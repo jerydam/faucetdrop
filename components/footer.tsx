@@ -9,7 +9,7 @@ export function Footer() {
           <div>
             <Link href="/" className="flex items-center space-x-2">
               <Droplet className="h-6 w-6 text-blue-700" />
-              <span className="text-xl font-bold">FaucetFactory</span>
+              <span className="text-xl font-bold">FaucetDrop</span>
             </Link>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Decentralized Token Faucets for Everyone</p>
           </div>

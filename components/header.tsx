@@ -24,7 +24,7 @@ export function Header() {
           <div className="flex items-center space-x-4">
             <Link href="/" className="flex items-center space-x-2">
               <Droplet className="h-6 w-6 text-blue-700" />
-              <span className="text-xl font-bold">FaucetFactory</span>
+              <span className="text-xl font-bold">FaucetDrop</span>
             </Link>
 
             <nav className="hidden md:flex space-x-6 ml-10">

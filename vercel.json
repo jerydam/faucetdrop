@@ -22,17 +22,17 @@
       {
         "src": "/api/claim",
         "methods": ["POST"],
-        "dest": "/lib/server.ts"
+        "dest": "lib/server.ts"
       },
       {
         "src": "/api/(.*)",
-        "dest": "/lib/server.ts"
+        "dest": "lib/server.ts"
       },
       {
         "src": "/(.*)",
         "dest": "/$1",
         "headers": {
-          "x-vercel-cache": "MISS"
+            "x-vercel-cache": "MISS"
         }
       }
     ]

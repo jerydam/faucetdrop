@@ -1,3 +1,4 @@
+
 import express from "express";
 import type { Request, Response, RequestHandler } from "express";
 import cors from "cors";
@@ -7,10 +8,10 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 dotenv.config();
-// Hardcoded PRIVATE_KEY (TESTNET ONLY, DO NOT USE IN PRODUCTION)
-const PRIVATE_KEY = process.env.PRIVATE_KEY; // Replace with your testnet key
-const RPC_URL= process.env.RPC_URL; // Replace with your Infura key or hardcode
 
+// Environment variables
+const PRIVATE_KEY = process.env.PRIVATE_KEY; 
+const RPC_URL= process.env.RPC_URL;
 
 const provider = new ethers.JsonRpcProvider(RPC_URL);
 
@@ -464,7 +465,7 @@ const FAUCET_ABI = [
 interface ClaimRequestBody {
   userAddress: string;
   faucetAddress: string;
-  whitelist?: boolean;
+  shouldWhitelist?: boolean;
 }
 
 interface AppError extends Error {
@@ -472,13 +473,16 @@ interface AppError extends Error {
 }
 
 const healthHandler: RequestHandler = (req: Request, res: Response) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 };
 app.get("/health", healthHandler);
 
-const claimHandler: RequestHandler<{}, any, ClaimRequestBody> = async (req: Request<{}, any, ClaimRequestBody>, res: Response) => {
-  const { userAddress, faucetAddress, whitelist } = req.body;
-
+const claimHandler: RequestHandler = async (
+  req: Request, 
+  res: Response
+): Promise<void> => {
+  const { userAddress, faucetAddress, shouldWhitelist } = req.body as ClaimRequestBody;
+  
   if (!ethers.isAddress(userAddress) || !ethers.isAddress(faucetAddress)) {
     console.error(`Invalid address - userAddress: ${userAddress}, faucetAddress: ${faucetAddress}`);
     res.status(400).json({ error: "Invalid userAddress or faucetAddress" });
@@ -496,7 +500,7 @@ const claimHandler: RequestHandler<{}, any, ClaimRequestBody> = async (req: Requ
     const signer = new ethers.Wallet(PRIVATE_KEY, provider);
     const faucetContract = new ethers.Contract(faucetAddress, FAUCET_ABI, signer);
 
-    if (whitelist) {
+    if (shouldWhitelist) {
       try {
         console.log(`Whitelisting user: ${userAddress}`);
         const whitelistTx = await faucetContract.setWhitelist(userAddress, true);
@@ -522,7 +526,7 @@ const claimHandler: RequestHandler<{}, any, ClaimRequestBody> = async (req: Requ
       const claimTx = await faucetContract.claimForBatch([userAddress]);
       await claimTx.wait();
       console.log(`Claim successful, tx: ${claimTx.hash}`);
-      res.json({ success: true, txHash: claimTx.hash });
+      res.status(200).json({ success: true, txHash: claimTx.hash });
     } catch (claimError) {
       const error = claimError as AppError;
       console.error(`Failed to claim tokens for ${userAddress}: ${error.message}`);

@@ -30,7 +30,10 @@
       },
       {
         "src": "/(.*)",
-        "dest": "/"
+        "dest": "/$1",
+        "headers": {
+          "x-vercel-cache": "MISS"
+        }
       }
     ]
   }

@@ -2,13 +2,15 @@ import express from "express";
 import type { Request, Response, RequestHandler } from "express";
 import cors from "cors";
 import { ethers } from "ethers";
-
+import dotenv from "dotenv";
 const app = express();
 app.use(express.json());
 app.use(cors());
+dotenv.config();
+// Hardcoded PRIVATE_KEY (TESTNET ONLY, DO NOT USE IN PRODUCTION)
+const PRIVATE_KEY = process.env.PRIVATE_KEY; // Replace with your testnet key
+const RPC_URL= process.env.RPC_URL; // Replace with your Infura key or hardcode
 
-const PRIVATE_KEY = process.env.PRIVATE_KEY!;
-const RPC_URL = process.env.RPC_URL!;
 
 const provider = new ethers.JsonRpcProvider(RPC_URL);
 
@@ -480,6 +482,13 @@ const claimHandler: RequestHandler<{}, any, ClaimRequestBody> = async (req: Requ
   if (!ethers.isAddress(userAddress) || !ethers.isAddress(faucetAddress)) {
     console.error(`Invalid address - userAddress: ${userAddress}, faucetAddress: ${faucetAddress}`);
     res.status(400).json({ error: "Invalid userAddress or faucetAddress" });
+    return;
+  }
+
+  // Validate environment variables
+  if (!PRIVATE_KEY || !RPC_URL) {
+    console.error("Missing environment variables: PRIVATE_KEY or RPC_URL");
+    res.status(500).json({ error: "Server configuration error: Missing PRIVATE_KEY or RPC_URL" });
     return;
   }
 

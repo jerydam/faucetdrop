@@ -1,0 +1,28 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "lib/server.ts",
+        "use": "@vercel/node"
+      },
+      {
+        "src": "package.json",
+        "use": "@vercel/next"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/api/claim",
+        "methods": ["POST"],
+        "dest": "/lib/server.ts"
+      },
+      {
+        "src": "/api/(.*)",
+        "dest": "/lib/server.ts"
+      },
+      {
+        "src": "/(.*)",
+        "dest": "/"
+      }
+    ]
+  }

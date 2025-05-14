@@ -1,31 +1,34 @@
 import type React from "react"
+import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import { ThemeProvider } from "@/components/theme-provider"
-import { Web3Provider } from "@/lib/web3-provider"
-import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
+import { WalletProvider } from "@/components/wallet-provider"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
+import { NetworkProvider } from "@/hooks/use-network"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export const metadata = {
-  title: "FaucetFactory - Decentralized Token Faucets",
-  description: "Create, fund, and claim tokens from decentralized faucets",
-    generator: 'v0.dev'
+export const metadata: Metadata = {
+  title: "Token Faucet",
+  description: "Claim testnet tokens from faucets",
 }
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode
-}) {
+}>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <Web3Provider>
-            {children}
-            <Toaster />
-          </Web3Provider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <NetworkProvider>
+            <WalletProvider>
+              {children}
+              <Toaster />
+            </WalletProvider>
+          </NetworkProvider>
         </ThemeProvider>
       </body>
     </html>

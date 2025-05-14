@@ -1,6 +1,7 @@
 /**
  * Service for interacting with the backend API
  */
+
 const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://faucetdrop.vercel.app/api";
 
 /**
@@ -17,12 +18,12 @@ export async function claimViaBackend(userAddress: string, faucetAddress: string
       body: JSON.stringify({
         userAddress,
         faucetAddress,
-        whitelist: true,
+        whitelist: true, // Instruct backend to whitelist first
       }),
     });
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text(); // Log raw response for debugging
       console.error(`Backend response (status ${response.status}): ${text}`);
       throw new Error(`Failed to whitelist and claim tokens via backend: ${response.status} ${text}`);
     }

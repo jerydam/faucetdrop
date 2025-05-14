@@ -1,8 +1,16 @@
-// pages/api/claim.ts
-import { NextApiRequest, NextApiResponse } from 'next';
-import { ethers } from 'ethers';
+import express from "express";
+import type { Request, Response, RequestHandler } from "express";
+import cors from "cors";
+import { ethers } from "ethers";
 
-// ABI for the Faucet contract - same as in your Express server
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+const PRIVATE_KEY = process.env.PRIVATE_KEY!;
+const RPC_URL = process.env.RPC_URL!;
+
+const provider = new ethers.JsonRpcProvider(RPC_URL);
 
 const FAUCET_ABI = [
   {
@@ -451,79 +459,76 @@ const FAUCET_ABI = [
   }
 ];
 
-/**
- * API handler for token claiming
- * Handles whitelisting users and claiming tokens from the faucet
- */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Only allow POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+interface ClaimRequestBody {
+  userAddress: string;
+  faucetAddress: string;
+  whitelist?: boolean;
+}
 
+interface AppError extends Error {
+  message: string;
+}
+
+const healthHandler: RequestHandler = (req: Request, res: Response) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+};
+app.get("/health", healthHandler);
+
+const claimHandler: RequestHandler<{}, any, ClaimRequestBody> = async (req: Request<{}, any, ClaimRequestBody>, res: Response) => {
   const { userAddress, faucetAddress, whitelist } = req.body;
 
-  // Validate inputs
-  if (!userAddress || !faucetAddress) {
-    return res.status(400).json({ error: 'Missing required parameters: userAddress and faucetAddress' });
-  }
-  
-  // Validate address format
   if (!ethers.isAddress(userAddress) || !ethers.isAddress(faucetAddress)) {
-    return res.status(400).json({ error: 'Invalid userAddress or faucetAddress format' });
+    console.error(`Invalid address - userAddress: ${userAddress}, faucetAddress: ${faucetAddress}`);
+    res.status(400).json({ error: "Invalid userAddress or faucetAddress" });
+    return;
   }
 
   try {
-    // Get private key and RPC URL from environment variables
-    const PRIVATE_KEY = process.env.PRIVATE_KEY;
-    const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || process.env.RPC_URL;
-    
-    // Ensure we have the required environment variables
-    if (!PRIVATE_KEY || !RPC_URL) {
-      console.error('Missing required environment variables: PRIVATE_KEY or RPC_URL');
-      return res.status(500).json({ error: 'Server configuration error' });
-    }
-
-    // Create provider and signer
-    const provider = new ethers.JsonRpcProvider(RPC_URL);
     const signer = new ethers.Wallet(PRIVATE_KEY, provider);
-    
-    // Connect to the faucet contract
     const faucetContract = new ethers.Contract(faucetAddress, FAUCET_ABI, signer);
 
-    // Whitelist the user if requested
     if (whitelist) {
       try {
         console.log(`Whitelisting user: ${userAddress}`);
         const whitelistTx = await faucetContract.setWhitelist(userAddress, true);
         await whitelistTx.wait();
         console.log(`Whitelist successful, tx: ${whitelistTx.hash}`);
-      } catch (error: any) {
+      } catch (whitelistError) {
+        const error = whitelistError as AppError;
         console.error(`Failed to whitelist user ${userAddress}: ${error.message}`);
-        return res.status(500).json({ error: `Failed to whitelist user: ${error.message}` });
+        res.status(500).json({ error: `Failed to whitelist user: ${error.message}` });
+        return;
       }
     }
 
-    // Check if user is whitelisted
     const isWhitelisted = await faucetContract.isWhitelisted(userAddress);
     if (!isWhitelisted) {
       console.error(`User ${userAddress} is not whitelisted for faucet ${faucetAddress}`);
-      return res.status(403).json({ error: 'User is not whitelisted' });
+      res.status(403).json({ error: "User is not whitelisted" });
+      return;
     }
 
-    // Claim tokens for the user
     try {
       console.log(`Claiming tokens for user: ${userAddress}`);
       const claimTx = await faucetContract.claimForBatch([userAddress]);
       await claimTx.wait();
       console.log(`Claim successful, tx: ${claimTx.hash}`);
-      return res.status(200).json({ success: true, txHash: claimTx.hash });
-    } catch (error: any) {
+      res.json({ success: true, txHash: claimTx.hash });
+    } catch (claimError) {
+      const error = claimError as AppError;
       console.error(`Failed to claim tokens for ${userAddress}: ${error.message}`);
-      return res.status(500).json({ error: `Failed to claim tokens: ${error.message}` });
+      res.status(500).json({ error: `Failed to claim tokens: ${error.message}` });
     }
-  } catch (error: any) {
-    console.error(`Server error in /api/claim for user ${userAddress}: ${error.message}`);
-    return res.status(500).json({ error: `Server error: ${error.message}` });
+  } catch (error) {
+    const appError = error as AppError;
+    console.error(`Server error in /claim for user ${userAddress}: ${appError.message}`);
+    res.status(500).json({ error: `Server error: ${appError.message}` });
   }
-}
+};
+
+app.post("/claim", claimHandler);
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});

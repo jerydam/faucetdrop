@@ -2,7 +2,7 @@
  * Service for interacting with the backend API
  */
 
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://faucetdrop.vercel.app/api";
 
 /**
  * Whitelists a user and claims tokens from a faucet using the backend service

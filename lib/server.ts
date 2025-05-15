@@ -1,18 +1,15 @@
-import http from "http";
-import { URL } from "url";
-import { ethers } from "ethers";
-import dotenv from "dotenv";
+import { NextResponse } from 'next/server';
+import { ethers } from 'ethers';
+import type { NextRequest } from 'next/server';
 
-// Initialize environment variables
-dotenv.config();
-
-// Environment variables
-const PRIVATE_KEY = process.env.PRIVATE_KEY; 
+// Load environment variables (Next.js automatically loads .env files)
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const RPC_URL = process.env.RPC_URL;
 
+// Initialize ethers provider
 const provider = new ethers.JsonRpcProvider(RPC_URL);
 
-// ABI remains unchanged
+// Faucet contract ABI (same as in your code)
 const FAUCET_ABI = [
   {
     "inputs": [],
@@ -459,148 +456,85 @@ const FAUCET_ABI = [
     "type": "receive"
   }
 ];
-
-
-// Define interfaces
+// Interface for request body
 interface ClaimRequestBody {
   userAddress: string;
   faucetAddress: string;
   shouldWhitelist?: boolean;
 }
 
-interface ResponseData {
-  [key: string]: any;
-}
+// POST /api/claim
+export async function POST(req: NextRequest) {
+  try {
+    // Parse request body
+    const body = await req.json() as ClaimRequestBody;
+    const { userAddress, faucetAddress, shouldWhitelist } = body;
 
-// Helper function to parse JSON body from requests
-const parseJSONBody = async (req: http.IncomingMessage): Promise<unknown> => {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk: Buffer) => {
-      body += chunk.toString();
-    });
-    req.on('end', () => {
-      try {
-        const parsedBody = body ? JSON.parse(body) : {};
-        resolve(parsedBody);
-      } catch (error) {
-        reject(error);
-      }
-    });
-    req.on('error', (error: Error) => {
-      reject(error);
-    });
-  });
-};
-
-// Helper function to handle API responses
-const sendResponse = (res: http.ServerResponse, statusCode: number, data: ResponseData): void => {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(data));
-};
-
-// Create HTTP server
-const server = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
-  // Parse the URL
-  const parsedUrl = new URL(req.url || '/', `http://${req.headers.host}`);
-  const pathname = parsedUrl.pathname;
-
-  // Health check endpoint
-  if (pathname === '/health' && req.method === 'GET') {
-    sendResponse(res, 200, { status: 'ok', timestamp: new Date().toISOString() });
-    return;
-  }
-
-  // Claim tokens endpoint
-  if (pathname === '/claim' && req.method === 'POST') {
-    try {
-      const body = await parseJSONBody(req) as ClaimRequestBody;
-      const { userAddress, faucetAddress, shouldWhitelist } = body;
-
-      if (!ethers.isAddress(userAddress) || !ethers.isAddress(faucetAddress)) {
-        console.error(`Invalid address - userAddress: ${userAddress}, faucetAddress: ${faucetAddress}`);
-        sendResponse(res, 400, { error: "Invalid userAddress or faucetAddress" });
-        return;
-      }
-
-      // Validate environment variables
-      if (!PRIVATE_KEY || !RPC_URL) {
-        console.error("Missing environment variables: PRIVATE_KEY or RPC_URL");
-        sendResponse(res, 500, { error: "Server configuration error: Missing PRIVATE_KEY or RPC_URL" });
-        return;
-      }
-
-      try {
-        const signer = new ethers.Wallet(PRIVATE_KEY, provider);
-        const faucetContract = new ethers.Contract(faucetAddress, FAUCET_ABI, signer);
-
-        // First handle whitelisting if requested - removed the early check for whitelisting
-        if (shouldWhitelist) {
-          try {
-            console.log(`Whitelisting user: ${userAddress}`);
-            const whitelistTx = await faucetContract.setWhitelist(userAddress, true);
-            await whitelistTx.wait();
-            console.log(`Whitelist successful, tx: ${whitelistTx.hash}`);
-          } catch (whitelistError) {
-            const error = whitelistError as { message: string };
-            console.error(`Failed to whitelist user ${userAddress}: ${error.message}`);
-            sendResponse(res, 500, { error: `Failed to whitelist user: ${error.message}` });
-            return;
-          }
-        }
-
-        // Now check if user is whitelisted - this check happens after the whitelisting attempt
-        const isWhitelisted = await faucetContract.isWhitelisted(userAddress);
-        if (!isWhitelisted) {
-          console.error(`User ${userAddress} is not whitelisted for faucet ${faucetAddress}`);
-          sendResponse(res, 403, { error: "User is not whitelisted" });
-          return;
-        }
-
-        try {
-          console.log(`Claiming tokens for user: ${userAddress}`);
-          const claimTx = await faucetContract.claimForBatch([userAddress]);
-          await claimTx.wait();
-          console.log(`Claim successful, tx: ${claimTx.hash}`);
-          sendResponse(res, 200, { success: true, txHash: claimTx.hash });
-        } catch (claimError) {
-          const error = claimError as { message: string };
-          console.error(`Failed to claim tokens for ${userAddress}: ${error.message}`);
-          sendResponse(res, 500, { error: `Failed to claim tokens: ${error.message}` });
-        }
-      } catch (error) {
-        const err = error as { message: string };
-        console.error(`Server error in /claim for user ${userAddress}: ${err.message}`);
-        sendResponse(res, 500, { error: `Server error: ${err.message}` });
-      }
-    } catch (error) {
-      console.error('Error parsing request body:', error);
-      sendResponse(res, 400, { error: 'Invalid JSON in request body' });
+    // Validate addresses
+    if (!ethers.isAddress(userAddress) || !ethers.isAddress(faucetAddress)) {
+      console.error(`Invalid address - userAddress: ${userAddress}, faucetAddress: ${faucetAddress}`);
+      return NextResponse.json({ error: 'Invalid userAddress or faucetAddress' }, { status: 400 });
     }
-    return;
+
+    // Validate environment variables
+    if (!PRIVATE_KEY || !RPC_URL) {
+      console.error('Missing environment variables: PRIVATE_KEY or RPC_URL');
+      return NextResponse.json(
+        { error: 'Server configuration error: Missing PRIVATE_KEY or RPC_URL' },
+        { status: 500 }
+      );
+    }
+
+    // Initialize signer and contract
+    const signer = new ethers.Wallet(PRIVATE_KEY, provider);
+    const faucetContract = new ethers.Contract(faucetAddress, FAUCET_ABI, signer);
+
+    // Whitelist user if requested
+    if (shouldWhitelist) {
+      try {
+        console.log(`Whitelisting user: ${userAddress}`);
+        const whitelistTx = await faucetContract.setWhitelist(userAddress, true, {
+          gasLimit: 100000, // Adjust based on network
+        });
+        await whitelistTx.wait();
+        console.log(`Whitelist successful, tx: ${whitelistTx.hash}`);
+      } catch (whitelistError: any) {
+        console.error(`Failed to whitelist user ${userAddress}: ${whitelistError.message}`);
+        return NextResponse.json(
+          { error: `Failed to whitelist user: ${whitelistError.message}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    // Check if user is whitelisted
+    const isWhitelisted = await faucetContract.isWhitelisted(userAddress);
+    if (!isWhitelisted) {
+      console.error(`User ${userAddress} is not whitelisted for faucet ${faucetAddress}`);
+      return NextResponse.json({ error: 'User is not whitelisted' }, { status: 403 });
+    }
+
+    // Claim tokens
+    try {
+      console.log(`Claiming tokens for user: ${userAddress}`);
+      const claimTx = await faucetContract.claimForBatch([userAddress], {
+        gasLimit: 150000, // Adjust based on network
+      });
+      await claimTx.wait();
+      console.log(`Claim successful, tx: ${claimTx.hash}`);
+      return NextResponse.json({ success: true, txHash: claimTx.hash }, { status: 200 });
+    } catch (claimError: any) {
+      console.error(`Failed to claim tokens for ${userAddress}: ${claimError.message}`);
+      return NextResponse.json(
+        { error: `Failed to claim tokens: ${claimError.message}` },
+        { status: 500 }
+      );
+    }
+  } catch (error: any) {
+    console.error('Error processing /api/claim:', error.message);
+    return NextResponse.json(
+      { error: error.message || 'Invalid JSON in request body' },
+      { status: 400 }
+    );
   }
-
-  // Handle 404 for any other routes
-  sendResponse(res, 404, { error: 'Not Found' });
-});
-
-// Start the server
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-// Export for serverless environments
-export default server;
+}

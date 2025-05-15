@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import cors from "cors";
 import { ethers } from "ethers";
 import dotenv from "dotenv";
@@ -471,13 +471,13 @@ interface ClaimRequestBody {
 }
 
 // Health check endpoint
-app.get("/health", (req, res) => {
+app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // Claim tokens endpoint
-app.post("/claim", async (req, res) => {
-  const { userAddress, faucetAddress, shouldWhitelist } = req.body;
+app.post("/claim", async (req: Request, res: Response) => {
+  const { userAddress, faucetAddress, shouldWhitelist } = req.body as ClaimRequestBody;
 
   if (!ethers.isAddress(userAddress) || !ethers.isAddress(faucetAddress)) {
     console.error(`Invalid address - userAddress: ${userAddress}, faucetAddress: ${faucetAddress}`);

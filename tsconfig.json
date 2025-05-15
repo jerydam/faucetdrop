@@ -13,7 +13,7 @@
     "jsx": "preserve",
     "incremental": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist",
+    "outDir": "dist",
     "noEmit": false, // Changed to allow compilation for ts-node or tsc
     "plugins": [
       {

@@ -1,9 +1,9 @@
-
 import express from "express";
-import type { Request, Response, RequestHandler } from "express";
 import cors from "cors";
 import { ethers } from "ethers";
 import dotenv from "dotenv";
+
+// Initialize Express app
 const app = express();
 app.use(express.json());
 app.use(cors());
@@ -11,9 +11,10 @@ dotenv.config();
 
 // Environment variables
 const PRIVATE_KEY = process.env.PRIVATE_KEY; 
-const RPC_URL= process.env.RPC_URL;
+const RPC_URL = process.env.RPC_URL;
 
 const provider = new ethers.JsonRpcProvider(RPC_URL);
+
 
 const FAUCET_ABI = [
   {
@@ -462,27 +463,22 @@ const FAUCET_ABI = [
   }
 ];
 
+// Define interfaces
 interface ClaimRequestBody {
   userAddress: string;
   faucetAddress: string;
   shouldWhitelist?: boolean;
 }
 
-interface AppError extends Error {
-  message: string;
-}
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
-const healthHandler: RequestHandler = (req: Request, res: Response) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
-};
-app.get("/health", healthHandler);
+// Claim tokens endpoint
+app.post("/claim", async (req, res) => {
+  const { userAddress, faucetAddress, shouldWhitelist } = req.body;
 
-const claimHandler: RequestHandler = async (
-  req: Request, 
-  res: Response
-): Promise<void> => {
-  const { userAddress, faucetAddress, shouldWhitelist } = req.body as ClaimRequestBody;
-  
   if (!ethers.isAddress(userAddress) || !ethers.isAddress(faucetAddress)) {
     console.error(`Invalid address - userAddress: ${userAddress}, faucetAddress: ${faucetAddress}`);
     res.status(400).json({ error: "Invalid userAddress or faucetAddress" });
@@ -507,7 +503,7 @@ const claimHandler: RequestHandler = async (
         await whitelistTx.wait();
         console.log(`Whitelist successful, tx: ${whitelistTx.hash}`);
       } catch (whitelistError) {
-        const error = whitelistError as AppError;
+        const error = whitelistError as { message: string };
         console.error(`Failed to whitelist user ${userAddress}: ${error.message}`);
         res.status(500).json({ error: `Failed to whitelist user: ${error.message}` });
         return;
@@ -528,20 +524,22 @@ const claimHandler: RequestHandler = async (
       console.log(`Claim successful, tx: ${claimTx.hash}`);
       res.status(200).json({ success: true, txHash: claimTx.hash });
     } catch (claimError) {
-      const error = claimError as AppError;
+      const error = claimError as { message: string };
       console.error(`Failed to claim tokens for ${userAddress}: ${error.message}`);
       res.status(500).json({ error: `Failed to claim tokens: ${error.message}` });
     }
   } catch (error) {
-    const appError = error as AppError;
-    console.error(`Server error in /claim for user ${userAddress}: ${appError.message}`);
-    res.status(500).json({ error: `Server error: ${appError.message}` });
+    const err = error as { message: string };
+    console.error(`Server error in /claim for user ${userAddress}: ${err.message}`);
+    res.status(500).json({ error: `Server error: ${err.message}` });
   }
-};
+});
 
-app.post("/claim", claimHandler);
-
+// Start the server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Export the app for serverless environments
+export default app;

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { useWallet } from "@/hooks/use-wallet";
-import { useNetwork } from "@/hooks/use-network"; // Import useNetwork
+import { useNetwork } from "@/hooks/use-network";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { NetworkSelector } from "@/components/network-selector";
@@ -18,7 +18,7 @@ export default function CreateFaucet() {
   const { toast } = useToast();
   const router = useRouter();
   const { isConnected, provider, chainId, isSwitchingNetwork } = useWallet();
-  const { network } = useNetwork(); // Use useNetwork
+  const { network } = useNetwork();
   const [isCreating, setIsCreating] = useState(false);
 
   const handleCreate = async () => {
@@ -60,7 +60,7 @@ export default function CreateFaucet() {
 
     try {
       setIsCreating(true);
-      const faucetAddress = await createFaucet(provider, network); // Pass network
+      const faucetAddress = await createFaucet(provider, network);
 
       toast({
         title: "Faucet created successfully",
@@ -82,15 +82,15 @@ export default function CreateFaucet() {
 
   return (
     <main className="min-h-screen">
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col gap-8 max-w-2xl mx-auto">
-          <header className="flex items-center gap-4">
+      <div className="container mx-auto px-4 py-6 sm:py-8">
+        <div className="flex flex-col gap-6 max-w-3xl mx-auto">
+          <header className="flex flex-col sm:flex-row sm:items-center gap-4">
             <Link href="/">
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" className="w-10 h-10">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="text-3xl font-bold">Create New Faucet</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">Create New Faucet</h1>
             <div className="ml-auto">
               <NetworkSelector />
             </div>
@@ -98,17 +98,17 @@ export default function CreateFaucet() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Create a Token Faucet</CardTitle>
-              <CardDescription>
-                Create a new faucet for distributing tokens on testnet. After creation, you'll be able to configure the
+              <CardTitle className="text-lg sm:text-xl">Create a Token Faucet</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Create a new faucet for distributing tokens on testnet. After creation, you&apos;ll be able to configure the
                 token and other settings.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">
-                Clicking the button below will create a new faucet contract. Once created, you'll need to:
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Clicking the button below will create a new faucet contract. Once created, you&apos;ll need to:
               </p>
-              <ul className="list-disc list-inside mt-2 space-y-1 text-muted-foreground">
+              <ul className="list-disc list-inside mt-2 space-y-1 text-xs sm:text-sm text-muted-foreground">
                 <li>Set the token address</li>
                 <li>Configure claim parameters</li>
                 <li>Fund the faucet with tokens</li>
@@ -116,7 +116,7 @@ export default function CreateFaucet() {
             </CardContent>
             <CardFooter>
               <Button
-                className="w-full"
+                className="w-full h-10 text-sm sm:text-base"
                 onClick={handleCreate}
                 disabled={isCreating || !isConnected || isSwitchingNetwork || chainId !== ARBITRUM_SEPOLIA || !network}
               >

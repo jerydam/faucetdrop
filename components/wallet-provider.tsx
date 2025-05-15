@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { BrowserProvider, type JsonRpcSigner } from "ethers";
 import { useNetwork } from "@/hooks/use-network";
 
-// Type for window.ethereum (EIP-1193 compatible provider)
+// Type for EIP-1193 compatible provider
 interface EIP1193Provider {
   request: (args: { method: string; params?: any[] }) => Promise<any>;
   on: (event: string, callback: (...args: any[]) => void) => void;
@@ -14,6 +14,7 @@ interface EIP1193Provider {
 declare global {
   interface Window {
     ethereum?: EIP1193Provider & any;
+    backpack?: EIP1193Provider & any;
   }
 }
 
@@ -23,7 +24,7 @@ interface WalletContextType {
   address: string | null;
   chainId: number | null;
   isConnected: boolean;
-  connect: () => Promise<void>;
+  connect: (walletType?: string) => Promise<void>;
   disconnect: () => void;
   isSwitchingNetwork: boolean;
 }
@@ -50,84 +51,95 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
   const { network, switchNetwork } = useNetwork();
 
-  const handleAccountsChanged = async (signers: JsonRpcSigner[]) => {
-    if (signers.length === 0) {
-      setSigner(null);
-      setAddress(null);
-      setIsConnected(false);
+  const handleAccountsChanged = async (accounts: string[]) => {
+    if (accounts.length === 0) {
+      disconnect();
     } else {
       try {
-        const signer = signers[0];
-        setSigner(signer);
-        const address = await signer.getAddress();
-        setAddress(address);
-        setIsConnected(true);
+        if (provider) {
+          const signer = await provider.getSigner();
+          setSigner(signer);
+          setAddress(accounts[0]);
+          setIsConnected(true);
+          localStorage.setItem("walletConnected", "true");
+        }
       } catch (error) {
         console.error("Error getting signer address:", error);
       }
     }
   };
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.ethereum) {
-      const provider = new BrowserProvider(window.ethereum);
-      setProvider(provider);
+  const initializeProvider = async (walletProvider: EIP1193Provider) => {
+    const provider = new BrowserProvider(walletProvider);
+    setProvider(provider);
 
-      const handleChainChanged = (chainIdHex: string) => {
-        const newChainId = Number.parseInt(chainIdHex, 16);
-        setChainId(newChainId);
-        setIsSwitchingNetwork(false); // Reset after network change
-      };
+    const handleChainChanged = (chainIdHex: string) => {
+      const newChainId = Number.parseInt(chainIdHex, 16);
+      setChainId(newChainId);
+      setIsSwitchingNetwork(false);
+    };
 
-      provider
-        .listAccounts()
-        .then((accounts) => {
-          if (accounts.length > 0) {
-            handleAccountsChanged(accounts);
-          }
-        })
-        .catch(console.error);
+    try {
+      const accounts = await provider.listAccounts();
+      if (accounts.length > 0) {
+        await handleAccountsChanged(accounts.map((acc) => acc.address));
+      }
 
-      window.ethereum.on("accountsChanged", handleAccountsChanged);
-      window.ethereum.on("chainChanged", handleChainChanged);
+      const network = await provider.getNetwork();
+      setChainId(Number(network.chainId));
 
-      provider
-        .getNetwork()
-        .then((network) => {
-          setChainId(Number(network.chainId));
-        })
-        .catch(console.error);
+      walletProvider.on("accountsChanged", handleAccountsChanged);
+      walletProvider.on("chainChanged", handleChainChanged);
 
       return () => {
-        window.ethereum?.removeListener("accountsChanged", handleAccountsChanged);
-        window.ethereum?.removeListener("chainChanged", handleChainChanged);
+        walletProvider.removeListener("accountsChanged", handleAccountsChanged);
+        walletProvider.removeListener("chainChanged", handleChainChanged);
       };
-    } else {
-      console.warn("No Ethereum provider found. Please install MetaMask or another wallet.");
+    } catch (error) {
+      console.error("Error initializing provider:", error);
+    }
+  };
+
+  useEffect(() => {
+    const connected = localStorage.getItem("walletConnected") === "true";
+    if (connected && (window.ethereum || window.backpack)) {
+      const walletProvider = window.ethereum || window.backpack;
+      initializeProvider(walletProvider);
+    } else if (!window.ethereum && !window.backpack) {
+      console.warn("No Ethereum provider found. Please install MetaMask, Backpack, or another wallet.");
     }
   }, []);
 
   useEffect(() => {
-    if (chainId && chainId !== ARBITRUM_SEPOLIA && !isSwitchingNetwork) {
+    if (chainId && chainId !== ARBITRUM_SEPOLIA && !isSwitchingNetwork && network) {
       setIsSwitchingNetwork(true);
       switchNetwork(ARBITRUM_SEPOLIA).catch((error) => {
         console.error("Error switching network:", error);
         setIsSwitchingNetwork(false);
       });
     }
-  }, [chainId, switchNetwork]);
+  }, [chainId, network, switchNetwork]);
 
-  const connect = async () => {
-    if (!provider || isSwitchingNetwork) return;
-
-    try {
-      const accounts = await provider.send("eth_requestAccounts", []);
-      await handleAccountsChanged(accounts);
-      if (chainId !== ARBITRUM_SEPOLIA) {
-        await switchNetwork(ARBITRUM_SEPOLIA);
+  const connect = async (walletType: string = "metamask") => {
+    if (!provider && (walletType === "metamask" || walletType === "backpack")) {
+      const walletProvider = walletType === "metamask" ? window.ethereum : window.backpack;
+      if (!walletProvider) {
+        console.warn(`${walletType} not found. Please install ${walletType}.`);
+        return;
       }
-    } catch (error) {
-      console.error("Error connecting wallet:", error);
+      await initializeProvider(walletProvider);
+    }
+
+    if (provider && !isSwitchingNetwork) {
+      try {
+        const accounts = await provider.send("eth_requestAccounts", []);
+        await handleAccountsChanged(accounts);
+        if (chainId !== ARBITRUM_SEPOLIA) {
+          await switchNetwork(ARBITRUM_SEPOLIA);
+        }
+      } catch (error) {
+        console.error("Error connecting wallet:", error);
+      }
     }
   };
 
@@ -135,6 +147,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setSigner(null);
     setAddress(null);
     setIsConnected(false);
+    localStorage.removeItem("walletConnected");
   };
 
   return (

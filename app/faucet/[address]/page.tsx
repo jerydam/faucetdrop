@@ -1,4 +1,3 @@
-// app/faucet/[address]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { NetworkSelector } from "@/components/network-selector";
 import {
   getFaucetDetails,
@@ -100,7 +99,6 @@ export default function FaucetDetails() {
     }
 
     try {
-      // Check if user is whitelisted
       const isWhitelisted = await faucetDetails.isWhitelisted;
       if (!isWhitelisted) {
         toast({
@@ -289,10 +287,10 @@ export default function FaucetDetails() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 flex justify-center items-center min-h-[50vh]">
+      <div className="container mx-auto px-4 py-6 flex justify-center items-center min-h-[50vh]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4">Loading faucet details...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-3 text-sm">Loading faucet details...</p>
         </div>
       </div>
     );
@@ -300,15 +298,15 @@ export default function FaucetDetails() {
 
   return (
     <main className="min-h-screen">
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col gap-8 max-w-4xl mx-auto">
-          <header className="flex items-center gap-4">
+      <div className="container mx-auto px-4 py-6 sm:py-8">
+        <div className="flex flex-col gap-6 max-w-5xl mx-auto">
+          <header className="flex flex-col sm:flex-row sm:items-center gap-4">
             <Link href="/">
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon" className="w-10 h-10">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="text-2xl font-bold truncate">Faucet Details</h1>
+            <h1 className="text-xl sm:text-2xl font-bold truncate">Faucet Details</h1>
             <div className="ml-auto">
               <NetworkSelector />
             </div>
@@ -318,53 +316,52 @@ export default function FaucetDetails() {
             <>
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex justify-between items-center">
-                    <span>{tokenSymbol} Faucet</span>
+                  <CardTitle className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <span className="text-lg sm:text-xl">{tokenSymbol} Faucet</span>
                     {faucetDetails.isClaimActive ? (
-                      <span className="text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-3 py-1 rounded-full">
+                      <span className="text-xs sm:text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded-full">
                         Active
                       </span>
                     ) : (
-                      <span className="text-sm bg-red-500/20 text-red-600 dark:text-red-400 px-3 py-1 rounded-full">
+                      <span className="text-xs sm:text-sm bg-red-500/20 text-red-600 dark:text-red-400 px-2 py-1 rounded-full">
                         Inactive
                       </span>
                     )}
                   </CardTitle>
                   <CardDescription>
-                    <div className="flex flex-col gap-1 mt-2">
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-1 mt-2 text-xs sm:text-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span className="font-medium">Faucet Address:</span>
-                        <span className="text-sm font-mono">{faucetAddress}</span>
+                        <span className="font-mono break-all">{faucetAddress}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span className="font-medium">Token Address:</span>
-                        <span className="text-sm font-mono">{faucetDetails.token}</span>
+                        <span className="font-mono break-all">{faucetDetails.token}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span className="font-medium">Owner:</span>
-                        <span className="text-sm font-mono">{faucetDetails.owner}</span>
+                        <span className="font-mono break-all">{faucetDetails.owner}</span>
                       </div>
                     </div>
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex flex-col p-4 border rounded-lg">
-                      <span className="text-sm text-muted-foreground">Balance</span>
-                      <span className="text-2xl font-bold">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="flex flex-col p-3 border rounded-lg">
+                      <span className="text-xs sm:text-sm text-muted-foreground">Balance</span>
+                      <span className="text-lg sm:text-xl font-bold">
                         {faucetDetails.balance ? formatUnits(faucetDetails.balance, tokenDecimals) : "0"} {tokenSymbol}
                       </span>
                     </div>
-                    <div className="flex flex-col p-4 border rounded-lg">
-                      <span className="text-sm text-muted-foreground">Claim Amount</span>
-                      <span className="text-2xl font-bold">
-                        {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"}{" "}
-                        {tokenSymbol}
+                    <div className="flex flex-col p-3 border rounded-lg">
+                      <span className="text-xs sm:text-sm text-muted-foreground">Claim Amount</span>
+                      <span className="text-lg sm:text-xl font-bold()]./font-bold">
+                        {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}
                       </span>
                     </div>
-                    <div className="flex flex-col p-4 border rounded-lg">
-                      <span className="text-sm text-muted-foreground">Status</span>
-                      <span className="text-lg font-medium">
+                    <div className="flex flex-col p-3 border rounded-lg">
+                      <span className="text-xs sm:text-sm text-muted-foreground">Status</span>
+                      <span className="text-base sm:text-lg font-medium">
                         {hasClaimed ? "Already Claimed" : "Available to Claim"}
                       </span>
                     </div>
@@ -373,7 +370,7 @@ export default function FaucetDetails() {
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
+                      <span className="text-xs sm:text-sm">
                         Active from{" "}
                         {faucetDetails.startTime
                           ? new Date(Number(faucetDetails.startTime) * 1000).toLocaleString()
@@ -388,7 +385,7 @@ export default function FaucetDetails() {
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
                   <Button
-                    className="w-full"
+                    className="w-full h-10 text-sm sm:text-base"
                     onClick={handleClaim}
                     disabled={isClaiming || !isConnected || !faucetDetails.isClaimActive || hasClaimed}
                   >
@@ -400,7 +397,7 @@ export default function FaucetDetails() {
                   </Button>
 
                   <Button
-                    className="w-full"
+                    className="w-full h-10 text-sm sm:text-base"
                     variant="outline"
                     onClick={handleBackendClaim}
                     disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed}
@@ -413,60 +410,62 @@ export default function FaucetDetails() {
               {isOwner && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Admin Controls</CardTitle>
-                    <CardDescription>Manage your faucet settings</CardDescription>
+                    <CardTitle className="text-lg sm:text-xl">Admin Controls</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Manage your faucet settings</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <Tabs defaultValue="fund">
                       <TabsList className="grid grid-cols-3">
-                        <TabsTrigger value="fund">
-                          <Upload className="h-4 w-4 mr-2" />
+                        <TabsTrigger value="fund" className="text-xs sm:text-sm">
+                          <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Fund
                         </TabsTrigger>
-                        <TabsTrigger value="parameters">
-                          <Coins className="h-4 w-4 mr-2" />
+                        <TabsTrigger value="parameters" className="text-xs sm:text-sm">
+                          <Coins className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Parameters
                         </TabsTrigger>
-                        <TabsTrigger value="whitelist">
-                          <Users className="h-4 w-4 mr-2" />
+                        <TabsTrigger value="whitelist" className="text-xs sm:text-sm">
+                          <Users className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Whitelist
                         </TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="fund" className="space-y-4 mt-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-2">
-                            <Label htmlFor="fund-amount">Fund Amount</Label>
-                            <div className="flex gap-2">
+                            <Label htmlFor="fund-amount" className="text-xs sm:text-sm">Fund Amount</Label>
+                            <div className="flex flex-col sm:flex-row gap-2">
                               <Input
                                 id="fund-amount"
                                 placeholder="0.0"
                                 value={fundAmount}
                                 onChange={(e) => setFundAmount(e.target.value)}
+                                className="h-9 text-sm"
                               />
-                              <Button onClick={handleFund} disabled={!fundAmount}>
-                                <Upload className="h-4 w-4 mr-2" />
+                              <Button onClick={handleFund} disabled={!fundAmount} className="h-9 text-sm">
+                                <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                                 Fund
                               </Button>
                             </div>
-                            <p className="text-sm text-muted-foreground">Add tokens to the faucet</p>
+                            <p className="text-xs text-muted-foreground">Add tokens to the faucet</p>
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="withdraw-amount">Withdraw Amount</Label>
-                            <div className="flex gap-2">
+                            <Label htmlFor="withdraw-amount" className="text-xs sm:text-sm">Withdraw Amount</Label>
+                            <div className="flex flex-col sm:flex-row gap-2">
                               <Input
                                 id="withdraw-amount"
                                 placeholder="0.0"
                                 value={withdrawAmount}
                                 onChange={(e) => setWithdrawAmount(e.target.value)}
+                                className="h-9 text-sm"
                               />
-                              <Button onClick={handleWithdraw} disabled={!withdrawAmount} variant="outline">
-                                <Download className="h-4 w-4 mr-2" />
+                              <Button onClick={handleWithdraw} disabled={!withdrawAmount} variant="outline" className="h-9 text-sm">
+                                <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                                 Withdraw
                               </Button>
                             </div>
-                            <p className="text-sm text-muted-foreground">Withdraw tokens from the faucet</p>
+                            <p className="text-xs text-muted-foreground">Withdraw tokens from the faucet</p>
                           </div>
                         </div>
                       </TabsContent>
@@ -474,39 +473,42 @@ export default function FaucetDetails() {
                       <TabsContent value="parameters" className="space-y-4 mt-4">
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="claim-amount">Claim Amount</Label>
+                            <Label htmlFor="claim-amount" className="text-xs sm:text-sm">Claim Amount</Label>
                             <Input
                               id="claim-amount"
                               placeholder="0.0"
                               value={claimAmount}
                               onChange={(e) => setClaimAmount(e.target.value)}
+                              className="h-9 text-sm"
                             />
-                            <p className="text-sm text-muted-foreground">Amount of tokens users can claim</p>
+                            <p className="text-xs text-muted-foreground">Amount of tokens users can claim</p>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-2">
-                              <Label htmlFor="start-time">Start Time</Label>
+                              <Label htmlFor="start-time" className="text-xs sm:text-sm">Start Time</Label>
                               <Input
                                 id="start-time"
                                 type="datetime-local"
                                 value={startTime}
                                 onChange={(e) => setStartTime(e.target.value)}
+                                className="h-9 text-sm"
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor="end-time">End Time</Label>
+                              <Label htmlFor="end-time" className="text-xs sm:text-sm">End Time</Label>
                               <Input
                                 id="end-time"
                                 type="datetime-local"
                                 value={endTime}
                                 onChange={(e) => setEndTime(e.target.value)}
+                                className="h-9 text-sm"
                               />
                             </div>
                           </div>
 
-                          <Button onClick={handleUpdateClaimParameters}>Update Parameters</Button>
+                          <Button onClick={handleUpdateClaimParameters} className="h-9 text-sm">Update Parameters</Button>
                         </div>
                       </TabsContent>
 
@@ -518,23 +520,24 @@ export default function FaucetDetails() {
                               checked={isWhitelistEnabled}
                               onCheckedChange={setIsWhitelistEnabled}
                             />
-                            <Label htmlFor="whitelist-mode">
+                            <Label htmlFor="whitelist-mode" className="text-xs sm:text-sm">
                               {isWhitelistEnabled ? "Add to whitelist" : "Remove from whitelist"}
                             </Label>
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="whitelist-addresses">Addresses (one per line or comma separated)</Label>
+                            <Label htmlFor="whitelist-addresses" className="text-xs sm:text-sm">Addresses (one per line or comma separated)</Label>
                             <Textarea
                               id="whitelist-addresses"
                               placeholder="0x..."
                               value={whitelistAddresses}
                               onChange={(e) => setWhitelistAddresses(e.target.value)}
                               rows={5}
+                              className="text-sm"
                             />
                           </div>
 
-                          <Button onClick={handleUpdateWhitelist}>Update Whitelist</Button>
+                          <Button onClick={handleUpdateWhitelist} className="h-9 text-sm">Update Whitelist</Button>
                         </div>
                       </TabsContent>
                     </Tabs>
@@ -544,13 +547,11 @@ export default function FaucetDetails() {
             </>
           ) : (
             <Card>
-              <CardContent className="py-10">
-                <div className="text-center">
-                  <p>Faucet not found or error loading details</p>
-                  <Button className="mt-4" onClick={() => router.push("/")}>
-                    Return to Home
-                  </Button>
-                </div>
+              <CardContent className="py-8 sm:py-10 text-center">
+                <p className="text-sm sm:text-base">Faucet not found or error loading details</p>
+                <Button className="mt-3 h-9 text-sm sm:text-base" onClick={() => router.push("/")}>
+                  Return to Home
+                </Button>
               </CardContent>
             </Card>
           )}

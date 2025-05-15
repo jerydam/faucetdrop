@@ -1,3 +1,4 @@
+// app/faucet/[address]/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -18,7 +19,7 @@ import {
   setClaimParameters,
   setWhitelist,
 } from "@/lib/faucet";
-import { formatUnits, parseUnits } from "ethers";
+import { ethers, formatUnits, parseUnits } from "ethers";
 import { ArrowLeft, Clock, Coins, Download, Upload, Users } from "lucide-react";
 import Link from "next/link";
 import { Textarea } from "@/components/ui/textarea";
@@ -134,32 +135,49 @@ export default function FaucetDetails() {
   const handleBackendClaim = async () => {
     if (!address) {
       toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet to claim tokens",
-        variant: "destructive",
+        title: 'Wallet not connected',
+        description: 'Please connect your wallet to claim tokens',
+        variant: 'destructive',
       });
       return;
     }
 
     try {
       setIsClaiming(true);
-      await claimViaBackend(address, faucetAddress);
+      const data = await claimViaBackend(address, faucetAddress);
 
+      if (data.status === 'pending') {
+        const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL || "https://eth-sepolia.g.alchemy.com/v2/your_api_key");
+        let attempts = 0;
+        while (attempts < 30) {
+          const receipt = await provider.getTransactionReceipt(data.txHash!);
+          if (receipt) {
+            toast({
+              title: 'Tokens claimed successfully via backend',
+              description: `You have claimed ${formatUnits(faucetDetails.claimAmount, tokenDecimals)} ${tokenSymbol}`,
+            });
+            await loadFaucetDetails();
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          attempts++;
+        }
+        if (attempts >= 30) {
+          throw new Error('Transaction not confirmed within timeout');
+        }
+      } else {
+        toast({
+          title: 'Tokens claimed successfully via backend',
+          description: `You have claimed ${formatUnits(faucetDetails.claimAmount, tokenDecimals)} ${tokenSymbol}`,
+        });
+        await loadFaucetDetails();
+      }
+    } catch (error: any) {
+      console.error('Error claiming tokens via backend:', error);
       toast({
-        title: "Tokens claimed successfully via backend",
-        description: `You have claimed ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`,
-      });
-
-      await loadFaucetDetails();
-    } catch (error) {
-      console.error("Error claiming tokens via backend:", error);
-      toast({
-        title: "Failed to claim tokens via backend",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failedixos to contact the backend server. Please try again or contact support.",
-        variant: "destructive",
+        title: 'Failed to claim tokens via backend',
+        description: error.message || 'Failed to contact the backend server',
+        variant: 'destructive',
       });
     } finally {
       setIsClaiming(false);

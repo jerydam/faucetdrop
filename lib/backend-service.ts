@@ -18,7 +18,7 @@ export async function claimViaBackend(userAddress: string, faucetAddress: string
       body: JSON.stringify({
         userAddress,
         faucetAddress,
-        whitelist: true, // Instruct backend to whitelist first
+        shouldWhitelist: true // Fixed parameter name to match backend expectation
       }),
     });
 

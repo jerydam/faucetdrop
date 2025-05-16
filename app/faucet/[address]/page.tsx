@@ -101,47 +101,47 @@ export default function FaucetDetails() {
     setHasFollowed(true); // Enable claim button after follow
   };
 
-  const handleClaim = async () => {
-    if (!isConnected || !provider) {
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet to claim tokens",
-        variant: "destructive",
-      });
-      return;
-    }
+  // const handleClaim = async () => {
+  //   if (!isConnected || !provider) {
+  //     toast({
+  //       title: "Wallet not connected",
+  //       description: "Please connect your wallet to claim tokens",
+  //       variant: "destructive",
+  //     });
+  //     return;
+  //   }
 
-    try {
-      const isWhitelisted = await faucetDetails.isWhitelisted;
-      if (!isWhitelisted) {
-        toast({
-          title: "Not Whitelisted",
-          description: "Please use the backend claim option or contact the faucet admin to be whitelisted.",
-          variant: "destructive",
-        });
-        return;
-      }
+  //   try {
+  //     const isWhitelisted = await faucetDetails.isWhitelisted;
+  //     if (!isWhitelisted) {
+  //       toast({
+  //         title: "Not Whitelisted",
+  //         description: "Please use the backend claim option or contact the faucet admin to be whitelisted.",
+  //         variant: "destructive",
+  //       });
+  //       return;
+  //     }
 
-      setIsClaiming(true);
-      await claimTokens(provider, faucetAddress);
+  //     setIsClaiming(true);
+  //     await claimTokens(provider, faucetAddress);
 
-      toast({
-        title: "Tokens claimed successfully",
-        description: `You have claimed ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`,
-      });
+  //     toast({
+  //       title: "Tokens claimed successfully",
+  //       description: `You have claimed ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`,
+  //     });
 
-      await loadFaucetDetails();
-    } catch (error) {
-      console.error("Error claiming tokens:", error);
-      toast({
-        title: "Failed to claim tokens",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
-        variant: "destructive",
-      });
-    } finally {
-      setIsClaiming(false);
-    }
-  };
+  //     await loadFaucetDetails();
+  //   } catch (error) {
+  //     console.error("Error claiming tokens:", error);
+  //     toast({
+  //       title: "Failed to claim tokens",
+  //       description: error instanceof Error ? error.message : "Unknown error occurred",
+  //       variant: "destructive",
+  //     });
+  //   } finally {
+  //     setIsClaiming(false);
+  //   }
+  // };
 
   const handleBackendClaim = async () => {
     if (!address) {
@@ -409,7 +409,7 @@ export default function FaucetDetails() {
                   </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
-                  <Button
+                  {/* <Button
                     className="w-full h-10 text-sm sm:text-base"
                     onClick={handleClaim}
                     disabled={isClaiming || !isConnected || !faucetDetails.isClaimActive || hasClaimed}
@@ -419,7 +419,7 @@ export default function FaucetDetails() {
                       : hasClaimed
                         ? "Already Claimed"
                         : `Claim ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`}
-                  </Button>
+                  </Button> */}
 
                   {!hasFollowed ? (
                     <Button
@@ -436,7 +436,7 @@ export default function FaucetDetails() {
                       onClick={handleBackendClaim}
                       disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed}
                     >
-                      {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim via Backend (Gas-free)`}
+                      {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim `}
                     </Button>
                   )}
                 </CardFooter>

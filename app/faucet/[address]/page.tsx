@@ -24,6 +24,7 @@ import Link from "next/link";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { claimViaBackend } from "@/lib/backend-service";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 export default function FaucetDetails() {
   const { address: faucetAddress } = useParams<{ address: string }>();
@@ -44,6 +45,12 @@ export default function FaucetDetails() {
   const [tokenSymbol, setTokenSymbol] = useState("tokens");
   const [tokenDecimals, setTokenDecimals] = useState(18);
   const [hasClaimed, setHasClaimed] = useState(false);
+  const [hasFollowed, setHasFollowed] = useState(false); // Track if user has clicked follow
+  const [showClaimPopup, setShowClaimPopup] = useState(false); // Control popup visibility
+
+  // Hardcoded X profile link and popup content (replace with actual values or fetch from faucet details)
+  const xProfileLink = "https://x.com/FaucetDrops"; // Example hardcoded link
+  const popupContent = (amount: string) => `I just claimed ${amount} from @FaucetDrops`; // Popup message template
 
   const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase();
 
@@ -86,6 +93,12 @@ export default function FaucetDetails() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleFollow = () => {
+    // Open X profile in a new tab
+    window.open(xProfileLink, "_blank");
+    setHasFollowed(true); // Enable claim button after follow
   };
 
   const handleClaim = async () => {
@@ -133,9 +146,9 @@ export default function FaucetDetails() {
   const handleBackendClaim = async () => {
     if (!address) {
       toast({
-        title: 'Wallet not connected',
-        description: 'Please connect your wallet to claim tokens',
-        variant: 'destructive',
+        title: "Wallet not connected",
+        description: "Please connect your wallet to claim tokens",
+        variant: "destructive",
       });
       return;
     }
@@ -144,16 +157,18 @@ export default function FaucetDetails() {
       setIsClaiming(true);
       const data = await claimViaBackend(address, faucetAddress);
 
-      if (data.status === 'pending') {
+      if (data.status === "pending") {
         const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL || "https://eth-sepolia.g.alchemy.com/v2/your_api_key");
         let attempts = 0;
         while (attempts < 30) {
           const receipt = await provider.getTransactionReceipt(data.txHash!);
           if (receipt) {
+            const claimedAmount = formatUnits(faucetDetails.claimAmount, tokenDecimals);
             toast({
-              title: 'Tokens claimed successfully via backend',
-              description: `You have claimed ${formatUnits(faucetDetails.claimAmount, tokenDecimals)} ${tokenSymbol}`,
+              title: "Tokens claimed successfully via backend",
+              description: `You have claimed ${claimedAmount} ${tokenSymbol}`,
             });
+            setShowClaimPopup(true); // Show popup after successful claim
             await loadFaucetDetails();
             break;
           }
@@ -161,25 +176,35 @@ export default function FaucetDetails() {
           attempts++;
         }
         if (attempts >= 30) {
-          throw new Error('Transaction not confirmed within timeout');
+          throw new Error("Transaction not confirmed within timeout");
         }
       } else {
+        const claimedAmount = formatUnits(faucetDetails.claimAmount, tokenDecimals);
         toast({
-          title: 'Tokens claimed successfully via backend',
-          description: `You have claimed ${formatUnits(faucetDetails.claimAmount, tokenDecimals)} ${tokenSymbol}`,
+          title: "Tokens claimed successfully via backend",
+          description: `You have claimed ${claimedAmount} ${tokenSymbol}`,
         });
+        setShowClaimPopup(true); // Show popup after successful claim
         await loadFaucetDetails();
       }
     } catch (error: any) {
-      console.error('Error claiming tokens via backend:', error);
+      console.error("Error claiming tokens via backend:", error);
       toast({
-        title: 'Failed to claim tokens via backend',
-        description: error.message || 'Failed to contact the backend server',
-        variant: 'destructive',
+        title: "Failed to claim tokens via backend",
+        description: error.message || "Failed to contact the backend server",
+        variant: "destructive",
       });
     } finally {
       setIsClaiming(false);
     }
+  };
+
+  const handleShareOnX = () => {
+    const claimedAmount = formatUnits(faucetDetails.claimAmount, tokenDecimals);
+    const shareText = encodeURIComponent(popupContent(claimedAmount));
+    const shareUrl = `https://x.com/intent/tweet?text=${shareText}`;
+    window.open(shareUrl, "_blank");
+    setShowClaimPopup(false); // Close popup after sharing
   };
 
   const handleFund = async () => {
@@ -355,7 +380,7 @@ export default function FaucetDetails() {
                     </div>
                     <div className="flex flex-col p-3 border rounded-lg">
                       <span className="text-xs sm:text-sm text-muted-foreground">Claim Amount</span>
-                      <span className="text-lg sm:text-xl font-bold()]./font-bold">
+                      <span className="text-lg sm:text-xl font-bold">
                         {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}
                       </span>
                     </div>
@@ -396,14 +421,24 @@ export default function FaucetDetails() {
                         : `Claim ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`}
                   </Button>
 
-                  <Button
-                    className="w-full h-10 text-sm sm:text-base"
-                    variant="outline"
-                    onClick={handleBackendClaim}
-                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed}
-                  >
-                    {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim via Backend (Gas-free)`}
-                  </Button>
+                  {!hasFollowed ? (
+                    <Button
+                      className="w-full h-10 text-sm sm:text-base"
+                      onClick={handleFollow}
+                      disabled={isClaiming}
+                    >
+                      Follow on X to Claim
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full h-10 text-sm sm:text-base"
+                      variant="outline"
+                      onClick={handleBackendClaim}
+                      disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed}
+                    >
+                      {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim via Backend (Gas-free)`}
+                    </Button>
+                  )}
                 </CardFooter>
               </Card>
 
@@ -544,6 +579,23 @@ export default function FaucetDetails() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Claim Success Popup */}
+              <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Claim Successful!</DialogTitle>
+                    <DialogDescription>
+                      {popupContent(formatUnits(faucetDetails.claimAmount, tokenDecimals))}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button onClick={handleShareOnX} className="w-full">
+                      Share on X
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </>
           ) : (
             <Card>

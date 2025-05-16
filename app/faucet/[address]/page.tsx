@@ -414,7 +414,7 @@ export default function FaucetDetails() {
                       onClick={handleFollow}
                       disabled={isClaiming}
                     >
-                      Follow on X to Claim
+                      Follow on 𝕏 to Claim
                     </Button>
                   
                     <Button
@@ -580,7 +580,7 @@ export default function FaucetDetails() {
                       onClick={handleShareOnX} 
                       className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                     >
-                      Share on X
+                      Share on 𝕏
                     </Button>
                   </DialogFooter>
                 </DialogContent>

@@ -408,7 +408,7 @@ export default function FaucetDetails() {
                   </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
-                  {!hasFollowed ? (
+                  
                     <Button
                       className="w-full h-9 sm:h-10 text-sm sm:text-base"
                       onClick={handleFollow}
@@ -416,7 +416,7 @@ export default function FaucetDetails() {
                     >
                       Follow on X to Claim
                     </Button>
-                  ) : (
+                  
                     <Button
                       className="w-full h-9 sm:h-10 text-sm sm:text-base"
                       variant="outline"
@@ -425,7 +425,7 @@ export default function FaucetDetails() {
                     >
                       {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim `}
                     </Button>
-                  )}
+                 
                 </CardFooter>
               </Card>
 

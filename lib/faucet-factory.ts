@@ -1,34 +1,12 @@
 import { type BrowserProvider, Contract } from "ethers";
 import { getFaucetDetails } from "./faucet";
 import { FACTORY_ABI } from "./abis";
-import { Network } from "@/hooks/use-network";
-import { getFaucetXProfileLink } from "./faucetLink";
+import { Network } from "@/hooks/use-network"; // Import Network type
 
-// Interface for faucet details with xProfileLink
-interface FaucetDetails {
-  faucetAddress: string;
-  token: string;
-  owner: string;
-  balance: bigint;
-  claimAmount: bigint;
-  startTime: bigint;
-  endTime: bigint;
-  isClaimActive: boolean;
-  tokenSymbol: string;
-  tokenDecimals: number;
-  hasClaimed: boolean;
-  isWhitelisted: boolean;
-  xProfileLink?: string;
-}
-
-export async function createFaucet(provider: BrowserProvider, network: Network, xProfileLink: string) {
+export async function createFaucet(provider: BrowserProvider, network: Network) {
   try {
     if (!network?.factoryAddress) {
       throw new Error("Factory address not found for the network");
-    }
-
-    if (!xProfileLink.startsWith("https://x.com/")) {
-      throw new Error("Invalid X profile link. Must start with https://x.com/");
     }
 
     const signer = await provider.getSigner();
@@ -53,14 +31,7 @@ export async function createFaucet(provider: BrowserProvider, network: Network, 
       throw new Error("Failed to retrieve faucet address from transaction");
     }
 
-    const faucetAddress = faucetCreatedEvent.args.faucet as string;
-
-    // Log the faucet address and X profile link for manual addition
-    console.log(`New faucet created: ${faucetAddress}`);
-    console.log(`X Profile Link: ${xProfileLink}`);
-    console.log(`Please add to faucetXProfileLinks.ts: "${faucetAddress.toLowerCase()}": "${xProfileLink}"`);
-
-    return faucetAddress;
+    return faucetCreatedEvent.args.faucet as string;
   } catch (error) {
     console.error("Error creating faucet:", error);
     throw error;
@@ -79,20 +50,15 @@ export async function getAllFaucets(provider: BrowserProvider, network: Network)
     // Get list of faucet addresses
     const faucetAddresses: string[] = await factoryContract.getAllFaucets();
 
-    // Fetch details for each faucet and include xProfileLink
+    // Fetch details for each faucet
     const faucetDetails = await Promise.all(
       faucetAddresses.map(async (faucetAddress) => {
         try {
           const details = await getFaucetDetails(provider, faucetAddress);
-          const xProfileLink = getFaucetXProfileLink(faucetAddress); // Retrieve xProfileLink
-          return {
-            ...details,
-            faucetAddress,
-            xProfileLink,
-          } as FaucetDetails;
+          return details;
         } catch (error) {
           console.error(`Error fetching details for faucet ${faucetAddress}:`, error);
-          return null;
+          return null; // Skip failed faucets
         }
       })
     );

@@ -63,7 +63,7 @@ export default function FaucetDetails() {
 
   const xProfileLink = "https://x.com/FaucetDrops";
   const popupContent = (amount: string, txHash: string | null) =>
-    `I just claimed ${amount} ARB from @FaucetDrops. Verify claim: ${
+    `I just claimed ${amount} ETH from @FaucetDrops. Verify claim: ${
       txHash ? `https://sepolia.arbiscan.io/tx/0x${txHash}` : "Transaction not available"
     }`;
 

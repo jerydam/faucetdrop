@@ -14,7 +14,7 @@ export default function Home() {
         <div className="flex flex-col gap-6">
           <header className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex flex-col sm:flex-row items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold">Token Faucet</h1>
+              <h1 className="text-xl sm:text-2xl font-bold"> aucet Drop</h1>
               <NetworkSelector />
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3">

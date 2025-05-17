@@ -7,19 +7,31 @@ export async function getFaucetDetails(provider: BrowserProvider, faucetAddress:
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
 
     // Get basic faucet info
-    const ownerAddress = await faucetContract.owner();
-    const claimAmount = await faucetContract.claimAmount();
-    const startTime = await faucetContract.startTime();
-    const endTime = await faucetContract.endTime();
-    const isClaimActive = await faucetContract.isClaimActive();
-    const balance = await faucetContract.getFaucetBalance();
+    const [ownerAddress, claimAmount, startTime, endTime, isClaimActive, balance, userAddress] = await Promise.all([
+      faucetContract.owner(),
+      faucetContract.claimAmount(),
+      faucetContract.startTime(),
+      faucetContract.endTime(),
+      faucetContract.isClaimActive(),
+      faucetContract.getFaucetBalance(),
+      signer.getAddress(),
+    ]);
 
     // Get user-specific info
-    const userAddress = await signer.getAddress();
     const hasClaimed = await faucetContract.hasClaimed(userAddress);
+
+    // Conditionally fetch name
+    let name: string | undefined;
+    try {
+      name = await faucetContract.name();
+    } catch (error) {
+      console.warn(`Faucet at ${faucetAddress} does not support name():`, error);
+      name = undefined; // Or set a default like "Unnamed Faucet"
+    }
 
     return {
       faucetAddress,
+      name,
       owner: ownerAddress,
       claimAmount,
       startTime,

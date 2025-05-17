@@ -25,14 +25,12 @@ import { Switch } from "@/components/ui/switch";
 import { claimViaBackend } from "@/lib/backend-service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
-// Define interface for claimViaBackend response
 interface ClaimResponse {
   success: boolean;
   txHash?: string;
   status?: string;
 }
 
-// Define interface for backend error response
 interface BackendError {
   message?: string;
   detail?: string;
@@ -54,7 +52,7 @@ export default function FaucetDetails() {
   const [endTime, setEndTime] = useState("");
   const [whitelistAddresses, setWhitelistAddresses] = useState("");
   const [isWhitelistEnabled, setIsWhitelistEnabled] = useState(false);
-  const [tokenSymbol, setTokenSymbol] = useState("tokens");
+  const [tokenSymbol, setTokenSymbol] = useState("ETH");
   const [tokenDecimals, setTokenDecimals] = useState(18);
   const [hasClaimed, setHasClaimed] = useState(false);
   const [hasFollowed, setHasFollowed] = useState(false);
@@ -64,7 +62,7 @@ export default function FaucetDetails() {
   const xProfileLink = "https://x.com/FaucetDrops";
   const popupContent = (amount: string, txHash: string | null) =>
     `I just claimed ${amount} ETH from @FaucetDrops. Verify claim: ${
-      txHash ? `https://sepolia.arbiscan.io/tx/0x${txHash}` : "Transaction not available"
+      txHash ? `https://arbiscan.io/tx/0x${txHash}` : "Transaction not available"
     }`;
 
   const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase();
@@ -95,7 +93,7 @@ export default function FaucetDetails() {
         setEndTime(date.toISOString().slice(0, 16));
       }
 
-      setTokenSymbol(details.tokenSymbol || "ARB");
+      setTokenSymbol(details.tokenSymbol || "ETH");
       setTokenDecimals(details.tokenDecimals || 18);
       setHasClaimed(details.hasClaimed || false);
     } catch (error) {
@@ -135,7 +133,7 @@ export default function FaucetDetails() {
 
       if (data.status === "pending" && data.txHash) {
         const provider = new ethers.JsonRpcProvider(
-          process.env.NEXT_PUBLIC_RPC_URL || "https://sepolia-rollup.arbitrum.io/rpc"
+          process.env.NEXT_PUBLIC_RPC_URL || "https://arb1.arbitrum.io/rpc"
         );
         let attempts = 0;
         while (attempts < 30) {
@@ -341,7 +339,7 @@ export default function FaucetDetails() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <span className="text-base sm:text-lg lg:text-xl">{tokenSymbol} Faucet</span>
+                    <span className="text-base sm:text-lg lg:text-xl">{faucetDetails.name}</span>
                     {faucetDetails.isClaimActive ? (
                       <span className="text-xs sm:text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded-full">
                         Active
@@ -357,10 +355,6 @@ export default function FaucetDetails() {
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span className="font-medium">Faucet Address:</span>
                         <span className="font-mono break-all">{faucetAddress}</span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                        <span className="font-medium">Token Address:</span>
-                        <span className="font-mono break-all">{faucetDetails.token}</span>
                       </div>
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span className="font-medium">Owner:</span>
@@ -408,24 +402,21 @@ export default function FaucetDetails() {
                   </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
-                  
-                    <Button
-                      className="w-full h-9 sm:h-10 text-sm sm:text-base"
-                      onClick={handleFollow}
-                      disabled={isClaiming}
-                    >
-                      Follow on 𝕏 to Claim
-                    </Button>
-                  
-                    <Button
-                      className="w-full h-9 sm:h-10 text-sm sm:text-base"
-                      variant="outline"
-                      onClick={handleBackendClaim}
-                      disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed}
-                    >
-                      {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim `}
-                    </Button>
-                 
+                  <Button
+                    className="w-full h-9 sm:h-10 text-sm sm:text-base"
+                    onClick={handleFollow}
+                    disabled={isClaiming || hasFollowed}
+                  >
+                    {hasFollowed ? "Followed" : "Follow on 𝕏 to Claim"}
+                  </Button>
+                  <Button
+                    className="w-full h-9 sm:h-10 text-sm sm:text-base"
+                    variant="outline"
+                    onClick={handleBackendClaim}
+                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !hasFollowed}
+                  >
+                    {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim`}
+                  </Button>
                 </CardFooter>
               </Card>
 
@@ -469,7 +460,7 @@ export default function FaucetDetails() {
                                 Fund
                               </Button>
                             </div>
-                            <p className="text-xs text-muted-foreground">Add tokens to the faucet</p>
+                            <p className="text-xs text-muted-foreground">Add ETH to the faucet</p>
                           </div>
 
                           <div className="space-y-2">
@@ -487,7 +478,7 @@ export default function FaucetDetails() {
                                 Withdraw
                               </Button>
                             </div>
-                            <p className="text-xs text-muted-foreground">Withdraw tokens from the faucet</p>
+                            <p className="text-xs text-muted-foreground">Withdraw ETH from the faucet</p>
                           </div>
                         </div>
                       </TabsContent>
@@ -503,7 +494,7 @@ export default function FaucetDetails() {
                               onChange={(e) => setClaimAmount(e.target.value)}
                               className="h-9 text-sm"
                             />
-                            <p className="text-xs text-muted-foreground">Amount of tokens users can claim</p>
+                            <p className="text-xs text-muted-foreground">Amount of ETH users can claim</p>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -568,11 +559,13 @@ export default function FaucetDetails() {
               )}
 
               <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
-                <DialogContent className="w-[95vw] max-w-[380px] sm:max-w-[450px] max-h-[90vh] overflow-y-auto p-3 sm:p-4 rounded-lg">
+                <DialogContent className="w-[95vw] max-w-[380px] sm:max-w-[450px] p-3 sm:p-4 rounded-lg overflow-y-hidden">
                   <DialogHeader>
                     <DialogTitle className="text-sm sm:text-base md:text-lg">Claim Successful!</DialogTitle>
-                    <DialogDescription className="text-xs sm:text-sm break-words hyphens-auto">
-                      {popupContent(formatUnits(faucetDetails.claimAmount, tokenDecimals), txHash)}
+                    <DialogDescription className="text-xs sm:text-sm break-words">
+                      <span className="flex flex-wrap">
+                        {popupContent(formatUnits(faucetDetails.claimAmount, tokenDecimals), txHash)}
+                      </span>
                     </DialogDescription>
                   </DialogHeader>
                   <DialogFooter className="mt-2 sm:mt-3">

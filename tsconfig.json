@@ -24,7 +24,7 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "lib/**/*.ts"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "lib/**/*.ts", "dist/lib/faucet-factory.js"],
   "exclude": ["node_modules"],
   "ts-node": {
     "esm": true, // Enable ESM support for ts-node

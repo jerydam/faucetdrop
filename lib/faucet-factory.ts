@@ -1,9 +1,9 @@
 import { type BrowserProvider, Contract } from "ethers";
 import { getFaucetDetails } from "./faucet";
 import { FACTORY_ABI } from "./abis";
-import { Network } from "@/hooks/use-network"; // Import Network type
+import { Network } from "@/hooks/use-network";
 
-export async function createFaucet(provider: BrowserProvider, network: Network) {
+export async function createFaucet(provider: BrowserProvider, network: Network, name: string) {
   try {
     if (!network?.factoryAddress) {
       throw new Error("Factory address not found for the network");
@@ -12,8 +12,8 @@ export async function createFaucet(provider: BrowserProvider, network: Network) 
     const signer = await provider.getSigner();
     const factoryContract = new Contract(network.factoryAddress, FACTORY_ABI, signer);
 
-    // Call createFaucet function
-    const tx = await factoryContract.createFaucet();
+    // Call createFaucet function with name
+    const tx = await factoryContract.createFaucet(name);
     const receipt = await tx.wait();
 
     // Extract the new faucet address from the FaucetCreated event
@@ -58,7 +58,7 @@ export async function getAllFaucets(provider: BrowserProvider, network: Network)
           return details;
         } catch (error) {
           console.error(`Error fetching details for faucet ${faucetAddress}:`, error);
-          return null; // Skip failed faucets
+          return null;
         }
       })
     );

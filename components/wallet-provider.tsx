@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { BrowserProvider, type JsonRpcSigner } from "ethers";
 import { useNetwork } from "@/hooks/use-network";
 
-// Type for EIP-1193 compatible provider
 interface EIP1193Provider {
   request: (args: { method: string; params?: any[] }) => Promise<any>;
   on: (event: string, callback: (...args: any[]) => void) => void;
@@ -40,7 +39,7 @@ export const WalletContext = createContext<WalletContextType>({
   isSwitchingNetwork: false,
 });
 
-const ARBITRUM_SEPOLIA = 421614;
+const ARBITRUM_MAINNET = 42161;
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
@@ -111,9 +110,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (chainId && chainId !== ARBITRUM_SEPOLIA && !isSwitchingNetwork && network) {
+    if (chainId && chainId !== ARBITRUM_MAINNET && !isSwitchingNetwork && network) {
       setIsSwitchingNetwork(true);
-      switchNetwork(ARBITRUM_SEPOLIA).catch((error) => {
+      switchNetwork(ARBITRUM_MAINNET).catch((error) => {
         console.error("Error switching network:", error);
         setIsSwitchingNetwork(false);
       });
@@ -134,8 +133,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         const accounts = await provider.send("eth_requestAccounts", []);
         await handleAccountsChanged(accounts);
-        if (chainId !== ARBITRUM_SEPOLIA) {
-          await switchNetwork(ARBITRUM_SEPOLIA);
+        if (chainId !== ARBITRUM_MAINNET) {
+          await switchNetwork(ARBITRUM_MAINNET);
         }
       } catch (error) {
         console.error("Error connecting wallet:", error);

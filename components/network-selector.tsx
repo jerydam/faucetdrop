@@ -9,21 +9,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Define supported networks
 const SUPPORTED_NETWORKS = [
   {
-    chainId: 421614,
-    name: "Arbitrum Sepolia",
+    chainId: 42161,
+    name: "Arbitrum Mainnet",
     color: "#28A0F0",
-    blockExplorer: "https://sepolia.arbiscan.io",
-    rpcUrl: "https://sepolia-rollup.arbitrum.io/rpc",
-  },
-  {
-    chainId: 11155111,
-    name: "Ethereum Sepolia",
-    color: "#627EEA",
-    blockExplorer: "https://sepolia.etherscan.io",
-    rpcUrl: "https://rpc.sepolia.org",
+    blockExplorer: "https://arbiscan.io",
+    rpcUrl: "https://arb1.arbitrum.io/rpc",
   },
 ];
 

@@ -21,14 +21,15 @@ interface NetworkContextType {
 // Only include Arbitrum Sepolia
 const networks: Network[] = [
   {
-    name: "Arbitrum Sepolia",
-    chainId: 421614,
-    rpcUrl: "https://sepolia-rollup.arbitrum.io/rpc",
-    blockExplorer: "https://sepolia.arbiscan.io",
+    name: "Arbitrum Mainnet",
+    chainId: 42161,
+    rpcUrl: "https://arb1.arbitrum.io/rpc",
+    blockExplorer: "https://arbiscan.io",
     color: "#28A0F0",
-    factoryAddress: "0xDbD1CC7077AC8B8b85d7526995C64cd6F1B7Bd5B",
+    factoryAddress: "0xd041701cC67944fEdc311d7f1825A52b93C4aBF1", // Replace with actual factory address
   },
 ];
+
 
 const NetworkContext = createContext<NetworkContextType>({
   network: null,

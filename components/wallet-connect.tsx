@@ -15,7 +15,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useNetwork } from "@/hooks/use-network";
 
-const ARBITRUM_SEPOLIA = 421614;
+const ARBITRUM_MAINNET = 42161;
 
 export function WalletConnect() {
   const { address, isConnected, connect, disconnect, chainId, isSwitchingNetwork } = useWallet();
@@ -36,10 +36,10 @@ export function WalletConnect() {
     setIsConnecting(true);
     try {
       await connect();
-      if (chainId !== ARBITRUM_SEPOLIA) {
+      if (chainId !== ARBITRUM_MAINNET) {
         toast({
           title: "Wrong network",
-          description: "Please switch to Arbitrum Sepolia.",
+          description: "Please switch to Arbitrum Mainnet.",
           variant: "destructive",
         });
       }

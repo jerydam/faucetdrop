@@ -128,7 +128,9 @@ This project is licensed under the MIT License. See the LICENSE file for more de
 ## 📬 Contact
 
 For support, partnership, or questions, contact the Faucet Drop team via:
+
 **𝕏:** [@Jerydam00](https://x.com/Jerydam00)
+
 **𝕏:** [@Johnadek_](https://x.com/Johnadek_)
 
 ---

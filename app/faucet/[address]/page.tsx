@@ -392,8 +392,7 @@ export default function FaucetDetails() {
                         Active from{" "}
                         {faucetDetails.startTime
                           ? new Date(Number(faucetDetails.startTime) * 1000).toLocaleString()
-                          : "N/A"}
-                        to{" "}
+                          : "N/A"}{" "} to{" "}
                         {faucetDetails.endTime
                           ? new Date(Number(faucetDetails.endTime) * 1000).toLocaleString()
                           : "N/A"}
@@ -413,7 +412,7 @@ export default function FaucetDetails() {
                     className="w-full h-9 sm:h-10 text-sm sm:text-base"
                     variant="outline"
                     onClick={handleBackendClaim}
-                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !hasFollowed}
+                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed}
                   >
                     {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim`}
                   </Button>

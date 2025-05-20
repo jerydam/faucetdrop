@@ -20,7 +20,7 @@ function FaucetCard({ faucet }: FaucetCardProps) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base sm:text-lg flex items-center justify-between">
-          <span>{faucet.tokenSymbol || "Token"} Faucet</span>
+          <span>{faucet.name || `${faucet.tokenSymbol} Faucet`}</span>
           {faucet.isClaimActive ? (
             <span className="text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
               Active
@@ -38,15 +38,13 @@ function FaucetCard({ faucet }: FaucetCardProps) {
           <div className="flex justify-between items-center">
             <span className="text-xs sm:text-sm text-muted-foreground">Balance:</span>
             <span className="text-sm sm:text-base font-medium">
-              {faucet.balance ? formatUnits(faucet.balance, faucet.tokenDecimals || 18) : "0"}{" "}
-              {faucet.tokenSymbol || "tokens"}
+              {faucet.balance ? formatUnits(faucet.balance, faucet.tokenDecimals || 18) : "0"} {faucet.tokenSymbol}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs sm:text-sm text-muted-foreground">Claim Amount:</span>
             <span className="text-sm sm:text-base font-medium">
-              {faucet.claimAmount ? formatUnits(faucet.claimAmount, faucet.tokenDecimals || 18) : "0"}{" "}
-              {faucet.tokenSymbol || "tokens"}
+              {faucet.claimAmount ? formatUnits(faucet.claimAmount, faucet.tokenDecimals || 18) : "0"} {faucet.tokenSymbol}
             </span>
           </div>
         </div>

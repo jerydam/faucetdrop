@@ -72,7 +72,7 @@ export default function FaucetDetails() {
   // X/Twitter integration
   const xProfileLink = "https://x.com/FaucetDrops";
   const popupContent = (amount: string, txHash: string | null) =>
-    `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${network?.name || "the network"}. Verify claim: ${
+    `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${network?.name || "the network"}. Verify Drop 💧: ${
       txHash ? `${network?.blockExplorer}/tx/0x${txHash}` : "Transaction not available"
     }`;
 

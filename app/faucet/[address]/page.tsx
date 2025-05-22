@@ -38,7 +38,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { DivviInfo } from "@/components/divvi-info";
 
 export default function FaucetDetails() {
   const { address: faucetAddress } = useParams<{ address: string }>();
@@ -212,7 +211,7 @@ export default function FaucetDetails() {
   };
 
   async function handleBackendClaim() {
-    if (!isDisconnected || !address || !provider) {
+    if (!isConnected || !address || !provider) {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet to claim tokens",
@@ -433,7 +432,6 @@ export default function FaucetDetails() {
 
           {faucetDetails ? (
             <>
-              <DivviInfo />
               <Card className="w-full sm:max-w-2xl mx-auto">
                 <CardHeader className="px-4 sm:px-6">
                   <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
@@ -529,9 +527,9 @@ export default function FaucetDetails() {
                   <Button
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                     onClick={handleFollow}
-                    disabled={isClaiming || hasFollowed}
+                    disabled={isClaiming}
                   >
-                    {hasFollowed ? "Followed" : "Follow on 𝕏 to Claim"}
+                    {"Follow on 𝕏 to Claim"}
                   </Button>
                   <Button
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm"

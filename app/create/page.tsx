@@ -1,67 +1,72 @@
-"use client"
+"use client";
 
-import { Alert } from "@/components/ui/alert"
-import { useState, useEffect } from "react"
-import { useWallet } from "@/hooks/use-wallet"
-import { useNetwork } from "@/hooks/use-network"
-import { useToast } from "@/hooks/use-toast"
-import { createFaucet } from "@/lib/faucet"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
-import Link from "next/link"
-import { NetworkSelector } from "@/components/network-selector"
-import { WalletConnect } from "@/components/wallet-connect"
-import { DivviInfo } from "@/components/divvi-info"
-import { Loader2, ArrowLeft } from "lucide-react"
+import { Alert } from "@/components/ui/alert";
+import { useState, useEffect } from "react";
+import { useWallet } from "@/hooks/use-wallet";
+import { useNetwork } from "@/hooks/use-network";
+import { useToast } from "@/hooks/use-toast";
+import { createFaucet } from "@/lib/faucet";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle, Loader2, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { NetworkSelector } from "@/components/network-selector";
+import { WalletConnect } from "@/components/wallet-connect";
 
 export default function CreateFaucet() {
-  const { provider, address, isConnected, connect, chainId } = useWallet()
-  const { network } = useNetwork()
-  const { toast } = useToast()
-  const [name, setName] = useState("")
-  const [isCreating, setIsCreating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { provider, address, isConnected, connect, chainId } = useWallet();
+  const { network } = useNetwork();
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (network && chainId && chainId !== network.chainId) {
-      setError(`Please switch to the ${network.name} network to create a faucet`)
+      setError(`Please switch to the ${network.name} network to create a faucet`);
     } else {
-      setError(null)
+      setError(null);
     }
-  }, [network, chainId])
+  }, [network, chainId]);
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      setError("Please enter a faucet name")
-      return
+      setError("Please enter a faucet name");
+      return;
     }
 
-    setError(null)
+    setError(null);
 
     if (!isConnected) {
       try {
-        await connect()
+        await connect();
       } catch (error) {
-        console.error("Failed to connect wallet:", error)
-        setError("Failed to connect wallet. Please try again.")
-        return
+        console.error("Failed to connect wallet:", error);
+        setError("Failed to connect wallet. Please try again.");
+        return;
       }
     }
 
     if (!provider || !network || !chainId) {
-      setError("Wallet not connected or network not selected")
-      return
+      setError("Wallet not connected or network not selected");
+      return;
     }
 
-    setIsCreating(true)
+    setIsCreating(true);
 
     try {
-      const factoryAddress = network.factoryAddress
-      const tokenAddress = network.tokenAddress
+      const factoryAddress = network.factoryAddress;
+      const tokenAddress = network.tokenAddress;
 
       console.log("Creating faucet with params:", {
         factoryAddress,
@@ -70,31 +75,30 @@ export default function CreateFaucet() {
         backendAddress: factoryAddress,
         chainId,
         networkId: network.chainId,
-      })
+      });
 
       const faucetAddress = await createFaucet(
         provider,
         factoryAddress,
         name,
         tokenAddress,
-        factoryAddress,
         chainId,
         network.chainId
-      )
+      );
 
       if (!faucetAddress) {
-        throw new Error("Failed to get created faucet address")
+        throw new Error("Failed to get created faucet address");
       }
 
       toast({
         title: "Faucet Created",
         description: `Your faucet has been created at ${faucetAddress}`,
-      })
+      });
 
-      window.location.href = `/faucet/${faucetAddress}?networkId=${network.chainId}`
+      window.location.href = `/faucet/${faucetAddress}?networkId=${network.chainId}`;
     } catch (error: any) {
-      console.error("Error creating faucet:", error)
-      let errorMessage = error.message || "Failed to create faucet"
+      console.error("Error creating faucet:", error);
+      let errorMessage = error.message || "Failed to create faucet";
 
       if (errorMessage.includes("Switch to the network")) {
         toast({
@@ -103,27 +107,33 @@ export default function CreateFaucet() {
           variant: "destructive",
           action: (
             <Button
-              onClick={() => network && window.ethereum.request({
-                method: "wallet_switchEthereumChain",
-                params: [{ chainId: `0x${network.chainId.toString(16)}` }],
-              })}
+              onClick={() =>
+                network &&
+                window.ethereum.request({
+                  method: "wallet_switchEthereumChain",
+                  params: [{ chainId: `0x${network.chainId.toString(16)}` }],
+                })
+              }
             >
               Switch to {network?.name}
             </Button>
           ),
-        })
+        });
       } else {
         toast({
           title: "Failed to create faucet",
           description: errorMessage,
           variant: "destructive",
-        })
+        });
       }
-      setError(errorMessage)
+      setError(errorMessage);
     } finally {
-      setIsCreating(false)
+      setIsCreating(false);
     }
-  }
+  };
+
+  // Ensure disabled prop is boolean | undefined
+  const isDisabled = isCreating || !network || (chainId !== undefined && network && chainId !== network.chainId);
 
   return (
     <main className="min-h-screen">
@@ -144,11 +154,13 @@ export default function CreateFaucet() {
         </header>
 
         <div className="max-w-2xl mx-auto">
-          <DivviInfo />
+          
           <Card>
             <CardHeader>
               <CardTitle>Create New Faucet</CardTitle>
-              <CardDescription>Create a new token faucet on {network?.name || "the current network"}</CardDescription>
+              <CardDescription>
+                Create a new token faucet on {network?.name || "the current network"}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {error && (
@@ -189,7 +201,7 @@ export default function CreateFaucet() {
             <CardFooter>
               <Button
                 onClick={handleCreate}
-                disabled={isCreating || (network && chainId !== network.chainId)}
+                disabled={isDisabled}
                 className="w-full"
               >
                 {isCreating ? (
@@ -208,5 +220,5 @@ export default function CreateFaucet() {
         </div>
       </div>
     </main>
-  )
+  );
 }

@@ -10,8 +10,9 @@ import { NetworkProvider } from "@/hooks/use-network"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Faucet Drop",
-  description: "Claim tokens from faucets",
+  title: "Token Faucet",
+  description: "Claim testnet tokens from faucets",
+    generator: 'v0.dev'
 }
 
 export default function RootLayout({

@@ -1,36 +1,46 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useToast } from "@/hooks/use-toast";
-import { useWallet } from "@/hooks/use-wallet";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { NetworkSelector } from "@/components/network-selector";
-import { claimViaBackend } from "@/lib/backend-service";
-import { ArrowLeft, Users } from "lucide-react";
-import Link from "next/link";
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
+import { useWallet } from "@/hooks/use-wallet"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { NetworkSelector } from "@/components/network-selector"
+import { claimViaBackend } from "@/lib/backend-service"
+import { ArrowLeft, Users } from "lucide-react"
+import Link from "next/link"
+// Add the useNetwork import
+import { useNetwork } from "@/hooks/use-network"
 
 export default function BatchClaimPage() {
-  const { toast } = useToast();
-  const router = useRouter();
-  const { address, isConnected } = useWallet();
+  const { toast } = useToast()
+  const router = useRouter()
+  const { address, isConnected } = useWallet()
+  const { network, ensureCorrectNetwork } = useNetwork()
 
-  const [faucetAddress, setFaucetAddress] = useState("");
-  const [addresses, setAddresses] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [faucetAddress, setFaucetAddress] = useState("")
+  const [addresses, setAddresses] = useState("")
+  const [isProcessing, setIsProcessing] = useState(false)
 
+  // Update the handleBatchClaim function to include network checking
   const handleBatchClaim = async () => {
     if (!isConnected) {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet to process batch claims",
         variant: "destructive",
-      });
-      return;
+      })
+      return
+    }
+
+    // Ensure we're on the correct network
+    if (network) {
+      const isCorrectNetwork = await ensureCorrectNetwork(network.chainId)
+      if (!isCorrectNetwork) return
     }
 
     if (!faucetAddress) {
@@ -38,37 +48,37 @@ export default function BatchClaimPage() {
         title: "Faucet address required",
         description: "Please enter a valid faucet address",
         variant: "destructive",
-      });
-      return;
+      })
+      return
     }
 
     const addressList = addresses
       .split(/[\n,]/)
       .map((addr) => addr.trim())
-      .filter((addr) => addr.length > 0 && addr.startsWith("0x"));
+      .filter((addr) => addr.length > 0 && addr.startsWith("0x"))
 
     if (addressList.length === 0) {
       toast({
         title: "No valid addresses",
         description: "Please enter at least one valid Ethereum address",
         variant: "destructive",
-      });
-      return;
+      })
+      return
     }
 
-    setIsProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
+    setIsProcessing(true)
+    let successCount = 0
+    let failCount = 0
 
     try {
       // Process each address sequentially
       for (const userAddress of addressList) {
         try {
-          await claimViaBackend(userAddress, faucetAddress);
-          successCount++;
+          await claimViaBackend(userAddress, faucetAddress)
+          successCount++
         } catch (error) {
-          console.error(`Error claiming for ${userAddress}:`, error);
-          failCount++;
+          console.error(`Error claiming for ${userAddress}:`, error)
+          failCount++
         }
       }
 
@@ -76,25 +86,23 @@ export default function BatchClaimPage() {
         title: "Batch claim processed",
         description: `Successfully claimed for ${successCount} addresses. Failed: ${failCount}`,
         variant: successCount > 0 ? "default" : "destructive",
-      });
+      })
 
       if (successCount > 0) {
-        setAddresses(""); // Clear form on success
+        // Clear form on success
+        setAddresses("")
       }
     } catch (error) {
-      console.error("Error in batch claim:", error);
+      console.error("Error in batch claim:", error)
       toast({
         title: "Batch claim failed",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to process batch claim. Please check the backend server and try again.",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsProcessing(false);
+      setIsProcessing(false)
     }
-  };
+  }
 
   return (
     <main className="min-h-screen">
@@ -165,5 +173,5 @@ export default function BatchClaimPage() {
         </div>
       </div>
     </main>
-  );
+  )
 }

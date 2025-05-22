@@ -8,14 +8,18 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Textarea } from "@/components/ui/textarea"
 import { claimViaBackend } from "@/lib/backend-service"
 import { Users } from "lucide-react"
+// Add the useNetwork import
+import { useNetwork } from "@/hooks/use-network"
 
 interface BatchClaimProps {
   faucetAddress: string
 }
 
+// Update the BatchClaim component to include network checking
 export function BatchClaim({ faucetAddress }: BatchClaimProps) {
   const { toast } = useToast()
-  const { address } = useWallet()
+  const { address, ensureCorrectNetwork } = useWallet()
+  const { network } = useNetwork()
   const [addresses, setAddresses] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -27,6 +31,12 @@ export function BatchClaim({ faucetAddress }: BatchClaimProps) {
         variant: "destructive",
       })
       return
+    }
+
+    // Ensure we're on the correct network
+    if (network) {
+      const isCorrectNetwork = await ensureCorrectNetwork(network.chainId)
+      if (!isCorrectNetwork) return
     }
 
     const addressList = addresses

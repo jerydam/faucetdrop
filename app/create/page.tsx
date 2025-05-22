@@ -1,157 +1,206 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useToast } from "@/hooks/use-toast";
-import { useWallet } from "@/hooks/use-wallet";
-import { useNetwork } from "@/hooks/use-network";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { NetworkSelector } from "@/components/network-selector";
-import { createFaucet } from "@/lib/faucet-factory";
-import { ArrowLeft, Plus } from "lucide-react";
-import Link from "next/link";
-
-const ARBITRUM_MAINNET = 42161;
+import { Alert } from "@/components/ui/alert"
+import { useState, useEffect } from "react"
+import { useWallet } from "@/hooks/use-wallet"
+import { useNetwork } from "@/hooks/use-network"
+import { useToast } from "@/hooks/use-toast"
+import { createFaucet } from "@/lib/faucet"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
+import Link from "next/link"
+import { NetworkSelector } from "@/components/network-selector"
+import { WalletConnect } from "@/components/wallet-connect"
+import { DivviInfo } from "@/components/divvi-info"
+import { Loader2, ArrowLeft } from "lucide-react"
 
 export default function CreateFaucet() {
-  const { toast } = useToast();
-  const router = useRouter();
-  const { isConnected, provider, chainId, isSwitchingNetwork } = useWallet();
-  const { network } = useNetwork();
-  const [isCreating, setIsCreating] = useState(false);
-  const [faucetName, setFaucetName] = useState("");
+  const { provider, address, isConnected, connect, chainId } = useWallet()
+  const { network } = useNetwork()
+  const { toast } = useToast()
+  const [name, setName] = useState("")
+  const [isCreating, setIsCreating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (network && chainId && chainId !== network.chainId) {
+      setError(`Please switch to the ${network.name} network to create a faucet`)
+    } else {
+      setError(null)
+    }
+  }, [network, chainId])
 
   const handleCreate = async () => {
-    if (!isConnected || !provider) {
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet to create a faucet",
-        variant: "destructive",
-      });
-      return;
+    if (!name.trim()) {
+      setError("Please enter a faucet name")
+      return
     }
 
-    if (chainId !== ARBITRUM_MAINNET) {
-      toast({
-        title: "Wrong network",
-        description: "Please switch to Arbitrum Mainnet to create a faucet.",
-        variant: "destructive",
-      });
-      return;
+    setError(null)
+
+    if (!isConnected) {
+      try {
+        await connect()
+      } catch (error) {
+        console.error("Failed to connect wallet:", error)
+        setError("Failed to connect wallet. Please try again.")
+        return
+      }
     }
 
-    if (isSwitchingNetwork) {
-      toast({
-        title: "Network switch in progress",
-        description: "Please wait until the network switch is complete.",
-        variant: "destructive",
-      });
-      return;
+    if (!provider || !network || !chainId) {
+      setError("Wallet not connected or network not selected")
+      return
     }
 
-    if (!network) {
-      toast({
-        title: "Network not selected",
-        description: "Please select a network to create a faucet.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!faucetName.trim()) {
-      toast({
-        title: "Faucet name required",
-        description: "Please enter a name for the faucet.",
-        variant: "destructive",
-      });
-      return;
-    }
+    setIsCreating(true)
 
     try {
-      setIsCreating(true);
-      const faucetAddress = await createFaucet(provider, network, faucetName);
+      const factoryAddress = network.factoryAddress
+      const tokenAddress = network.tokenAddress
+
+      console.log("Creating faucet with params:", {
+        factoryAddress,
+        name,
+        tokenAddress,
+        backendAddress: factoryAddress,
+        chainId,
+        networkId: network.chainId,
+      })
+
+      const faucetAddress = await createFaucet(
+        provider,
+        factoryAddress,
+        name,
+        tokenAddress,
+        factoryAddress,
+        chainId,
+        network.chainId
+      )
+
+      if (!faucetAddress) {
+        throw new Error("Failed to get created faucet address")
+      }
 
       toast({
-        title: "Faucet created successfully",
-        description: `New faucet address: ${faucetAddress}`,
-      });
+        title: "Faucet Created",
+        description: `Your faucet has been created at ${faucetAddress}`,
+      })
 
-      router.push(`/faucet/${faucetAddress}`);
+      window.location.href = `/faucet/${faucetAddress}?networkId=${network.chainId}`
     } catch (error: any) {
-      console.error("Error creating faucet:", error);
-      toast({
-        title: "Failed to create faucet",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      console.error("Error creating faucet:", error)
+      let errorMessage = error.message || "Failed to create faucet"
+
+      if (errorMessage.includes("Switch to the network")) {
+        toast({
+          title: "Network Mismatch",
+          description: `Please switch to the ${network?.name} network to create a faucet`,
+          variant: "destructive",
+          action: (
+            <Button
+              onClick={() => network && window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: `0x${network.chainId.toString(16)}` }],
+              })}
+            >
+              Switch to {network?.name}
+            </Button>
+          ),
+        })
+      } else {
+        toast({
+          title: "Failed to create faucet",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      }
+      setError(errorMessage)
     } finally {
-      setIsCreating(false);
+      setIsCreating(false)
     }
-  };
+  }
 
   return (
     <main className="min-h-screen">
-      <div className="container mx-auto px-4 py-6 sm:py-8">
-        <div className="flex flex-col gap-6 max-w-3xl mx-auto">
-          <header className="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="container mx-auto px-4 py-8">
+        <header className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
             <Link href="/">
-              <Button variant="outline" size="icon" className="w-10 h-10">
+              <Button variant="outline" size="icon">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="text-xl sm:text-2xl font-bold">Create New Faucet</h1>
-            <div className="ml-auto">
-              <NetworkSelector />
-            </div>
-          </header>
+            <h1 className="text-3xl font-bold">Create Faucet</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <NetworkSelector />
+            <WalletConnect />
+          </div>
+        </header>
 
+        <div className="max-w-2xl mx-auto">
+          <DivviInfo />
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg sm:text-xl">Create a Token Faucet</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">
-                Create a new faucet for distributing tokens on Arbitrum Mainnet. After creation, you'll be able to configure the
-                token and other settings.
-              </CardDescription>
+              <CardTitle>Create New Faucet</CardTitle>
+              <CardDescription>Create a new token faucet on {network?.name || "the current network"}</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="faucet-name" className="text-xs sm:text-sm">Faucet Name</Label>
-                  <Input
-                    id="faucet-name"
-                    placeholder="Enter faucet name"
-                    value={faucetName}
-                    onChange={(e) => setFaucetName(e.target.value)}
-                    className="h-9 text-sm"
-                  />
-                  <p className="text-xs text-muted-foreground">Give your faucet a unique name.</p>
-                </div>
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                  Clicking the button below will create a new faucet contract. Once created, you'll need to:
-                </p>
-                <ul className="list-disc list-inside mt-2 space-y-1 text-xs sm:text-sm text-muted-foreground">
-                  <li>Configure claim parameters</li>
-                  <li>Fund the faucet with ETH</li>
-                  <li>Manage whitelist settings</li>
-                </ul>
+            <CardContent className="space-y-6">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="name">Faucet Name</Label>
+                <Input
+                  id="name"
+                  placeholder="Enter a name for your faucet"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
               </div>
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Automatic Configuration</AlertTitle>
+                <AlertDescription>
+                  <p>The following will be configured automatically:</p>
+                  <ul className="list-disc pl-5 mt-2">
+                    <li>
+                      Token:{" "}
+                      {network?.tokenAddress === "0x0000000000000000000000000000000000000000"
+                        ? `Native Token (${network?.nativeCurrency?.symbol || "ETH"})`
+                        : `ERC20 Token (${network?.tokenAddress})`}
+                    </li>
+                    <li>Backend: Using the factory address as the backend</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
             </CardContent>
             <CardFooter>
               <Button
-                className="w-full h-10 text-sm sm:text-base"
                 onClick={handleCreate}
-                disabled={isCreating || !isConnected || isSwitchingNetwork || chainId !== ARBITRUM_MAINNET || !network || !faucetName.trim()}
+                disabled={isCreating || (network && chainId !== network.chainId)}
+                className="w-full"
               >
                 {isCreating ? (
-                  "Creating..."
-                ) : (
                   <>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Faucet
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
                   </>
+                ) : !isConnected ? (
+                  "Connect & Create Faucet"
+                ) : (
+                  "Create Faucet"
                 )}
               </Button>
             </CardFooter>
@@ -159,5 +208,5 @@ export default function CreateFaucet() {
         </div>
       </div>
     </main>
-  );
+  )
 }

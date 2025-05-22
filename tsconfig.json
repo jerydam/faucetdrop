@@ -1,20 +1,18 @@
 {
   "compilerOptions": {
-    "target": "ES6",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
+    "target": "ES6",
     "skipLibCheck": true,
     "strict": true,
+    "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "dist",
-    "noEmit": false, // Changed to allow compilation for ts-node or tsc
     "plugins": [
       {
         "name": "next"
@@ -24,10 +22,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "lib/**/*.ts", "dist/lib/faucet-factory.js"],
-  "exclude": ["node_modules"],
-  "ts-node": {
-    "esm": true, // Enable ESM support for ts-node
-    "experimentalSpecifierResolution": "node" // Ensure Node.js-style resolution
-  }
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
 }

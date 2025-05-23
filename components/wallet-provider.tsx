@@ -42,15 +42,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const provider = new BrowserProvider(window.ethereum)
       setProvider(provider)
 
-      provider
-        .listAccounts()
-        .then((accounts) => {
-          if (accounts.length > 0) {
-            handleAccountsChanged(accounts)
-          }
-        })
-        .catch(console.error)
-
       window.ethereum.on("accountsChanged", handleAccountsChanged)
 
       const handleChainChanged = (chainIdHex: string) => {
@@ -58,6 +49,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const newChainId = Number.parseInt(chainIdHex, 16)
           console.log(`Chain changed to: ${newChainId}`)
           setChainId(newChainId)
+          // Reload the page on chain change
+          window.location.reload()
         } catch (error) {
           console.error("Error handling chain change:", error)
         }
@@ -86,6 +79,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setSigner(null)
       setAddress(null)
       setIsConnected(false)
+      // No page reload on disconnect
+      console.log("Accounts disconnected")
     } else {
       try {
         if (provider) {
@@ -94,6 +89,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const address = await signer.getAddress()
           setAddress(address)
           setIsConnected(true)
+          console.log("Accounts connected:", address)
         }
       } catch (error) {
         console.error("Error getting signer:", error)
@@ -124,6 +120,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setProvider(newProvider)
       }
 
+      // Always request accounts to trigger the wallet popup
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
       await handleAccountsChanged(accounts)
 
@@ -133,7 +130,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     } catch (error: any) {
       console.error("Error connecting wallet:", error)
-      if (error.code !== 4001) {
+      if (error.code !== 4001) { // 4001 is user rejected request
         toast({
           title: "Connection failed",
           description: `Failed to connect wallet: ${error.message}`,
@@ -150,6 +147,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setSigner(null)
     setAddress(null)
     setIsConnected(false)
+    // No page reload on disconnect
+    console.log("Wallet disconnected")
   }
 
   const ensureCorrectNetwork = async (requiredChainId: number): Promise<boolean> => {

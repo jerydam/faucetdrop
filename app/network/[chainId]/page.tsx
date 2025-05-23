@@ -16,6 +16,38 @@ import { ERC20_ABI } from "@/lib/abis";
 import { WalletConnect } from "@/components/wallet-connect";
 import { NetworkSelector } from "@/components/network-selector";
 
+// Hook to track window size
+function useWindowSize() {
+  const [windowSize, setWindowSize] = useState<{ width: number; height: number }>({
+    width: typeof window !== "undefined" ? window.innerWidth : 0,
+    height: typeof window !== "undefined" ? window.innerHeight : 0,
+  });
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    const handleResize = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setWindowSize({
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+      }, 150); // Debounce resize events
+    };
+
+    window.addEventListener("resize", handleResize);
+    handleResize(); // Initial call
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      clearTimeout(timeoutId);
+    };
+  }, []);
+
+  return windowSize;
+}
+
 // TokenBalance component
 function TokenBalance({
   tokenAddress,
@@ -74,10 +106,10 @@ function TokenBalance({
 
   return (
     <Card className="overflow-hidden">
-      <CardContent className="p-3 sm:p-4">
-        <div className="flex justify-between items-center">
-          <span className="text-xs sm:text-sm font-medium">Your Balance:</span>
-          <span className="text-xs sm:text-sm font-semibold truncate max-w-[150px] sm:max-w-[200px]">
+      <CardContent className="p-2 sm:p-3 md:p-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <span className="text-xs sm:text-sm md:text-base font-medium">Your Balance:</span>
+          <span className="text-xs sm:text-sm md:text-base font-semibold truncate max-w-full sm:max-w-[180px] md:max-w-[200px]">
             {loading ? "Loading..." : `${balance} ${tokenSymbol}`}
           </span>
         </div>
@@ -132,31 +164,33 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
   }, [faucet.startTime, faucet.endTime, faucet.isClaimActive]);
 
   return (
-    <Card className="relative w-full sm:max-w-md mx-auto">
+    <Card className="relative w-full max-w-[400px] mx-auto">
       {faucet.network && (
         <div className="absolute top-2 sm:top-3 right-2 sm:right-3">
           <Badge
             style={{ backgroundColor: faucet.network.color }}
-            className="text-white text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
+            className="text-white text-[10px] sm:text-xs md:text-sm font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
           >
             {faucet.network.name}
           </Badge>
         </div>
       )}
       <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-4">
-        <CardTitle className="text-base sm:text-lg flex items-center justify-between pr-16 sm:pr-20">
+        <CardTitle className="text-sm sm:text-base md:text-lg flex items-center justify-between pr-12 sm:pr-16 md:pr-20">
           <span className="truncate">{faucet.name || faucet.tokenSymbol || "Token"} Faucet</span>
           {faucet.isClaimActive ? (
-            <span className="text-[10px] sm:text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+            <span className="text-[10px] sm:text-xs md:text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 sm:px-2 py-0.5 rounded-full">
               Active
             </span>
           ) : (
-            <span className="text-[10px] sm:text-xs bg-red-500/20 text-red-600 dark:text-red-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+            <span className="text-[10px] sm:text-xs md:text-sm bg-red-500/20 text-red-600 dark:text-red-400 px-1.5 sm:px-2 py-0.5 rounded-full">
               Inactive
             </span>
           )}
         </CardTitle>
-        <CardDescription className="truncate text-[10px] sm:text-xs">{faucet.faucetAddress}</CardDescription>
+        <CardDescription className="text-[10px] sm:text-xs md:text-sm truncate">
+          {faucet.faucetAddress}
+        </CardDescription>
       </CardHeader>
       <div className="px-3 sm:px-4 pb-1 sm:pb-2">
         {isOnCorrectNetwork ? (
@@ -169,10 +203,15 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
           />
         ) : (
           <Card className="overflow-hidden">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex justify-between items-center">
-                <span className="text-xs sm:text-sm font-medium">Balance:</span>
-                <Button variant="outline" size="sm" onClick={onNetworkSwitch} className="text-xs sm:text-sm">
+            <CardContent className="p-2 sm:p-3 md:p-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <span className="text-xs sm:text-sm md:text-base font-medium">Balance:</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onNetworkSwitch}
+                  className="text-xs sm:text-sm md:text-base h-8 sm:h-9 w-full sm:w-auto"
+                >
                   Switch Network
                 </Button>
               </div>
@@ -181,45 +220,51 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
         )}
       </div>
       <CardContent className="pb-1 sm:pb-2 px-3 sm:px-4">
-        <div className="space-y-1 sm:space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="text-xs sm:text-sm text-muted-foreground">Balance:</span>
-            <span className="text-xs sm:text-sm font-medium truncate">
+        <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm md:text-base">
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-muted-foreground">Balance:</span>
+            <span className="font-medium truncate">
               {faucet.balance
                 ? Number(formatUnits(faucet.balance, faucet.tokenDecimals || 18)).toFixed(4)
                 : "0"}{" "}
               {faucet.tokenSymbol || (faucet.isEther ? "ETH" : "TOK")}
             </span>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-xs sm:text-sm text-muted-foreground">Claim Amount:</span>
-            <span className="text-xs sm:text-sm font-medium truncate">
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-muted-foreground">Claim Amount:</span>
+            <span className="font-medium truncate">
               {faucet.claimAmount
                 ? Number(formatUnits(faucet.claimAmount, faucet.tokenDecimals || 18)).toFixed(4)
                 : "0"}{" "}
               {faucet.tokenSymbol || (faucet.isEther ? "ETH" : "TOK")}
             </span>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-xs sm:text-sm text-muted-foreground">Type:</span>
-            <span className="text-xs sm:text-sm font-medium">{faucet.isEther ? "Native Token" : "ERC20 Token"}</span>
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-muted-foreground">Type:</span>
+            <span className="font-medium">{faucet.isEther ? "Native Token" : "ERC20 Token"}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            <span className="text-xs sm:text-sm">{startCountdown}</span>
+            <Clock className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 text-muted-foreground" />
+            <span>{startCountdown}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            <span className="text-xs sm:text-sm">{endCountdown}</span>
+            <Clock className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 text-muted-foreground" />
+            <span>{endCountdown}</span>
           </div>
         </div>
       </CardContent>
       <CardFooter className="px-3 sm:px-4">
-        <Link href={`/faucet/${faucet.faucetAddress}?networkId=${faucet.network?.chainId}`} className="w-full">
-          <Button variant="outline" className="w-full h-8 sm:h-9 text-xs sm:text-sm">
-            <Coins className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+        <Link
+          href={`/faucet/${faucet.faucetAddress}?networkId=${faucet.network?.chainId}`}
+          className="w-full"
+        >
+          <Button
+            variant="outline"
+            className="w-full h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base"
+          >
+            <Coins className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" />
             View Details
-            <ArrowLeft className="ml-1 sm:ml-2 h-3 w-3 sm:h-4 sm:w-4" />
+            <ArrowLeft className="ml-1 sm:ml-2 h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" />
           </Button>
         </Link>
       </CardFooter>
@@ -229,7 +274,6 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
 
 export default function NetworkFaucets() {
   const { chainId: chainIdStr } = useParams<{ chainId: string }>();
-  const chainId = parseInt(chainIdStr, 10);
   const router = useRouter();
   const { provider, ensureCorrectNetwork } = useWallet();
   const { networks, setNetwork } = useNetwork();
@@ -238,33 +282,89 @@ export default function NetworkFaucets() {
   const [loadingFaucets, setLoadingFaucets] = useState(true);
   const [page, setPage] = useState(1);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
-  const faucetsPerPage = 10;
-  const network = networks.find((n) => n.chainId === chainId);
+  const { width, height } = useWindowSize();
+
+  // Parse chainId with validation
+  const chainId = chainIdStr ? parseInt(chainIdStr, 10) : NaN;
+  const network = !isNaN(chainId) ? networks.find((n) => n.chainId === chainId) : undefined;
+
+  // Calculate faucetsPerPage based on screen size and viewport height
+  const calculateFaucetsPerPage = useCallback(() => {
+    if (!height || !width) {
+      // Fallback defaults for server-side rendering or initial render
+      if (width < 640) return 5; // Mobile
+      if (width < 1024) return 8; // Tablet
+      return 10; // Desktop
+    }
+
+    // Estimated heights
+    const headerHeight = width < 640 ? 100 : 120; // Header (title, buttons)
+    const paginationHeight = width < 640 ? 50 : 60; // Pagination
+    const containerPadding = width < 640 ? 32 : 64; // py-4 (8px * 4) or py-8 (16px * 4)
+    const cardHeight = width < 640 ? 300 : width < 1024 ? 320 : 350; // FaucetCard height
+    const gridGap = width < 640 ? 12 : width < 1024 ? 16 : 24; // gap-3 (12px), gap-4 (16px), gap-6 (24px)
+
+    // Available height for faucet grid
+    const availableHeight = height - (headerHeight + paginationHeight + containerPadding);
+
+    // Calculate number of cards that fit, accounting for grid gap
+    const cardsPerColumn = Math.floor(availableHeight / (cardHeight + gridGap));
+
+    // Adjust based on grid columns (1 for mobile, 2 for tablet, 3 for desktop)
+    const columns = width < 640 ? 1 : width < 1024 ? 2 : 3;
+    let faucetsPerPage = cardsPerColumn * columns;
+
+    // Clamp between min (3) and max (12)
+    faucetsPerPage = Math.max(3, Math.min(12, faucetsPerPage));
+
+    // Ensure at least one page of content
+    if (faucetsPerPage <= 0) faucetsPerPage = 3;
+
+    console.log(`Calculated faucetsPerPage: ${faucetsPerPage} (width: ${width}, height: ${height}, cardsPerColumn: ${cardsPerColumn}, columns: ${columns})`);
+
+    return faucetsPerPage;
+  }, [width, height]);
+
+  const [faucetsPerPage, setFaucetsPerPage] = useState(calculateFaucetsPerPage());
+
+  // Update faucetsPerPage on resize and reset page to 1
+  useEffect(() => {
+    const newFaucetsPerPage = calculateFaucetsPerPage();
+    if (newFaucetsPerPage !== faucetsPerPage) {
+      setFaucetsPerPage(newFaucetsPerPage);
+      setPage(1); // Reset to first page to avoid invalid page state
+      console.log(`Updated faucetsPerPage to ${newFaucetsPerPage}`);
+    }
+  }, [calculateFaucetsPerPage, faucetsPerPage]);
 
   const loadFaucets = useCallback(async () => {
-    if (!network) return;
+    if (!network || isNaN(chainId)) {
+      console.log("Skipping loadFaucets: network undefined or invalid chainId", { chainId, network });
+      return;
+    }
     setLoadingFaucets(true);
     try {
       const fetchedFaucets = await getFaucetsForNetwork(network);
       setFaucets(fetchedFaucets.filter((f) => f && f.faucetAddress && f.network)); // Filter invalid faucets
       setPage(1); // Reset page on new fetch
     } catch (error) {
-      console.error(`Error loading faucets for ${network.name}:`, error);
+      console.error(`Error loading faucets for network chainId ${chainId}:`, error);
       toast({
-        title: `Failed to load faucets for ${network.name}`,
+        title: `Failed to load faucets`,
         description: "Please try again later.",
         variant: "destructive",
       });
     } finally {
       setLoadingFaucets(false);
     }
-  }, [network, toast]);
+  }, [network, chainId, toast]);
 
   useEffect(() => {
-    if (!network || isNaN(chainId)) {
+    if (isNaN(chainId) || !network) {
+      console.log("Invalid chainId or network not found", { chainId, network });
       toast({
         title: "Network Not Found",
-        description: `Network with chain ID ${chainId} is not supported`,
+        description: `Network with chain ID ${chainIdStr || "unknown"} is not supported`,
         variant: "destructive",
       });
       router.push("/");
@@ -272,18 +372,17 @@ export default function NetworkFaucets() {
     }
 
     loadFaucets();
-  }, [chainId, network, router, toast, loadFaucets]);
+  }, [chainId, network, router, toast, loadFaucets, chainIdStr]);
 
   const handleNetworkSwitch = async (targetChainId: number) => {
     setSwitchingNetwork(true);
     try {
       const targetNetwork = networks.find((n) => n.chainId === targetChainId);
-      if (targetNetwork) {
-        setNetwork(targetNetwork);
-        await ensureCorrectNetwork(targetChainId);
-      } else {
-        throw new Error("Target network not found");
+      if (!targetNetwork) {
+        throw new Error(`Target network with chainId ${targetChainId} not found`);
       }
+      setNetwork(targetNetwork);
+      await ensureCorrectNetwork(targetChainId);
     } catch (error) {
       console.error("Error switching network:", error);
       toast({
@@ -300,7 +399,7 @@ export default function NetworkFaucets() {
   const totalPages = Math.ceil(faucets.length / faucetsPerPage);
   const paginatedFaucets = faucets.slice((page - 1) * faucetsPerPage, page * faucetsPerPage);
 
-  // Limit page buttons to 5 for better UX
+  // Limit page buttons to 5 for better UX, with responsive handling
   const getPageButtons = () => {
     const buttons = [];
     const maxButtons = 5;
@@ -314,7 +413,7 @@ export default function NetworkFaucets() {
           variant={1 === page ? "default" : "outline"}
           size="sm"
           onClick={() => setPage(1)}
-          className="w-8 h-8 text-xs sm:text-sm"
+          className="w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm"
         >
           1
         </Button>
@@ -329,7 +428,7 @@ export default function NetworkFaucets() {
           variant={p === page ? "default" : "outline"}
           size="sm"
           onClick={() => setPage(p)}
-          className="w-8 h-8 text-xs sm:text-sm"
+          className="w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm"
         >
           {p}
         </Button>
@@ -344,7 +443,7 @@ export default function NetworkFaucets() {
           variant={totalPages === page ? "default" : "outline"}
           size="sm"
           onClick={() => setPage(totalPages)}
-          className="w-8 h-8 text-xs sm:text-sm"
+          className="w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm"
         >
           {totalPages}
         </Button>
@@ -354,83 +453,94 @@ export default function NetworkFaucets() {
     return buttons;
   };
 
-  if (!network) {
-    return null; // Router will redirect
-  }
-
   return (
-    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-        
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-lg sm:text-xl font-semibold">Faucets on {network.name}</h2>
-        
-        <div className="flex gap-2">
-          <Button
+    <div className="container mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-semibold">
+          Faucets on {network?.name || "Unknown Network"}
+        </h2>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="flex-1 sm:flex-none order-1 sm:order-0">
+            <WalletConnect />
+          </div>
+           <Button
             variant="outline"
             size="sm"
             onClick={loadFaucets}
-            disabled={loadingFaucets}
-            className="text-xs sm:text-sm"
+            disabled={loadingFaucets || !network}
+            className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base flex-1 sm:flex-none order-4 sm:order-0"
           >
-            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 ${loadingFaucets ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 mr-1 sm:mr-2 ${
+                loadingFaucets ? "animate-spin" : ""
+              }`}
+            />
             Refresh
           </Button>
-          <NetworkSelector />
-          <Link href="/">
-            <Button variant="outline" size="sm" className="text-xs sm:text-sm">
-              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+          <div className="flex-1 sm:flex-none order-2">
+            <NetworkSelector />
+          </div>
+          <Link href="/" className="flex-1 sm:flex-none order-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base w-full sm:w-auto"
+            >
+              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 mr-1 sm:mr-2" />
               Back to Networks
             </Button>
           </Link>
-          <WalletConnect/>
+         
         </div>
       </div>
 
       {/* Faucets Section */}
       {loadingFaucets ? (
-        <div className="flex justify-center items-center py-10 sm:py-12">
+        <div className="flex justify-center items-center py-8 sm:py-10 md:py-12">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-sm sm:text-base">Loading faucets...</p>
+            <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-3 sm:mt-4 text-xs sm:text-sm md:text-base">Loading faucets...</p>
           </div>
         </div>
       ) : faucets.length === 0 ? (
-        <Card className="w-full sm:max-w-md mx-auto">
-          <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12">
-            <Coins className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-3 sm:mb-4" />
-            <h3 className="text-lg sm:text-xl font-medium mb-2">No Faucets Found</h3>
-            <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6">
-              No faucets are available on {network.name} yet.
+        <Card className="w-full max-w-[400px] mx-auto">
+          <CardContent className="flex flex-col items-center justify-center py-6 sm:py-8 md:py-10">
+            <Coins className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 text-muted-foreground mb-2 sm:mb-3 md:mb-4" />
+            <h3 className="text-base sm:text-lg md:text-xl font-medium mb-1 sm:mb-2">No Faucets Found</h3>
+            <p className="text-xs sm:text-sm md:text-base text-muted-foreground mb-3 sm:mb-4 md:mb-6 text-center">
+              No faucets are available on {network?.name || "this network"} yet.
             </p>
             <Link href="/create">
-              <Button className="text-xs sm:text-sm">Create Faucet</Button>
+              <Button className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
+                Create Faucet
+              </Button>
             </Link>
           </CardContent>
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
             {paginatedFaucets.map((faucet) => (
               <FaucetCard
-                key={`${faucet.faucetAddress}-${network.chainId}`}
+                key={`${faucet.faucetAddress}-${network?.chainId || chainId}`}
                 faucet={faucet}
                 onNetworkSwitch={() => handleNetworkSwitch(faucet.network.chainId)}
               />
             ))}
           </div>
           {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6">
-              <div className="text-xs sm:text-sm text-muted-foreground">
-                Showing {(page - 1) * faucetsPerPage + 1} to {Math.min(page * faucetsPerPage, faucets.length)} of{" "}
-                {faucets.length} faucets
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4 mt-4 sm:mt-6">
+              <div className="text-xs sm:text-sm md:text-base text-muted-foreground text-center sm:text-left">
+                Showing {(page - 1) * faucetsPerPage + 1} to{" "}
+                {Math.min(page * faucetsPerPage, faucets.length)} of {faucets.length} faucets
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1 || loadingFaucets}
-                  className="text-xs sm:text-sm"
+                  className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base px-2 sm:px-3"
                 >
                   Previous
                 </Button>
@@ -440,7 +550,7 @@ export default function NetworkFaucets() {
                   size="sm"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages || loadingFaucets}
-                  className="text-xs sm:text-sm"
+                  className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base px-2 sm:px-3"
                 >
                   Next
                 </Button>

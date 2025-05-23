@@ -2,6 +2,20 @@ import { BrowserProvider, Contract, JsonRpcProvider, ZeroAddress, isAddress, get
 import { FAUCET_ABI, ERC20_ABI, FACTORY_ABI, STORAGE_ABI } from "./abis";
 import { appendDivviReferralData, reportTransactionToDivvi } from "./divvi-integration";
 
+
+// Fetch faucets for a specific network using getAllFaucetDetails
+interface Network {
+  chainId: number;
+  name: string;
+  rpcUrl: string;
+  blockExplorer: string;
+  factoryAddress: string;
+  color: string;
+  storageAddress?: string; // Optional, defaults to FAUCET_STORAGE_ADDRESS
+}
+
+
+
 // Load backend address from .env
 const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178";
 
@@ -318,6 +332,139 @@ export async function storeClaim(
     throw new Error(error.reason || error.message || "Failed to store claim");
   }
 }
+
+
+export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
+  try {
+    const provider = new JsonRpcProvider(network.rpcUrl);
+    const factoryContract = new Contract(network.factoryAddress, FACTORY_ABI, provider);
+
+    // Check if factory contract exists
+    const code = await provider.getCode(network.factoryAddress);
+    if (code === "0x") {
+      console.warn(`No contract at factory address ${network.factoryAddress} on ${network.name}`);
+      return [];
+    }
+
+    // Fetch faucet details from factory
+    let faucetDetails: any[] = [];
+    try {
+      faucetDetails = await factoryContract.getAllFaucetDetails();
+    } catch (error) {
+      console.error(`Error calling getAllFaucetDetails on ${network.name}:`, error);
+      return [];
+    }
+
+    // Process each faucet to get full details
+    const results = await Promise.all(
+      faucetDetails.map(async (faucet: any) => {
+        if (!faucet.faucetAddress || faucet.faucetAddress === ZeroAddress) return null;
+        try {
+          const details = await getFaucetDetails(provider, faucet.faucetAddress);
+          return {
+            ...details,
+            network: {
+              chainId: network.chainId,
+              name: network.name,
+              color: network.color,
+              blockExplorer: network.blockExplorer,
+            },
+          };
+        } catch (error) {
+          console.warn(`Error getting details for faucet ${faucet.faucetAddress} on ${network.name}:`, error);
+          return null;
+        }
+      })
+    );
+
+    return results.filter((result) => result !== null);
+  } catch (error) {
+    console.error(`Error fetching faucets for ${network.name}:`, error);
+    return [];
+  }
+}
+
+async function contractExists(provider: JsonRpcProvider, address: string): Promise<boolean> {
+  try {
+    const code = await provider.getCode(address);
+    return code !== "0x";
+  } catch (error) {
+    console.warn(`Error checking contract at ${address}:`, error);
+    return false;
+  }
+}
+
+export async function getAllClaims(chainId: number, networks: Network[]): Promise<{
+  claimer: string;
+  faucet: string;
+  amount: bigint;
+  txHash: `0x${string}`;
+  networkName: string;
+  timestamp: number;
+}[]> {
+  try {
+    const network = networks.find((n) => n.chainId === chainId);
+    if (!network) {
+      throw new Error(`Network with chainId ${chainId} not found`);
+    }
+
+    const provider = new JsonRpcProvider(network.rpcUrl);
+    const storageAddress = STORAGE_CONTRACT_ADDRESS;
+    const contract = new Contract(storageAddress, STORAGE_ABI, provider);
+
+    // Verify contract exists
+    const exists = await contractExists(provider, storageAddress);
+    if (!exists) {
+      console.error(`No contract at ${storageAddress} on ${network.name}`);
+      return [];
+    }
+
+    // Call getAllClaims function
+    const claims: any[] = await contract.getAllClaims();
+
+    return claims.map((claim: any) => ({
+      claimer: claim.claimer as string,
+      faucet: claim.faucet as string,
+      amount: BigInt(claim.amount),
+      txHash: claim.txHash as `0x${string}`,
+      networkName: claim.networkName as string,
+      timestamp: Number(claim.timestamp),
+    }));
+  } catch (error) {
+    console.error(`Error fetching claims for chainId ${chainId}:`, error);
+    return [];
+  }
+}
+
+export async function getAllClaimsForAllNetworks(networks: Network[]): Promise<{
+  claimer: string;
+  faucet: string;
+  amount: bigint;
+  txHash: `0x${string}`;
+  networkName: string;
+  timestamp: number;
+  chainId: number;
+}[]> {
+  try {
+    const allClaims = await Promise.all(
+      networks.map(async (network) => {
+        try {
+          const claims = await getAllClaims(network.chainId, networks);
+          return claims.map((claim) => ({ ...claim, chainId: network.chainId }));
+        } catch (error) {
+          console.error(`Error fetching claims for ${network.name}:`, error);
+          return [];
+        }
+      })
+    );
+
+    return allClaims.flat().sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp (newest first)
+  } catch (error) {
+    console.error("Error fetching claims for all networks:", error);
+    return [];
+  }
+}
+
 
 // Fund faucet
 export async function fundFaucet(

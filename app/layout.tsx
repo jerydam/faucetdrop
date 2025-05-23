@@ -10,9 +10,9 @@ import { NetworkProvider } from "@/hooks/use-network"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Token Faucet",
-  description: "Claim testnet tokens from faucets",
-    generator: 'v0.dev'
+  title: "FaucetDrops",
+  description: "Token dropping make easy",
+    
 }
 
 export default function RootLayout({
@@ -22,6 +22,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <title>FaucetDrops</title>
+      <link rel="icon" href="/favicon.jpeg" /> 
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <NetworkProvider>

@@ -14,7 +14,12 @@ interface Network {
   storageAddress?: string; // Optional, defaults to FAUCET_STORAGE_ADDRESS
 }
 
-
+// Mapping of networkName to native token symbol
+const NATIVE_TOKEN_MAP: Record<string, string> = {
+  Celo: "CELO",
+  Lisk: "LISK",
+  Arbitrum: "ETH",
+};
 
 // Load backend address from .env
 const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178";
@@ -28,6 +33,7 @@ if (!isAddress(BACKEND_ADDRESS)) {
 
 const VALID_BACKEND_ADDRESS = getAddress(BACKEND_ADDRESS);
 
+const faucetDetailsCache: Map<string, any> = new Map();
 
 // Helper to check if the network is Celo
 export function isCeloNetwork(chainId: number): boolean {
@@ -401,6 +407,9 @@ export async function getAllClaims(chainId: number, networks: Network[]): Promis
   txHash: `0x${string}`;
   networkName: string;
   timestamp: number;
+  tokenSymbol: string;
+  tokenDecimals: number;
+  isEther: boolean;
 }[]> {
   try {
     const network = networks.find((n) => n.chainId === chainId);
@@ -422,14 +431,50 @@ export async function getAllClaims(chainId: number, networks: Network[]): Promis
     // Call getAllClaims function
     const claims: any[] = await contract.getAllClaims();
 
-    return claims.map((claim: any) => ({
-      claimer: claim.claimer as string,
-      faucet: claim.faucet as string,
-      amount: BigInt(claim.amount),
-      txHash: claim.txHash as `0x${string}`,
-      networkName: claim.networkName as string,
-      timestamp: Number(claim.timestamp),
-    }));
+    // Fetch token details for each claim
+    const formattedClaims = await Promise.all(
+      claims.map(async (claim: any) => {
+        let tokenSymbol = NATIVE_TOKEN_MAP[network.name] || "TOK";
+        let tokenDecimals = 18;
+        let isEther = true;
+
+        // Check cache for faucet details
+        const cacheKey = `${network.chainId}-${claim.faucet}`;
+        let faucetDetails = faucetDetailsCache.get(cacheKey);
+
+        if (!faucetDetails) {
+          try {
+            faucetDetails = await getFaucetDetails(provider, claim.faucet);
+            faucetDetailsCache.set(cacheKey, faucetDetails);
+          } catch (error) {
+            console.warn(`Error fetching faucet details for ${claim.faucet} on ${network.name}:`, error);
+            faucetDetails = {
+              tokenSymbol: NATIVE_TOKEN_MAP[network.name] || "TOK",
+              tokenDecimals: 18,
+              isEther: true,
+            };
+          }
+        }
+
+        tokenSymbol = faucetDetails.tokenSymbol;
+        tokenDecimals = faucetDetails.tokenDecimals;
+        isEther = faucetDetails.isEther;
+
+        return {
+          claimer: claim.claimer as string,
+          faucet: claim.faucet as string,
+          amount: BigInt(claim.amount),
+          txHash: claim.txHash as `0x${string}`,
+          networkName: claim.networkName as string,
+          timestamp: Number(claim.timestamp),
+          tokenSymbol,
+          tokenDecimals,
+          isEther,
+        };
+      })
+    );
+
+    return formattedClaims;
   } catch (error) {
     console.error(`Error fetching claims for chainId ${chainId}:`, error);
     return [];
@@ -444,6 +489,9 @@ export async function getAllClaimsForAllNetworks(networks: Network[]): Promise<{
   networkName: string;
   timestamp: number;
   chainId: number;
+  tokenSymbol: string;
+  tokenDecimals: number;
+  isEther: boolean;
 }[]> {
   try {
     const allClaims = await Promise.all(
@@ -458,7 +506,9 @@ export async function getAllClaimsForAllNetworks(networks: Network[]): Promise<{
       })
     );
 
-    return allClaims.flat().sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp (newest first)
+    const sortedClaims = allClaims.flat().sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp (newest first)
+    console.log("All claims:", sortedClaims); // Debug log
+    return sortedClaims;
   } catch (error) {
     console.error("Error fetching claims for all networks:", error);
     return [];

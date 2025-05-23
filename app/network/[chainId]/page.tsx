@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
 import { useNetwork } from "@/hooks/use-network";
@@ -9,10 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { Button } from "@/components/ui/button";
 import { getFaucetsForNetwork } from "@/lib/faucet";
 import { formatUnits, Contract, ZeroAddress } from "ethers";
-import { ArrowLeft, Coins, Clock } from "lucide-react";
+import { ArrowLeft, Coins, Clock, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { ERC20_ABI } from "@/lib/abis";
+import { WalletConnect } from "@/components/wallet-connect";
+import { NetworkSelector } from "@/components/network-selector";
 
 // TokenBalance component
 function TokenBalance({
@@ -31,6 +33,7 @@ function TokenBalance({
   const { provider, address } = useWallet();
   const [balance, setBalance] = useState<string>("0");
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchBalance = async () => {
@@ -45,26 +48,29 @@ function TokenBalance({
         let balance: bigint;
         if (isNativeToken) {
           balance = await provider.getBalance(address);
+        } else if (tokenAddress === ZeroAddress) {
+          balance = 0n;
         } else {
-          if (tokenAddress === ZeroAddress) {
-            balance = 0n;
-          } else {
-            const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider);
-            balance = await tokenContract.balanceOf(address);
-          }
+          const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider);
+          balance = await tokenContract.balanceOf(address);
         }
         const formattedBalance = Number(formatUnits(balance, tokenDecimals)).toFixed(4);
         setBalance(formattedBalance);
       } catch (error) {
         console.error("Error fetching balance:", error);
         setBalance("0");
+        toast({
+          title: "Failed to fetch balance",
+          description: "Please try again later.",
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }
     };
 
     fetchBalance();
-  }, [provider, address, tokenAddress, tokenDecimals, isNativeToken, networkChainId]);
+  }, [provider, address, tokenAddress, tokenDecimals, isNativeToken, networkChainId, toast]);
 
   return (
     <Card className="overflow-hidden">
@@ -90,10 +96,10 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
   useEffect(() => {
     const updateCountdown = () => {
       const now = Date.now();
-      const start = Number(faucet.startTime) * 1000;
-      const end = Number(faucet.endTime) * 1000;
+      const start = Number(faucet.startTime || 0) * 1000;
+      const end = Number(faucet.endTime || 0) * 1000;
 
-      if (start === 0) {
+      if (!start) {
         setStartCountdown("Inactive");
       } else if (start > now) {
         const diff = start - now;
@@ -129,7 +135,10 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
     <Card className="relative w-full sm:max-w-md mx-auto">
       {faucet.network && (
         <div className="absolute top-2 sm:top-3 right-2 sm:right-3">
-          <Badge style={{ backgroundColor: faucet.network.color }} className="text-white text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 sm:py-1">
+          <Badge
+            style={{ backgroundColor: faucet.network.color }}
+            className="text-white text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
+          >
             {faucet.network.name}
           </Badge>
         </div>
@@ -152,8 +161,8 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
       <div className="px-3 sm:px-4 pb-1 sm:pb-2">
         {isOnCorrectNetwork ? (
           <TokenBalance
-            tokenAddress={faucet.token}
-            tokenSymbol={faucet.tokenSymbol || "tokens"}
+            tokenAddress={faucet.token || ZeroAddress}
+            tokenSymbol={faucet.tokenSymbol || (faucet.isEther ? "ETH" : "TOK")}
             tokenDecimals={faucet.tokenDecimals || 18}
             isNativeToken={faucet.isEther}
             networkChainId={faucet.network?.chainId}
@@ -176,13 +185,19 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
           <div className="flex justify-between items-center">
             <span className="text-xs sm:text-sm text-muted-foreground">Balance:</span>
             <span className="text-xs sm:text-sm font-medium truncate">
-              {faucet.balance ? Number(formatUnits(faucet.balance, faucet.tokenDecimals || 18)).toFixed(4) : "0"} {faucet.tokenSymbol || "tokens"}
+              {faucet.balance
+                ? Number(formatUnits(faucet.balance, faucet.tokenDecimals || 18)).toFixed(4)
+                : "0"}{" "}
+              {faucet.tokenSymbol || (faucet.isEther ? "ETH" : "TOK")}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs sm:text-sm text-muted-foreground">Claim Amount:</span>
             <span className="text-xs sm:text-sm font-medium truncate">
-              {faucet.claimAmount ? formatUnits(faucet.claimAmount, faucet.tokenDecimals || 18) : "0"} {faucet.tokenSymbol || "tokens"}
+              {faucet.claimAmount
+                ? Number(formatUnits(faucet.claimAmount, faucet.tokenDecimals || 18)).toFixed(4)
+                : "0"}{" "}
+              {faucet.tokenSymbol || (faucet.isEther ? "ETH" : "TOK")}
             </span>
           </div>
           <div className="flex justify-between items-center">
@@ -221,10 +236,32 @@ export default function NetworkFaucets() {
   const { toast } = useToast();
   const [faucets, setFaucets] = useState<any[]>([]);
   const [loadingFaucets, setLoadingFaucets] = useState(true);
+  const [page, setPage] = useState(1);
+  const [switchingNetwork, setSwitchingNetwork] = useState(false);
+  const faucetsPerPage = 10;
   const network = networks.find((n) => n.chainId === chainId);
 
+  const loadFaucets = useCallback(async () => {
+    if (!network) return;
+    setLoadingFaucets(true);
+    try {
+      const fetchedFaucets = await getFaucetsForNetwork(network);
+      setFaucets(fetchedFaucets.filter((f) => f && f.faucetAddress && f.network)); // Filter invalid faucets
+      setPage(1); // Reset page on new fetch
+    } catch (error) {
+      console.error(`Error loading faucets for ${network.name}:`, error);
+      toast({
+        title: `Failed to load faucets for ${network.name}`,
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingFaucets(false);
+    }
+  }, [network, toast]);
+
   useEffect(() => {
-    if (!network) {
+    if (!network || isNaN(chainId)) {
       toast({
         title: "Network Not Found",
         description: `Network with chain ID ${chainId} is not supported`,
@@ -234,32 +271,18 @@ export default function NetworkFaucets() {
       return;
     }
 
-    const loadFaucets = async () => {
-      setLoadingFaucets(true);
-      try {
-        const fetchedFaucets = await getFaucetsForNetwork(network);
-        setFaucets(fetchedFaucets);
-      } catch (error) {
-        console.error(`Error loading faucets for ${network.name}:`, error);
-        toast({
-          title: `Failed to load faucets for ${network.name}`,
-          description: "Please try again later.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoadingFaucets(false);
-      }
-    };
-
     loadFaucets();
-  }, [chainId, network, networks, router, toast]);
+  }, [chainId, network, router, toast, loadFaucets]);
 
   const handleNetworkSwitch = async (targetChainId: number) => {
+    setSwitchingNetwork(true);
     try {
       const targetNetwork = networks.find((n) => n.chainId === targetChainId);
       if (targetNetwork) {
         setNetwork(targetNetwork);
         await ensureCorrectNetwork(targetChainId);
+      } else {
+        throw new Error("Target network not found");
       }
     } catch (error) {
       console.error("Error switching network:", error);
@@ -268,25 +291,99 @@ export default function NetworkFaucets() {
         description: "Failed to switch network. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setSwitchingNetwork(false);
     }
   };
 
+  // Calculate pagination
+  const totalPages = Math.ceil(faucets.length / faucetsPerPage);
+  const paginatedFaucets = faucets.slice((page - 1) * faucetsPerPage, page * faucetsPerPage);
+
+  // Limit page buttons to 5 for better UX
+  const getPageButtons = () => {
+    const buttons = [];
+    const maxButtons = 5;
+    const start = Math.max(1, page - Math.floor(maxButtons / 2));
+    const end = Math.min(totalPages, start + maxButtons - 1);
+
+    if (start > 1) {
+      buttons.push(
+        <Button
+          key={1}
+          variant={1 === page ? "default" : "outline"}
+          size="sm"
+          onClick={() => setPage(1)}
+          className="w-8 h-8 text-xs sm:text-sm"
+        >
+          1
+        </Button>
+      );
+      if (start > 2) buttons.push(<span key="start-ellipsis" className="text-xs sm:text-sm">...</span>);
+    }
+
+    for (let p = start; p <= end; p++) {
+      buttons.push(
+        <Button
+          key={p}
+          variant={p === page ? "default" : "outline"}
+          size="sm"
+          onClick={() => setPage(p)}
+          className="w-8 h-8 text-xs sm:text-sm"
+        >
+          {p}
+        </Button>
+      );
+    }
+
+    if (end < totalPages) {
+      if (end < totalPages - 1) buttons.push(<span key="end-ellipsis" className="text-xs sm:text-sm">...</span>);
+      buttons.push(
+        <Button
+          key={totalPages}
+          variant={totalPages === page ? "default" : "outline"}
+          size="sm"
+          onClick={() => setPage(totalPages)}
+          className="w-8 h-8 text-xs sm:text-sm"
+        >
+          {totalPages}
+        </Button>
+      );
+    }
+
+    return buttons;
+  };
+
   if (!network) {
-    return null; // Router will redirect to home
+    return null; // Router will redirect
   }
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-lg sm:text-xl font-semibold">
-          Faucets on {network.name}
-        </h2>
-        <Link href="/">
-          <Button variant="outline" size="sm" className="text-xs sm:text-sm">
-            <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-            Back to Networks
+        <h2 className="text-lg sm:text-xl font-semibold">Faucets on {network.name}</h2>
+        
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadFaucets}
+            disabled={loadingFaucets}
+            className="text-xs sm:text-sm"
+          >
+            <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 ${loadingFaucets ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
-        </Link>
+          <NetworkSelector />
+          <Link href="/">
+            <Button variant="outline" size="sm" className="text-xs sm:text-sm">
+              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              Back to Networks
+            </Button>
+          </Link>
+          <WalletConnect/>
+        </div>
       </div>
 
       {/* Faucets Section */}
@@ -311,15 +408,46 @@ export default function NetworkFaucets() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          {faucets.map((faucet) => (
-            <FaucetCard
-              key={`${faucet.faucetAddress}-${faucet.network?.chainId}`}
-              faucet={faucet}
-              onNetworkSwitch={() => handleNetworkSwitch(faucet.network?.chainId)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {paginatedFaucets.map((faucet) => (
+              <FaucetCard
+                key={`${faucet.faucetAddress}-${network.chainId}`}
+                faucet={faucet}
+                onNetworkSwitch={() => handleNetworkSwitch(faucet.network.chainId)}
+              />
+            ))}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6">
+              <div className="text-xs sm:text-sm text-muted-foreground">
+                Showing {(page - 1) * faucetsPerPage + 1} to {Math.min(page * faucetsPerPage, faucets.length)} of{" "}
+                {faucets.length} faucets
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1 || loadingFaucets}
+                  className="text-xs sm:text-sm"
+                >
+                  Previous
+                </Button>
+                {getPageButtons()}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages || loadingFaucets}
+                  className="text-xs sm:text-sm"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

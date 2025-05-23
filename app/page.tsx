@@ -6,7 +6,7 @@ import { WalletConnect } from "@/components/wallet-connect"
 import { Button } from "@/components/ui/button"
 import { Plus, Users } from "lucide-react"
 import Link from "next/link"
-
+import Image from "next/image"
 export default function Home() {
   return (
     <main className="min-h-screen">
@@ -14,7 +14,15 @@ export default function Home() {
         <div className="flex flex-col gap-8">
           <header className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold">Token Faucet</h1>
+              <h1 className="text-3xl font-bold">
+               <Image
+               src={"/logo.png"}
+               alt="Logo"
+               width={40}
+               height={40}
+               className="inline-block mr-2"
+               />
+                FaucetDrops</h1>
               <NetworkSelector />
             </div>
             <div className="flex items-center gap-4">

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { Coins } from "lucide-react";
 import { formatUnits } from "ethers";
 import { getAllClaimsForAllNetworks, getFaucetsForNetwork } from "@/lib/faucet";
@@ -28,10 +29,15 @@ export function FaucetList() {
       networkName: string;
       timestamp: number;
       chainId: number;
+      tokenSymbol: string;
+      tokenDecimals: number;
+      isEther: boolean;
     }[]
   >([]);
   const [loadingClaims, setLoadingClaims] = useState(true);
   const [faucetCounts, setFaucetCounts] = useState<Record<string, number>>({});
+  const [page, setPage] = useState(1);
+  const claimsPerPage = 10;
 
   useEffect(() => {
     // Initialize network status and faucet counts
@@ -49,7 +55,10 @@ export function FaucetList() {
       setLoadingClaims(true);
       try {
         const fetchedClaims = await getAllClaimsForAllNetworks(networks);
+        console.log("Fetched claims:", fetchedClaims); // Debug log
         setClaims(fetchedClaims);
+        setPage(1); // Reset page on new fetch
+        console.log("Total pages:", Math.ceil(fetchedClaims.length / claimsPerPage)); // Debug log
       } catch (error) {
         console.error("Error loading claims:", error);
         toast({
@@ -92,6 +101,10 @@ export function FaucetList() {
     loadClaims();
     loadFaucetCounts();
   }, [networks, toast]);
+
+  // Calculate pagination
+  const totalPages = Math.ceil(claims.length / claimsPerPage);
+  const paginatedClaims = claims.slice((page - 1) * claimsPerPage, page * claimsPerPage);
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
@@ -164,57 +177,92 @@ export function FaucetList() {
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs sm:text-sm">Claimer</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Faucet</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Amount</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Tx Hash</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Network</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Timestamp</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {claims.map((claim, index) => {
-                  const network = networks.find((n) => n.chainId === claim.chainId);
-                  return (
-                    <TableRow key={index}>
-                      <TableCell className="text-xs sm:text-sm font-mono truncate max-w-[100px] sm:max-w-[150px]">
-                        {claim.claimer}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm font-mono truncate max-w-[100px] sm:max-w-[150px]">
-                        <Link
-                          href={`/faucet/${claim.faucet}?networkId=${claim.chainId}`}
-                          className="text-blue-600 hover:underline"
-                        >
-                          {claim.faucet}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
-                        {formatUnits(claim.amount, 18)} tokens
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm font-mono truncate max-w-[100px] sm:max-w-[150px]">
-                        <a
-                          href={`${network?.blockExplorer || "#"}/tx/${claim.txHash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          {claim.txHash.slice(0, 6)}...{claim.txHash.slice(-4)}
-                        </a>
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
-                        {claim.networkName}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
-                        {new Date(claim.timestamp * 1000).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs sm:text-sm">Claimer</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Faucet</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Amount</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Tx Hash</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Network</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Timestamp</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedClaims.map((claim, index) => {
+                    const network = networks.find((n) => n.chainId === claim.chainId);
+                    return (
+                      <TableRow key={`${claim.txHash}-${index}`}>
+                        <TableCell className="text-xs sm:text-sm font-mono truncate max-w-[100px] sm:max-w-[150px]">
+                          {claim.claimer}
+                        </TableCell>
+                        <TableCell className="text-xs sm:text-sm font-mono truncate max-w-[100px] sm:max-w-[150px]">
+                          <Link
+                            href={`/faucet/${claim.faucet}?networkId=${claim.chainId}`}
+                            className="text-blue-600 hover:underline"
+                          >
+                            {claim.faucet}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-xs sm:text-sm">
+                          {Number(formatUnits(claim.amount, claim.tokenDecimals)).toFixed(4)} {claim.tokenSymbol}
+                        </TableCell>
+                        <TableCell className="text-xs sm:text-sm font-mono truncate max-w-[100px] sm:max-w-[150px]">
+                          <a
+                            href={`${network?.blockExplorer || "#"}/tx/${claim.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {claim.txHash.slice(0, 6)}...{claim.txHash.slice(-4)}
+                          </a>
+                        </TableCell>
+                        <TableCell className="text-xs sm:text-sm">
+                          {claim.networkName}
+                        </TableCell>
+                        <TableCell className="text-xs sm:text-sm">
+                          {new Date(claim.timestamp * 1000).toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6">
+                  <div className="text-xs sm:text-sm text-muted-foreground">
+                    Showing {(page - 1) * claimsPerPage + 1} to {Math.min(page * claimsPerPage, claims.length)} of{" "}
+                    {claims.length} claims
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1 || loadingClaims}
+                      className="text-xs sm:text-sm hover:bg-primary/10"
+                      aria-label="Previous page"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs sm:text-sm text-muted-foreground">
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages || loadingClaims}
+                      className="text-xs sm:text-sm hover:bg-primary/10"
+                      aria-label="Next page"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

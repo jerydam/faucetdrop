@@ -1,9 +1,12 @@
 import { BrowserProvider, Contract, JsonRpcProvider, ZeroAddress, isAddress, getAddress } from "ethers";
-import { FAUCET_ABI, ERC20_ABI, FACTORY_ABI } from "./abis";
+import { FAUCET_ABI, ERC20_ABI, FACTORY_ABI, STORAGE_ABI } from "./abis";
 import { appendDivviReferralData, reportTransactionToDivvi } from "./divvi-integration";
 
 // Load backend address from .env
 const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178";
+
+// Storage contract address
+const STORAGE_CONTRACT_ADDRESS = "0x3fC5162779F545Bb4ea7980471b823577825dc8A";
 
 if (!isAddress(BACKEND_ADDRESS)) {
   throw new Error(`Invalid BACKEND_ADDRESS in .env: ${BACKEND_ADDRESS}`);
@@ -11,11 +14,11 @@ if (!isAddress(BACKEND_ADDRESS)) {
 
 const VALID_BACKEND_ADDRESS = getAddress(BACKEND_ADDRESS);
 
+
 // Helper to check if the network is Celo
 export function isCeloNetwork(chainId: number): boolean {
   return chainId === 42220; // Celo Mainnet
 }
-
 
 // Helper to check network match
 export function checkNetwork(chainId: number, networkId: number): boolean {
@@ -115,7 +118,7 @@ export async function createFaucet(
   }
 }
 
-// Get faucet details (no gas, no changes needed)
+// Get faucet details
 export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvider, faucetAddress: string) {
   try {
     console.log(`Getting details for faucet ${faucetAddress}`);
@@ -230,6 +233,93 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
   }
 }
 
+// Store claim in storage contract
+export async function storeClaim(
+  provider: BrowserProvider,
+  claimer: string,
+  faucetAddress: string,
+  amount: bigint,
+  txHash: string,
+  chainId: number,
+  networkId: number,
+  networkName: string
+): Promise<string> {
+  if (!checkNetwork(chainId, networkId)) {
+    throw new Error("Switch to the network to perform operation");
+  }
+
+  try {
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const storageContract = new Contract(STORAGE_CONTRACT_ADDRESS, STORAGE_ABI, signer);
+
+    // Convert txHash to bytes32 (ensure it's a valid 32-byte hash)
+    const formattedTxHash = txHash.startsWith('0x') ? txHash : `0x${txHash}`;
+    if (!/^0x[a-fA-F0-9]{64}$/.test(formattedTxHash)) {
+      throw new Error(`Invalid transaction hash format: ${formattedTxHash}`);
+    }
+
+    if (!networkName) {
+      throw new Error("Network name cannot be empty");
+    }
+
+    const data = storageContract.interface.encodeFunctionData("storeClaim", [
+      claimer,
+      faucetAddress,
+      amount,
+      formattedTxHash,
+      networkName,
+    ]);
+    const dataWithReferral = appendDivviReferralData(data);
+
+    // Estimate gas
+    const gasEstimate = await provider.estimateGas({
+      to: STORAGE_CONTRACT_ADDRESS,
+      data: dataWithReferral,
+      from: signerAddress,
+    });
+    const feeData = await provider.getFeeData();
+    const maxFeePerGas = feeData.maxFeePerGas || undefined;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
+
+    console.log("Store claim params:", {
+      claimer,
+      faucetAddress,
+      amount: amount.toString(),
+      txHash: formattedTxHash,
+      networkName,
+      chainId,
+      networkId,
+      signerAddress,
+      gasEstimate: gasEstimate.toString(),
+      maxFeePerGas: maxFeePerGas?.toString(),
+      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
+    });
+
+    const tx = await signer.sendTransaction({
+      to: STORAGE_CONTRACT_ADDRESS,
+      data: dataWithReferral,
+      gasLimit: gasEstimate * BigInt(12) / BigInt(10), // 20% buffer
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    });
+
+    console.log("Store claim transaction hash:", tx.hash);
+    const receipt = await tx.wait();
+    console.log("Store claim transaction confirmed:", receipt.hash);
+    await reportTransactionToDivvi(tx.hash, chainId);
+
+    return tx.hash;
+  } catch (error: any) {
+    console.error("Error storing claim:", error);
+    if (error.message?.includes("network changed")) {
+      throw new Error("Network changed during transaction. Please try again with a stable network connection.");
+    }
+    throw new Error(error.reason || error.message || "Failed to store claim");
+  }
+}
+
+// Fund faucet
 export async function fundFaucet(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -385,7 +475,6 @@ export async function claimTokens(provider: BrowserProvider, faucetAddress: stri
     throw new Error(error.reason || error.message || "Failed to claim tokens");
   }
 }
-
 
 // Withdraw tokens
 export async function withdrawTokens(

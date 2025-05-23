@@ -18,6 +18,7 @@ import {
   withdrawTokens,
   setClaimParameters,
   setWhitelist,
+  storeClaim,
 } from "@/lib/faucet";
 import { formatUnits, parseUnits } from "ethers";
 import { ArrowLeft, Clock, Coins, Download, Share2, Upload, Users } from "lucide-react";
@@ -73,7 +74,7 @@ export default function FaucetDetails() {
   const xProfileLink = "https://x.com/FaucetDrops";
   const popupContent = (amount: string, txHash: string | null) =>
     `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${network?.name || "the network"}. Verify Drop 💧: ${
-      txHash ? `${network?.blockExplorer}/tx/0x${txHash}` : "Transaction not available"
+      txHash ? `${network?.blockExplorer}/tx/0x${txHash.slice(2)}` : "Transaction not available"
     }`;
 
   const handleFollow = () => {
@@ -89,52 +90,52 @@ export default function FaucetDetails() {
     setShowClaimPopup(false);
   };
 
-    // Countdown logic
-    useEffect(() => {
-      if (!faucetDetails) return;
-  
-      const updateCountdown = () => {
-        const now = Date.now();
-        const start = Number(faucetDetails.startTime) * 1000;
-        const end = Number(faucetDetails.endTime) * 1000;
-  
-        // Start time countdown
-        if (start > now) {
-          const diff = start - now;
-          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-          const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-          setStartCountdown(
-            `${days}d ${hours}h ${minutes}m ${seconds}s until active`
-          );
-        } else {
-          setStartCountdown("Already Active");
-        }
-  
-        // End time countdown
-        if (end > now && faucetDetails.isClaimActive) {
-          const diff = end - now;
-          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-          const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-          setEndCountdown(
-            `${days}d ${hours}h ${minutes}m ${seconds}s until inactive`
-          );
-        } else if (end > 0 && end <= now) {
-          setEndCountdown("Ended");
-        } else {
-          setEndCountdown("N/A");
-        }
-      };
-  
-      updateCountdown(); // Initial call
-      const interval = setInterval(updateCountdown, 1000); // Update every second
-  
-      return () => clearInterval(interval); // Cleanup on unmount
-    }, [faucetDetails]);
-  
+  // Countdown logic
+  useEffect(() => {
+    if (!faucetDetails) return;
+
+    const updateCountdown = () => {
+      const now = Date.now();
+      const start = Number(faucetDetails.startTime) * 1000;
+      const end = Number(faucetDetails.endTime) * 1000;
+
+      // Start time countdown
+      if (start > now) {
+        const diff = start - now;
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        setStartCountdown(
+          `${days}d ${hours}h ${minutes}m ${seconds}s until active`
+        );
+      } else {
+        setStartCountdown("Already Active");
+      }
+
+      // End time countdown
+      if (end > now && faucetDetails.isClaimActive) {
+        const diff = end - now;
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        setEndCountdown(
+          `${days}d ${hours}h ${minutes}m ${seconds}s until inactive`
+        );
+      } else if (end > 0 && end <= now) {
+        setEndCountdown("Ended");
+      } else {
+        setEndCountdown("N/A");
+      }
+    };
+
+    updateCountdown(); // Initial call
+    const interval = setInterval(updateCountdown, 1000); // Update every second
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, [faucetDetails]);
+
   useEffect(() => {
     if (provider && faucetAddress && networkId) {
       loadFaucetDetails();
@@ -219,32 +220,70 @@ export default function FaucetDetails() {
       });
       return;
     }
-  
+
+    if (!chainId) {
+      toast({
+        title: "Network not detected",
+        description: "Please ensure your wallet is connected to a supported network",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!networkId) {
+      toast({
+        title: "Network ID not specified",
+        description: "Please specify a network ID in the URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!checkNetwork()) return;
-  
+
     try {
       setIsClaiming(true);
-      // Ensure wallet is connected to Celo
+      // Ensure wallet is connected
       if (!window.ethereum) {
         throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet.");
       }
       await window.ethereum.request({ method: 'eth_requestAccounts' });
+
+      // Perform backend claim
       const result = await claimViaBackend(address, faucetAddress, provider);
-      setTxHash(result.txHash);
-  
+      const formattedTxHash = result.txHash.startsWith('0x') ? result.txHash : `0x${result.txHash}` as `0x${string}`;
+      setTxHash(formattedTxHash);
+
+      // Get network name from networkId
+      const targetNetwork = networks.find((n) => n.chainId === Number(networkId));
+      const networkName = targetNetwork ? targetNetwork.name : "Unknown Network";
+
+      // Store the claim on-chain
+      const claimAmountBN = faucetDetails?.claimAmount || 0n;
+      await storeClaim(
+        provider,
+        address,
+        faucetAddress,
+        claimAmountBN,
+        formattedTxHash,
+        chainId,
+        Number(networkId),
+        networkName
+      );
+
       toast({
-        title: "Tokens claimed successfully via backend",
+        title: "Tokens claimed successfully",
         description: `You have claimed ${
           faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""
-        } ${tokenSymbol}`,
+        } ${tokenSymbol} and recorded the claim on-chain on ${networkName}`,
       });
-  
+
       setShowClaimPopup(true);
       await loadFaucetDetails();
     } catch (error: any) {
-      console.error("Error claiming tokens via backend:", error);
+      console.error("Error claiming tokens:", error);
       toast({
-        title: "Failed to claim tokens via backend",
+        title: "Failed to claim tokens",
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       });
@@ -258,6 +297,15 @@ export default function FaucetDetails() {
       toast({
         title: "Invalid Input",
         description: "Please connect your wallet and enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!chainId) {
+      toast({
+        title: "Network not detected",
+        description: "Please ensure your wallet is connected to a supported network",
         variant: "destructive",
       });
       return;
@@ -298,6 +346,15 @@ export default function FaucetDetails() {
       return;
     }
 
+    if (!chainId) {
+      toast({
+        title: "Network not detected",
+        description: "Please ensure your wallet is connected to a supported network",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const amount = parseUnits(withdrawAmount, tokenDecimals);
       await withdrawTokens(provider, faucetAddress, amount, chainId, Number(networkId));
@@ -328,6 +385,15 @@ export default function FaucetDetails() {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet to update parameters",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!chainId) {
+      toast({
+        title: "Network not detected",
+        description: "Please ensure your wallet is connected to a supported network",
         variant: "destructive",
       });
       return;
@@ -365,6 +431,15 @@ export default function FaucetDetails() {
       toast({
         title: "Invalid Input",
         description: "Please connect your wallet and enter valid addresses",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!chainId) {
+      toast({
+        title: "Network not detected",
+        description: "Please ensure your wallet is connected to a supported network",
         variant: "destructive",
       });
       return;
@@ -712,9 +787,6 @@ export default function FaucetDetails() {
             <Button type="button" variant="default" onClick={handleShareOnX} className="flex items-center gap-2 text-xs sm:text-sm">
               <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
               Share on 𝕏
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setShowClaimPopup(false)} className="text-xs sm:text-sm">
-              Close
             </Button>
           </DialogFooter>
         </DialogContent>

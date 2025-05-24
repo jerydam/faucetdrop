@@ -9,24 +9,21 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { NetworkSelector } from "@/components/network-selector";
-import { WalletConnect } from "@/components/wallet-connect";
-import {
-  getFaucetDetails,
-  claimTokens,
-  fundFaucet,
-  withdrawTokens,
-  setClaimParameters,
-  setWhitelist,
-  storeClaim,
-} from "@/lib/faucet";
-import { formatUnits, parseUnits } from "ethers";
-import { ArrowLeft, Clock, Coins, Download, Share2, Upload, Users } from "lucide-react";
-import Link from "next/link";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Header } from "@/components/header";
+import {
+  getFaucetDetails,
+  fundFaucet,
+  withdrawTokens,
+  setWhitelist,
+  storeClaim,
+  setClaimParameters,
+} from "@/lib/faucet";
+import { formatUnits, parseUnits, BrowserProvider } from "ethers";
+import { Clock, Coins, Download, Share2, Upload, Users } from "lucide-react";
 import { claimViaBackend } from "@/lib/backend-service";
-import { BatchClaim } from "@/components/batch-claim";
+import { Batchclaim } from "@/components/batch-claim";
 import { useNetwork } from "@/hooks/use-network";
 import { TokenBalance } from "@/components/token-balance";
 import { Badge } from "@/components/ui/badge";
@@ -47,12 +44,13 @@ export default function FaucetDetails() {
   const { toast } = useToast();
   const router = useRouter();
   const { address, chainId, isConnected, provider } = useWallet();
-  const { network, networks, setNetwork } = useNetwork();
+  const { networks, setNetwork } = useNetwork();
 
   const [faucetDetails, setFaucetDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isClaiming, setIsClaiming] = useState(false);
   const [fundAmount, setFundAmount] = useState("");
+  const [adjustedFundAmount, setAdjustedFundAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [claimAmount, setClaimAmount] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -64,18 +62,57 @@ export default function FaucetDetails() {
   const [hasClaimed, setHasClaimed] = useState(false);
   const [hasFollowed, setHasFollowed] = useState(false);
   const [showClaimPopup, setShowClaimPopup] = useState(false);
+  const [showFundPopup, setShowFundPopup] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [startCountdown, setStartCountdown] = useState<string | null>(null);
   const [endCountdown, setEndCountdown] = useState<string>("");
+  const [selectedNetwork, setSelectedNetwork] = useState<any>(null);
+  const [secretCode, setSecretCode] = useState("");
+  const [generatedSecretCode, setGeneratedSecretCode] = useState("");
+  const [showSecretCodeDialog, setShowSecretCodeDialog] = useState(false);
 
   const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase();
+  const isSecretCodeValid = secretCode.length === 6 && /^[A-Z0-9]{6}$/.test(secretCode);
 
-  // X/Twitter integration
   const xProfileLink = "https://x.com/FaucetDrops";
   const popupContent = (amount: string, txHash: string | null) =>
-    `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${network?.name || "the network"}. Verify Drop 💧: ${
-      txHash ? `${network?.blockExplorer}/tx/0x${txHash.slice(2)}` : "Transaction not available"
+    `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
+      txHash ? `${selectedNetwork?.blockExplorer || "https://explorer.unknown"}/tx/0x${txHash.slice(2)}` : "Transaction not available"
     }`;
+
+  // Calculate platform fee (5%), net funded amount, and recommended input for original amount
+  const calculateFee = (amount: string) => {
+    try {
+      const parsedAmount = parseUnits(amount, tokenDecimals); // Returns BigInt
+      const fee = (parsedAmount * BigInt(5)) / BigInt(100); // 5% fee
+      const netAmount = parsedAmount - fee;
+      // To achieve original amount as net, input = original / 0.95
+      const recommendedInput = (parsedAmount * BigInt(100)) / BigInt(95);
+      // Round recommendedInput to 3 decimal places for display
+      const recommendedInputStr = Number(formatUnits(recommendedInput, tokenDecimals)).toFixed(3);
+      return {
+        fee: formatUnits(fee, tokenDecimals),
+        netAmount: formatUnits(netAmount, tokenDecimals),
+        recommendedInput: recommendedInputStr,
+      };
+    } catch {
+      return { fee: "0", netAmount: "0", recommendedInput: "0" };
+    }
+  };
+
+  // Adjust funding amount to achieve desired net amount after fee
+  const adjustFundingAmount = (desiredNet: string) => {
+    try {
+      const parsedNet = parseUnits(desiredNet, tokenDecimals); // Returns BigInt
+      // Net amount = Input * (1 - 0.05) => Input = Net / 0.95
+      const adjusted = (parsedNet * BigInt(100)) / BigInt(95);
+      return formatUnits(adjusted, tokenDecimals);
+    } catch {
+      return "";
+    }
+  };
+
+  const { fee, netAmount, recommendedInput } = calculateFee(fundAmount);
 
   const handleFollow = () => {
     window.open(xProfileLink, "_blank");
@@ -90,7 +127,6 @@ export default function FaucetDetails() {
     setShowClaimPopup(false);
   };
 
-  // Countdown logic
   useEffect(() => {
     if (!faucetDetails) return;
 
@@ -99,7 +135,6 @@ export default function FaucetDetails() {
       const start = Number(faucetDetails.startTime) * 1000;
       const end = Number(faucetDetails.endTime) * 1000;
 
-      // Start time countdown
       if (start > now) {
         const diff = start - now;
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -113,7 +148,6 @@ export default function FaucetDetails() {
         setStartCountdown("Already Active");
       }
 
-      // End time countdown
       if (end > now && faucetDetails.isClaimActive) {
         const diff = end - now;
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -130,10 +164,9 @@ export default function FaucetDetails() {
       }
     };
 
-    updateCountdown(); // Initial call
-    const interval = setInterval(updateCountdown, 1000); // Update every second
-
-    return () => clearInterval(interval); // Cleanup on unmount
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
   }, [faucetDetails]);
 
   useEffect(() => {
@@ -143,7 +176,15 @@ export default function FaucetDetails() {
   }, [provider, faucetAddress, networkId]);
 
   const loadFaucetDetails = async () => {
-    if (!faucetAddress || !networkId) return;
+    if (!faucetAddress || !networkId) {
+      toast({
+        title: "Invalid Parameters",
+        description: "Faucet address or network ID is missing",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -154,9 +195,12 @@ export default function FaucetDetails() {
           description: `Network ID ${networkId} is not supported`,
           variant: "destructive",
         });
+        setLoading(false);
+        router.push("/");
         return;
       }
 
+      setSelectedNetwork(targetNetwork);
       const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl);
       const details = await getFaucetDetails(detailsProvider, faucetAddress);
       setFaucetDetails(details);
@@ -189,6 +233,14 @@ export default function FaucetDetails() {
   };
 
   const checkNetwork = () => {
+    if (!chainId) {
+      toast({
+        title: "Network not detected",
+        description: "Please ensure your wallet is connected to a supported network",
+        variant: "destructive",
+      });
+      return false;
+    }
     if (networkId && Number(networkId) !== chainId) {
       const targetNetwork = networks.find((n) => n.chainId === Number(networkId));
       if (targetNetwork) {
@@ -221,7 +273,7 @@ export default function FaucetDetails() {
       return;
     }
 
-    if (!chainId) {
+    if (!chainId || !networkId) {
       toast({
         title: "Network not detected",
         description: "Please ensure your wallet is connected to a supported network",
@@ -230,10 +282,10 @@ export default function FaucetDetails() {
       return;
     }
 
-    if (!networkId) {
+    if (!isSecretCodeValid) {
       toast({
-        title: "Network ID not specified",
-        description: "Please specify a network ID in the URL",
+        title: "Invalid Secret Code",
+        description: "Please enter a valid 6-character alphanumeric secret code",
         variant: "destructive",
       });
       return;
@@ -243,25 +295,20 @@ export default function FaucetDetails() {
 
     try {
       setIsClaiming(true);
-      // Ensure wallet is connected
       if (!window.ethereum) {
         throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet.");
       }
       await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-      // Perform backend claim
-      const result = await claimViaBackend(address, faucetAddress, provider);
+      const result = await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode);
       const formattedTxHash = result.txHash.startsWith('0x') ? result.txHash : `0x${result.txHash}` as `0x${string}`;
       setTxHash(formattedTxHash);
 
-      // Get network name from networkId
-      const targetNetwork = networks.find((n) => n.chainId === Number(networkId));
-      const networkName = targetNetwork ? targetNetwork.name : "Unknown Network";
+      const networkName = selectedNetwork?.name || "Unknown Network";
 
-      // Store the claim on-chain
-      const claimAmountBN = faucetDetails?.claimAmount || 0n;
+      const claimAmountBN = faucetDetails?.claimAmount || BigInt(0);
       await storeClaim(
-        provider,
+        provider as BrowserProvider,
         address,
         faucetAddress,
         claimAmountBN,
@@ -279,12 +326,17 @@ export default function FaucetDetails() {
       });
 
       setShowClaimPopup(true);
+      setSecretCode("");
       await loadFaucetDetails();
     } catch (error: any) {
       console.error("Error claiming tokens:", error);
+      let errorMessage = error.message || "Unknown error occurred";
+      if (errorMessage.includes("Unauthorized: Invalid secret code")) {
+        errorMessage = "Invalid secret code. Please check and try again.";
+      }
       toast({
         title: "Failed to claim tokens",
-        description: error.message || "Unknown error occurred",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -293,39 +345,56 @@ export default function FaucetDetails() {
   }
 
   const handleFund = async () => {
-    if (!isConnected || !provider || !fundAmount) {
+    if (!isConnected || !provider || !fundAmount || !chainId) {
       toast({
         title: "Invalid Input",
-        description: "Please connect your wallet and enter a valid amount",
+        description: "Please connect your wallet, ensure a network is selected, and enter a valid amount",
         variant: "destructive",
       });
       return;
     }
 
-    if (!chainId) {
+    // Show the funding confirmation popup
+    setAdjustedFundAmount(fundAmount);
+    setShowFundPopup(true);
+  };
+
+  const confirmFund = async () => {
+    if (!isConnected || !provider || !adjustedFundAmount || !chainId) {
       toast({
-        title: "Network not detected",
-        description: "Please ensure your wallet is connected to a supported network",
+        title: "Invalid Input",
+        description: "Please connect your wallet, ensure a network is selected, and enter a valid amount",
         variant: "destructive",
       });
       return;
     }
+
+    if (!checkNetwork()) return;
 
     try {
-      const amount = parseUnits(fundAmount, tokenDecimals);
-      const hash = await fundFaucet(provider, faucetAddress, amount, faucetDetails.isEther, chainId, Number(networkId));
+      const amount = parseUnits(adjustedFundAmount, tokenDecimals);
+      const hash = await fundFaucet(
+        provider as BrowserProvider,
+        faucetAddress,
+        amount,
+        faucetDetails.isEther,
+        chainId,
+        Number(networkId)
+      );
 
       toast({
         title: "Faucet funded successfully",
-        description: `You have added ${fundAmount} ${tokenSymbol} to the faucet`,
+        description: `You have added ${formatUnits(amount, tokenDecimals)} ${tokenSymbol} to the faucet (after 5% platform fee)`,
       });
 
       setFundAmount("");
+      setAdjustedFundAmount("");
+      setShowFundPopup(false);
       await loadFaucetDetails();
     } catch (error: any) {
       console.error("Error funding faucet:", error);
       if (error.message === "Switch to the network to perform operation") {
-        checkNetwork(); // Trigger toast alert
+        checkNetwork();
       } else {
         toast({
           title: "Failed to fund faucet",
@@ -337,27 +406,26 @@ export default function FaucetDetails() {
   };
 
   const handleWithdraw = async () => {
-    if (!isConnected || !provider || !withdrawAmount) {
+    if (!isConnected || !provider || !withdrawAmount || !chainId) {
       toast({
         title: "Invalid Input",
-        description: "Please connect your wallet and enter a valid amount",
+        description: "Please connect your wallet, ensure a network is selected, and enter a valid amount",
         variant: "destructive",
       });
       return;
     }
 
-    if (!chainId) {
-      toast({
-        title: "Network not detected",
-        description: "Please ensure your wallet is connected to a supported network",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!checkNetwork()) return;
 
     try {
       const amount = parseUnits(withdrawAmount, tokenDecimals);
-      await withdrawTokens(provider, faucetAddress, amount, chainId, Number(networkId));
+      await withdrawTokens(
+        provider as BrowserProvider,
+        faucetAddress,
+        amount,
+        chainId,
+        Number(networkId)
+      );
 
       toast({
         title: "Tokens withdrawn successfully",
@@ -369,7 +437,7 @@ export default function FaucetDetails() {
     } catch (error: any) {
       console.error("Error withdrawing tokens:", error);
       if (error.message === "Switch to the network to perform operation") {
-        checkNetwork(); // Trigger toast alert
+        checkNetwork();
       } else {
         toast({
           title: "Failed to withdraw tokens",
@@ -381,41 +449,54 @@ export default function FaucetDetails() {
   };
 
   const handleUpdateClaimParameters = async () => {
-    if (!isConnected || !provider) {
+    if (!isConnected || !provider || !chainId) {
       toast({
         title: "Wallet not connected",
-        description: "Please connect your wallet to update parameters",
+        description: "Please connect your wallet and ensure a network is selected",
         variant: "destructive",
       });
       return;
     }
 
-    if (!chainId) {
+    if (!claimAmount || !startTime || !endTime) {
       toast({
-        title: "Network not detected",
-        description: "Please ensure your wallet is connected to a supported network",
+        title: "Invalid Input",
+        description: "Please fill in all claim parameters",
         variant: "destructive",
       });
       return;
     }
+
+    if (!checkNetwork()) return;
 
     try {
       const claimAmountBN = parseUnits(claimAmount, tokenDecimals);
-      const startTimestamp = startTime ? Math.floor(new Date(startTime).getTime() / 1000) : 0;
-      const endTimestamp = endTime ? Math.floor(new Date(endTime).getTime() / 1000) : 0;
+      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
+      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
-      await setClaimParameters(provider, faucetAddress, claimAmountBN, startTimestamp, endTimestamp, chainId, Number(networkId));
+      const result = await setClaimParameters(
+        provider as BrowserProvider,
+        faucetAddress,
+        claimAmountBN,
+        startTimestamp,
+        endTimestamp,
+        chainId,
+        Number(networkId)
+      );
+
+      setGeneratedSecretCode(result.secretCode);
+      setShowSecretCodeDialog(true);
 
       toast({
         title: "Claim parameters updated",
-        description: "The faucet claim parameters have been updated successfully",
+        description: `Parameters updated successfully. Secret code generated.`,
       });
 
       await loadFaucetDetails();
     } catch (error: any) {
       console.error("Error updating claim parameters:", error);
       if (error.message === "Switch to the network to perform operation") {
-        checkNetwork(); // Trigger toast alert
+        checkNetwork();
       } else {
         toast({
           title: "Failed to update claim parameters",
@@ -427,23 +508,16 @@ export default function FaucetDetails() {
   };
 
   const handleUpdateWhitelist = async () => {
-    if (!isConnected || !provider || !whitelistAddresses.trim()) {
+    if (!isConnected || !provider || !whitelistAddresses.trim() || !chainId) {
       toast({
         title: "Invalid Input",
-        description: "Please connect your wallet and enter valid addresses",
+        description: "Please connect your wallet, ensure a network is selected, and enter valid addresses",
         variant: "destructive",
       });
       return;
     }
 
-    if (!chainId) {
-      toast({
-        title: "Network not detected",
-        description: "Please ensure your wallet is connected to a supported network",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!checkNetwork()) return;
 
     try {
       const addresses = whitelistAddresses
@@ -453,7 +527,14 @@ export default function FaucetDetails() {
 
       if (addresses.length === 0) return;
 
-      await setWhitelist(provider, faucetAddress, addresses, isWhitelistEnabled, chainId, Number(networkId));
+      await setWhitelist(
+        provider as BrowserProvider,
+        faucetAddress,
+        addresses,
+        isWhitelistEnabled,
+        chainId,
+        Number(networkId)
+      );
 
       toast({
         title: "Whitelist updated",
@@ -466,7 +547,7 @@ export default function FaucetDetails() {
     } catch (error: any) {
       console.error("Error updating whitelist:", error);
       if (error.message === "Switch to the network to perform operation") {
-        checkNetwork(); // Trigger toast alert
+        checkNetwork();
       } else {
         toast({
           title: "Failed to update whitelist",
@@ -492,18 +573,7 @@ export default function FaucetDetails() {
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="flex flex-col gap-6 sm:gap-8 max-w-3xl sm:max-w-4xl mx-auto">
-          <header className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <Link href="/">
-              <Button variant="outline" size="icon" className="h-8 w-8 sm:h-10 sm:w-10">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <h1 className="text-xl sm:text-2xl font-bold truncate">Faucet Details</h1>
-            <div className="ml-auto flex items-center gap-2 sm:gap-4">
-              <NetworkSelector />
-              <WalletConnect />
-            </div>
-          </header>
+          <Header pageTitle="Faucet Details" />
 
           {faucetDetails ? (
             <>
@@ -514,12 +584,18 @@ export default function FaucetDetails() {
                       <span>{faucetDetails.name || tokenSymbol} Faucet</span>
                     </CardTitle>
                     <div className="flex items-center gap-2">
-                      {network && (
+                      {selectedNetwork ? (
                         <Badge
-                          style={{ backgroundColor: network.color }}
+                          style={{ backgroundColor: selectedNetwork.color }}
                           className="text-white text-xs font-medium px-2 py-1"
                         >
-                          {network.name}
+                          {selectedNetwork.name}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          className="text-white text-xs font-medium px-2 py-1 bg-gray-500"
+                        >
+                          Unknown Network
                         </Badge>
                       )}
                       {faucetDetails.isClaimActive ? (
@@ -557,7 +633,7 @@ export default function FaucetDetails() {
                       tokenSymbol={tokenSymbol}
                       tokenDecimals={tokenDecimals}
                       isNativeToken={faucetDetails.isEther}
-                      networkChainId={network?.chainId}
+                      networkChainId={selectedNetwork?.chainId}
                     />
                   </div>
                 )}
@@ -597,20 +673,33 @@ export default function FaucetDetails() {
                       </span>
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="secret-code" className="text-xs sm:text-sm">Secret Code</Label>
+                    <Input
+                      id="secret-code"
+                      placeholder="Enter 6-character code (e.g., ABC123)"
+                      value={secretCode}
+                      onChange={(e) => setSecretCode(e.target.value.toUpperCase())}
+                      className="text-xs sm:text-sm"
+                      maxLength={6}
+                    />
+                    <p className="text-xs text-muted-foreground">Enter the 6-character alphanumeric code to claim tokens</p>
+                  </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2 px-4 sm:px-6">
                   <Button
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                     onClick={handleFollow}
-                    disabled={isClaiming}
+                    disabled={hasFollowed}
                   >
-                    {"Follow on 𝕏 to Claim"}
+                    {hasFollowed ? "Followed on 𝕏" : "Follow on 𝕏 to Claim"}
                   </Button>
                   <Button
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                     variant="outline"
                     onClick={handleBackendClaim}
-                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed}
+                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !isSecretCodeValid || !hasFollowed}
                   >
                     {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim ${
                             faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""
@@ -659,7 +748,7 @@ export default function FaucetDetails() {
                                 Fund
                               </Button>
                             </div>
-                            <p className="text-xs text-muted-foreground">Add {tokenSymbol} to the faucet</p>
+                            <p className="text-xs text-muted-foreground">Add {tokenSymbol} to the faucet (5% platform fee applies)</p>
                           </div>
 
                           <div className="space-y-2">
@@ -720,7 +809,13 @@ export default function FaucetDetails() {
                             </div>
                           </div>
 
-                          <Button onClick={handleUpdateClaimParameters} className="text-xs sm:text-sm">Update Parameters</Button>
+                          <Button 
+                            onClick={handleUpdateClaimParameters} 
+                            className="text-xs sm:text-sm"
+                            disabled={!claimAmount || !startTime || !endTime}
+                          >
+                            Update Parameters & Generate Secret Code
+                          </Button>
                         </div>
                       </TabsContent>
 
@@ -756,7 +851,7 @@ export default function FaucetDetails() {
                   </CardContent>
                 </Card>
               )}
-              {isOwner && <BatchClaim faucetAddress={faucetAddress} />}
+              {isOwner && <Batchclaim faucetAddress={faucetAddress} />}
             </>
           ) : (
             <Card className="w-full sm:max-w-2xl mx-auto">
@@ -787,6 +882,114 @@ export default function FaucetDetails() {
             <Button type="button" variant="default" onClick={handleShareOnX} className="flex items-center gap-2 text-xs sm:text-sm">
               <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
               Share on 𝕏
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSecretCodeDialog} onOpenChange={setShowSecretCodeDialog}>
+        <DialogContent className="w-11/12 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Secret Code Generated</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              A new secret code has been generated for this faucet. Share this code with users to allow them to claim tokens.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="generated-secret-code" className="text-xs sm:text-sm">Secret Code</Label>
+              <Input
+                id="generated-secret-code"
+                value={generatedSecretCode}
+                readOnly
+                className="text-xs sm:text-sm font-mono"
+              />
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="default"
+              onClick={() => {
+                navigator.clipboard.writeText(generatedSecretCode);
+                toast({
+                  title: "Copied to Clipboard",
+                  description: "The secret code has been copied to your clipboard",
+                });
+              }}
+              className="text-xs sm:text-sm"
+            >
+              Copy Code
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowSecretCodeDialog(false)}
+              className="text-xs sm:text-sm"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
+        <DialogContent className="w-11/12 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Confirm Faucet Funding</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              A 5% platform fee will be deducted from your funding amount.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs sm:text-sm">Funding Details</Label>
+              <p className="text-xs sm:text-sm">
+                Input Amount: {fundAmount} {tokenSymbol}
+              </p>
+              <p className="text-xs sm:text-sm">
+                Platform Fee (5%): {fee} {tokenSymbol}
+              </p>
+              <p className="text-xs sm:text-sm font-medium">
+                Net Funded Amount: {netAmount} {tokenSymbol}
+              </p>
+              <p className="text-xs sm:text-sm font-medium">
+                To fund {fundAmount} {tokenSymbol} after the fee, input: {recommendedInput} {tokenSymbol}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
+                Adjust Funding Amount
+              </Label>
+              <Input
+                id="adjusted-fund-amount"
+                placeholder="Enter amount"
+                value={adjustedFundAmount}
+                onChange={(e) => setAdjustedFundAmount(e.target.value)}
+                className="text-xs sm:text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter the total amount to send, including the 5% fee. To fund {fundAmount} {tokenSymbol} after the fee, use {recommendedInput} {tokenSymbol}.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="default"
+              onClick={confirmFund}
+              disabled={!adjustedFundAmount || parseFloat(adjustedFundAmount) <= 0}
+              className="text-xs sm:text-sm"
+            >
+              Proceed
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowFundPopup(false)}
+              className="text-xs sm:text-sm"
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -18,10 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Loader2, ArrowLeft } from "lucide-react";
-import Link from "next/link";
-import { NetworkSelector } from "@/components/network-selector";
-import { WalletConnect } from "@/components/wallet-connect";
+import { AlertCircle, Loader2 } from "lucide-react";
+import { Header } from "@/components/header";
 
 export default function CreateFaucet() {
   const { provider, address, isConnected, connect, chainId } = useWallet();
@@ -132,29 +130,13 @@ export default function CreateFaucet() {
     }
   };
 
-  // Ensure disabled prop is boolean | undefined
   const isDisabled = isCreating || !network || (chainId !== undefined && network && chainId !== network.chainId);
 
   return (
     <main className="min-h-screen">
       <div className="container mx-auto px-4 py-8">
-        <header className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="outline" size="icon">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <h1 className="text-3xl font-bold">Create Faucet</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <NetworkSelector />
-            <WalletConnect />
-          </div>
-        </header>
-
+        <Header pageTitle="Create Faucet" />
         <div className="max-w-2xl mx-auto">
-          
           <Card>
             <CardHeader>
               <CardTitle>Create New Faucet</CardTitle>

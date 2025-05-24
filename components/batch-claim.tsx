@@ -11,19 +11,19 @@ import { Users } from "lucide-react"
 // Add the useNetwork import
 import { useNetwork } from "@/hooks/use-network"
 
-interface BatchClaimProps {
+interface BatchclaimProps {
   faucetAddress: string
 }
 
-// Update the BatchClaim component to include network checking
-export function BatchClaim({ faucetAddress }: BatchClaimProps) {
+// Update the Batchclaim component to include network checking
+export function Batchclaim({ faucetAddress }: BatchclaimProps) {
   const { toast } = useToast()
   const { address, ensureCorrectNetwork } = useWallet()
   const { network } = useNetwork()
   const [addresses, setAddresses] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
-  const handleBatchClaim = async () => {
+  const handleBatchclaim = async () => {
     if (!address) {
       toast({
         title: "Wallet not connected",
@@ -89,8 +89,8 @@ export function BatchClaim({ faucetAddress }: BatchClaimProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Batch Claim</CardTitle>
-        <CardDescription>Claim tokens for multiple addresses at once</CardDescription>
+        <CardTitle>Batch claim</CardTitle>
+        <CardDescription>claim tokens for multiple addresses at once</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -109,13 +109,13 @@ export function BatchClaim({ faucetAddress }: BatchClaimProps) {
         </div>
       </CardContent>
       <CardFooter>
-        <Button className="w-full" onClick={handleBatchClaim} disabled={isProcessing || !address || !addresses.trim()}>
+        <Button className="w-full" onClick={handleBatchclaim} disabled={isProcessing || !address || !addresses.trim()}>
           {isProcessing ? (
             "Processing..."
           ) : (
             <>
               <Users className="mr-2 h-4 w-4" />
-              Process Batch Claim
+              Process Batch claim
             </>
           )}
         </Button>

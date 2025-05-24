@@ -83,7 +83,7 @@ export default function BatchClaimPage() {
       }
 
       toast({
-        title: "Batch claim processed",
+        title: "Batch drop processed",
         description: `Successfully claimed for ${successCount} addresses. Failed: ${failCount}`,
         variant: successCount > 0 ? "default" : "destructive",
       })
@@ -93,9 +93,9 @@ export default function BatchClaimPage() {
         setAddresses("")
       }
     } catch (error) {
-      console.error("Error in batch claim:", error)
+      console.error("Error in batch drop:", error)
       toast({
-        title: "Batch claim failed",
+        title: "Batch drop failed",
         description: error instanceof Error ? error.message : "Unknown error occurred",
         variant: "destructive",
       })
@@ -114,7 +114,7 @@ export default function BatchClaimPage() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="text-3xl font-bold">Batch Claim</h1>
+            <h1 className="text-3xl font-bold">Batch drop</h1>
             <div className="ml-auto">
               <NetworkSelector />
             </div>
@@ -122,8 +122,8 @@ export default function BatchClaimPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Batch Claim Tokens</CardTitle>
-              <CardDescription>Claim tokens for multiple addresses at once</CardDescription>
+              <CardTitle>Batch drop Tokens</CardTitle>
+              <CardDescription>Drop tokens for multiple addresses at once</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -135,7 +135,7 @@ export default function BatchClaimPage() {
                   onChange={(e) => setFaucetAddress(e.target.value)}
                   disabled={isProcessing}
                 />
-                <p className="text-sm text-muted-foreground">The address of the faucet to claim from</p>
+                <p className="text-sm text-muted-foreground">The address of the faucet to drop from</p>
               </div>
 
               <div className="space-y-2">
@@ -149,7 +149,7 @@ export default function BatchClaimPage() {
                   disabled={isProcessing}
                 />
                 <p className="text-sm text-muted-foreground">
-                  Enter Ethereum addresses to claim tokens for. The backend will process these claims.
+                  Enter Ethereum addresses to drop tokens for. The backend will process these drops.
                 </p>
               </div>
             </CardContent>
@@ -164,7 +164,7 @@ export default function BatchClaimPage() {
                 ) : (
                   <>
                     <Users className="mr-2 h-4 w-4" />
-                    Process Batch Claim
+                    Process Batch drop
                   </>
                 )}
               </Button>

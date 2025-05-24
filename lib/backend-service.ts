@@ -10,6 +10,7 @@ interface ClaimPayload {
   faucetAddress: string;
   shouldWhitelist: boolean;
   chainId: number;
+  secretCode: string;
   divviReferralData?: string;
 }
 
@@ -54,7 +55,6 @@ interface DebugInfo {
   errorMessage?: string;
 }
 
-// Enhanced logging utility
 function debugLog(message: string, data?: any) {
   if (DEBUG_MODE) {
     console.log(`🔍 [Divvi Debug] ${message}`, data ? data : '');
@@ -69,7 +69,6 @@ function successLog(message: string, data?: any) {
   console.log(`✅ [Divvi Success] ${message}`, data ? data : '');
 }
 
-// Improved hex validation and fixing
 function validateAndFixHexData(data: string): { isValid: boolean; fixed: string; error?: string } {
   if (!data || typeof data !== 'string') {
     return { isValid: false, fixed: '', error: 'Data is empty or not a string' };
@@ -80,16 +79,13 @@ function validateAndFixHexData(data: string): { isValid: boolean; fixed: string;
     return { isValid: false, fixed: '', error: 'Data is empty after trimming' };
   }
 
-  // Check if it's valid hex (with or without 0x prefix)
   const hexPattern = /^(0x)?[0-9a-fA-F]+$/;
   if (!hexPattern.test(trimmed)) {
     return { isValid: false, fixed: '', error: 'Data contains non-hex characters' };
   }
 
-  // Ensure 0x prefix
   const fixed = trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
   
-  // Additional validation: check if length is reasonable (should be even after 0x)
   const hexPart = fixed.slice(2);
   if (hexPart.length % 2 !== 0) {
     return { isValid: false, fixed: '', error: 'Hex data has odd length (incomplete bytes)' };
@@ -98,7 +94,6 @@ function validateAndFixHexData(data: string): { isValid: boolean; fixed: string;
   return { isValid: true, fixed };
 }
 
-// Enhanced Divvi referral data processing
 async function processDivviReferralData(chainId: number): Promise<{
   data?: string;
   error?: string;
@@ -124,7 +119,6 @@ async function processDivviReferralData(chainId: number): Promise<{
   try {
     debugLog('Attempting to get Divvi referral data...');
     
-    // Call the appendDivviReferralData function
     const rawData = appendDivviReferralData('');
     
     debugInfo.rawData = {
@@ -142,7 +136,6 @@ async function processDivviReferralData(chainId: number): Promise<{
       return { error, debugInfo: { ...debugInfo, reason: 'empty_data' } };
     }
 
-    // Validate and fix the hex data
     const validation = validateAndFixHexData(rawData);
     debugInfo.validation = validation;
 
@@ -179,7 +172,6 @@ async function processDivviReferralData(chainId: number): Promise<{
   }
 }
 
-// Enhanced transaction reporting with better error handling
 async function reportToDivvi(txHash: string, chainId: number): Promise<void> {
   if (!ENABLE_DIVVI_REFERRAL || !isCeloNetwork(chainId)) {
     debugLog('Skipping Divvi reporting (not applicable)');
@@ -188,13 +180,11 @@ async function reportToDivvi(txHash: string, chainId: number): Promise<void> {
 
   try {
     debugLog(`Reporting transaction to Divvi: ${txHash} on chain ${chainId}`);
-    // Cast to the expected type if needed, or handle the type mismatch appropriately
     await reportTransactionToDivvi(txHash as `0x${string}`, chainId);
     successLog('Transaction reported to Divvi successfully');
   } catch (error) {
     errorLog('Failed to report transaction to Divvi', error);
     
-    // Enhanced error classification and user guidance
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
       console.error(`
 🚫 CORS Error Detected - Transaction reporting to Divvi failed
@@ -229,17 +219,16 @@ async function reportToDivvi(txHash: string, chainId: number): Promise<void> {
         });
       }
     }
-    
   }
 }
 
 export async function claimViaBackend(
   userAddress: string,
   faucetAddress: string,
-  provider?: BrowserProvider
+  provider: BrowserProvider,
+  secretCode: string
 ): Promise<{ success: boolean; txHash: string; whitelistTx?: string; divviDebug?: any }> {
   try {
-    // Environment and provider validation
     if (typeof window === 'undefined' || !window.ethereum) {
       throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet in a supported browser.");
     }
@@ -248,27 +237,24 @@ export async function claimViaBackend(
       throw new Error("Provider not initialized. Please ensure your wallet is connected.");
     }
 
-    // Get chainId from provider
     const network = await provider.getNetwork();
     const chainId = Number(network.chainId);
 
-    // Validate chainId
-    const validChainIds = [1135, 42220, 42161]; // Lisk, Celo, Arbitrum
+    const validChainIds = [1135, 42220, 42161];
     if (!validChainIds.includes(chainId)) {
       throw new Error(`Unsupported chainId: ${chainId}. Please switch to Lisk, Celo, or Arbitrum.`);
     }
 
     debugLog(`Starting claim process for chainId: ${chainId}`);
 
-    // Prepare the base payload
     let payload: ClaimPayload = {
       userAddress,
       faucetAddress,
       shouldWhitelist: true,
       chainId,
+      secretCode,
     };
 
-    // Process Divvi referral data
     const divviResult = await processDivviReferralData(chainId);
     
     if (divviResult.data) {
@@ -281,7 +267,6 @@ export async function claimViaBackend(
       debugLog(`Proceeding without Divvi data: ${divviResult.error}`);
     }
 
-    // Enhanced request logging
     const requestLog: RequestLogData = {
       userAddress,
       faucetAddress,
@@ -298,7 +283,6 @@ export async function claimViaBackend(
 
     debugLog('Sending claim request', requestLog);
 
-    // Make the API request
     const response = await fetch(`${API_URL}/claim`, {
       method: "POST",
       headers: {
@@ -307,7 +291,6 @@ export async function claimViaBackend(
       body: JSON.stringify(payload),
     });
 
-    // Handle API response
     if (!response.ok) {
       let errorData;
       try {
@@ -337,15 +320,12 @@ export async function claimViaBackend(
       txHash: result.txHash 
     });
 
-    // Report transaction to Divvi (non-blocking)
     if (result.success && result.txHash) {
-      // Use setTimeout to make this truly non-blocking
       setTimeout(() => {
         reportToDivvi(result.txHash, chainId);
-      }, 100); // Small delay to ensure main response is sent first
+      }, 100);
     }
 
-    // Include debug info in development
     if (DEBUG_MODE) {
       result.divviDebug = divviResult.debugInfo;
     }
@@ -357,9 +337,8 @@ export async function claimViaBackend(
   }
 }
 
-// Enhanced utility function to test Divvi integration
 export async function testDivviIntegration(chainId?: number): Promise<DivviIntegrationResult> {
-  const testChainId = chainId || 42220; // Default to Celo Mainnet
+  const testChainId = chainId || 42220;
   
   debugLog(`Testing Divvi integration for chainId: ${testChainId}`);
   
@@ -374,7 +353,6 @@ export async function testDivviIntegration(chainId?: number): Promise<DivviInteg
   };
 }
 
-// Enhanced URL debugging
 export function debugReferralParams(): {
   url: string;
   params: Record<string, string>;
@@ -393,7 +371,6 @@ export function debugReferralParams(): {
   const url = new URL(window.location.href);
   const params = Object.fromEntries(url.searchParams.entries());
   
-  // Check for common referral parameter names
   const commonReferralParams = ['ref', 'referral', 'r', 'divvi', 'affiliate', 'partner', 'code'];
   const referralParams = Object.fromEntries(
     commonReferralParams
@@ -426,7 +403,6 @@ export function debugReferralParams(): {
   return result;
 }
 
-// Utility to check Divvi integration health
 export async function checkDivviHealth(): Promise<{
   status: 'healthy' | 'warning' | 'error';
   checks: Array<{ name: string; passed: boolean; message: string }>;
@@ -434,14 +410,12 @@ export async function checkDivviHealth(): Promise<{
 }> {
   const checks = [];
   
-  // Check 1: Environment
   checks.push({
     name: 'Browser Environment',
     passed: typeof window !== 'undefined',
     message: typeof window !== 'undefined' ? 'Running in browser' : 'Not in browser environment'
   });
 
-  // Check 2: Divvi function availability
   let divviFunctionAvailable = false;
   try {
     divviFunctionAvailable = typeof appendDivviReferralData === 'function';
@@ -455,7 +429,6 @@ export async function checkDivviHealth(): Promise<{
     message: divviFunctionAvailable ? 'appendDivviReferralData function is available' : 'appendDivviReferralData function not found'
   });
 
-  // Check 3: URL parameters
   const urlCheck = debugReferralParams();
   const hasReferralParams = Object.keys(urlCheck.referralParams).length > 0;
   
@@ -465,7 +438,6 @@ export async function checkDivviHealth(): Promise<{
     message: hasReferralParams ? `Found: ${Object.keys(urlCheck.referralParams).join(', ')}` : 'No referral parameters in URL'
   });
 
-  // Check 4: Test Divvi data generation
   let testResult = null;
   if (divviFunctionAvailable) {
     testResult = await testDivviIntegration(42220);

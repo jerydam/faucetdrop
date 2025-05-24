@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Coins } from "lucide-react";
 import { formatUnits } from "ethers";
 import { getAllClaimsForAllNetworks, getFaucetsForNetwork } from "@/lib/faucet";
+import { Header } from "@/components/header";
 
 export function FaucetList() {
   const { chainId } = useWallet();
@@ -37,10 +38,10 @@ export function FaucetList() {
   const [loadingClaims, setLoadingClaims] = useState(true);
   const [faucetCounts, setFaucetCounts] = useState<Record<string, number>>({});
   const [page, setPage] = useState(1);
+  const [activeNetworkIndex, setActiveNetworkIndex] = useState(0); // Track active network for mobile toggle
   const claimsPerPage = 10;
 
   useEffect(() => {
-    // Initialize network status and faucet counts
     const initialStatus: Record<string, { loading: boolean; error: string | null }> = {};
     const initialFaucetCounts: Record<string, number> = {};
     networks.forEach((network) => {
@@ -50,19 +51,18 @@ export function FaucetList() {
     setNetworkStatus(initialStatus);
     setFaucetCounts(initialFaucetCounts);
 
-    // Load claims for all networks
     const loadClaims = async () => {
       setLoadingClaims(true);
       try {
         const fetchedClaims = await getAllClaimsForAllNetworks(networks);
-        console.log("Fetched claims:", fetchedClaims); // Debug log
+        console.log("Fetched drops:", fetchedClaims);
         setClaims(fetchedClaims);
-        setPage(1); // Reset page on new fetch
-        console.log("Total pages:", Math.ceil(fetchedClaims.length / claimsPerPage)); // Debug log
+        setPage(1);
+        console.log("Total pages:", Math.ceil(fetchedClaims.length / claimsPerPage));
       } catch (error) {
-        console.error("Error loading claims:", error);
+        console.error("Error loading drops:", error);
         toast({
-          title: "Failed to load claims",
+          title: "Failed to load drops",
           description: "Please try again later.",
           variant: "destructive",
         });
@@ -71,7 +71,6 @@ export function FaucetList() {
       }
     };
 
-    // Load faucet counts for all networks
     const loadFaucetCounts = async () => {
       const updatedStatus = { ...initialStatus };
       const updatedCounts = { ...initialFaucetCounts };
@@ -102,49 +101,133 @@ export function FaucetList() {
     loadFaucetCounts();
   }, [networks, toast]);
 
-  // Calculate pagination
   const totalPages = Math.ceil(claims.length / claimsPerPage);
   const paginatedClaims = claims.slice((page - 1) * claimsPerPage, page * claimsPerPage);
 
+  // Handle network toggle navigation
+  const handlePrevNetwork = () => {
+    setActiveNetworkIndex((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleNextNetwork = () => {
+    setActiveNetworkIndex((prev) => Math.min(networks.length - 1, prev + 1));
+  };
+
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
-      <h2 className="text-lg sm:text-xl font-semibold">Available Networks</h2>
+      
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+      {/* Mobile Toggle Layout (<640px) */}
+      <div className="block sm:hidden">
+        {networks.length > 0 ? (
+          <div className="space-y-4">
+            <Link href={`/network/${networks[activeNetworkIndex].chainId}`} key={networks[activeNetworkIndex].chainId}>
+              <Card
+                className="overflow-hidden w-full cursor-pointer hover:shadow-md transition-shadow"
+              >
+                <CardHeader className="pb-1 px-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-1">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: networks[activeNetworkIndex].color }}
+                      ></span>
+                      {networks[activeNetworkIndex].name}
+                    </CardTitle>
+                    {networkStatus[networks[activeNetworkIndex].name]?.loading ? (
+                      <span className="text-[10px] bg-blue-500/20 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-full">
+                        Loading...
+                      </span>
+                    ) : networkStatus[networks[activeNetworkIndex].name]?.error ? (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full">
+                        Issue
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded-full">
+                        Online
+                      </span>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="text-xs px-3">
+                  <p>
+                    View {faucetCounts[networks[activeNetworkIndex].name] || 0} faucet{faucetCounts[networks[activeNetworkIndex].name] !== 1 ? "s" : ""}
+                    {chainId === networks[activeNetworkIndex].chainId && (
+                      <span className="ml-2 text-[10px] bg-green-500/20 text-green-600 dark:text-blue-400 px-1.5 py-0.5 rounded-full">
+                        Connected
+                      </span>
+                    )}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+            <div className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrevNetwork}
+                disabled={activeNetworkIndex === 0}
+                className="text-xs hover:bg-primary/10"
+                aria-label="Previous network"
+              >
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Network {activeNetworkIndex + 1} of {networks.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextNetwork}
+                disabled={activeNetworkIndex === networks.length - 1}
+                className="text-xs hover:bg-primary/10"
+                aria-label="Next network"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-center text-muted-foreground">No networks available</p>
+        )}
+      </div>
+
+      {/* Grid Layout for sm+ (≥640px) */}
+      <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {networks.map((network) => (
           <Link href={`/network/${network.chainId}`} key={network.chainId}>
             <Card
               className="overflow-hidden w-full sm:max-w-md mx-auto cursor-pointer hover:shadow-md transition-shadow"
             >
-              <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-4">
+              <CardHeader className="pb-2 px-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm sm:text-base flex items-center gap-1 sm:gap-2">
+                  <CardTitle className="text-base flex items-center gap-2">
                     <span
-                      className="h-2 w-2 sm:h-3 sm:w-3 rounded-full"
+                      className="h-3 w-3 rounded-full"
                       style={{ backgroundColor: network.color }}
                     ></span>
                     {network.name}
                   </CardTitle>
                   {networkStatus[network.name]?.loading ? (
-                    <span className="text-[10px] sm:text-xs bg-blue-500/20 text-blue-600 dark:text-blue-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full">
                       Loading...
                     </span>
                   ) : networkStatus[network.name]?.error ? (
-                    <span className="text-[10px] sm:text-xs bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-amber-500/20 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full">
                       Issue
                     </span>
                   ) : (
-                    <span className="text-[10px] sm:text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
                       Online
                     </span>
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="text-xs sm:text-sm px-3 sm:px-4">
+              <CardContent className="text-sm px-4">
                 <p>
                   View {faucetCounts[network.name] || 0} faucet{faucetCounts[network.name] !== 1 ? "s" : ""}
                   {chainId === network.chainId && (
-                    <span className="ml-2 text-[10px] sm:text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+                    <span className="ml-2 text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
                       Connected
                     </span>
                   )}
@@ -165,15 +248,15 @@ export function FaucetList() {
             <div className="flex justify-center items-center py-10 sm:py-12">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-primary mx-auto"></div>
-                <p className="mt-4 text-sm sm:text-base">Loading claims...</p>
+                <p className="mt-4 text-sm sm:text-base">Loading drops...</p>
               </div>
             </div>
           ) : claims.length === 0 ? (
             <div className="text-center py-8 sm:py-12">
               <Coins className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mx-auto mb-3 sm:mb-4" />
-              <h3 className="text-lg sm:text-xl font-medium mb-2">No Claims Found</h3>
+              <h3 className="text-lg sm:text-xl font-medium mb-2">No Drops Found</h3>
               <p className="text-xs sm:text-sm text-muted-foreground">
-                No claims have been recorded across any network yet.
+                No drops have been recorded across any network yet.
               </p>
             </div>
           ) : (
@@ -181,7 +264,7 @@ export function FaucetList() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs sm:text-sm">Claimer</TableHead>
+                    <TableHead className="text-xs sm:text-sm">dropee</TableHead>
                     <TableHead className="text-xs sm:text-sm">Faucet</TableHead>
                     <TableHead className="text-xs sm:text-sm">Amount</TableHead>
                     <TableHead className="text-xs sm:text-sm">Tx Hash</TableHead>
@@ -233,7 +316,7 @@ export function FaucetList() {
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6">
                   <div className="text-xs sm:text-sm text-muted-foreground">
                     Showing {(page - 1) * claimsPerPage + 1} to {Math.min(page * claimsPerPage, claims.length)} of{" "}
-                    {claims.length} claims
+                    {claims.length} drops
                   </div>
                   <div className="flex items-center gap-2">
                     <Button

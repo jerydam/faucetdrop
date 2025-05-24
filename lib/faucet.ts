@@ -2,10 +2,9 @@ import { BrowserProvider, Contract, JsonRpcProvider, ZeroAddress, isAddress, get
 import { FAUCET_ABI, ERC20_ABI, FACTORY_ABI, STORAGE_ABI } from "./abis";
 import { appendDivviReferralData, reportTransactionToDivvi } from "./divvi-integration";
 
-
 // Fetch faucets for a specific network using getAllFaucetDetails
 interface Network {
-  chainId: number;
+  chainId: bigint;
   name: string;
   rpcUrl: string;
   blockExplorer: string;
@@ -36,13 +35,23 @@ const VALID_BACKEND_ADDRESS = getAddress(BACKEND_ADDRESS);
 const faucetDetailsCache: Map<string, any> = new Map();
 
 // Helper to check if the network is Celo
-export function isCeloNetwork(chainId: number): boolean {
-  return chainId === 42220; // Celo Mainnet
+export function isCeloNetwork(chainId: bigint): boolean {
+  return chainId === BigInt(42220); // Celo Mainnet
 }
 
 // Helper to check network match
-export function checkNetwork(chainId: number, networkId: number): boolean {
+export function checkNetwork(chainId: bigint, networkId: bigint): boolean {
   return chainId === networkId;
+}
+
+// Generate a 6-character alphanumeric secret code
+function generateSecretCode(): string {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return code;
 }
 
 // Create a faucet
@@ -51,8 +60,8 @@ export async function createFaucet(
   factoryAddress: string,
   name: string,
   tokenAddress: string,
-  chainId: number,
-  networkId: number
+  chainId: bigint,
+  networkId: bigint
 ): Promise<string> {
   try {
     const signer = await provider.getSigner();
@@ -82,8 +91,8 @@ export async function createFaucet(
       name,
       tokenAddress,
       backendAddress: VALID_BACKEND_ADDRESS,
-      chainId,
-      networkId,
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
       signerAddress,
       gasEstimate: gasEstimate.toString(),
       gasPrice: gasPrice.toString(),
@@ -102,8 +111,11 @@ export async function createFaucet(
 
     console.log("Transaction hash:", tx.hash);
     const receipt = await tx.wait();
+    if (!receipt) {
+      throw new Error("Transaction receipt is null");
+    }
     console.log("Transaction confirmed:", receipt.hash);
-    await reportTransactionToDivvi(tx.hash, chainId);
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
     const event = receipt.logs
       .map((log) => {
@@ -157,11 +169,11 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
     let tokenAddress = ZeroAddress;
     let ownerAddress = ZeroAddress;
     let faucetName = "Unknown Faucet";
-    let claimAmount = 0n;
-    let startTime = 0n;
-    let endTime = 0n;
+    let claimAmount = BigInt(0);
+    let startTime = BigInt(0);
+    let endTime = BigInt(0);
     let isClaimActive = false;
-    let balance = 0n;
+    let balance = BigInt(0);
     let isEther = true;
     let tokenSymbol = "CELO"; // Default for Celo
     let tokenDecimals = 18;
@@ -177,8 +189,9 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
       const balanceResult = await contract.getFaucetBalance();
       balance = balanceResult[0];
       isEther = balanceResult[1];
+      const network = await provider.getNetwork();
       tokenSymbol = isEther
-        ? (isCeloNetwork(provider.network?.chainId || 0) ? "CELO" : provider.network?.chainId === 1135 ? "LISK" : "ETH")
+        ? (isCeloNetwork(network.chainId) ? "CELO" : network.chainId === BigInt(1135) ? "LISK" : "ETH")
         : tokenSymbol;
     } catch (error) {
       console.warn(`Error getting balance:`, error);
@@ -239,11 +252,11 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
       token: ZeroAddress,
       owner: ZeroAddress,
       name: "Error Loading Faucet",
-      claimAmount: 0n,
-      startTime: 0n,
-      endTime: 0n,
+      claimAmount: BigInt(0),
+      startTime: BigInt(0),
+      endTime: BigInt(0),
       isClaimActive: false,
-      balance: 0n,
+      balance: BigInt(0),
       isEther: true,
       tokenSymbol: "CELO",
       tokenDecimals: 18,
@@ -260,8 +273,8 @@ export async function storeClaim(
   faucetAddress: string,
   amount: bigint,
   txHash: string,
-  chainId: number,
-  networkId: number,
+  chainId: bigint,
+  networkId: bigint,
   networkName: string
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) {
@@ -308,8 +321,8 @@ export async function storeClaim(
       amount: amount.toString(),
       txHash: formattedTxHash,
       networkName,
-      chainId,
-      networkId,
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
       signerAddress,
       gasEstimate: gasEstimate.toString(),
       maxFeePerGas: maxFeePerGas?.toString(),
@@ -326,8 +339,11 @@ export async function storeClaim(
 
     console.log("Store claim transaction hash:", tx.hash);
     const receipt = await tx.wait();
+    if (!receipt) {
+      throw new Error("Store claim transaction receipt is null");
+    }
     console.log("Store claim transaction confirmed:", receipt.hash);
-    await reportTransactionToDivvi(tx.hash, chainId);
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
     return tx.hash;
   } catch (error: any) {
@@ -338,7 +354,6 @@ export async function storeClaim(
     throw new Error(error.reason || error.message || "Failed to store claim");
   }
 }
-
 
 export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
   try {
@@ -400,7 +415,7 @@ async function contractExists(provider: JsonRpcProvider, address: string): Promi
   }
 }
 
-export async function getAllClaims(chainId: number, networks: Network[]): Promise<{
+export async function getAllClaims(chainId: bigint, networks: Network[]): Promise<{
   claimer: string;
   faucet: string;
   amount: bigint;
@@ -488,7 +503,7 @@ export async function getAllClaimsForAllNetworks(networks: Network[]): Promise<{
   txHash: `0x${string}`;
   networkName: string;
   timestamp: number;
-  chainId: number;
+  chainId: bigint;
   tokenSymbol: string;
   tokenDecimals: number;
   isEther: boolean;
@@ -515,15 +530,14 @@ export async function getAllClaimsForAllNetworks(networks: Network[]): Promise<{
   }
 }
 
-
 // Fund faucet
 export async function fundFaucet(
   provider: BrowserProvider,
   faucetAddress: string,
   amount: bigint,
   isEther: boolean,
-  chainId: number,
-  networkId: number
+  chainId: bigint,
+  networkId: bigint
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) {
     throw new Error("Switch to the network to perform operation");
@@ -541,8 +555,8 @@ export async function fundFaucet(
       faucetAddress,
       amount: amount.toString(),
       isEther,
-      chainId,
-      networkId,
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
       signerAddress,
       signerBalance: balance.toString(),
       contractBalance: contractBalance.toString(),
@@ -560,7 +574,8 @@ export async function fundFaucet(
         value: amount,
         data: "0x",
       });
-      const gasPrice = await provider.getGasPrice();
+      const feeData = await provider.getFeeData();
+      const gasPrice = feeData.gasPrice || BigInt(0);
       const gasCost = gasEstimate * gasPrice;
       console.log("Gas estimate:", {
         gasEstimate: gasEstimate.toString(),
@@ -573,12 +588,16 @@ export async function fundFaucet(
         value: amount,
         data: "0x",
         gasLimit: gasEstimate * BigInt(12) / BigInt(10), // 20% buffer
-        gasPrice,
+        maxFeePerGas: feeData.maxFeePerGas || undefined,
+        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
       });
       console.log("Transaction hash:", tx.hash);
       const receipt = await tx.wait();
+      if (!receipt) {
+        throw new Error("Fund transaction receipt is null");
+      }
       console.log("Transaction confirmed:", receipt.hash);
-      await reportTransactionToDivvi(tx.hash, chainId);
+      await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
       return tx.hash;
     }
 
@@ -600,14 +619,20 @@ export async function fundFaucet(
       data: approveDataWithReferral,
       from: signerAddress,
     });
+    const feeData = await provider.getFeeData();
     const approveTx = await signer.sendTransaction({
       to: tokenAddress,
       data: approveDataWithReferral,
       gasLimit: approveGasEstimate * BigInt(12) / BigInt(10),
+      maxFeePerGas: feeData.maxFeePerGas || undefined,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
     });
-    await approveTx.wait();
-    console.log("Approve transaction confirmed:", approveTx.hash);
-    await reportTransactionToDivvi(approveTx.hash, chainId);
+    const approveReceipt = await approveTx.wait();
+    if (!approveReceipt) {
+      throw new Error("Approve transaction receipt is null");
+    }
+    console.log("Approve transaction confirmed:", approveReceipt.hash);
+    await reportTransactionToDivvi(approveTx.hash as `0x${string}`, Number(chainId));
 
     console.log(`Funding faucet ${faucetAddress} with ${amount} ${isEther && isCelo ? "CELO" : "tokens"}`);
     const fundData = faucetContract.interface.encodeFunctionData("fund", [amount]);
@@ -621,10 +646,15 @@ export async function fundFaucet(
       to: faucetAddress,
       data: fundDataWithReferral,
       gasLimit: fundGasEstimate * BigInt(12) / BigInt(10),
+      maxFeePerGas: feeData.maxFeePerGas || undefined,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
     });
     const receipt = await fundTx.wait();
+    if (!receipt) {
+      throw new Error("Fund transaction receipt is null");
+    }
     console.log("Fund transaction confirmed:", receipt.hash);
-    await reportTransactionToDivvi(fundTx.hash, chainId);
+    await reportTransactionToDivvi(fundTx.hash as `0x${string}`, Number(chainId));
 
     return fundTx.hash;
   } catch (error: any) {
@@ -643,7 +673,7 @@ export async function fundFaucet(
 }
 
 // Claim tokens
-export async function claimTokens(provider: BrowserProvider, faucetAddress: string, chainId: number, networkId: number): Promise<string> {
+export async function claimTokens(provider: BrowserProvider, faucetAddress: string, chainId: bigint, networkId: bigint, userAddress: string): Promise<string> {
   if (!checkNetwork(chainId, networkId)) {
     throw new Error("Switch to the network to perform operation");
   }
@@ -651,7 +681,6 @@ export async function claimTokens(provider: BrowserProvider, faucetAddress: stri
   try {
     const signer = await provider.getSigner();
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
-    const userAddress = await signer.getAddress();
 
     const data = faucetContract.interface.encodeFunctionData("claim", [[userAddress]]);
     const dataWithReferral = appendDivviReferralData(data);
@@ -661,7 +690,10 @@ export async function claimTokens(provider: BrowserProvider, faucetAddress: stri
     });
 
     const receipt = await tx.wait();
-    await reportTransactionToDivvi(tx.hash, chainId);
+    if (!receipt) {
+      throw new Error("Claim transaction receipt is null");
+    }
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
     return tx.hash;
   } catch (error: any) {
@@ -678,8 +710,8 @@ export async function withdrawTokens(
   provider: BrowserProvider,
   faucetAddress: string,
   amount: bigint,
-  chainId: number,
-  networkId: number
+  chainId: bigint,
+  networkId: bigint
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) {
     throw new Error("Switch to the network to perform operation");
@@ -697,7 +729,10 @@ export async function withdrawTokens(
     });
 
     const receipt = await tx.wait();
-    await reportTransactionToDivvi(tx.hash, chainId);
+    if (!receipt) {
+      throw new Error("Withdraw transaction receipt is null");
+    }
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
     return tx.hash;
   } catch (error: any) {
@@ -709,15 +744,15 @@ export async function withdrawTokens(
   }
 }
 
-// Set claim parameters
-export async function setClaimParameters(
+// Update claim parameters on chain
+export async function updateClaimParametersOnChain(
   provider: BrowserProvider,
   faucetAddress: string,
   claimAmount: bigint,
   startTime: number,
   endTime: number,
-  chainId: number,
-  networkId: number
+  chainId: bigint,
+  networkId: bigint
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) {
     throw new Error("Switch to the network to perform operation");
@@ -735,9 +770,77 @@ export async function setClaimParameters(
     });
 
     const receipt = await tx.wait();
-    await reportTransactionToDivvi(tx.hash, chainId);
+    if (!receipt) {
+      throw new Error("Set claim parameters transaction receipt is null");
+    }
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
     return tx.hash;
+  } catch (error: any) {
+    console.error("Error setting claim parameters on chain:", error);
+    if (error.message?.includes("network changed")) {
+      throw new Error("Network changed during transaction. Please try again with a stable network connection.");
+    }
+    throw new Error(error.reason || error.message || "Failed to set claim parameters on chain");
+  }
+}
+
+// Set claim parameters
+export async function setClaimParameters(
+  provider: BrowserProvider,
+  faucetAddress: string,
+  claimAmount: bigint,
+  startTime: number,
+  endTime: number,
+  chainId: bigint,
+  networkId: bigint
+): Promise<{ txHash: string; secretCode: string }> {
+  if (!checkNetwork(chainId, networkId)) {
+    throw new Error("Switch to the network to perform operation");
+  }
+
+  try {
+    // Generate a 6-character secret code
+    const secretCode = generateSecretCode();
+
+    // Send claim parameters and secret code to backend
+    const response = await fetch("https://fauctdrop-backend-1.onrender.com/set-claim-parameters", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        faucetAddress,
+        claimAmount: claimAmount.toString(),
+        startTime,
+        endTime,
+        chainId: chainId.toString(),
+        secretCode,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to set claim parameters");
+    }
+
+    const responseData = await response.json();
+    console.log("Backend response for setClaimParameters:", responseData);
+
+    // Update blockchain with the new parameters
+    const txHash = await updateClaimParametersOnChain(
+      provider,
+      faucetAddress,
+      claimAmount,
+      startTime,
+      endTime,
+      chainId,
+      networkId
+    );
+
+    console.log("setClaimParameters completed:", { txHash, secretCode });
+
+    return { txHash, secretCode };
   } catch (error: any) {
     console.error("Error setting claim parameters:", error);
     if (error.message?.includes("network changed")) {
@@ -753,8 +856,8 @@ export async function setWhitelist(
   faucetAddress: string,
   addresses: string[],
   status: boolean,
-  chainId: number,
-  networkId: number
+  chainId: bigint,
+  networkId: bigint
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) {
     throw new Error("Switch to the network to perform operation");
@@ -774,7 +877,10 @@ export async function setWhitelist(
     });
 
     const receipt = await tx.wait();
-    await reportTransactionToDivvi(tx.hash, chainId);
+    if (!receipt) {
+      throw new Error("Set whitelist transaction receipt is null");
+    }
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
     return tx.hash;
   } catch (error: any) {

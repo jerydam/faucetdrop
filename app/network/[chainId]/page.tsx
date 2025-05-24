@@ -9,12 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { Button } from "@/components/ui/button";
 import { getFaucetsForNetwork } from "@/lib/faucet";
 import { formatUnits, Contract, ZeroAddress } from "ethers";
-import { ArrowLeft, Coins, Clock, RefreshCw } from "lucide-react";
-import Link from "next/link";
+import { Coins, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ERC20_ABI } from "@/lib/abis";
-import { WalletConnect } from "@/components/wallet-connect";
-import { NetworkSelector } from "@/components/network-selector";
+import { Header } from "@/components/header";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 // Hook to track window size
 function useWindowSize() {
@@ -231,7 +231,7 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
             </span>
           </div>
           <div className="flex justify-between items-center gap-2">
-            <span className="text-muted-foreground">Claim Amount:</span>
+            <span className="text-muted-foreground">Drops Amount:</span>
             <span className="font-medium truncate">
               {faucet.claimAmount
                 ? Number(formatUnits(faucet.claimAmount, faucet.tokenDecimals || 18)).toFixed(4)
@@ -291,33 +291,23 @@ export default function NetworkFaucets() {
   // Calculate faucetsPerPage based on screen size and viewport height
   const calculateFaucetsPerPage = useCallback(() => {
     if (!height || !width) {
-      // Fallback defaults for server-side rendering or initial render
       if (width < 640) return 5; // Mobile
       if (width < 1024) return 8; // Tablet
       return 10; // Desktop
     }
 
-    // Estimated heights
-    const headerHeight = width < 640 ? 100 : 120; // Header (title, buttons)
+    const headerHeight = width < 640 ? 60 : 120; // Mobile: toggle button only
     const paginationHeight = width < 640 ? 50 : 60; // Pagination
     const containerPadding = width < 640 ? 32 : 64; // py-4 (8px * 4) or py-8 (16px * 4)
     const cardHeight = width < 640 ? 300 : width < 1024 ? 320 : 350; // FaucetCard height
     const gridGap = width < 640 ? 12 : width < 1024 ? 16 : 24; // gap-3 (12px), gap-4 (16px), gap-6 (24px)
 
-    // Available height for faucet grid
     const availableHeight = height - (headerHeight + paginationHeight + containerPadding);
-
-    // Calculate number of cards that fit, accounting for grid gap
     const cardsPerColumn = Math.floor(availableHeight / (cardHeight + gridGap));
-
-    // Adjust based on grid columns (1 for mobile, 2 for tablet, 3 for desktop)
     const columns = width < 640 ? 1 : width < 1024 ? 2 : 3;
     let faucetsPerPage = cardsPerColumn * columns;
 
-    // Clamp between min (3) and max (12)
     faucetsPerPage = Math.max(3, Math.min(12, faucetsPerPage));
-
-    // Ensure at least one page of content
     if (faucetsPerPage <= 0) faucetsPerPage = 3;
 
     console.log(`Calculated faucetsPerPage: ${faucetsPerPage} (width: ${width}, height: ${height}, cardsPerColumn: ${cardsPerColumn}, columns: ${columns})`);
@@ -327,12 +317,11 @@ export default function NetworkFaucets() {
 
   const [faucetsPerPage, setFaucetsPerPage] = useState(calculateFaucetsPerPage());
 
-  // Update faucetsPerPage on resize and reset page to 1
   useEffect(() => {
     const newFaucetsPerPage = calculateFaucetsPerPage();
     if (newFaucetsPerPage !== faucetsPerPage) {
       setFaucetsPerPage(newFaucetsPerPage);
-      setPage(1); // Reset to first page to avoid invalid page state
+      setPage(1);
       console.log(`Updated faucetsPerPage to ${newFaucetsPerPage}`);
     }
   }, [calculateFaucetsPerPage, faucetsPerPage]);
@@ -345,8 +334,8 @@ export default function NetworkFaucets() {
     setLoadingFaucets(true);
     try {
       const fetchedFaucets = await getFaucetsForNetwork(network);
-      setFaucets(fetchedFaucets.filter((f) => f && f.faucetAddress && f.network)); // Filter invalid faucets
-      setPage(1); // Reset page on new fetch
+      setFaucets(fetchedFaucets.filter((f) => f && f.faucetAddress && f.network));
+      setPage(1);
     } catch (error) {
       console.error(`Error loading faucets for network chainId ${chainId}:`, error);
       toast({
@@ -395,11 +384,9 @@ export default function NetworkFaucets() {
     }
   };
 
-  // Calculate pagination
   const totalPages = Math.ceil(faucets.length / faucetsPerPage);
   const paginatedFaucets = faucets.slice((page - 1) * faucetsPerPage, page * faucetsPerPage);
 
-  // Limit page buttons to 5 for better UX, with responsive handling
   const getPageButtons = () => {
     const buttons = [];
     const maxButtons = 5;
@@ -455,46 +442,12 @@ export default function NetworkFaucets() {
 
   return (
     <div className="container mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-        <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-semibold">
-          Faucets on {network?.name || "Unknown Network"}
-        </h2>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <div className="flex-1 sm:flex-none order-1 sm:order-0">
-            <WalletConnect />
-          </div>
-           <Button
-            variant="outline"
-            size="sm"
-            onClick={loadFaucets}
-            disabled={loadingFaucets || !network}
-            className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base flex-1 sm:flex-none order-4 sm:order-0"
-          >
-            <RefreshCw
-              className={`h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 mr-1 sm:mr-2 ${
-                loadingFaucets ? "animate-spin" : ""
-              }`}
-            />
-            Refresh
-          </Button>
-          <div className="flex-1 sm:flex-none order-2">
-            <NetworkSelector />
-          </div>
-          <Link href="/" className="flex-1 sm:flex-none order-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base w-full sm:w-auto"
-            >
-              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 mr-1 sm:mr-2" />
-              Back to Networks
-            </Button>
-          </Link>
-         
-        </div>
-      </div>
+      <Header
+        pageTitle={`Faucets on ${network?.name || "Unknown Network"}`}
+        onRefresh={loadFaucets}
+        loading={loadingFaucets}
+      />
 
-      {/* Faucets Section */}
       {loadingFaucets ? (
         <div className="flex justify-center items-center py-8 sm:py-10 md:py-12">
           <div className="text-center">

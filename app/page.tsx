@@ -17,6 +17,7 @@ export default function Home() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [userAddress, setUserAddress] = useState("");
   const [isAllowedAddress, setIsAllowedAddress] = useState(false);
+  const [isDivviSubmitted, setIsDivviSubmitted] = useState(false);
 
   // Define the array of allowed wallet addresses (case-insensitive)
   const allowedAddresses = [
@@ -73,8 +74,10 @@ export default function Home() {
           setUserAddress("");
           setIsAllowedAddress(false);
           console.log("No accounts connected");
+          // Automatically attempt to connect wallet if not connected
+          connectWallet();
         }
-      } catch (error: any) {
+      } catch (error) {
         console.error("Error checking wallet connection:", error);
         setCheckInStatus("Failed to connect to wallet. Please try again.");
       }
@@ -99,6 +102,14 @@ export default function Home() {
     };
   }, []);
 
+  // Auto-trigger check-in when wallet is connected, address is allowed, and Divvi submission is successful
+  useEffect(() => {
+    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn) {
+      console.log("Conditions met, triggering auto check-in after Divvi submission...");
+      handleCheckIn();
+    }
+  }, [isWalletConnected, isAllowedAddress, isDivviSubmitted]);
+
   const connectWallet = async () => {
     if (!window.ethereum) {
       setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.");
@@ -107,6 +118,7 @@ export default function Home() {
 
     try {
       console.log("Requesting wallet connection...");
+      setCheckInStatus("Please confirm the wallet connection in the popup.");
       await window.ethereum.request({ method: "eth_requestAccounts" });
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
@@ -115,8 +127,9 @@ export default function Home() {
       setIsWalletConnected(true);
       setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()));
       console.log("Wallet connected:", { address, isAllowed: allowedAddresses.includes(address.toLowerCase()) });
-    } catch (error: any) {
-        console.error("Wallet connection failed:", error);
+      setCheckInStatus("Wallet connected successfully!");
+    } catch (error) {
+      console.error("Wallet connection failed:", error);
       setCheckInStatus(
         error.code === 4001
           ? "Wallet connection rejected by user."
@@ -158,19 +171,19 @@ export default function Home() {
       // Ensure the wallet is on the correct network (e.g., Celo)
       const expectedChainId = isCelo ? 42220 : 1; // Adjust as needed
       if (chainId !== expectedChainId) {
-        console.log("Network mismatch, attempting to switch...");
-        try {
-          await window.ethereum.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: `0x${expectedChainId.toString(16)}` }],
-          });
-        } catch (switchError: any) {
-          console.error("Network switch failed:", switchError);
-          setCheckInStatus(`Please switch to the ${isCelo ? "Celo" : "Ethereum"} network.`);
-          setIsCheckingIn(false);
-          return;
-        }
+      console.log("Network mismatch, attempting to switch...");
+      try {
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: `0x${expectedChainId.toString(16)}` }],
+        });
+      } catch (switchError) {
+        console.error("Network switch failed:", switchError);
+        setCheckInStatus(`Please switch to the ${isCelo ? "Celo" : "Ethereum"} network.`);
+        setIsCheckingIn(false);
+        return;
       }
+    }
 
       const contract = new Contract(contractAddress, contractABI, signer);
       console.log("Contract instance created:", contractAddress);
@@ -190,6 +203,7 @@ export default function Home() {
         console.log("Transaction sent:", tx.hash);
       }
 
+      // Wait for transaction confirmation
       const receipt = await tx.wait();
       console.log("Transaction confirmed:", receipt.transactionHash);
       const timestamp = new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" });
@@ -212,14 +226,21 @@ export default function Home() {
         try {
           await reportTransactionToDivvi(txHash, chainId);
           console.log("Divvi reporting successful");
-        } catch (divviError: any) {
+          setIsDivviSubmitted(true); // Set Divvi submission success
+        } catch (divviError) {
           console.error("Divvi reporting failed, but check-in completed:", divviError);
           setCheckInStatus(
             `Checked in at ${timestamp} with balance ${parseFloat(balanceEther).toFixed(4)} CELO, but failed to report to Divvi. Please contact support.`
           );
+          setIsDivviSubmitted(false); // Reset on failure
         }
+      } else {
+        setIsDivviSubmitted(true); // For non-Celo, assume success to allow auto-trigger
       }
-    } catch (error: any) {
+
+      // Reset Divvi submission state after successful check-in to allow future auto-triggers
+      setTimeout(() => setIsDivviSubmitted(false), 1000);
+    } catch (error) {
       console.error("Check-in failed:", error);
       let message = "Check-in failed: Please try again.";
       if (error.code === "INSUFFICIENT_FUNDS") {
@@ -230,6 +251,7 @@ export default function Home() {
         message = `Check-in failed: ${error.message}`;
       }
       setCheckInStatus(message);
+      setIsDivviSubmitted(false); // Reset on failure
     } finally {
       setIsCheckingIn(false);
     }

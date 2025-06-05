@@ -197,7 +197,7 @@ export default function Home() {
       const balanceEther = ethers.formatEther(balanceWei);
 
       setCheckInStatus(
-        `Successfully checked in at ${timestamp}! Balance: ${parseFloat(balanceEther).toFixed(4)} CELO`
+        `Successfully added to Drop List. ${timestamp}! Balance: ${parseFloat(balanceEther).toFixed(4)} CELO`
       );
 
       if (isCelo) {

@@ -21,6 +21,7 @@ export default function Home() {
   // Define the array of allowed wallet addresses (case-insensitive)
   const allowedAddresses = [
     "0x2A1ABea47881a380396Aa0D150DC6d01F4C8F9cb",
+    "0xF46F1B3Bea9cdd4102105EE9bAefc83db333354B",
     "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
     "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
     "0x3207D4728c32391405C7122E59CCb115A4af31eA",
@@ -274,7 +275,7 @@ export default function Home() {
                   disabled={isCheckingIn}
                   className="w-full sm:w-auto flex items-center gap-2 text-sm sm:text-base"
                 >
-                  {isCheckingIn ? "Checking In..." : "Check In"}
+                  {isCheckingIn ? "Dropping..." : "Drop List"}
                 </Button>
               )}
             </div>

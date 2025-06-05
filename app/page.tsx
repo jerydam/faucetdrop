@@ -8,14 +8,24 @@ import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { ethers, Contract } from "ethers";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { appendDivviReferralData, reportTransactionToDivvi, isCeloNetwork } from "../lib/divvi-integration";
 
 export default function Home() {
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [checkInStatus, setCheckInStatus] = useState("");
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
+  const [userAddress, setUserAddress] = useState("");
+  const [isAllowedAddress, setIsAllowedAddress] = useState(false);
 
-  const contractAddress = "0xb7785eFfD86F90260378d8b7b5a8b4CC6cbe8435";
+  // Define the array of allowed wallet addresses (case-insensitive)
+  const allowedAddresses = [
+    "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
+    "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
+    "0x3207D4728c32391405C7122E59CCb115A4af31eA",
+  ].map((addr) => addr.toLowerCase());
+
+  const contractAddress = "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700";
   const contractABI = [
     {
       anonymous: false,
@@ -35,9 +45,98 @@ export default function Home() {
     },
   ];
 
+  // Check wallet connection and address on mount and when wallet changes
+  useEffect(() => {
+    const checkWalletConnection = async () => {
+      if (!window.ethereum) {
+        setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.");
+        console.error("window.ethereum not found");
+        return;
+      }
+
+      try {
+        console.log("Checking wallet connection...");
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.listAccounts();
+        console.log("Connected accounts:", accounts);
+        if (accounts.length > 0) {
+          const signer = await provider.getSigner();
+          const address = await signer.getAddress();
+          setUserAddress(address);
+          setIsWalletConnected(true);
+          setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()));
+          console.log("Wallet connected:", { address, isAllowed: allowedAddresses.includes(address.toLowerCase()) });
+        } else {
+          setIsWalletConnected(false);
+          setUserAddress("");
+          setIsAllowedAddress(false);
+          console.log("No accounts connected");
+        }
+      } catch (error: any) {
+        console.error("Error checking wallet connection:", error);
+        setCheckInStatus("Failed to connect to wallet. Please try again.");
+      }
+    };
+
+    checkWalletConnection();
+
+    // Listen for account or network changes
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", checkWalletConnection);
+      window.ethereum.on("chainChanged", () => {
+        console.log("Network changed");
+        checkWalletConnection();
+      });
+    }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener("accountsChanged", checkWalletConnection);
+        window.ethereum.removeListener("chainChanged", checkWalletConnection);
+      }
+    };
+  }, []);
+
+  const connectWallet = async () => {
+    if (!window.ethereum) {
+      setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.");
+      return;
+    }
+
+    try {
+      console.log("Requesting wallet connection...");
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      setUserAddress(address);
+      setIsWalletConnected(true);
+      setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()));
+      console.log("Wallet connected:", { address, isAllowed: allowedAddresses.includes(address.toLowerCase()) });
+    } catch (error: any) {
+        console.error("Wallet connection failed:", error);
+      setCheckInStatus(
+        error.code === 4001
+          ? "Wallet connection rejected by user."
+          : "Failed to connect wallet. Please try again."
+      );
+    }
+  };
+
   const handleCheckIn = async () => {
     if (!window.ethereum) {
-      setCheckInStatus("Please install MetaMask");
+      setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.");
+      return;
+    }
+
+    if (!isWalletConnected) {
+      setCheckInStatus("Please connect your wallet.");
+      await connectWallet(); // Prompt wallet connection
+      return;
+    }
+
+    if (!isAllowedAddress) {
+      setCheckInStatus("Your wallet address is not authorized to perform this action.");
       return;
     }
 
@@ -45,13 +144,34 @@ export default function Home() {
     setCheckInStatus("");
 
     try {
+      console.log("Starting check-in process...");
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      const contract = new Contract(contractAddress, contractABI, signer);
+      console.log("Signer:", signer);
       const network = await provider.getNetwork();
       const chainId = Number(network.chainId);
+      console.log("Network chainId:", chainId);
       const isCelo = isCeloNetwork(chainId);
+
+      // Ensure the wallet is on the correct network (e.g., Celo)
+      const expectedChainId = isCelo ? 42220 : 1; // Adjust as needed
+      if (chainId !== expectedChainId) {
+        console.log("Network mismatch, attempting to switch...");
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: `0x${expectedChainId.toString(16)}` }],
+          });
+        } catch (switchError: any) {
+          console.error("Network switch failed:", switchError);
+          setCheckInStatus(`Please switch to the ${isCelo ? "Celo" : "Ethereum"} network.`);
+          setIsCheckingIn(false);
+          return;
+        }
+      }
+
+      const contract = new Contract(contractAddress, contractABI, signer);
+      console.log("Contract instance created:", contractAddress);
 
       let tx;
       if (isCelo) {
@@ -62,11 +182,14 @@ export default function Home() {
           to: contractAddress,
           data: dataWithReferral,
         });
+        console.log("Celo transaction sent:", tx.hash);
       } else {
         tx = await contract.checkIn();
+        console.log("Transaction sent:", tx.hash);
       }
 
       const receipt = await tx.wait();
+      console.log("Transaction confirmed:", receipt.transactionHash);
       const timestamp = new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" });
       const balanceWei = await provider.getBalance(userAddress);
       const balanceEther = ethers.formatEther(balanceWei);
@@ -76,7 +199,7 @@ export default function Home() {
       );
 
       if (isCelo) {
-        const txHash: `0x${string}` = tx.hash;
+        const txHash = tx.hash;
         console.log("Attempting to report transaction to Divvi:", {
           txHash,
           chainId,
@@ -87,7 +210,7 @@ export default function Home() {
         try {
           await reportTransactionToDivvi(txHash, chainId);
           console.log("Divvi reporting successful");
-        } catch (divviError) {
+        } catch (divviError: any) {
           console.error("Divvi reporting failed, but check-in completed:", divviError);
           setCheckInStatus(
             `Checked in at ${timestamp} with balance ${parseFloat(balanceEther).toFixed(4)} CELO, but failed to report to Divvi. Please contact support.`
@@ -96,7 +219,15 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error("Check-in failed:", error);
-      setCheckInStatus(`Check-in failed: ${error.message || "Please try again."}`);
+      let message = "Check-in failed: Please try again.";
+      if (error.code === "INSUFFICIENT_FUNDS") {
+        message = "Check-in failed: Insufficient funds in your wallet.";
+      } else if (error.code === 4001) {
+        message = "Check-in failed: Transaction rejected by user.";
+      } else if (error.message) {
+        message = `Check-in failed: ${error.message}`;
+      }
+      setCheckInStatus(message);
     } finally {
       setIsCheckingIn(false);
     }
@@ -106,16 +237,15 @@ export default function Home() {
     <main className="min-h-screen">
       <div className="container mx-auto px-4 py-6 sm:py-8">
         <div className="flex flex-col gap-6 sm:gap-8">
-          {/* Header: Adjusted for better mobile stacking and spacing */}
           <header className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-6">
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
                 <Image
                   src="/logo.png"
                   alt="Logo"
-                  width={32} // Reduced size for mobile
+                  width={32}
                   height={32}
-                  className="inline-block mr-2 sm:w-10 sm:h-10" // Scales up on larger screens
+                  className="inline-block mr-2 sm:w-10 sm:h-10"
                 />
                 FaucetDrops
               </h1>
@@ -137,19 +267,27 @@ export default function Home() {
                 </Button>
               </Link>
               <WalletConnect />
-              <Button
-                onClick={handleCheckIn}
-                disabled={isCheckingIn}
-                className="w-full sm:w-auto flex items-center gap-2 text-sm sm:text-base"
-              >
-                {isCheckingIn ? "Testing..." : "Test"}
-              </Button>
+              {isWalletConnected && isAllowedAddress && (
+                <Button
+                  onClick={handleCheckIn}
+                  disabled={isCheckingIn}
+                  className="w-full sm:w-auto flex items-center gap-2 text-sm sm:text-base"
+                >
+                  {isCheckingIn ? "Checking In..." : "Check In"}
+                </Button>
+              )}
             </div>
           </header>
-          {/* Check-In Status: Added max-width and word-break for better mobile display */}
           {checkInStatus && (
             <div className="text-center text-xs sm:text-sm text-gray-600 max-w-full break-words px-2">
               {checkInStatus}
+            </div>
+          )}
+          {isWalletConnected && (
+            <div className="text-center text-xs sm:text-sm text-gray-600 max-w-full break-words px-2">
+              {isAllowedAddress
+                ? `Connected: ${userAddress} (Authorized)`
+                : `Connected: ${userAddress} (Not Authorized)`}
             </div>
           )}
           <FaucetList />

@@ -36,6 +36,9 @@ export default function Home() {
   // Define the array of allowed wallet addresses (case-insensitive)
   const allowedAddresses = [
     "0x961B6b05ad723a7039De5e32586CF19b706870E5",
+    "0x08f4f4b874f6b55d768258c026d1f75a2c6e10a0",
+    "0xB3121eBb78F3CF34b03dfc285C0e2d9343dCF965",
+    "0xf07ea30f4821c60ffa4ce3d2d816b339207e7475",
     "0xa4D30Cfd6b2Fec50D94AAe9F2311c961CC217d29",
     "0xD03Cec8c65a5D9875740552b915F007D76e75497",
     "0x81193c6ba3E69c4c47FFE2e4b3304985D1914d93",

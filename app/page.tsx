@@ -18,13 +18,14 @@ export default function Home() {
   const [userAddress, setUserAddress] = useState("");
   const [isAllowedAddress, setIsAllowedAddress] = useState(false);
   const [isDivviSubmitted, setIsDivviSubmitted] = useState(false);
+  const [isUserRejected, setIsUserRejected] = useState(false); // New state to track user rejection
 
   // Define the array of allowed wallet addresses (case-insensitive)
   const allowedAddresses = [
+    "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178",
     "0x2A1ABea47881a380396Aa0D150DC6d01F4C8F9cb",
     "0xF46F1B3Bea9cdd4102105EE9bAefc83db333354B",
     "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
-    "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
     "0x3207D4728c32391405C7122E59CCb115A4af31eA",
   ].map((addr) => addr.toLowerCase());
 
@@ -77,7 +78,7 @@ export default function Home() {
           // Automatically attempt to connect wallet if not connected
           connectWallet();
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error checking wallet connection:", error);
         setCheckInStatus("Failed to connect to wallet. Please try again.");
       }
@@ -102,13 +103,35 @@ export default function Home() {
     };
   }, []);
 
-  // Auto-trigger check-in when wallet is connected, address is allowed, and Divvi submission is successful
+  // Auto-trigger check-in with retry mechanism
   useEffect(() => {
-    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn) {
-      console.log("Conditions met, triggering auto check-in after Divvi submission...");
-      handleCheckIn();
+    let retryInterval: NodeJS.Timeout | null = null;
+
+    const attemptCheckIn = () => {
+      if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn && !isUserRejected) {
+        console.log("Conditions met, triggering auto check-in after Divvi submission...");
+        handleCheckIn();
+      }
+    };
+
+    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isUserRejected) {
+      attemptCheckIn(); // Initial attempt
+      // Set up retry interval every 5 seconds if conditions are still met
+      retryInterval = setInterval(() => {
+        if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn && !isUserRejected) {
+          console.log("Retrying check-in...");
+          handleCheckIn();
+        }
+      }, 5000); // Retry every 5 seconds
     }
-  }, [isWalletConnected, isAllowedAddress, isDivviSubmitted]);
+
+    // Cleanup interval on unmount or when conditions change
+    return () => {
+      if (retryInterval) {
+        clearInterval(retryInterval);
+      }
+    };
+  }, [isWalletConnected, isAllowedAddress, isDivviSubmitted, isUserRejected, isCheckingIn]);
 
   const connectWallet = async () => {
     if (!window.ethereum) {
@@ -128,13 +151,17 @@ export default function Home() {
       setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()));
       console.log("Wallet connected:", { address, isAllowed: allowedAddresses.includes(address.toLowerCase()) });
       setCheckInStatus("Wallet connected successfully!");
-    } catch (error) {
+      setIsUserRejected(false); // Reset user rejection on successful connection
+    } catch (error: any) {
       console.error("Wallet connection failed:", error);
       setCheckInStatus(
         error.code === 4001
           ? "Wallet connection rejected by user."
           : "Failed to connect wallet. Please try again."
       );
+      if (error.code === 4001) {
+        setIsUserRejected(true); // Stop retries on user rejection
+      }
     }
   };
 
@@ -171,19 +198,19 @@ export default function Home() {
       // Ensure the wallet is on the correct network (e.g., Celo)
       const expectedChainId = isCelo ? 42220 : 1; // Adjust as needed
       if (chainId !== expectedChainId) {
-      console.log("Network mismatch, attempting to switch...");
-      try {
-        await window.ethereum.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: `0x${expectedChainId.toString(16)}` }],
-        });
-      } catch (switchError) {
-        console.error("Network switch failed:", switchError);
-        setCheckInStatus(`Please switch to the ${isCelo ? "Celo" : "Ethereum"} network.`);
-        setIsCheckingIn(false);
-        return;
+        console.log("Network mismatch, attempting to switch network...");
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: `0x${expectedChainId.toString(16)}` }],
+          });
+        } catch (switchError: any) {
+          console.error("Network switch failed:", switchError);
+          setCheckInStatus(`Please switch to the ${isCelo ? "Celo" : "Ethereum"} network.`);
+          setIsCheckingIn(false);
+          return;
+        }
       }
-    }
 
       const contract = new Contract(contractAddress, contractABI, signer);
       console.log("Contract instance created:", contractAddress);
@@ -227,7 +254,7 @@ export default function Home() {
           await reportTransactionToDivvi(txHash, chainId);
           console.log("Divvi reporting successful");
           setIsDivviSubmitted(true); // Set Divvi submission success
-        } catch (divviError) {
+        } catch (divviError: any) {
           console.error("Divvi reporting failed, but check-in completed:", divviError);
           setCheckInStatus(
             `Checked in at ${timestamp} with balance ${parseFloat(balanceEther).toFixed(4)} CELO, but failed to report to Divvi. Please contact support.`
@@ -240,20 +267,22 @@ export default function Home() {
 
       // Reset Divvi submission state after successful check-in to allow future auto-triggers
       setTimeout(() => setIsDivviSubmitted(false), 1000);
-    } catch (error) {
+      setIsUserRejected(false); // Reset user rejection on success
+    } catch (error: any) {
       console.error("Check-in failed:", error);
       let message = "Check-in failed: Please try again.";
       if (error.code === "INSUFFICIENT_FUNDS") {
         message = "Check-in failed: Insufficient funds in your wallet.";
       } else if (error.code === 4001) {
         message = "Check-in failed: Transaction rejected by user.";
+        setIsUserRejected(true); // Stop retries on user rejection
       } else if (error.message) {
         message = `Check-in failed: ${error.message}`;
       }
       setCheckInStatus(message);
       setIsDivviSubmitted(false); // Reset on failure
     } finally {
-      setIsCheckingIn(false);
+      setIsCheckingIn(false); // Always reset isCheckingIn to allow retries
     }
   };
 

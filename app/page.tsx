@@ -1,37 +1,53 @@
-"use client";
+"use client"
 
-import { FaucetList } from "@/components/faucet-list";
-import { NetworkSelector } from "@/components/network-selector";
-import { WalletConnect } from "@/components/wallet-connect";
-import { Button } from "@/components/ui/button";
-import { Plus, Users } from "lucide-react";
-import Link from "next/link";
-import Image from "next/image";
-import { ethers, Contract } from "ethers";
-import { useState, useEffect } from "react";
-import { appendDivviReferralData, reportTransactionToDivvi, isCeloNetwork } from "../lib/divvi-integration";
+import { FaucetList } from "@/components/faucet-list"
+import { NetworkSelector } from "@/components/network-selector"
+import { WalletConnect } from "@/components/wallet-connect"
+import { AnalyticsDashboard } from "@/components/analytics-dashboard"
+import { Button } from "@/components/ui/button"
+import { Plus, Users } from "lucide-react"
+import Link from "next/link"
+import Image from "next/image"
+import { ethers, Contract } from "ethers"
+import { useState, useEffect } from "react"
+import { appendDivviReferralData, reportTransactionToDivvi } from "../lib/divvi-integration"
 
 // Helper function to safely extract error information
 const getErrorInfo = (error: unknown): { code?: string | number; message: string } => {
-  if (error && typeof error === 'object') {
-    const errorObj = error as any;
+  if (error && typeof error === "object") {
+    const errorObj = error as any
     return {
       code: errorObj.code,
-      message: errorObj.message || 'Unknown error occurred'
-    };
+      message: errorObj.message || "Unknown error occurred",
+    }
   }
   return {
-    message: typeof error === 'string' ? error : 'Unknown error occurred'
-  };
-};
+    message: typeof error === "string" ? error : "Unknown error occurred",
+  }
+}
+
+// Define network configurations
+const NETWORKS = {
+  celo: {
+    chainId: 42220, // Celo Mainnet
+    contractAddress: "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700",
+    name: "Celo",
+  },
+  lisk: {
+    chainId: 1135, // Lisk Mainnet
+    contractAddress: "0x0995C06E2fb2d059F3534608176858406f6bE95F",
+    name: "Lisk",
+  },
+}
 
 export default function Home() {
-  const [isCheckingIn, setIsCheckingIn] = useState(false);
-  const [checkInStatus, setCheckInStatus] = useState("");
-  const [isWalletConnected, setIsWalletConnected] = useState(false);
-  const [userAddress, setUserAddress] = useState("");
-  const [isAllowedAddress, setIsAllowedAddress] = useState(false);
-  const [isDivviSubmitted, setIsDivviSubmitted] = useState(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false)
+  const [checkInStatus, setCheckInStatus] = useState("")
+  const [isWalletConnected, setIsWalletConnected] = useState(false)
+  const [userAddress, setUserAddress] = useState("")
+  const [isAllowedAddress, setIsAllowedAddress] = useState(false)
+  const [isDivviSubmitted, setIsDivviSubmitted] = useState(false)
+  const [currentNetwork, setCurrentNetwork] = useState<"celo" | "lisk" | null>(null)
 
   // Define the array of allowed wallet addresses (case-insensitive)
   const allowedAddresses = [
@@ -51,9 +67,8 @@ export default function Home() {
     "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
     "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
     "0x3207D4728c32391405C7122E59CCb115A4af31eA",
-  ].map((addr) => addr.toLowerCase());
+  ].map((addr) => addr.toLowerCase())
 
-  const contractAddress = "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700";
   const contractABI = [
     {
       anonymous: false,
@@ -71,286 +86,386 @@ export default function Home() {
       stateMutability: "nonpayable",
       type: "function",
     },
-  ];
+  ]
 
   // Check wallet connection and address on mount and when wallet changes
   useEffect(() => {
     const checkWalletConnection = async () => {
       if (!window.ethereum) {
-        setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.");
-        console.error("window.ethereum not found");
-        return;
+        setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.")
+        console.error("window.ethereum not found")
+        return
       }
 
       try {
-        console.log("Checking wallet connection...");
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await provider.listAccounts();
-        console.log("Connected accounts:", accounts);
+        console.log("Checking wallet connection...")
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const accounts = await provider.listAccounts()
+        console.log("Connected accounts:", accounts)
         if (accounts.length > 0) {
-          const signer = await provider.getSigner();
-          const address = await signer.getAddress();
-          setUserAddress(address);
-          setIsWalletConnected(true);
-          setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()));
-          console.log("Wallet connected:", { address, isAllowed: allowedAddresses.includes(address.toLowerCase()) });
+          const signer = await provider.getSigner()
+          const address = await signer.getAddress()
+          const network = await provider.getNetwork()
+          const chainId = Number(network.chainId)
+          setUserAddress(address)
+          setIsWalletConnected(true)
+          setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()))
+          setCurrentNetwork(
+            chainId === NETWORKS.celo.chainId
+              ? "celo"
+              : chainId === NETWORKS.lisk.chainId
+              ? "lisk"
+              : null
+          )
+          console.log("Wallet connected:", {
+            address,
+            isAllowed: allowedAddresses.includes(address.toLowerCase()),
+            chainId,
+            network: chainId === NETWORKS.celo.chainId ? "Celo" : chainId === NETWORKS.lisk.chainId ? "Lisk" : "Unknown",
+          })
         } else {
-          setIsWalletConnected(false);
-          setUserAddress("");
-          setIsAllowedAddress(false);
-          console.log("No accounts connected");
-          // Automatically attempt to connect wallet if not connected
-          connectWallet();
+          setIsWalletConnected(false)
+          setUserAddress("")
+          setIsAllowedAddress(false)
+          setCurrentNetwork(null)
+          console.log("No accounts connected")
+          connectWallet()
         }
       } catch (error) {
-        const { message } = getErrorInfo(error);
-        console.error("Error checking wallet connection:", message);
-        setCheckInStatus("Failed to connect to wallet. Please try again.");
+        const { message } = getErrorInfo(error)
+        console.error("Error checking wallet connection:", message)
+        setCheckInStatus("Failed to connect to wallet. Please try again.")
       }
-    };
+    }
 
-    checkWalletConnection();
+    checkWalletConnection()
 
-    // Listen for account or network changes
     if (window.ethereum) {
-      window.ethereum.on("accountsChanged", checkWalletConnection);
-      window.ethereum.on("chainChanged", () => {
-        console.log("Network changed");
-        checkWalletConnection();
-      });
+      window.ethereum.on("accountsChanged", checkWalletConnection)
+      window.ethereum.on("chainChanged", checkWalletConnection)
     }
 
     return () => {
       if (window.ethereum) {
-        window.ethereum.removeListener("accountsChanged", checkWalletConnection);
-        window.ethereum.removeListener("chainChanged", checkWalletConnection);
+        window.ethereum.removeListener("accountsChanged", checkWalletConnection)
+        window.ethereum.removeListener("chainChanged", checkWalletConnection)
       }
-    };
-  }, []);
+    }
+  }, [])
 
   // Auto-trigger check-in when wallet is connected, address is allowed, and Divvi submission is successful
   useEffect(() => {
-    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn) {
-      console.log("Conditions met, triggering auto check-in after Divvi submission...");
-      handleCheckIn();
+    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn && currentNetwork) {
+      console.log("Conditions met, triggering auto check-in after Divvi submission...")
+      handleCheckIn()
     }
-  }, [isWalletConnected, isAllowedAddress, isDivviSubmitted]);
+  }, [isWalletConnected, isAllowedAddress, isDivviSubmitted, currentNetwork])
 
   const connectWallet = async () => {
     if (!window.ethereum) {
-      setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.");
-      return;
+      setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.")
+      return
     }
 
     try {
-      console.log("Requesting wallet connection...");
-      setCheckInStatus("Please confirm the wallet connection in the popup.");
-      await window.ethereum.request({ method: "eth_requestAccounts" });
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const address = await signer.getAddress();
-      setUserAddress(address);
-      setIsWalletConnected(true);
-      setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()));
-      console.log("Wallet connected:", { address, isAllowed: allowedAddresses.includes(address.toLowerCase()) });
-      setCheckInStatus("Wallet connected successfully!");
+      console.log("Requesting wallet connection...")
+      setCheckInStatus("Please confirm the wallet connection in the popup.")
+      await window.ethereum.request({ method: "eth_requestAccounts" })
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const address = await signer.getAddress()
+      const network = await provider.getNetwork()
+      const chainId = Number(network.chainId)
+      setUserAddress(address)
+      setIsWalletConnected(true)
+      setIsAllowedAddress(allowedAddresses.includes(address.toLowerCase()))
+      setCurrentNetwork(
+        chainId === NETWORKS.celo.chainId
+          ? "celo"
+          : chainId === NETWORKS.lisk.chainId
+          ? "lisk"
+          : null
+      )
+      console.log("Wallet connected:", {
+        address,
+        isAllowed: allowedAddresses.includes(address.toLowerCase()),
+        chainId,
+        network: chainId === NETWORKS.celo.chainId ? "Celo" : chainId === NETWORKS.lisk.chainId ? "Lisk" : "Unknown",
+      })
+      setCheckInStatus("Wallet connected successfully!")
     } catch (error) {
-      const { code, message } = getErrorInfo(error);
-      console.error("Wallet connection failed:", { code, message, fullError: error });
+      const { code, message } = getErrorInfo(error)
+      console.error("Wallet connection failed:", { code, message, fullError: error })
       setCheckInStatus(
-        code === 4001
-          ? "Wallet connection rejected by user."
-          : "Failed to connect wallet. Please try again."
-      );
+        code === 4001 ? "Wallet connection rejected by user." : "Failed to connect wallet. Please try again.",
+      )
     }
-  };
+  }
 
   const handleCheckIn = async () => {
     if (!window.ethereum) {
-      setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.");
-      return;
+      setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.")
+      return
     }
 
     if (!isWalletConnected) {
-      setCheckInStatus("Please connect your wallet.");
-      await connectWallet(); // Prompt wallet connection
-      return;
+      setCheckInStatus("Please connect your wallet.")
+      await connectWallet()
+      return
     }
 
     if (!isAllowedAddress) {
-      setCheckInStatus("Your wallet address is not authorized to perform this action.");
-      return;
+      setCheckInStatus("Your wallet address is not authorized to perform this action.")
+      return
     }
 
-    setIsCheckingIn(true);
-    setCheckInStatus("");
+    if (!currentNetwork) {
+      setCheckInStatus("Please switch to either the Celo or Lisk network.")
+      return
+    }
+
+    setIsCheckingIn(true)
+    setCheckInStatus("")
 
     try {
-      console.log("Starting check-in process...");
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      console.log("Signer:", signer);
-      const network = await provider.getNetwork();
-      const chainId = Number(network.chainId);
-      console.log("Network chainId:", chainId);
-      const isCelo = isCeloNetwork(chainId);
+      console.log("Starting check-in process...")
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      console.log("Signer:", signer)
+      const network = await provider.getNetwork()
+      const chainId = Number(network.chainId)
+      console.log("Network chainId:", chainId)
 
-      // Ensure the wallet is on the correct network (e.g., Celo)
-      const expectedChainId = isCelo ? 42220 : 1; // Adjust as needed
+      // Ensure the wallet is on the correct network (Celo or Lisk)
+      const expectedChainId = NETWORKS[currentNetwork].chainId
       if (chainId !== expectedChainId) {
-        console.log("Network mismatch, attempting to switch...");
+        console.log("Network mismatch, attempting to switch...")
         try {
           await window.ethereum.request({
             method: "wallet_switchEthereumChain",
             params: [{ chainId: `0x${expectedChainId.toString(16)}` }],
-          });
+          })
         } catch (switchError) {
-          const { message } = getErrorInfo(switchError);
-          console.error("Network switch failed:", message);
-          setCheckInStatus(`Please switch to the ${isCelo ? "Celo" : "Ethereum"} network.`);
-          setIsCheckingIn(false);
-          return;
+          const { message } = getErrorInfo(switchError)
+          console.error("Network switch failed:", message)
+          setCheckInStatus(`Please switch to the ${NETWORKS[currentNetwork].name} network.`)
+          setIsCheckingIn(false)
+          return
         }
       }
 
-      const contract = new Contract(contractAddress, contractABI, signer);
-      console.log("Contract instance created:", contractAddress);
+      const contract = new Contract(NETWORKS[currentNetwork].contractAddress, contractABI, signer)
+      console.log("Contract instance created:", NETWORKS[currentNetwork].contractAddress)
 
-      let tx;
-      if (isCelo) {
-        console.log("Appending Divvi referral data for Celo transaction");
-        const data = contract.interface.encodeFunctionData("checkIn");
-        const dataWithReferral = appendDivviReferralData(data);
+      let tx
+      if (currentNetwork === "celo" || currentNetwork === "lisk") {
+        console.log(`Appending Divvi referral data for ${NETWORKS[currentNetwork].name} transaction`)
+        const data = contract.interface.encodeFunctionData("checkIn")
+        const dataWithReferral = appendDivviReferralData(data)
         tx = await signer.sendTransaction({
-          to: contractAddress,
+          to: NETWORKS[currentNetwork].contractAddress,
           data: dataWithReferral,
-        });
-        console.log("Celo transaction sent:", tx.hash);
+        })
+        console.log(`${NETWORKS[currentNetwork].name} transaction sent:`, tx.hash)
       } else {
-        tx = await contract.checkIn();
-        console.log("Transaction sent:", tx.hash);
+        tx = await contract.checkIn()
+        console.log("Transaction sent:", tx.hash)
       }
 
       // Wait for transaction confirmation
-      const receipt = await tx.wait();
-      console.log("Transaction confirmed:", receipt.transactionHash);
-      const timestamp = new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" });
-      const balanceWei = await provider.getBalance(userAddress);
-      const balanceEther = ethers.formatEther(balanceWei);
+      const receipt = await tx.wait()
+      console.log("Transaction confirmed:", receipt.transactionHash)
+      const timestamp = new Date().toLocaleString("en-US", { timeZone: "Africa/Lagos" })
+      const balanceWei = await provider.getBalance(userAddress)
+      const balanceEther = ethers.formatEther(balanceWei)
 
       setCheckInStatus(
-        `Successfully added to Drop List. ${timestamp}! Balance: ${parseFloat(balanceEther).toFixed(4)} CELO`
-      );
+        `Successfully added to Drop List on ${NETWORKS[currentNetwork].name}. ${timestamp}! Balance: ${Number.parseFloat(balanceEther).toFixed(4)} ${currentNetwork === "celo" ? "CELO" : "LSK"}`,
+      )
 
-      if (isCelo) {
-        const txHash = tx.hash;
+      if (currentNetwork === "celo" || currentNetwork === "lisk") {
+        const txHash = tx.hash
         console.log("Attempting to report transaction to Divvi:", {
           txHash,
           chainId,
           timestamp,
           userAddress,
-          balance: `${balanceEther} CELO`,
-        });
+          balance: `${balanceEther} ${currentNetwork === "celo" ? "CELO" : "LSK"}`,
+        })
         try {
-          await reportTransactionToDivvi(txHash, chainId);
-          console.log("Divvi reporting successful");
-          setIsDivviSubmitted(true); // Set Divvi submission success
+          await reportTransactionToDivvi(txHash, chainId)
+          console.log("Divvi reporting successful")
+          setIsDivviSubmitted(true)
         } catch (divviError) {
-          const { message } = getErrorInfo(divviError);
-          console.error("Divvi reporting failed, but check-in completed:", message);
+          const { message } = getErrorInfo(divviError)
+          console.error("Divvi reporting failed, but check-in completed:", message)
           setCheckInStatus(
-            `Checked in at ${timestamp} with balance ${parseFloat(balanceEther).toFixed(4)} CELO, but failed to report to Divvi. Please contact support.`
-          );
-          // Don't reset isDivviSubmitted here - let the auto-trigger continue working
-          console.log("Continuing with auto-trigger despite Divvi error");
+            `Checked in on ${NETWORKS[currentNetwork].name} at ${timestamp} with balance ${Number.parseFloat(balanceEther).toFixed(4)} ${currentNetwork === "celo" ? "CELO" : "LSK"}, but failed to report to Divvi. Please contact support.`,
+          )
+          console.log("Continuing with auto-trigger despite Divvi error")
         }
       } else {
-        setIsDivviSubmitted(true); // For non-Celo, assume success to allow auto-trigger
+        setIsDivviSubmitted(true)
       }
 
-      // Reset Divvi submission state after successful check-in to allow future auto-triggers
-      setTimeout(() => setIsDivviSubmitted(false), 1000);
+      setTimeout(() => setIsDivviSubmitted(false), 1000)
     } catch (error) {
-      const { code, message } = getErrorInfo(error);
-      console.error("Check-in failed:", { code, message, fullError: error });
-      
-      let statusMessage = "Check-in failed: Please try again.";
+      const { code, message } = getErrorInfo(error)
+      console.error("Check-in failed:", { code, message, fullError: error })
+
+      let statusMessage = "Check-in failed: Please try again."
       if (code === "INSUFFICIENT_FUNDS") {
-        statusMessage = "Check-in failed: Insufficient funds in your wallet.";
+        statusMessage = "Check-in failed: Insufficient funds in your wallet."
       } else if (code === 4001) {
-        statusMessage = "Check-in failed: Transaction rejected by user.";
+        statusMessage = "Check-in failed: Transaction rejected by user."
       } else if (message) {
-        statusMessage = `Check-in failed: ${message}`;
+        statusMessage = `Check-in failed: ${message}`
       }
-      
-      setCheckInStatus(statusMessage);
-      
-      // Keep auto-trigger working - only reset isDivviSubmitted if it's a user rejection
+
+      setCheckInStatus(statusMessage)
+
       if (code !== 4001) {
-        console.log("Non-user-rejection error, keeping auto-trigger active");
-        // Don't reset isDivviSubmitted to keep auto-trigger working
+        console.log("Non-user-rejection error, keeping auto-trigger active")
       } else {
-        setIsDivviSubmitted(false); // Reset only on user rejection
+        setIsDivviSubmitted(false)
       }
     } finally {
-      setIsCheckingIn(false);
+      setIsCheckingIn(false)
     }
-  };
+  }
 
   return (
-    <main className="min-h-screen">
-      <div className="container mx-auto px-4 py-6 sm:py-8">
-        <div className="flex flex-col gap-6 sm:gap-8">
-          <header className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-6">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
-                <Image
-                  src="/logo.png"
-                  alt="Logo"
-                  width={32}
-                  height={32}
-                  className="inline-block mr-2 sm:w-10 sm:h-10"
-                />
-                FaucetDrops
-              </h1>
-              <div className="ml-auto sm:ml-0">
-                <NetworkSelector />
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
+        <div className="flex flex-col gap-4 sm:gap-6 lg:gap-8">
+          {/* Header Section */}
+          <header className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 sm:p-6">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
+              {/* Logo and Title */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full lg:w-auto">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Image
+                    src="/logo.png"
+                    alt="FaucetDrops Logo"
+                    width={28}
+                    height={28}
+                    className="sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-md"
+                  />
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-slate-100">
+                    FaucetDrops
+                  </h1>
+                </div>
+                <div className="ml-auto sm:ml-0">
+                  <NetworkSelector />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
+                <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+                  <Link href="/batch-claim" className="flex-1 xs:flex-none">
+                    <Button 
+                      variant="outline" 
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <Users className="h-4 w-4" />
+                      <span className="hidden xs:inline">Batch Claim</span>
+                      <span className="xs:hidden">Batch</span>
+                    </Button>
+                  </Link>
+                  
+                  <Link href="/create" className="flex-1 xs:flex-none">
+                    <Button className="w-full sm:w-auto flex items-center justify-center gap-2 text-sm bg-blue-600 hover:bg-blue-700 transition-colors">
+                      <Plus className="h-4 w-4" />
+                      <span className="hidden xs:inline">Create Faucet</span>
+                      <span className="xs:hidden">Create</span>
+                    </Button>
+                  </Link>
+                </div>
+
+                <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+                  <div className="flex-1 xs:flex-none">
+                    <WalletConnect />
+                  </div>
+                  
+                  {isWalletConnected && isAllowedAddress && (
+                    <Button
+                      onClick={handleCheckIn}
+                      disabled={isCheckingIn}
+                      className="w-full xs:w-auto flex items-center justify-center gap-2 text-sm bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      {isCheckingIn ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          <span>Dropping...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                          </svg>
+                          <span>Drop List</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 w-full sm:w-auto">
-              <Link href="/batch-claim" className="w-full sm:w-auto">
-                <Button variant="outline" className="w-full sm:w-auto flex items-center gap-2 text-sm sm:text-base">
-                  <Users className="h-4 w-4" />
-                  Batch Claim
-                </Button>
-              </Link>
-              <Link href="/create" className="w-full sm:w-auto">
-                <Button className="w-full sm:w-auto flex items-center gap-2 text-sm sm:text-base">
-                  <Plus className="h-4 w-4" />
-                  Create Faucet
-                </Button>
-              </Link>
-              <WalletConnect />
-              {isWalletConnected && isAllowedAddress && (
-                <Button
-                  onClick={handleCheckIn}
-                  disabled={isCheckingIn}
-                  className="w-full sm:w-auto flex items-center gap-2 text-sm sm:text-base"
-                >
-                  {isCheckingIn ? "Dropping..." : "Drop List"}
-                </Button>
-              )}
-            </div>
           </header>
+
+          {/* Status Message */}
           {checkInStatus && (
-            <div className="text-center text-xs sm:text-sm text-gray-600 max-w-full break-words px-2">
-              {checkInStatus}
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-3 sm:p-4">
+              <div className="text-center">
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-words leading-relaxed">
+                  {checkInStatus}
+                </p>
+              </div>
             </div>
           )}
-          
-          <FaucetList />
+
+          {/* User Info Card (for mobile) */}
+          {isWalletConnected && (
+            <div className="lg:hidden bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-3 sm:p-4">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Wallet</span>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    isAllowedAddress 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                  }`}>
+                    {isAllowedAddress ? 'Authorized' : 'Not Authorized'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-mono break-all">
+                  {userAddress}
+                </p>
+                {currentNetwork && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Network</span>
+                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full capitalize">
+                      {currentNetwork}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Main Content */}
+          <div className="space-y-6 sm:space-y-8">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <AnalyticsDashboard />
+            </div>
+            
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <FaucetList />
+            </div>
+          </div>
         </div>
       </div>
     </main>
-  );
+  )
 }

@@ -7,6 +7,7 @@ const DIVVI_CONSUMER_ADDRESS: `0x${string}` = "0xd59B83De618561c8FF4E98fC29a1b96
 const DIVVI_PROVIDERS: `0x${string}`[] = [
   '0x0423189886d7966f0dd7e7d256898daeee625dca',
   '0xc95876688026be9d6fa7a7c33328bd013effa2bb',
+  '0x7beb0e14f8d2e6f6678cc30d867787b384b19e20',
   '0x5f0a55fad9424ac99429f635dfb9bf20c3360ab8'
 ];
 
@@ -44,11 +45,12 @@ export async function reportTransactionToDivvi(txHash: `0x${string}`, chainId: n
 }
 
 /**
- * Checks if the current network is Celo
+ * Checks if the current network is Celo or Lisk
  * @param chainId - The chain ID to check
- * @returns True if the network is Celo, false otherwise
+ * @returns True if the network is Celo or Lisk, false otherwise
  */
-export function isCeloNetwork(chainId: number): boolean {
+export function isSupportedNetwork(chainId: number): boolean {
   // Celo Mainnet: 42220, Celo Alfajores: 44787, Celo Baklava: 62320
-  return [42220, 44787, 62320].includes(chainId);
+  // Lisk Mainnet: 1135, Lisk Sepolia Testnet: 4202
+  return [42220, 44787, 62320, 1135, 4202].includes(chainId);
 }

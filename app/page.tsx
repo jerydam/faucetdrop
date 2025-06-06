@@ -120,7 +120,7 @@ export default function Home() {
 
   // Auto-trigger check-in when wallet is connected, address is allowed, and Divvi submission is successful
   useEffect(() => {
-    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn) {
+    if (isWalletConnected && isAllowedAddress && !isCheckingIn) {
       console.log("Conditions met, triggering auto check-in after Divvi submission...");
       handleCheckIn();
     }

@@ -708,7 +708,7 @@ export default function FaucetDetails() {
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                     variant="outline"
                     onClick={handleBackendClaim}
-                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !hasFollowed} // Removed isSecretCodeValid check
+                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed} // Removed isSecretCodeValid check
                   >
                     {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim ${
                             faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""

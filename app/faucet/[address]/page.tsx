@@ -282,6 +282,8 @@ export default function FaucetDetails() {
       return;
     }
 
+    // Commented out secret code validation
+    /*
     if (!isSecretCodeValid) {
       toast({
         title: "Invalid Secret Code",
@@ -290,6 +292,7 @@ export default function FaucetDetails() {
       });
       return;
     }
+    */
 
     if (!checkNetwork()) return;
 
@@ -300,7 +303,8 @@ export default function FaucetDetails() {
       }
       await window.ethereum.request({ method: 'eth_requestAccounts' });
 
-      const result = await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode);
+      // Pass empty string for secretCode since verification is disabled
+      const result = await claimViaBackend(address, faucetAddress, provider as BrowserProvider, "");
       const formattedTxHash = result.txHash.startsWith('0x') ? result.txHash : `0x${result.txHash}` as `0x${string}`;
       setTxHash(formattedTxHash);
 
@@ -331,9 +335,12 @@ export default function FaucetDetails() {
     } catch (error: any) {
       console.error("Error claiming tokens:", error);
       let errorMessage = error.message || "Unknown error occurred";
+      // Commented out specific error handling for invalid secret code
+      /*
       if (errorMessage.includes("Unauthorized: Invalid secret code")) {
         errorMessage = "Invalid secret code. Please check and try again.";
       }
+      */
       toast({
         title: "Failed to claim tokens",
         description: errorMessage,
@@ -674,6 +681,7 @@ export default function FaucetDetails() {
                     </div>
                   </div>
 
+                  {/* Commented out secret code input field
                   <div className="space-y-2">
                     <Label htmlFor="secret-code" className="text-xs sm:text-sm">Secret Code</Label>
                     <Input
@@ -686,6 +694,7 @@ export default function FaucetDetails() {
                     />
                     <p className="text-xs text-muted-foreground">Enter the 6-character alphanumeric code to claim tokens</p>
                   </div>
+                  */}
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2 px-4 sm:px-6">
                   <Button
@@ -699,7 +708,7 @@ export default function FaucetDetails() {
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                     variant="outline"
                     onClick={handleBackendClaim}
-                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !isSecretCodeValid || !hasFollowed}
+                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !hasFollowed} // Removed isSecretCodeValid check
                   >
                     {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim ${
                             faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""
@@ -997,3 +1006,4 @@ export default function FaucetDetails() {
     </main>
   );
 }
+

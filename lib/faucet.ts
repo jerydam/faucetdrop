@@ -796,7 +796,10 @@ export async function getAllClaims(
     return formattedClaims
   } catch (error) {
     console.error(`Error fetching claims for chainId ${chainId}:`, error)
-    return []
+    if (error instanceof Error) {
+      throw new Error(`Failed to fetch claims: ${error.message}`)
+    }
+    throw new Error("Failed to fetch claims: Unknown error")
   }
 }
 
@@ -827,12 +830,15 @@ export async function getAllClaimsForAllNetworks(networks: Network[]): Promise<
       }),
     )
 
-    const sortedClaims = allClaims.flat().sort((a, b) => b.timestamp - a.timestamp) // Sort by timestamp (newest first)
-    console.log("All claims:", sortedClaims) // Debug log
+    const sortedClaims = allClaims.flat().sort((a, b) => b.timestamp - a.timestamp)
+    console.log("All claims:", sortedClaims)
     return sortedClaims
   } catch (error) {
     console.error("Error fetching claims for all networks:", error)
-    return []
+    if (error instanceof Error) {
+      throw new Error(`Failed to fetch claims for all networks: ${error.message}`)
+    }
+    throw new Error("Failed to fetch claims for all networks: Unknown error")
   }
 }
 
@@ -956,147 +962,20 @@ export async function fundFaucet(
       maxFeePerGas: feeData.maxFeePerGas || undefined,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
     })
-    const receipt = await fundTx.wait()
-    if (!receipt) {
+    console.log("Fund transaction hash:", fundTx.hash)
+    const fundReceipt = await fundTx.wait()
+    if (!fundReceipt) {
       throw new Error("Fund transaction receipt is null")
     }
-    console.log("Fund transaction confirmed:", receipt.hash)
+    console.log("Fund transaction confirmed:", fundReceipt.hash)
     await reportTransactionToDivvi(fundTx.hash as `0x${string}`, Number(chainId))
-
     return fundTx.hash
   } catch (error: any) {
     console.error("Error funding faucet:", error)
-    if (error.code === "UNSUPPORTED_OPERATION" && error.operation === "getEnsAddress") {
-      throw new Error("ENS is not supported on this network. Please ensure the token address is correct.")
-    }
-    if (error.reason === "Must send Ether") {
-      throw new Error(
-        "Contract requires native tokens. Please ensure you are sending the correct amount in the transaction.",
-      )
-    }
     if (error.message?.includes("network changed")) {
       throw new Error("Network changed during transaction. Please try again with a stable network connection.")
     }
     throw new Error(error.reason || error.message || "Failed to fund faucet")
-  }
-}
-
-// Claim tokens
-export async function claimTokens(
-  provider: BrowserProvider,
-  faucetAddress: string,
-  chainId: bigint,
-  networkId: bigint,
-  userAddress: string,
-): Promise<string> {
-  if (!checkNetwork(chainId, networkId)) {
-    throw new Error("Switch to the network to perform operation")
-  }
-
-  try {
-    const signer = await provider.getSigner()
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
-
-    const data = faucetContract.interface.encodeFunctionData("claim", [[userAddress]])
-    const dataWithReferral = appendDivviReferralData(data)
-    const tx = await signer.sendTransaction({
-      to: faucetAddress,
-      data: dataWithReferral,
-    })
-
-    const receipt = await tx.wait()
-    if (!receipt) {
-      throw new Error("Claim transaction receipt is null")
-    }
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
-
-    return tx.hash
-  } catch (error: any) {
-    console.error("Error claiming tokens:", error)
-    if (error.message?.includes("network changed")) {
-      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
-    }
-    throw new Error(error.reason || error.message || "Failed to claim tokens")
-  }
-}
-
-// Withdraw tokens
-export async function withdrawTokens(
-  provider: BrowserProvider,
-  faucetAddress: string,
-  amount: bigint,
-  chainId: bigint,
-  networkId: bigint,
-): Promise<string> {
-  if (!checkNetwork(chainId, networkId)) {
-    throw new Error("Switch to the network to perform operation")
-  }
-
-  try {
-    const signer = await provider.getSigner()
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
-
-    const data = faucetContract.interface.encodeFunctionData("withdraw", [amount])
-    const dataWithReferral = appendDivviReferralData(data)
-    const tx = await signer.sendTransaction({
-      to: faucetAddress,
-      data: dataWithReferral,
-    })
-
-    const receipt = await tx.wait()
-    if (!receipt) {
-      throw new Error("Withdraw transaction receipt is null")
-    }
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
-
-    return tx.hash
-  } catch (error: any) {
-    console.error("Error withdrawing tokens:", error)
-    if (error.message?.includes("network changed")) {
-      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
-    }
-    throw new Error(error.reason || error.message || "Failed to withdraw tokens")
-  }
-}
-
-// Update claim parameters on chain
-export async function updateClaimParametersOnChain(
-  provider: BrowserProvider,
-  faucetAddress: string,
-  claimAmount: bigint,
-  startTime: number,
-  endTime: number,
-  chainId: bigint,
-  networkId: bigint,
-): Promise<string> {
-  if (!checkNetwork(chainId, networkId)) {
-    throw new Error("Switch to the network to perform operation")
-  }
-
-  try {
-    const signer = await provider.getSigner()
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
-
-    const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [claimAmount, startTime, endTime])
-    const dataWithReferral = appendDivviReferralData(data)
-    const tx = await signer.sendTransaction({
-      to: faucetAddress,
-      data: dataWithReferral,
-    })
-
-    const receipt = await tx.wait()
-    if (!receipt) {
-      throw new Error("Set claim parameters transaction receipt is null")
-    }
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
-
-    return tx.hash
-  } catch (error: any) {
-    console.error("Error setting claim parameters on chain:", error)
-    if (error.message?.includes("network changed")) {
-      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
-    }
-    throw new Error(error.reason || error.message || "Failed to set claim parameters on chain")
   }
 }
 
@@ -1115,47 +994,62 @@ export async function setClaimParameters(
   }
 
   try {
-    // Generate a 6-character secret code
+    const signer = await provider.getSigner()
+    const signerAddress = await signer.getAddress()
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
+
+    // Generate a secret code
     const secretCode = generateSecretCode()
 
-    // Send claim parameters and secret code to backend
-    const response = await fetch("https://fauctdrop-backend-1.onrender.com/set-claim-parameters", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        faucetAddress,
-        claimAmount: claimAmount.toString(),
-        startTime,
-        endTime,
-        chainId: chainId.toString(),
-        secretCode,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.detail || "Failed to set claim parameters")
-    }
-
-    const responseData = await response.json()
-    console.log("Backend response for setClaimParameters:", responseData)
-
-    // Update blockchain with the new parameters
-    const txHash = await updateClaimParametersOnChain(
-      provider,
-      faucetAddress,
+    const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [
       claimAmount,
       startTime,
       endTime,
-      chainId,
-      networkId,
-    )
+      // secretCode, // Commented out secret code parameter
+    ])
+    const dataWithReferral = appendDivviReferralData(data)
 
-    console.log("setClaimParameters completed:", { txHash, secretCode })
+    // Estimate gas
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    })
+    const feeData = await provider.getFeeData()
+    const maxFeePerGas = feeData.maxFeePerGas || undefined
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
 
-    return { txHash, secretCode }
+    console.log("Set claim parameters params:", {
+      faucetAddress,
+      claimAmount: claimAmount.toString(),
+      startTime,
+      endTime,
+      // secretCode, // Commented out secret code logging
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
+      signerAddress,
+      gasEstimate: gasEstimate.toString(),
+      maxFeePerGas: maxFeePerGas?.toString(),
+      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
+    })
+
+    const tx = await signer.sendTransaction({
+      to: faucetAddress,
+      data: dataWithReferral,
+      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    })
+
+    console.log("Set claim parameters transaction hash:", tx.hash)
+    const receipt = await tx.wait()
+    if (!receipt) {
+      throw new Error("Set claim parameters transaction receipt is null")
+    }
+    console.log("Set claim parameters transaction confirmed:", receipt.hash)
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
+
+    return { txHash: tx.hash, secretCode }
   } catch (error: any) {
     console.error("Error setting claim parameters:", error)
     if (error.message?.includes("network changed")) {
@@ -1165,12 +1059,13 @@ export async function setClaimParameters(
   }
 }
 
-// Set whitelist
-export async function setWhitelist(
+// Update claim parameters on-chain
+export async function updateClaimParametersOnChain(
   provider: BrowserProvider,
   faucetAddress: string,
-  addresses: string[],
-  status: boolean,
+  claimAmount: bigint,
+  startTime: number,
+  endTime: number,
   chainId: bigint,
   networkId: bigint,
 ): Promise<string> {
@@ -1180,21 +1075,195 @@ export async function setWhitelist(
 
   try {
     const signer = await provider.getSigner()
+    const signerAddress = await signer.getAddress()
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
 
-    const method = addresses.length > 1 ? "setWhitelistBatch" : "setWhitelist"
-    const args = addresses.length > 1 ? [addresses, status] : [addresses[0], status]
-    const data = faucetContract.interface.encodeFunctionData(method, args)
+    // Generate a secret code
+    const secretCode = generateSecretCode()
+
+    const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [
+      claimAmount,
+      startTime,
+      endTime,
+      // secretCode, // Commented out secret code parameter
+    ])
     const dataWithReferral = appendDivviReferralData(data)
+
+    // Estimate gas
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    })
+    const feeData = await provider.getFeeData()
+    const maxFeePerGas = feeData.maxFeePerGas || undefined
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
+
+    console.log("Update claim parameters params:", {
+      faucetAddress,
+      claimAmount: claimAmount.toString(),
+      startTime,
+      endTime,
+      // secretCode, // Commented out secret code logging
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
+      signerAddress,
+      gasEstimate: gasEstimate.toString(),
+      maxFeePerGas: maxFeePerGas?.toString(),
+      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
+    })
+
     const tx = await signer.sendTransaction({
       to: faucetAddress,
       data: dataWithReferral,
+      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
+      maxFeePerGas,
+      maxPriorityFeePerGas,
     })
 
+    console.log("Update claim parameters transaction hash:", tx.hash)
+    const receipt = await tx.wait()
+    if (!receipt) {
+      throw new Error("Update claim parameters transaction receipt is null")
+    }
+    console.log("Update claim parameters transaction confirmed:", receipt.hash)
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
+
+    return tx.hash
+  } catch (error: any) {
+    console.error("Error updating claim parameters on-chain:", error)
+    if (error.message?.includes("network changed")) {
+      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
+    }
+    throw new Error(error.reason || error.message || "Failed to update claim parameters")
+  }
+}
+
+// Withdraw tokens
+export async function withdrawTokens(
+  provider: BrowserProvider,
+  faucetAddress: string,
+  amount: bigint,
+  chainId: bigint,
+  networkId: bigint,
+): Promise<string> {
+  if (!checkNetwork(chainId, networkId)) {
+    throw new Error("Switch to the network to perform operation")
+  }
+
+  try {
+    const signer = await provider.getSigner()
+    const signerAddress = await signer.getAddress()
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
+
+    const data = faucetContract.interface.encodeFunctionData("withdraw", [amount])
+    const dataWithReferral = appendDivviReferralData(data)
+
+    // Estimate gas
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    })
+    const feeData = await provider.getFeeData()
+    const maxFeePerGas = feeData.maxFeePerGas || undefined
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
+
+    console.log("Withdraw tokens params:", {
+      faucetAddress,
+      amount: amount.toString(),
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
+      signerAddress,
+      gasEstimate: gasEstimate.toString(),
+      maxFeePerGas: maxFeePerGas?.toString(),
+      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
+    })
+
+    const tx = await signer.sendTransaction({
+      to: faucetAddress,
+      data: dataWithReferral,
+      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    })
+
+    console.log("Withdraw transaction hash:", tx.hash)
+    const receipt = await tx.wait()
+    if (!receipt) {
+      throw new Error("Withdraw transaction receipt is null")
+    }
+    console.log("Withdraw transaction confirmed:", receipt.hash)
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
+
+    return tx.hash
+  } catch (error: any) {
+    console.error("Error withdrawing tokens:", error)
+    if (error.message?.includes("network changed")) {
+      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
+    }
+    throw new Error(error.reason || error.message || "Failed to withdraw tokens")
+  }
+}
+
+// Set whitelist
+export async function setWhitelist(
+  provider: BrowserProvider,
+  faucetAddress: string,
+  addresses: string[],
+  add: boolean,
+  chainId: bigint,
+  networkId: bigint,
+): Promise<string> {
+  if (!checkNetwork(chainId, networkId)) {
+    throw new Error("Switch to the network to perform operation")
+  }
+
+  try {
+    const signer = await provider.getSigner()
+    const signerAddress = await signer.getAddress()
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
+
+    const method = add ? "addToWhitelist" : "removeFromWhitelist"
+    const data = faucetContract.interface.encodeFunctionData(method, [addresses])
+    const dataWithReferral = appendDivviReferralData(data)
+
+    // Estimate gas
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    })
+    const feeData = await provider.getFeeData()
+    const maxFeePerGas = feeData.maxFeePerGas || undefined
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
+
+    console.log("Set whitelist params:", {
+      faucetAddress,
+      addresses,
+      add,
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
+      signerAddress,
+      gasEstimate: gasEstimate.toString(),
+      maxFeePerGas: maxFeePerGas?.toString(),
+      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
+    })
+
+    const tx = await signer.sendTransaction({
+      to: faucetAddress,
+      data: dataWithReferral,
+      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    })
+
+    console.log("Set whitelist transaction hash:", tx.hash)
     const receipt = await tx.wait()
     if (!receipt) {
       throw new Error("Set whitelist transaction receipt is null")
     }
+    console.log("Set whitelist transaction confirmed:", receipt.hash)
     await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
 
     return tx.hash
@@ -1207,10 +1276,4 @@ export async function setWhitelist(
   }
 }
 
-// Clear cache function
-export function clearAnalyticsCache(): void {
-  Object.values(STORAGE_KEYS).forEach((key) => {
-    localStorage.removeItem(key)
-  })
-  console.log("Analytics cache cleared")
-}
+

@@ -1,5 +1,5 @@
 import { BrowserProvider } from 'ethers';
-import { appendDivviReferralData, reportTransactionToDivvi, isCeloNetwork } from './divvi-integration';
+import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
 
 const API_URL = "https://fauctdrop-backend-1.onrender.com";
 const ENABLE_DIVVI_REFERRAL = true;
@@ -10,7 +10,7 @@ interface ClaimPayload {
   faucetAddress: string;
   shouldWhitelist: boolean;
   chainId: number;
-  secretCode: string;
+  secretCode: string; // Kept for compatibility
   divviReferralData?: string;
 }
 
@@ -53,6 +53,11 @@ interface DebugInfo {
   processedData?: string;
   errorType?: string;
   errorMessage?: string;
+}
+
+// Helper to check if the network is Celo (replicated from faucet.ts)
+function isCeloNetwork(chainId: number): boolean {
+  return chainId === 42220; // Celo Mainnet
 }
 
 function debugLog(message: string, data?: any) {
@@ -252,8 +257,16 @@ export async function claimViaBackend(
       faucetAddress,
       shouldWhitelist: true,
       chainId,
-      secretCode,
+      secretCode: "", // Set to empty string to disable verification
     };
+
+    // Commented out secret code validation
+    /*
+    if (!secretCode || !/^[A-Z0-9]{6}$/.test(secretCode)) {
+      throw new Error("Invalid secret code. Must be a 6-character alphanumeric code.");
+    }
+    payload.secretCode = secretCode;
+    */
 
     const divviResult = await processDivviReferralData(chainId);
     

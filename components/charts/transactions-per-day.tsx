@@ -8,7 +8,7 @@ import { Loader2, Activity } from "lucide-react"
 const NETWORKS = {
   celo: {
     chainId: 42220, // Celo Mainnet
-    contractAddress: "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700",
+    contractAddress: "0x190266890eF80cb9479F41dC6616107632FAa980",
     name: "Celo",
     rpcUrl: "https://forno.celo.org",
     color: "#35D07F",

@@ -74,7 +74,23 @@ const networks: Network[] = [
       decimals: 18,
     },
   },
-]
+  {
+    chainId:8453,
+    name: "Base Mainnet",
+    rpcUrl: "https://mainnet.base.org",
+    blockExplorer: "https://basescan.org",
+    factoryAddress: "0xYourFactoryAddressForBase", // Replace with actual address
+    color: "#0052FF",
+    tokenAddress: ZeroAddress, // ETH (native)
+    nativeCurrency: {
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
+    },
+  },
+];
+
+
 
 const NetworkContext = createContext<NetworkContextType>({
   network: null,

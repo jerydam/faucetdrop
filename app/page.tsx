@@ -30,7 +30,7 @@ const getErrorInfo = (error: unknown): { code?: string | number; message: string
 const NETWORKS = {
   celo: {
     chainId: 42220, // Celo Mainnet
-    contractAddress: "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700",
+    contractAddress: "0x190266890eF80cb9479F41dC6616107632FAa980",
     name: "Celo",
   },
   lisk: {
@@ -51,25 +51,25 @@ export default function Home() {
 
   // Define the array of allowed wallet addresses (case-insensitive)
   const allowedAddresses = [
-    "0x961B6b05ad723a7039De5e32586CF19b706870E5",
-    "0x08f4f4b874f6b55d768258c026d1f75a2c6e10a0",
-    "0xB3121eBb78F3CF34b03dfc285C0e2d9343dCF965",
-    "0xf07ea30f4821c60ffa4ce3d2d816b339207e7475",
-    "0xa4D30Cfd6b2Fec50D94AAe9F2311c961CC217d29",
-    "0xD03Cec8c65a5D9875740552b915F007D76e75497",
-    "0x81193c6ba3E69c4c47FFE2e4b3304985D1914d93",
-    "0xE7eDF84cEdE0a3B20E02A3b540312716EBe1A744",
-    "0x317419Db8EB30cEC60Ebf847581be2F02A688c53",
-    "0x739CC47B744c93c827B72bCCc07Fcb91628FFca2",
-    "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178",
-    "0x2A1ABea47881a380396Aa0D150DC6d01F4C8F9cb",
-    "0xF46F1B3Bea9cdd4102105EE9bAefc83db333354B",
-    "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
-    "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
-    "0x3207D4728c32391405C7122E59CCb115A4af31eA",
+    // "0x961B6b05ad723a7039De5e32586CF19b706870E5",
+    // "0x08f4f4b874f6b55d768258c026d1f75a2c6e10a0",
+    // "0xB3121eBb78F3CF34b03dfc285C0e2d9343dCF965",
+    // "0xf07ea30f4821c60ffa4ce3d2d816b339207e7475",
+    // "0xa4D30Cfd6b2Fec50D94AAe9F2311c961CC217d29",
+    // "0xD03Cec8c65a5D9875740552b915F007D76e75497",
+    // "0x81193c6ba3E69c4c47FFE2e4b3304985D1914d93",
+    // "0xE7eDF84cEdE0a3B20E02A3b540312716EBe1A744",
+    // "0x317419Db8EB30cEC60Ebf847581be2F02A688c53",
+    // "0x739CC47B744c93c827B72bCCc07Fcb91628FFca2",
+    // "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178",
+    // "0x2A1ABea47881a380396Aa0D150DC6d01F4C8F9cb",
+    // "0xF46F1B3Bea9cdd4102105EE9bAefc83db333354B",
+    // "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
+    // "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
+    // "0x3207D4728c32391405C7122E59CCb115A4af31eA",
   ].map((addr) => addr.toLowerCase())
 
-  const contractABI = [
+  const contractABI = [ 
     {
       anonymous: false,
       inputs: [
@@ -457,7 +457,7 @@ export default function Home() {
           {/* Main Content */}
           <div className="space-y-6 sm:space-y-8">
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-           {/* <AnalyticsDashboard /> */}
+           <AnalyticsDashboard />
             </div>
             
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">

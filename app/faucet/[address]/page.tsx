@@ -272,7 +272,7 @@ export default function FaucetDetails() {
       });
       return;
     }
-
+  
     if (!chainId || !networkId) {
       toast({
         title: "Network not detected",
@@ -281,7 +281,7 @@ export default function FaucetDetails() {
       });
       return;
     }
-
+  
     if (!isSecretCodeValid) {
       toast({
         title: "Invalid Secret Code",
@@ -290,22 +290,24 @@ export default function FaucetDetails() {
       });
       return;
     }
-
+  
     if (!checkNetwork()) return;
-
+  
     try {
       setIsClaiming(true);
       if (!window.ethereum) {
         throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet.");
       }
       await window.ethereum.request({ method: 'eth_requestAccounts' });
-
+  
+      console.log("Sending claim request with secret code:", secretCode); // Debug log
+  
       const result = await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode);
       const formattedTxHash = result.txHash.startsWith('0x') ? result.txHash : `0x${result.txHash}` as `0x${string}`;
       setTxHash(formattedTxHash);
-
+  
       const networkName = selectedNetwork?.name || "Unknown Network";
-
+  
       const claimAmountBN = faucetDetails?.claimAmount || BigInt(0);
       await storeClaim(
         provider as BrowserProvider,
@@ -317,14 +319,14 @@ export default function FaucetDetails() {
         Number(networkId),
         networkName
       );
-
+  
       toast({
         title: "Tokens claimed successfully",
         description: `You have claimed ${
           faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""
         } ${tokenSymbol} and recorded the claim on-chain on ${networkName}`,
       });
-
+  
       setShowClaimPopup(true);
       setSecretCode("");
       await loadFaucetDetails();
@@ -474,7 +476,31 @@ export default function FaucetDetails() {
       const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
-      const result = await setClaimParameters(
+      // Call backend endpoint to generate secret code
+      const response = await fetch("http://0.0.0.0:10000/set-claim-parameters", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          faucetAddress,
+          claimAmount: claimAmountBN.toString(),
+          startTime: startTimestamp,
+          endTime: endTimestamp,
+          chainId: Number(chainId),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to set claim parameters");
+      }
+
+      const result = await response.json();
+      const secretCode = result.secretCode;
+
+      // Update smart contract with claim parameters (without secret code)
+      await setClaimParameters(
         provider as BrowserProvider,
         faucetAddress,
         claimAmountBN,
@@ -484,7 +510,7 @@ export default function FaucetDetails() {
         Number(networkId)
       );
 
-      setGeneratedSecretCode(result.secretCode);
+      setGeneratedSecretCode(secretCode);
       setShowSecretCodeDialog(true);
 
       toast({
@@ -699,7 +725,7 @@ export default function FaucetDetails() {
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm"
                     variant="outline"
                     onClick={handleBackendClaim}
-                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !isSecretCodeValid || !hasFollowed}
+                    disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !isSecretCodeValid}
                   >
                     {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim ${
                             faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""

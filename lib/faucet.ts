@@ -92,16 +92,6 @@ export function checkNetwork(chainId: bigint, networkId: bigint): boolean {
   return chainId === networkId
 }
 
-// Generate a 6-character alphanumeric secret code
-function generateSecretCode(): string {
-  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  let code = ""
-  for (let i = 0; i < 6; i++) {
-    code += characters.charAt(Math.floor(Math.random() * characters.length))
-  }
-  return code
-}
-
 // Fetch check-in data from Celo with incremental loading
 export async function fetchCheckInData(): Promise<{
   transactionsByDate: { [date: string]: number }
@@ -998,14 +988,12 @@ export async function setClaimParameters(
     const signerAddress = await signer.getAddress()
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
 
-    // Generate a secret code
-    const secretCode = generateSecretCode()
+ 
 
     const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [
       claimAmount,
       startTime,
       endTime,
-      // secretCode, // Commented out secret code parameter
     ])
     const dataWithReferral = appendDivviReferralData(data)
 
@@ -1077,9 +1065,6 @@ export async function updateClaimParametersOnChain(
     const signer = await provider.getSigner()
     const signerAddress = await signer.getAddress()
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
-
-    // Generate a secret code
-    const secretCode = generateSecretCode()
 
     const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [
       claimAmount,

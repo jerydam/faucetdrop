@@ -1,7 +1,7 @@
 import { BrowserProvider } from 'ethers';
 import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
 
-const API_URL = "https://fauctdrop-backend-1.onrender.com";
+const API_URL = "http://0.0.0.0:10000";
 const ENABLE_DIVVI_REFERRAL = true;
 const DEBUG_MODE = process.env.NODE_ENV === 'development';
 
@@ -10,7 +10,7 @@ interface ClaimPayload {
   faucetAddress: string;
   shouldWhitelist: boolean;
   chainId: number;
-  secretCode: string; // Kept for compatibility
+  secretCode: string;
   divviReferralData?: string;
 }
 
@@ -55,9 +55,8 @@ interface DebugInfo {
   errorMessage?: string;
 }
 
-// Helper to check if the network is Celo (replicated from faucet.ts)
 function isCeloNetwork(chainId: number): boolean {
-  return chainId === 42220; // Celo Mainnet
+  return chainId === 42220;
 }
 
 function debugLog(message: string, data?: any) {
@@ -234,6 +233,19 @@ export async function claimViaBackend(
   secretCode: string
 ): Promise<{ success: boolean; txHash: string; whitelistTx?: string; divviDebug?: any }> {
   try {
+    // Log input secretCode for debugging
+    debugLog('Input to claimViaBackend', {
+      userAddress,
+      faucetAddress,
+      secretCode,
+      secretCodeDetails: {
+        value: secretCode,
+        isEmpty: !secretCode,
+        length: secretCode?.length || 0,
+        matchesPattern: secretCode ? /^[A-Z0-9]{6}$/.test(secretCode) : false
+      }
+    });
+
     if (typeof window === 'undefined' || !window.ethereum) {
       throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet in a supported browser.");
     }
@@ -252,21 +264,20 @@ export async function claimViaBackend(
 
     debugLog(`Starting claim process for chainId: ${chainId}`);
 
+    // Validate secretCode
+    if (!secretCode || !/^[A-Z0-9]{6}$/.test(secretCode)) {
+      const errorMessage = `Invalid secret code: ${secretCode || 'empty'}. Must be a 6-character alphanumeric code.`;
+      errorLog(errorMessage);
+      throw new Error(errorMessage);
+    }
+
     let payload: ClaimPayload = {
       userAddress,
       faucetAddress,
       shouldWhitelist: true,
       chainId,
-      secretCode: "", // Set to empty string to disable verification
+      secretCode
     };
-
-    // Commented out secret code validation
-    /*
-    if (!secretCode || !/^[A-Z0-9]{6}$/.test(secretCode)) {
-      throw new Error("Invalid secret code. Must be a 6-character alphanumeric code.");
-    }
-    payload.secretCode = secretCode;
-    */
 
     const divviResult = await processDivviReferralData(chainId);
     
@@ -462,11 +473,13 @@ export async function checkDivviHealth(): Promise<{
   }
 
   const passedChecks = checks.filter(c => c.passed).length;
-  const totalChecks = checks.length;
-  
+ const totalChecks = checks.length;
+
+  debugLog('Divvi health check results', { checks, passedChecks, totalChecks });
+
   let status: 'healthy' | 'warning' | 'error';
   let summary: string;
-  
+
   if (passedChecks === totalChecks) {
     status = 'healthy';
     summary = 'All Divvi integration checks passed';
@@ -478,5 +491,5 @@ export async function checkDivviHealth(): Promise<{
     summary = `${passedChecks}/${totalChecks} checks passed - major issues detected`;
   }
 
-  return { status, checks, summary };
+  return { status, checks, checks, summary };
 }

@@ -30,7 +30,11 @@ const getErrorInfo = (error: unknown): { code?: string | number; message: string
 const NETWORKS = {
   celo: {
     chainId: 42220, // Celo Mainnet
+<<<<<<< HEAD
     contractAddress: "0x190266890eF80cb9479F41dC6616107632FAa980",
+=======
+    contractAddress: "0x71C00c430ab70a622dc0b2888C4239cab9F244b0",
+>>>>>>> 38519fdafb8e9585ca3046156eb7f797dfbc4ec2
     name: "Celo",
   },
   lisk: {

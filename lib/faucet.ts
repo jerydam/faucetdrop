@@ -143,7 +143,7 @@ export async function fetchCheckInData(): Promise<{
         for (const event of events) {
           try {
             const block = await provider.getBlock(event.blockNumber)
-            if (block && event.args) {
+            if (block && 'args' in event && event.args) {
               const date = new Date(block.timestamp * 1000).toISOString().split("T")[0]
               const user = event.args.user.toLowerCase()
 
@@ -375,7 +375,7 @@ export async function createFaucet(
       })
       .find((parsed) => parsed?.name === "FaucetCreated")
 
-    if (!event || !event.args.faucet) {
+    if (!event || !('args' in event) || !event.args || !event.args.faucet) {
       throw new Error("Failed to retrieve faucet address from transaction")
     }
 
@@ -979,7 +979,7 @@ export async function setClaimParameters(
   endTime: number,
   chainId: bigint,
   networkId: bigint,
-): Promise<{ txHash: string; secretCode: string }> {
+): Promise<string> {
   if (!checkNetwork(chainId, networkId)) {
     throw new Error("Switch to the network to perform operation")
   }
@@ -988,8 +988,6 @@ export async function setClaimParameters(
     const signer = await provider.getSigner()
     const signerAddress = await signer.getAddress()
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
-
- 
 
     const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [
       claimAmount,
@@ -1013,7 +1011,6 @@ export async function setClaimParameters(
       claimAmount: claimAmount.toString(),
       startTime,
       endTime,
-      // secretCode, // Commented out secret code logging
       chainId: chainId.toString(),
       networkId: networkId.toString(),
       signerAddress,
@@ -1038,7 +1035,7 @@ export async function setClaimParameters(
     console.log("Set claim parameters transaction confirmed:", receipt.hash)
     await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
 
-    return { txHash: tx.hash, secretCode }
+    return tx.hash
   } catch (error: any) {
     console.error("Error setting claim parameters:", error)
     if (error.message?.includes("network changed")) {
@@ -1071,7 +1068,6 @@ export async function updateClaimParametersOnChain(
       claimAmount,
       startTime,
       endTime,
-      // secretCode, // Commented out secret code parameter
     ])
     const dataWithReferral = appendDivviReferralData(data)
 
@@ -1090,7 +1086,6 @@ export async function updateClaimParametersOnChain(
       claimAmount: claimAmount.toString(),
       startTime,
       endTime,
-      // secretCode, // Commented out secret code logging
       chainId: chainId.toString(),
       networkId: networkId.toString(),
       signerAddress,
@@ -1262,3 +1257,101 @@ export async function setWhitelist(
   }
 }
 
+// Reset claimed status for addresses
+export async function resetClaimedStatus(
+  provider: BrowserProvider,
+  faucetAddress: string,
+  addresses: string[],
+  status: boolean,
+  chainId: bigint,
+  networkId: bigint,
+): Promise<string> {
+  if (!checkNetwork(chainId, networkId)) {
+    throw new Error("Switch to the network to perform operation")
+  }
+
+  try {
+    const signer = await provider.getSigner()
+    const signerAddress = await signer.getAddress()
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
+
+    const data = faucetContract.interface.encodeFunctionData("resetClaimed", [addresses, status])
+    const dataWithReferral = appendDivviReferralData(data)
+
+    // Estimate gas
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    })
+    const feeData = await provider.getFeeData()
+    const maxFeePerGas = feeData.maxFeePerGas || undefined
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
+
+    console.log("Reset claimed status params:", {
+      faucetAddress,
+      addresses,
+      status,
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
+      signerAddress,
+      gasEstimate: gasEstimate.toString(),
+      maxFeePerGas: maxFeePerGas?.toString(),
+      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
+    })
+
+    const tx = await signer.sendTransaction({
+      to: faucetAddress,
+      data: dataWithReferral,
+      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    })
+
+    console.log("Reset claimed status transaction hash:", tx.hash)
+    const receipt = await tx.wait()
+    if (!receipt) {
+      throw new Error("Reset claimed status transaction receipt is null")
+    }
+    console.log("Reset claimed status transaction confirmed:", receipt.hash)
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
+
+    return tx.hash
+  } catch (error: any) {
+    console.error("Error resetting claimed status:", error)
+    if (error.message?.includes("network changed")) {
+      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
+    }
+    throw new Error(error.reason || error.message || "Failed to reset claimed status")
+  }
+}
+
+// Retrieve secret code for a faucet from backend/Supabase
+export async function retrieveSecretCode(faucetAddress: string): Promise<string> {
+  try {
+    console.log("Retrieving secret code for faucet:", faucetAddress)
+    
+    const response = await fetch("http://0.0.0.0:10000/get-secret-code", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        faucetAddress,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || "Failed to retrieve secret code")
+    }
+
+    const result = await response.json()
+    console.log("Secret code retrieved successfully")
+    
+    return result.secretCode
+  } catch (error: any) {
+    console.error("Error retrieving secret code:", error)
+    throw new Error(error.message || "Failed to retrieve secret code")
+  }
+}

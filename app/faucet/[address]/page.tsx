@@ -19,9 +19,11 @@ import {
   setWhitelist,
   storeClaim,
   setClaimParameters,
+  resetClaimedStatus,
+  retrieveSecretCode,
 } from "@/lib/faucet";
 import { formatUnits, parseUnits, BrowserProvider } from "ethers";
-import { Clock, Coins, Download, Share2, Upload, Users } from "lucide-react";
+import { Clock, Coins, Download, Share2, Upload, Users, Key, RotateCcw } from "lucide-react";
 import { claimViaBackend } from "@/lib/backend-service";
 import { Batchclaim } from "@/components/batch-claim";
 import { useNetwork } from "@/hooks/use-network";
@@ -70,6 +72,10 @@ export default function FaucetDetails() {
   const [secretCode, setSecretCode] = useState("");
   const [generatedSecretCode, setGeneratedSecretCode] = useState("");
   const [showSecretCodeDialog, setShowSecretCodeDialog] = useState(false);
+  const [resetAddresses, setResetAddresses] = useState("");
+  const [isResetEnabled, setIsResetEnabled] = useState(true);
+  const [currentSecretCode, setCurrentSecretCode] = useState("");
+  const [showCurrentSecretDialog, setShowCurrentSecretDialog] = useState(false);
 
   const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase();
   const isSecretCodeValid = secretCode.length === 6 && /^[A-Z0-9]{6}$/.test(secretCode);
@@ -125,6 +131,80 @@ export default function FaucetDetails() {
     const shareUrl = `https://x.com/intent/tweet?text=${shareText}`;
     window.open(shareUrl, "_blank");
     setShowClaimPopup(false);
+  };
+
+  const handleRetrieveSecretCode = async () => {
+    if (!faucetAddress) {
+      toast({
+        title: "Error",
+        description: "No faucet address available",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const code = await retrieveSecretCode(faucetAddress);
+      setCurrentSecretCode(code);
+      setShowCurrentSecretDialog(true);
+    } catch (error: any) {
+      toast({
+        title: "Failed to retrieve secret code",
+        description: error.message || "Unknown error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleResetClaimed = async () => {
+    if (!isConnected || !provider || !resetAddresses.trim() || !chainId) {
+      toast({
+        title: "Invalid Input",
+        description: "Please connect your wallet, ensure a network is selected, and enter valid addresses",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!checkNetwork()) return;
+
+    try {
+      const addresses = resetAddresses
+        .split(/[\n,]/)
+        .map((addr) => addr.trim())
+        .filter((addr) => addr.length > 0);
+
+      if (addresses.length === 0) return;
+
+      await resetClaimedStatus(
+        provider as BrowserProvider,
+        faucetAddress,
+        addresses,
+        isResetEnabled,
+        BigInt(chainId),
+        BigInt(Number(networkId))
+      );
+
+      toast({
+        title: "Claim status reset",
+        description: `${addresses.length} addresses have been ${
+          isResetEnabled ? "enabled to claim again" : "disabled from claiming"
+        }`,
+      });
+
+      setResetAddresses("");
+    } catch (error: any) {
+      console.error("Error resetting claim status:", error);
+      if (error.message === "Switch to the network to perform operation") {
+        checkNetwork();
+      } else {
+        toast({
+          title: "Failed to reset claim status",
+          description: error.message || "Unknown error occurred",
+          variant: "destructive",
+        });
+      }
+    }
   };
 
   useEffect(() => {
@@ -315,8 +395,8 @@ export default function FaucetDetails() {
         faucetAddress,
         claimAmountBN,
         formattedTxHash,
-        chainId,
-        Number(networkId),
+        BigInt(chainId),
+        BigInt(Number(networkId)),
         networkName
       );
   
@@ -380,8 +460,8 @@ export default function FaucetDetails() {
         faucetAddress,
         amount,
         faucetDetails.isEther,
-        chainId,
-        Number(networkId)
+        BigInt(chainId),
+        BigInt(Number(networkId))
       );
 
       toast({
@@ -425,8 +505,8 @@ export default function FaucetDetails() {
         provider as BrowserProvider,
         faucetAddress,
         amount,
-        chainId,
-        Number(networkId)
+        BigInt(chainId),
+        BigInt(Number(networkId))
       );
 
       toast({
@@ -497,7 +577,7 @@ export default function FaucetDetails() {
       }
 
       const result = await response.json();
-      const secretCode = result.secretCode;
+      const secretCodeFromBackend = result.secretCode;
 
       // Update smart contract with claim parameters (without secret code)
       await setClaimParameters(
@@ -506,11 +586,11 @@ export default function FaucetDetails() {
         claimAmountBN,
         startTimestamp,
         endTimestamp,
-        chainId,
-        Number(networkId)
+        BigInt(chainId),
+        BigInt(Number(networkId))
       );
 
-      setGeneratedSecretCode(secretCode);
+      setGeneratedSecretCode(secretCodeFromBackend);
       setShowSecretCodeDialog(true);
 
       toast({
@@ -558,8 +638,8 @@ export default function FaucetDetails() {
         faucetAddress,
         addresses,
         isWhitelistEnabled,
-        chainId,
-        Number(networkId)
+        BigInt(chainId),
+        BigInt(Number(networkId))
       );
 
       toast({
@@ -742,7 +822,7 @@ export default function FaucetDetails() {
                   </CardHeader>
                   <CardContent className="px-4 sm:px-6">
                     <Tabs defaultValue="fund">
-                      <TabsList className="grid grid-cols-3">
+                      <TabsList className="grid grid-cols-4">
                         <TabsTrigger value="fund" className="text-xs sm:text-sm">
                           <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Fund
@@ -754,6 +834,10 @@ export default function FaucetDetails() {
                         <TabsTrigger value="whitelist" className="text-xs sm:text-sm">
                           <Users className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Whitelist
+                        </TabsTrigger>
+                        <TabsTrigger value="reset" className="text-xs sm:text-sm">
+                          <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                          Reset
                         </TabsTrigger>
                       </TabsList>
 
@@ -835,13 +919,23 @@ export default function FaucetDetails() {
                             </div>
                           </div>
 
-                          <Button 
-                            onClick={handleUpdateClaimParameters} 
-                            className="text-xs sm:text-sm"
-                            disabled={!claimAmount || !startTime || !endTime}
-                          >
-                            Update Parameters & Generate Secret Code
-                          </Button>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <Button 
+                              onClick={handleUpdateClaimParameters} 
+                              className="text-xs sm:text-sm flex-1"
+                              disabled={!claimAmount || !startTime || !endTime}
+                            >
+                              Update Parameters & Generate Secret Code
+                            </Button>
+                            <Button
+                              onClick={handleRetrieveSecretCode}
+                              variant="outline"
+                              className="text-xs sm:text-sm"
+                            >
+                              <Key className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                              Get Current Code
+                            </Button>
+                          </div>
                         </div>
                       </TabsContent>
 
@@ -871,6 +965,41 @@ export default function FaucetDetails() {
                           </div>
 
                           <Button onClick={handleUpdateWhitelist} className="text-xs sm:text-sm">Update Whitelist</Button>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="reset" className="space-y-4 mt-4">
+                        <div className="space-y-4">
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="reset-mode"
+                              checked={isResetEnabled}
+                              onCheckedChange={setIsResetEnabled}
+                            />
+                            <Label htmlFor="reset-mode" className="text-xs sm:text-sm">
+                              {isResetEnabled ? "Enable claiming (reset to unclaimed)" : "Disable claiming (set as claimed)"}
+                            </Label>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="reset-addresses" className="text-xs sm:text-sm">Addresses to Reset (one per line or comma separated)</Label>
+                            <Textarea
+                              id="reset-addresses"
+                              placeholder="0x..."
+                              value={resetAddresses}
+                              onChange={(e) => setResetAddresses(e.target.value)}
+                              rows={5}
+                              className="text-xs sm:text-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Reset claim status for specific addresses. Enable = allow them to claim again, Disable = prevent them from claiming.
+                            </p>
+                          </div>
+
+                          <Button onClick={handleResetClaimed} className="text-xs sm:text-sm">
+                            <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                            Reset Claim Status
+                          </Button>
                         </div>
                       </TabsContent>
                     </Tabs>
@@ -951,6 +1080,52 @@ export default function FaucetDetails() {
               type="button"
               variant="outline"
               onClick={() => setShowSecretCodeDialog(false)}
+              className="text-xs sm:text-sm"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
+        <DialogContent className="w-11/12 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Current Secret Code</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              This is the current active secret code for this faucet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="current-secret-code" className="text-xs sm:text-sm">Secret Code</Label>
+              <Input
+                id="current-secret-code"
+                value={currentSecretCode}
+                readOnly
+                className="text-xs sm:text-sm font-mono"
+              />
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="default"
+              onClick={() => {
+                navigator.clipboard.writeText(currentSecretCode);
+                toast({
+                  title: "Copied to Clipboard",
+                  description: "The secret code has been copied to your clipboard",
+                });
+              }}
+              className="text-xs sm:text-sm"
+            >
+              Copy Code
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowCurrentSecretDialog(false)}
               className="text-xs sm:text-sm"
             >
               Close

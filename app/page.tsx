@@ -365,17 +365,7 @@ export default function Home() {
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
                 <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-                  <Link href="/batch-claim" className="flex-1 xs:flex-none">
-                    <Button 
-                      variant="outline" 
-                      className="w-full sm:w-auto flex items-center justify-center gap-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <Users className="h-4 w-4" />
-                      <span className="hidden xs:inline">Batch Claim</span>
-                      <span className="xs:hidden">Batch</span>
-                    </Button>
-                  </Link>
-                  
+                                
                   <Link href="/create" className="flex-1 xs:flex-none">
                     <Button className="w-full sm:w-auto flex items-center justify-center gap-2 text-sm bg-blue-600 hover:bg-blue-700 transition-colors">
                       <Plus className="h-4 w-4" />

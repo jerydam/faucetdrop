@@ -477,7 +477,7 @@ export default function FaucetDetails() {
       const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
       // Call backend endpoint to generate secret code
-      const response = await fetch("http://0.0.0.0:10000/set-claim-parameters", {
+      const response = await fetch("https://fauctdrop-backend-1.onrender.com/set-claim-parameters", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

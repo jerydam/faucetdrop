@@ -310,7 +310,7 @@ export function AnalyticsDashboard({ data: propData, loading: propLoading, error
                 title="Faucets Created"
                 value={data?.faucetsCreated.total}
                 change={data?.faucetsCreated.change}
-                icon={BarChart3}
+                icon={PieChart}
                 loading={loading}
               />
               <StatCard
@@ -331,7 +331,7 @@ export function AnalyticsDashboard({ data: propData, loading: propLoading, error
                 title="User Claims"
                 value={data?.userClaims.total}
                 change={data?.userClaims.change}
-                icon={PieChart}
+                icon={BarChart3}
                 loading={loading}
               />
             </>

@@ -1,20 +1,65 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
 import { useNetwork } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getFaucetsForNetwork } from "@/lib/faucet";
 import { formatUnits, Contract, ZeroAddress } from "ethers";
-import { Coins, Clock } from "lucide-react";
+import { Coins, Clock, Search, Filter, SortAsc, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ERC20_ABI } from "@/lib/abis";
 import { Header } from "@/components/header";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+
+// Types for better type safety
+interface FaucetData {
+  faucetAddress: string;
+  name?: string;
+  tokenSymbol?: string;
+  tokenDecimals?: number;
+  isEther: boolean;
+  balance?: bigint;
+  claimAmount?: bigint;
+  startTime?: string | number;
+  endTime?: string | number;
+  isClaimActive: boolean;
+  token?: string;
+  network?: {
+    chainId: number;
+    name: string;
+    color: string;
+  };
+  createdAt?: string | number; // For sorting by latest
+}
+
+// Filter and sort options
+const FILTER_OPTIONS = {
+  ALL: 'all',
+  ACTIVE: 'active',
+  INACTIVE: 'inactive',
+  NATIVE: 'native',
+  ERC20: 'erc20'
+} as const;
+
+const SORT_OPTIONS = {
+  DEFAULT: 'default', // Active first, then by latest
+  NAME_ASC: 'name_asc',
+  NAME_DESC: 'name_desc',
+  BALANCE_HIGH: 'balance_high',
+  BALANCE_LOW: 'balance_low',
+  AMOUNT_HIGH: 'amount_high',
+  AMOUNT_LOW: 'amount_low'
+} as const;
+
+type FilterOption = typeof FILTER_OPTIONS[keyof typeof FILTER_OPTIONS];
+type SortOption = typeof SORT_OPTIONS[keyof typeof SORT_OPTIONS];
 
 // Hook to track window size
 function useWindowSize() {
@@ -33,11 +78,11 @@ function useWindowSize() {
           width: window.innerWidth,
           height: window.innerHeight,
         });
-      }, 150); // Debounce resize events
+      }, 150);
     };
 
     window.addEventListener("resize", handleResize);
-    handleResize(); // Initial call
+    handleResize();
 
     return () => {
       window.removeEventListener("resize", handleResize);
@@ -119,7 +164,7 @@ function TokenBalance({
 }
 
 // FaucetCard component
-function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch: () => Promise<void> }) {
+function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetworkSwitch: () => Promise<void> }) {
   const { chainId } = useWallet();
   const isOnCorrectNetwork = chainId === faucet.network?.chainId;
   const [startCountdown, setStartCountdown] = useState<string>("");
@@ -199,7 +244,7 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
             tokenSymbol={faucet.tokenSymbol || (faucet.isEther ? "ETH" : "TOK")}
             tokenDecimals={faucet.tokenDecimals || 18}
             isNativeToken={faucet.isEther}
-            networkChainId={faucet.network?.chainId}
+            networkChainId={faucet.network?.chainId || 0}
           />
         ) : (
           <Card className="overflow-hidden">
@@ -272,17 +317,117 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: any; onNetworkSwitch:
   );
 }
 
+// Search and Filter Controls
+function SearchAndFilterControls({
+  searchTerm,
+  setSearchTerm,
+  filterBy,
+  setFilterBy,
+  sortBy,
+  setSortBy,
+  onClearFilters,
+  hasActiveFilters
+}: {
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  filterBy: FilterOption;
+  setFilterBy: (filter: FilterOption) => void;
+  sortBy: SortOption;
+  setSortBy: (sort: SortOption) => void;
+  onClearFilters: () => void;
+  hasActiveFilters: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6">
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search faucets by name, symbol, or address..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10 pr-4 h-9 sm:h-10 text-xs sm:text-sm"
+        />
+        {searchTerm && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSearchTerm("")}
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
+
+      {/* Filter and Sort Controls */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 flex-1">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={filterBy} onValueChange={(value: FilterOption) => setFilterBy(value)}>
+            <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
+              <SelectValue placeholder="Filter by..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTER_OPTIONS.ALL}>All Faucets</SelectItem>
+              <SelectItem value={FILTER_OPTIONS.ACTIVE}>Active Only</SelectItem>
+              <SelectItem value={FILTER_OPTIONS.INACTIVE}>Inactive Only</SelectItem>
+              <SelectItem value={FILTER_OPTIONS.NATIVE}>Native Tokens</SelectItem>
+              <SelectItem value={FILTER_OPTIONS.ERC20}>ERC20 Tokens</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-2 flex-1">
+          <SortAsc className="h-4 w-4 text-muted-foreground" />
+          <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
+            <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
+              <SelectValue placeholder="Sort by..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SORT_OPTIONS.DEFAULT}>Default (Active First)</SelectItem>
+              <SelectItem value={SORT_OPTIONS.NAME_ASC}>Name A-Z</SelectItem>
+              <SelectItem value={SORT_OPTIONS.NAME_DESC}>Name Z-A</SelectItem>
+              <SelectItem value={SORT_OPTIONS.BALANCE_HIGH}>Balance (High to Low)</SelectItem>
+              <SelectItem value={SORT_OPTIONS.BALANCE_LOW}>Balance (Low to High)</SelectItem>
+              <SelectItem value={SORT_OPTIONS.AMOUNT_HIGH}>Drop Amount (High to Low)</SelectItem>
+              <SelectItem value={SORT_OPTIONS.AMOUNT_LOW}>Drop Amount (Low to High)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {hasActiveFilters && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClearFilters}
+            className="h-8 sm:h-9 text-xs sm:text-sm px-3"
+          >
+            <X className="h-3 w-3 mr-1" />
+            Clear
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function NetworkFaucets() {
   const { chainId: chainIdStr } = useParams<{ chainId: string }>();
   const router = useRouter();
   const { provider, ensureCorrectNetwork } = useWallet();
   const { networks, setNetwork } = useNetwork();
   const { toast } = useToast();
-  const [faucets, setFaucets] = useState<any[]>([]);
+  const [faucets, setFaucets] = useState<FaucetData[]>([]);
   const [loadingFaucets, setLoadingFaucets] = useState(true);
   const [page, setPage] = useState(1);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
   const { width, height } = useWindowSize();
+
+  // Search and filter states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterBy, setFilterBy] = useState<FilterOption>(FILTER_OPTIONS.ALL);
+  const [sortBy, setSortBy] = useState<SortOption>(SORT_OPTIONS.DEFAULT);
 
   // Parse chainId with validation
   const chainId = chainIdStr ? parseInt(chainIdStr, 10) : NaN;
@@ -291,26 +436,25 @@ export default function NetworkFaucets() {
   // Calculate faucetsPerPage based on screen size and viewport height
   const calculateFaucetsPerPage = useCallback(() => {
     if (!height || !width) {
-      if (width < 640) return 5; // Mobile
-      if (width < 1024) return 8; // Tablet
-      return 10; // Desktop
+      if (width < 640) return 5;
+      if (width < 1024) return 8;
+      return 10;
     }
 
-    const headerHeight = width < 640 ? 60 : 120; // Mobile: toggle button only
-    const paginationHeight = width < 640 ? 50 : 60; // Pagination
-    const containerPadding = width < 640 ? 32 : 64; // py-4 (8px * 4) or py-8 (16px * 4)
-    const cardHeight = width < 640 ? 300 : width < 1024 ? 320 : 350; // FaucetCard height
-    const gridGap = width < 640 ? 12 : width < 1024 ? 16 : 24; // gap-3 (12px), gap-4 (16px), gap-6 (24px)
+    const headerHeight = width < 640 ? 60 : 120;
+    const searchFilterHeight = width < 640 ? 120 : 80; // Space for search/filter controls
+    const paginationHeight = width < 640 ? 50 : 60;
+    const containerPadding = width < 640 ? 32 : 64;
+    const cardHeight = width < 640 ? 300 : width < 1024 ? 320 : 350;
+    const gridGap = width < 640 ? 12 : width < 1024 ? 16 : 24;
 
-    const availableHeight = height - (headerHeight + paginationHeight + containerPadding);
+    const availableHeight = height - (headerHeight + searchFilterHeight + paginationHeight + containerPadding);
     const cardsPerColumn = Math.floor(availableHeight / (cardHeight + gridGap));
     const columns = width < 640 ? 1 : width < 1024 ? 2 : 3;
     let faucetsPerPage = cardsPerColumn * columns;
 
     faucetsPerPage = Math.max(3, Math.min(12, faucetsPerPage));
     if (faucetsPerPage <= 0) faucetsPerPage = 3;
-
-    console.log(`Calculated faucetsPerPage: ${faucetsPerPage} (width: ${width}, height: ${height}, cardsPerColumn: ${cardsPerColumn}, columns: ${columns})`);
 
     return faucetsPerPage;
   }, [width, height]);
@@ -322,9 +466,91 @@ export default function NetworkFaucets() {
     if (newFaucetsPerPage !== faucetsPerPage) {
       setFaucetsPerPage(newFaucetsPerPage);
       setPage(1);
-      console.log(`Updated faucetsPerPage to ${newFaucetsPerPage}`);
     }
   }, [calculateFaucetsPerPage, faucetsPerPage]);
+
+  // Filter and sort faucets
+  const filteredAndSortedFaucets = useMemo(() => {
+    let filtered = [...faucets];
+
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase().trim();
+      filtered = filtered.filter((faucet) => {
+        const name = (faucet.name || faucet.tokenSymbol || "").toLowerCase();
+        const symbol = (faucet.tokenSymbol || "").toLowerCase();
+        const address = faucet.faucetAddress.toLowerCase();
+        return name.includes(search) || symbol.includes(search) || address.includes(search);
+      });
+    }
+
+    // Apply type filter
+    if (filterBy !== FILTER_OPTIONS.ALL) {
+      filtered = filtered.filter((faucet) => {
+        switch (filterBy) {
+          case FILTER_OPTIONS.ACTIVE:
+            return faucet.isClaimActive;
+          case FILTER_OPTIONS.INACTIVE:
+            return !faucet.isClaimActive;
+          case FILTER_OPTIONS.NATIVE:
+            return faucet.isEther;
+          case FILTER_OPTIONS.ERC20:
+            return !faucet.isEther;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case SORT_OPTIONS.DEFAULT:
+          // Active first, then by latest (createdAt or startTime)
+          if (a.isClaimActive !== b.isClaimActive) {
+            return a.isClaimActive ? -1 : 1;
+          }
+          const aTime = Number(a.createdAt || a.startTime || 0);
+          const bTime = Number(b.createdAt || b.startTime || 0);
+          return bTime - aTime;
+
+        case SORT_OPTIONS.NAME_ASC:
+          const aName = (a.name || a.tokenSymbol || "").toLowerCase();
+          const bName = (b.name || b.tokenSymbol || "").toLowerCase();
+          return aName.localeCompare(bName);
+
+        case SORT_OPTIONS.NAME_DESC:
+          const aNameDesc = (a.name || a.tokenSymbol || "").toLowerCase();
+          const bNameDesc = (b.name || b.tokenSymbol || "").toLowerCase();
+          return bNameDesc.localeCompare(aNameDesc);
+
+        case SORT_OPTIONS.BALANCE_HIGH:
+          const aBalance = Number(formatUnits(a.balance || 0n, a.tokenDecimals || 18));
+          const bBalance = Number(formatUnits(b.balance || 0n, b.tokenDecimals || 18));
+          return bBalance - aBalance;
+
+        case SORT_OPTIONS.BALANCE_LOW:
+          const aBalanceLow = Number(formatUnits(a.balance || 0n, a.tokenDecimals || 18));
+          const bBalanceLow = Number(formatUnits(b.balance || 0n, b.tokenDecimals || 18));
+          return aBalanceLow - bBalanceLow;
+
+        case SORT_OPTIONS.AMOUNT_HIGH:
+          const aAmount = Number(formatUnits(a.claimAmount || 0n, a.tokenDecimals || 18));
+          const bAmount = Number(formatUnits(b.claimAmount || 0n, b.tokenDecimals || 18));
+          return bAmount - aAmount;
+
+        case SORT_OPTIONS.AMOUNT_LOW:
+          const aAmountLow = Number(formatUnits(a.claimAmount || 0n, a.tokenDecimals || 18));
+          const bAmountLow = Number(formatUnits(b.claimAmount || 0n, b.tokenDecimals || 18));
+          return aAmountLow - bAmountLow;
+
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  }, [faucets, searchTerm, filterBy, sortBy]);
 
   const loadFaucets = useCallback(async () => {
     if (!network || isNaN(chainId)) {
@@ -384,8 +610,22 @@ export default function NetworkFaucets() {
     }
   };
 
-  const totalPages = Math.ceil(faucets.length / faucetsPerPage);
-  const paginatedFaucets = faucets.slice((page - 1) * faucetsPerPage, page * faucetsPerPage);
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setFilterBy(FILTER_OPTIONS.ALL);
+    setSortBy(SORT_OPTIONS.DEFAULT);
+    setPage(1);
+  };
+
+  const hasActiveFilters = searchTerm.trim() !== "" || filterBy !== FILTER_OPTIONS.ALL || sortBy !== SORT_OPTIONS.DEFAULT;
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, filterBy, sortBy]);
+
+  const totalPages = Math.ceil(filteredAndSortedFaucets.length / faucetsPerPage);
+  const paginatedFaucets = filteredAndSortedFaucets.slice((page - 1) * faucetsPerPage, page * faucetsPerPage);
 
   const getPageButtons = () => {
     const buttons = [];
@@ -448,6 +688,18 @@ export default function NetworkFaucets() {
         loading={loadingFaucets}
       />
 
+      {/* Search and Filter Controls */}
+      <SearchAndFilterControls
+        searchTerm={searchTerm}
+        setSearchTerm={setSearchTerm}
+        filterBy={filterBy}
+        setFilterBy={setFilterBy}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasActiveFilters}
+      />
+
       {loadingFaucets ? (
         <div className="flex justify-center items-center py-8 sm:py-10 md:py-12">
           <div className="text-center">
@@ -455,37 +707,73 @@ export default function NetworkFaucets() {
             <p className="mt-3 sm:mt-4 text-xs sm:text-sm md:text-base">Loading faucets...</p>
           </div>
         </div>
-      ) : faucets.length === 0 ? (
+      ) : filteredAndSortedFaucets.length === 0 ? (
         <Card className="w-full max-w-[400px] mx-auto">
           <CardContent className="flex flex-col items-center justify-center py-6 sm:py-8 md:py-10">
             <Coins className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 text-muted-foreground mb-2 sm:mb-3 md:mb-4" />
-            <h3 className="text-base sm:text-lg md:text-xl font-medium mb-1 sm:mb-2">No Faucets Found</h3>
+            <h3 className="text-base sm:text-lg md:text-xl font-medium mb-1 sm:mb-2">
+              {faucets.length === 0 ? "No Faucets Found" : "No Matching Faucets"}
+            </h3>
             <p className="text-xs sm:text-sm md:text-base text-muted-foreground mb-3 sm:mb-4 md:mb-6 text-center">
-              No faucets are available on {network?.name || "this network"} yet.
+              {faucets.length === 0 
+                ? `No faucets are available on ${network?.name || "this network"} yet.`
+                : "Try adjusting your search or filter criteria."
+              }
             </p>
-            <Link href="/create">
-              <Button className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
-                Create Faucet
+            {faucets.length === 0 ? (
+              <Link href="/create">
+                <Button className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
+                  Create Faucet
+                </Button>
+              </Link>
+            ) : (
+              <Button 
+                onClick={handleClearFilters}
+                className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base"
+              >
+                Clear Filters
               </Button>
-            </Link>
+            )}
           </CardContent>
         </Card>
       ) : (
         <>
+          {/* Results Summary */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+            <span>
+              Showing {filteredAndSortedFaucets.length} of {faucets.length} faucets
+              {hasActiveFilters && " (filtered)"}
+            </span>
+            {hasActiveFilters && (
+              <div className="flex items-center gap-2">
+                <span className="text-primary font-medium">Filters applied</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearFilters}
+                  className="h-6 text-xs px-2"
+                >
+                  Clear all
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
             {paginatedFaucets.map((faucet) => (
               <FaucetCard
                 key={`${faucet.faucetAddress}-${network?.chainId || chainId}`}
                 faucet={faucet}
-                onNetworkSwitch={() => handleNetworkSwitch(faucet.network.chainId)}
+                onNetworkSwitch={() => handleNetworkSwitch(faucet.network?.chainId || 0)}
               />
             ))}
           </div>
+
           {totalPages > 1 && (
             <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4 mt-4 sm:mt-6">
               <div className="text-xs sm:text-sm md:text-base text-muted-foreground text-center sm:text-left">
                 Showing {(page - 1) * faucetsPerPage + 1} to{" "}
-                {Math.min(page * faucetsPerPage, faucets.length)} of {faucets.length} faucets
+                {Math.min(page * faucetsPerPage, filteredAndSortedFaucets.length)} of {filteredAndSortedFaucets.length} faucets
               </div>
               <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
                 <Button

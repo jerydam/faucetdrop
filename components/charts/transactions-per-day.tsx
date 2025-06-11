@@ -13,6 +13,13 @@ const NETWORKS = {
     rpcUrl: "https://forno.celo.org",
     color: "#35D07F",
   },
+   celos: {
+    chainId: 42220, // Celo Mainnet
+    contractAddress: "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700",
+    name: "Celo",
+    rpcUrl: "https://forno.celo.org",
+    color: "#35D07F",
+  },
   lisk: {
     chainId: 1135, // Lisk Mainnet
     contractAddress: "0x0995C06E2fb2d059F3534608176858406f6bE95F",
@@ -91,7 +98,7 @@ export function TransactionsPerDayChart() {
     <div className="space-y-6">
       <div className="text-center">
         <p className="text-4xl font-bold text-primary">{totalTransactions.toLocaleString()}</p>
-        <p className="text-sm text-muted-foreground">Total Check-ins Across All Networks</p>
+        <p className="text-sm text-muted-foreground">Total DropList Across All Networks</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

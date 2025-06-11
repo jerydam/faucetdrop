@@ -468,7 +468,7 @@ export default function Home() {
                   className="w-full sm:w-auto flex items-center justify-center gap-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <History className="h-4 w-4" />
-                  <span>{showClaimHistory ? 'Hide' : 'Show'} Claim History</span>
+                  <span>{showClaimHistory ? 'Hide' : 'Show'} Drop History</span>
                   {showClaimHistory ? (
                     <ChevronUp className="h-4 w-4" />
                   ) : (

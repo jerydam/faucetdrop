@@ -54,22 +54,23 @@ const STORAGE_KEYS = {
 // Cache duration (1 hour)
 const CACHE_DURATION = 60 * 60 * 1000
 
-// Helper functions for localStorage
-function getFromStorage(key: string): any {
+
+
+export function getFromStorage(key: string): any {
   try {
-    const item = localStorage.getItem(key)
-    return item ? JSON.parse(item) : null
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : null;
   } catch (error) {
-    console.warn(`Error reading from localStorage key ${key}:`, error)
-    return null
+    console.warn(`Error reading from localStorage key ${key}:`, error);
+    return null;
   }
 }
 
-function saveToStorage(key: string, data: any): void {
+export function saveToStorage(key: string, data: any): void {
   try {
-    localStorage.setItem(key, JSON.stringify(data))
+    localStorage.setItem(key, JSON.stringify(data));
   } catch (error) {
-    console.warn(`Error saving to localStorage key ${key}:`, error)
+    console.warn(`Error saving to localStorage key ${key}:`, error);
   }
 }
 
@@ -1326,32 +1327,49 @@ export async function resetClaimedStatus(
   }
 }
 
-// Retrieve secret code for a faucet from backend/Supabase
 export async function retrieveSecretCode(faucetAddress: string): Promise<string> {
+  if (!isAddress(faucetAddress)) {
+    throw new Error(`Invalid faucet address: ${faucetAddress}`);
+  }
+
   try {
-    console.log("Retrieving secret code for faucet:", faucetAddress)
-    
-    const response = await fetch("http://0.0.0.0:10000/get-secret-code", {
+    // Check localStorage first
+    const cachedCode = getFromStorage(`secretCode_${faucetAddress}`);
+    if (cachedCode && /^[A-Z0-9]{6}$/.test(cachedCode)) {
+      console.log(`Retrieved secret code for ${faucetAddress} from localStorage`);
+      return cachedCode;
+    }
+
+    // Fallback to backend if not found in localStorage
+    const response = await fetch("https://fauctdrop-backend-1.onrender.com/retrieve-secret-code", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        faucetAddress,
+        faucetAddress: getAddress(faucetAddress), // Normalize address
       }),
-    })
+    });
 
     if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.detail || "Failed to retrieve secret code")
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to retrieve secret code");
     }
 
-    const result = await response.json()
-    console.log("Secret code retrieved successfully")
-    
-    return result.secretCode
+    const result = await response.json();
+    const secretCode = result.secretCode;
+
+    if (!secretCode || !/^[A-Z0-9]{6}$/.test(secretCode)) {
+      throw new Error("Invalid secret code format received from backend");
+    }
+
+    // Store the retrieved secret code in localStorage for future use
+    saveToStorage(`secretCode_${faucetAddress}`, secretCode);
+
+    console.log(`Retrieved and stored secret code for ${faucetAddress} from backend`);
+    return secretCode;
   } catch (error: any) {
-    console.error("Error retrieving secret code:", error)
-    throw new Error(error.message || "Failed to retrieve secret code")
+    console.error("Error retrieving secret code:", error);
+    throw new Error(error.message || "Failed to retrieve secret code");
   }
 }

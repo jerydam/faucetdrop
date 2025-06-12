@@ -21,6 +21,8 @@ import {
   setClaimParameters,
   resetClaimedStatus,
   retrieveSecretCode,
+  saveToStorage,
+  getFromStorage,
 } from "@/lib/faucet";
 import { formatUnits, parseUnits, BrowserProvider } from "ethers";
 import { Clock, Coins, Download, Share2, Upload, Users, Key, RotateCcw } from "lucide-react";
@@ -134,27 +136,44 @@ export default function FaucetDetails() {
   };
 
   const handleRetrieveSecretCode = async () => {
-    if (!faucetAddress) {
-      toast({
-        title: "Error",
-        description: "No faucet address available",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!faucetAddress) {
+    toast({
+      title: "Error",
+      description: "No faucet address available",
+      variant: "destructive",
+    });
+    return;
+  }
 
-    try {
-      const code = await retrieveSecretCode(faucetAddress);
-      setCurrentSecretCode(code);
-      setShowCurrentSecretDialog(true);
-    } catch (error: any) {
-      toast({
-        title: "Failed to retrieve secret code",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
-    }
-  };
+  // Optional: Verify the user is the faucet owner
+  if (!isOwner) {
+    toast({
+      title: "Unauthorized",
+      description: "Only the faucet owner can retrieve the secret code",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  try {
+    const code = await retrieveSecretCode(faucetAddress);
+    setCurrentSecretCode(code);
+    setShowCurrentSecretDialog(true);
+
+    // Check if code was from cache or backend
+    const wasCached = getFromStorage(`secretCode_${faucetAddress}`) === code;
+    toast({
+      title: "Secret Code Retrieved",
+      description: wasCached ? "Code retrieve Successfully, Don't forget it again" : "",
+    });
+  } catch (error: any) {
+    toast({
+      title: "Failed to retrieve secret code",
+      description: error.message || "Unknown error occurred",
+      variant: "destructive",
+    });
+  }
+};
 
   const handleResetClaimed = async () => {
     if (!isConnected || !provider || !resetAddresses.trim() || !chainId) {
@@ -531,88 +550,90 @@ export default function FaucetDetails() {
   };
 
   const handleUpdateClaimParameters = async () => {
-    if (!isConnected || !provider || !chainId) {
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet and ensure a network is selected",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!isConnected || !provider || !chainId) {
+    toast({
+      title: "Wallet not connected",
+      description: "Please connect your wallet and ensure a network is selected",
+      variant: "destructive",
+    });
+    return;
+  }
 
-    if (!claimAmount || !startTime || !endTime) {
-      toast({
-        title: "Invalid Input",
-        description: "Please fill in all claim parameters",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!claimAmount || !startTime || !endTime) {
+    toast({
+      title: "Invalid Input",
+      description: "Please fill in all claim parameters",
+      variant: "destructive",
+    });
+    return;
+  }
 
-    if (!checkNetwork()) return;
+  if (!checkNetwork()) return;
 
-    try {
-      const claimAmountBN = parseUnits(claimAmount, tokenDecimals);
-      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
-      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
+  try {
+    const claimAmountBN = parseUnits(claimAmount, tokenDecimals);
+    const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
+    const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
-      // Call backend endpoint to generate secret code
-      const response = await fetch("https://fauctdrop-backend-1.onrender.com/set-claim-parameters", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          faucetAddress,
-          claimAmount: claimAmountBN.toString(),
-          startTime: startTimestamp,
-          endTime: endTimestamp,
-          chainId: Number(chainId),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to set claim parameters");
-      }
-
-      const result = await response.json();
-      const secretCodeFromBackend = result.secretCode;
-
-      // Update smart contract with claim parameters (without secret code)
-      await setClaimParameters(
-        provider as BrowserProvider,
+    // Call backend endpoint to generate secret code
+    const response = await fetch("https://fauctdrop-backend-1.onrender.com/set-claim-parameters", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
         faucetAddress,
-        claimAmountBN,
-        startTimestamp,
-        endTimestamp,
-        BigInt(chainId),
-        BigInt(Number(networkId))
-      );
+        claimAmount: claimAmountBN.toString(),
+        startTime: startTimestamp,
+        endTime: endTimestamp,
+        chainId: Number(chainId),
+      }),
+    });
 
-      setGeneratedSecretCode(secretCodeFromBackend);
-      setShowSecretCodeDialog(true);
-
-      toast({
-        title: "Claim parameters updated",
-        description: `Parameters updated successfully. Secret code generated.`,
-      });
-
-      await loadFaucetDetails();
-    } catch (error: any) {
-      console.error("Error updating claim parameters:", error);
-      if (error.message === "Switch to the network to perform operation") {
-        checkNetwork();
-      } else {
-        toast({
-          title: "Failed to update claim parameters",
-          description: error.message || "Unknown error occurred",
-          variant: "destructive",
-        });
-      }
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to set claim parameters");
     }
-  };
 
+    const result = await response.json();
+    const secretCodeFromBackend = result.secretCode;
+
+    // Store the secret code in localStorage
+    saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend);
+
+    // Update smart contract with claim parameters (without secret code)
+    await setClaimParameters(
+      provider as BrowserProvider,
+      faucetAddress,
+      claimAmountBN,
+      startTimestamp,
+      endTimestamp,
+      BigInt(chainId),
+      BigInt(Number(networkId))
+    );
+
+    setGeneratedSecretCode(secretCodeFromBackend);
+    setShowSecretCodeDialog(true);
+
+    toast({
+      title: "Claim parameters updated",
+      description: `Parameters updated successfully. Secret code generated and stored.`,
+    });
+
+    await loadFaucetDetails();
+  } catch (error: any) {
+    console.error("Error updating claim parameters:", error);
+    if (error.message === "Switch to the network to perform operation") {
+      checkNetwork();
+    } else {
+      toast({
+        title: "Failed to update claim parameters",
+        description: error.message || "Unknown error occurred",
+        variant: "destructive",
+      });
+    }
+  }
+};
   const handleUpdateWhitelist = async () => {
     if (!isConnected || !provider || !whitelistAddresses.trim() || !chainId) {
       toast({
@@ -1047,7 +1068,7 @@ export default function FaucetDetails() {
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">Secret Code Generated</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              A new secret code has been generated for this faucet. Share this code with users to allow them to claim tokens.
+              A new secret code has been generated for this faucet. Share this code with users to allow them to claim tokens. Do well to keep it secure!
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col space-y-4 py-4">

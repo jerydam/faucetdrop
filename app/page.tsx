@@ -53,21 +53,21 @@ export default function Home() {
 
   // Define the array of allowed wallet addresses (case-insensitive)
   const allowedAddresses = [
-    // "0x961B6b05ad723a7039De5e32586CF19b706870E5",
-    // "0x08f4f4b874f6b55d768258c026d1f75a2c6e10a0",
-    // "0xB3121eBb78F3CF34b03dfc285C0e2d9343dCF965",
-    // "0xf07ea30f4821c60ffa4ce3d2d816b339207e7475",
-    // "0xa4D30Cfd6b2Fec50D94AAe9F2311c961CC217d29",
-    // "0xD03Cec8c65a5D9875740552b915F007D76e75497",
-    // "0x81193c6ba3E69c4c47FFE2e4b3304985D1914d93",
-    // "0xE7eDF84cEdE0a3B20E02A3b540312716EBe1A744",
-    // "0x317419Db8EB30cEC60Ebf847581be2F02A688c53",
-    // "0x739CC47B744c93c827B72bCCc07Fcb91628FFca2",
-    // "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178",
-    // "0x2A1ABea47881a380396Aa0D150DC6d01F4C8F9cb",
-    // "0xF46F1B3Bea9cdd4102105EE9bAefc83db333354B",
-    // "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
-    // "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
+    "0x961B6b05ad723a7039De5e32586CF19b706870E5",
+    "0x08f4f4b874f6b55d768258c026d1f75a2c6e10a0",
+    "0xB3121eBb78F3CF34b03dfc285C0e2d9343dCF965",
+    "0xf07ea30f4821c60ffa4ce3d2d816b339207e7475",
+    "0xa4D30Cfd6b2Fec50D94AAe9F2311c961CC217d29",
+    "0xD03Cec8c65a5D9875740552b915F007D76e75497",
+    "0x81193c6ba3E69c4c47FFE2e4b3304985D1914d93",
+    "0xE7eDF84cEdE0a3B20E02A3b540312716EBe1A744",
+    "0x317419Db8EB30cEC60Ebf847581be2F02A688c53",
+    "0x739CC47B744c93c827B72bCCc07Fcb91628FFca2",
+    "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178",
+    "0x2A1ABea47881a380396Aa0D150DC6d01F4C8F9cb",
+    "0xF46F1B3Bea9cdd4102105EE9bAefc83db333354B",
+    "0xd59B83De618561c8FF4E98fC29a1b96ABcBFB18a",
+    "0x49B4593d5fbAA8262d22ECDD43826B55F85E0837",
     "0x3207D4728c32391405C7122E59CCb115A4af31eA",
   ].map((addr) => addr.toLowerCase())
 
@@ -222,7 +222,7 @@ export default function Home() {
     setCheckInStatus("")
 
     try {
-      console.log("Starting check-in process...")
+      console.log("Starting transactions process...")
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
       console.log("Signer:", signer)
@@ -292,7 +292,7 @@ export default function Home() {
           setIsDivviSubmitted(true)
         } catch (divviError) {
           const { message } = getErrorInfo(divviError)
-          console.error("Divvi reporting failed, but check-in completed:", message)
+          console.error("Divvi reporting failed, but transactions completed:", message)
           setCheckInStatus(
             `Checked in on ${NETWORKS[currentNetwork].name} at ${timestamp} with balance ${Number.parseFloat(balanceEther).toFixed(4)} ${currentNetwork === "celo" ? "CELO" : "LSK"}, but failed to report to Divvi. Please contact support.`,
           )
@@ -305,15 +305,15 @@ export default function Home() {
       setTimeout(() => setIsDivviSubmitted(false), 1000)
     } catch (error) {
       const { code, message } = getErrorInfo(error)
-      console.error("Check-in failed:", { code, message, fullError: error })
+      console.error("transactions failed:", { code, message, fullError: error })
 
-      let statusMessage = "Check-in failed: Please try again."
+      let statusMessage = "transactions failed: Please try again."
       if (code === "INSUFFICIENT_FUNDS") {
-        statusMessage = "Check-in failed: Insufficient funds in your wallet."
+        statusMessage = "transactions failed: Insufficient funds in your wallet."
       } else if (code === 4001) {
-        statusMessage = "Check-in failed: Transaction rejected by user."
+        statusMessage = "transactions failed: Transaction rejected by user."
       } else if (message) {
-        statusMessage = `Check-in failed: ${message}`
+        statusMessage = `transactions failed: ${message}`
       }
 
       setCheckInStatus(statusMessage)

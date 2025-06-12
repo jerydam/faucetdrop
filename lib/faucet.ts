@@ -26,7 +26,7 @@ const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x0307daA1F0d3Ac9e1b7870
 // Storage contract address
 const STORAGE_CONTRACT_ADDRESS = "0x3fC5162779F545Bb4ea7980471b823577825dc8A"
 
-// Check-in contract address
+// transactions contract address
 
 const CHECKIN_CONTRACT_ADDRESS = "0x71C00c430ab70a622dc0b2888C4239cab9F244b0"
 
@@ -94,7 +94,7 @@ export function checkNetwork(chainId: bigint, networkId: bigint): boolean {
   return chainId === networkId
 }
 
-// Fetch check-in data from Celo with incremental loading
+// Fetch transactions data from Celo with incremental loading
 export async function fetchCheckInData(): Promise<{
   transactionsByDate: { [date: string]: number }
   usersByDate: { [date: string]: Set<string> }
@@ -121,7 +121,7 @@ export async function fetchCheckInData(): Promise<{
         usersByDate[date] = new Set(users as string[])
       })
       allUsers = new Set(cachedData.allUsers || [])
-      console.log("Loaded cached check-in data")
+      console.log("Loaded cached transactions data")
     }
 
     // Get current block number
@@ -138,7 +138,7 @@ export async function fetchCheckInData(): Promise<{
         const filter = contract.filters.CheckedIn()
         const events = await contract.queryFilter(filter, fromBlock, currentBlock)
 
-        console.log(`Found ${events.length} new check-in events`)
+        console.log(`Found ${events.length} new transactions events`)
 
         // Process new events
         for (const event of events) {
@@ -176,16 +176,16 @@ export async function fetchCheckInData(): Promise<{
         saveToStorage(STORAGE_KEYS.CHECKIN_LAST_BLOCK, currentBlock)
         updateCacheTimestamp()
 
-        console.log("Updated check-in cache")
+        console.log("Updated transactions cache")
       } catch (queryError) {
-        console.error("Error querying check-in events:", queryError)
+        console.error("Error querying transactions events:", queryError)
         // If query fails, use cached data
       }
     }
 
     return { transactionsByDate, usersByDate, allUsers }
   } catch (error) {
-    console.error("Error fetching check-in data:", error)
+    console.error("Error fetching transactions data:", error)
 
     // Return cached data if available
     const cachedData = getFromStorage(STORAGE_KEYS.CHECKIN_DATA)

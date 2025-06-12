@@ -8,14 +8,10 @@ import { Loader2, Activity } from "lucide-react"
 const NETWORKS = {
   celo: {
     chainId: 42220, // Celo Mainnet
-    contractAddress: "0x71C00c430ab70a622dc0b2888C4239cab9F244b0",
-    name: "Celo",
-    rpcUrl: "https://forno.celo.org",
-    color: "#35D07F",
-  },
-   celos: {
-    chainId: 42220, // Celo Mainnet
-    contractAddress: "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700",
+    contractAddresses: [
+      "0x71C00c430ab70a622dc0b2888C4239cab9F244b0",
+      "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700"
+    ],
     name: "Celo",
     rpcUrl: "https://forno.celo.org",
     color: "#35D07F",
@@ -26,6 +22,20 @@ const NETWORKS = {
     name: "Lisk",
     rpcUrl: "https://rpc.api.lisk.com",
     color: "#0D4477",
+  },
+  base: {
+    chainId: 8453, // Base Mainnet
+    contractAddress: "0x0000000000000000000000000000000000000000", // Placeholder
+    name: "Base",
+    rpcUrl: "https://mainnet.base.org",
+    color: "#0052FF",
+  },
+  arbitrum: {
+    chainId: 42161, // Arbitrum One Mainnet
+    contractAddress: "0x661e54AD241549c3a5a246e5E74910aAFDF6Db72", // Placeholder
+    name: "Arbitrum",
+    rpcUrl: "https://arb1.arbitrum.io/rpc",
+    color: "#28A0F0",
   },
 }
 
@@ -49,11 +59,38 @@ export function TransactionsPerDayChart() {
 
         for (const [key, network] of Object.entries(NETWORKS)) {
           try {
+            let checkInCount = 0
             const provider = new JsonRpcProvider(network.rpcUrl)
-            const contract = new Contract(network.contractAddress, CHECKIN_ABI, provider)
 
-            const totalCheckIns = await contract.totalCheckIns()
-            const checkInCount = Number(totalCheckIns)
+            if (key === "arbitrum" && 'contractAddress' in network) {
+              // Arbitrum: Fetch total transactions (placeholder logic)
+              const contract = new Contract(network.contractAddress, CHECKIN_ABI, provider)
+              // Note: This is a placeholder. Replace with actual transaction counting logic
+              // For example, query events or use an external API like Arbiscan
+              try {
+                // Hypothetical contract method for total transactions
+                const txCount = await contract.getTransactionCount?.() ?? 0
+                checkInCount = Number(txCount)
+              } catch (error) {
+                console.warn(`Arbitrum transaction count not available via contract, attempting event logs:`, error)
+                // Fallback: Count transactions via event logs (example)
+                const filter = contract.filters.CheckIn?.() // Adjust to your contract's event
+                const events = filter ? await contract.queryFilter(filter) : []
+                checkInCount = events.length
+              }
+            } else if ('contractAddresses' in network) {
+              // Handle networks with multiple contract addresses (e.g., Celo)
+              for (const address of network.contractAddresses) {
+                const contract = new Contract(address, CHECKIN_ABI, provider)
+                const totalCheckIns = await contract.totalCheckIns()
+                checkInCount += Number(totalCheckIns)
+              }
+            } else if ('contractAddress' in network) {
+              // Handle networks with a single contract address
+              const contract = new Contract(network.contractAddress, CHECKIN_ABI, provider)
+              const totalCheckIns = await contract.totalCheckIns()
+              checkInCount = Number(totalCheckIns)
+            }
 
             stats.push({
               name: network.name,
@@ -63,7 +100,7 @@ export function TransactionsPerDayChart() {
 
             grandTotal += checkInCount
 
-            console.log(`${network.name} total check-ins:`, checkInCount)
+            console.log(`${network.name} total transactions:`, checkInCount)
           } catch (error) {
             console.error(`Error fetching data for ${network.name}:`, error)
             stats.push({
@@ -77,7 +114,7 @@ export function TransactionsPerDayChart() {
         setNetworkStats(stats)
         setTotalTransactions(grandTotal)
       } catch (error) {
-        console.error("Error fetching total check-ins:", error)
+        console.error("Error fetching total transactions:", error)
       } finally {
         setLoading(false)
       }
@@ -115,7 +152,9 @@ export function TransactionsPerDayChart() {
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold">{network.totalCheckIns.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">check-ins</p>
+                <p className="text-xs text-muted-foreground">
+                  {network.name === "Arbitrum" ? "transactions" : "transactions"}
+                </p>
               </div>
             </div>
 
@@ -140,7 +179,7 @@ export function TransactionsPerDayChart() {
       {totalTransactions === 0 && (
         <div className="text-center py-8">
           <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-          <p className="text-muted-foreground">No check-ins recorded yet</p>
+          <p className="text-muted-foreground">No transactions or transactions recorded yet</p>
         </div>
       )}
     </div>

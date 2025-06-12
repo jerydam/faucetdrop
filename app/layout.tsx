@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <title>FaucetDrops</title>
-      <link rel="icon" href="/favicon.jpeg" /> 
+      <link rel="icon" href="/favicon.png" /> 
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <NetworkProvider>

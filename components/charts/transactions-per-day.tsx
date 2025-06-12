@@ -32,7 +32,7 @@ const NETWORKS = {
   },
   arbitrum: {
     chainId: 42161, // Arbitrum One Mainnet
-    contractAddress: "0x661e54AD241549c3a5a246e5E74910aAFDF6Db72", // Placeholder
+    contractAddress: "0x661e54AD241549c3a5a246e5E74910aAFDF6Db72", // Faucet contract
     name: "Arbitrum",
     rpcUrl: "https://arb1.arbitrum.io/rpc",
     color: "#28A0F0",
@@ -63,20 +63,16 @@ export function TransactionsPerDayChart() {
             const provider = new JsonRpcProvider(network.rpcUrl)
 
             if (key === "arbitrum" && 'contractAddress' in network) {
-              // Arbitrum: Fetch total transactions (placeholder logic)
+              // Arbitrum: Fetch total transactions via all events
               const contract = new Contract(network.contractAddress, CHECKIN_ABI, provider)
-              // Note: This is a placeholder. Replace with actual transaction counting logic
-              // For example, query events or use an external API like Arbiscan
               try {
-                // Hypothetical contract method for total transactions
-                const txCount = await contract.getTransactionCount?.() ?? 0
-                checkInCount = Number(txCount)
-              } catch (error) {
-                console.warn(`Arbitrum transaction count not available via contract, attempting event logs:`, error)
-                // Fallback: Count transactions via event logs (example)
-                const filter = contract.filters.CheckIn?.() // Adjust to your contract's event
-                const events = filter ? await contract.queryFilter(filter) : []
+                // Query all events emitted by the contract
+                const events = await contract.queryFilter('*', 0, 'latest')
                 checkInCount = events.length
+                console.log(`Arbitrum events fetched:`, events.length)
+              } catch (error) {
+                console.error(`Error fetching Arbitrum events:`, error)
+                checkInCount = 0
               }
             } else if ('contractAddresses' in network) {
               // Handle networks with multiple contract addresses (e.g., Celo)
@@ -100,7 +96,7 @@ export function TransactionsPerDayChart() {
 
             grandTotal += checkInCount
 
-            console.log(`${network.name} total transactions:`, checkInCount)
+            console.log(`${network.name} total ${network.name === "Arbitrum" ? "transactions" : "check-ins"}:`, checkInCount)
           } catch (error) {
             console.error(`Error fetching data for ${network.name}:`, error)
             stats.push({
@@ -114,7 +110,7 @@ export function TransactionsPerDayChart() {
         setNetworkStats(stats)
         setTotalTransactions(grandTotal)
       } catch (error) {
-        console.error("Error fetching total transactions:", error)
+        console.error("Error fetching total check-ins:", error)
       } finally {
         setLoading(false)
       }
@@ -153,7 +149,7 @@ export function TransactionsPerDayChart() {
               <div className="text-right">
                 <p className="text-2xl font-bold">{network.totalCheckIns.toLocaleString()}</p>
                 <p className="text-xs text-muted-foreground">
-                  {network.name === "Arbitrum" ? "transactions" : "transactions"}
+                  {network.name === "Arbitrum" ? "transactions" : "check-ins"}
                 </p>
               </div>
             </div>
@@ -179,7 +175,7 @@ export function TransactionsPerDayChart() {
       {totalTransactions === 0 && (
         <div className="text-center py-8">
           <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-          <p className="text-muted-foreground">No transactions or transactions recorded yet</p>
+          <p className="text-muted-foreground">No check-ins or transactions recorded yet</p>
         </div>
       )}
     </div>

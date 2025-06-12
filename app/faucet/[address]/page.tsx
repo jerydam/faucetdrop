@@ -149,7 +149,7 @@ export default function FaucetDetails() {
   if (!isOwner) {
     toast({
       title: "Unauthorized",
-      description: "Only the faucet owner can retrieve the secret code",
+      description: "Only the faucet owner can retrieve the Drop code",
       variant: "destructive",
     });
     return;
@@ -163,12 +163,12 @@ export default function FaucetDetails() {
     // Check if code was from cache or backend
     const wasCached = getFromStorage(`secretCode_${faucetAddress}`) === code;
     toast({
-      title: "Secret Code Retrieved",
+      title: "Drop code Retrieved",
       description: wasCached ? "Code retrieve Successfully, Don't forget it again" : "",
     });
   } catch (error: any) {
     toast({
-      title: "Failed to retrieve secret code",
+      title: "Failed to retrieve Drop code",
       description: error.message || "Unknown error occurred",
       variant: "destructive",
     });
@@ -383,8 +383,8 @@ export default function FaucetDetails() {
   
     if (!isSecretCodeValid) {
       toast({
-        title: "Invalid Secret Code",
-        description: "Please enter a valid 6-character alphanumeric secret code",
+        title: "Invalid Drop code",
+        description: "Please enter a valid 6-character alphanumeric Drop code",
         variant: "destructive",
       });
       return;
@@ -399,7 +399,7 @@ export default function FaucetDetails() {
       }
       await window.ethereum.request({ method: 'eth_requestAccounts' });
   
-      console.log("Sending claim request with secret code:", secretCode); // Debug log
+      console.log("Sending claim request with Drop code:", secretCode); // Debug log
   
       const result = await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode);
       const formattedTxHash = result.txHash.startsWith('0x') ? result.txHash : `0x${result.txHash}` as `0x${string}`;
@@ -432,8 +432,8 @@ export default function FaucetDetails() {
     } catch (error: any) {
       console.error("Error claiming tokens:", error);
       let errorMessage = error.message || "Unknown error occurred";
-      if (errorMessage.includes("Unauthorized: Invalid secret code")) {
-        errorMessage = "Invalid secret code. Please check and try again.";
+      if (errorMessage.includes("Unauthorized: Invalid Drop code")) {
+        errorMessage = "Invalid Drop code. Please check and try again.";
       }
       toast({
         title: "Failed to claim tokens",
@@ -575,7 +575,7 @@ export default function FaucetDetails() {
     const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
     const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
-    // Call backend endpoint to generate secret code
+    // Call backend endpoint to generate Drop code
     const response = await fetch("https://fauctdrop-backend-1.onrender.com/set-claim-parameters", {
       method: "POST",
       headers: {
@@ -598,10 +598,10 @@ export default function FaucetDetails() {
     const result = await response.json();
     const secretCodeFromBackend = result.secretCode;
 
-    // Store the secret code in localStorage
+    // Store the Drop code in localStorage
     saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend);
 
-    // Update smart contract with claim parameters (without secret code)
+    // Update smart contract with claim parameters (without Drop code)
     await setClaimParameters(
       provider as BrowserProvider,
       faucetAddress,
@@ -617,7 +617,7 @@ export default function FaucetDetails() {
 
     toast({
       title: "Claim parameters updated",
-      description: `Parameters updated successfully. Secret code generated and stored.`,
+      description: `Parameters updated successfully. Drop code generated and stored.`,
     });
 
     await loadFaucetDetails();
@@ -802,7 +802,7 @@ export default function FaucetDetails() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="secret-code" className="text-xs sm:text-sm">Secret Code</Label>
+                    <Label htmlFor="secret-code" className="text-xs sm:text-sm">Drop code</Label>
                     <Input
                       id="secret-code"
                       placeholder="Enter 6-character code (e.g., ABC123)"
@@ -946,7 +946,7 @@ export default function FaucetDetails() {
                               className="text-xs sm:text-sm flex-1"
                               disabled={!claimAmount || !startTime || !endTime}
                             >
-                              Update Parameters & Generate Secret Code
+                              Update Parameters & Generate Drop code
                             </Button>
                             <Button
                               onClick={handleRetrieveSecretCode}
@@ -1066,14 +1066,14 @@ export default function FaucetDetails() {
       <Dialog open={showSecretCodeDialog} onOpenChange={setShowSecretCodeDialog}>
         <DialogContent className="w-11/12 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Secret Code Generated</DialogTitle>
+            <DialogTitle className="text-lg sm:text-xl">Drop code Generated</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              A new secret code has been generated for this faucet. Share this code with users to allow them to claim tokens. Do well to keep it secure!
+              A new Drop code has been generated for this faucet. Share this code with users to allow them to claim tokens. Do well to keep it secure!
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="generated-secret-code" className="text-xs sm:text-sm">Secret Code</Label>
+              <Label htmlFor="generated-secret-code" className="text-xs sm:text-sm">Drop code</Label>
               <Input
                 id="generated-secret-code"
                 value={generatedSecretCode}
@@ -1090,7 +1090,7 @@ export default function FaucetDetails() {
                 navigator.clipboard.writeText(generatedSecretCode);
                 toast({
                   title: "Copied to Clipboard",
-                  description: "The secret code has been copied to your clipboard",
+                  description: "The Drop code has been copied to your clipboard",
                 });
               }}
               className="text-xs sm:text-sm"
@@ -1112,14 +1112,14 @@ export default function FaucetDetails() {
       <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
         <DialogContent className="w-11/12 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Current Secret Code</DialogTitle>
+            <DialogTitle className="text-lg sm:text-xl">Current Drop code</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              This is the current active secret code for this faucet.
+              This is the current active Drop code for this faucet.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="current-secret-code" className="text-xs sm:text-sm">Secret Code</Label>
+              <Label htmlFor="current-secret-code" className="text-xs sm:text-sm">Drop code</Label>
               <Input
                 id="current-secret-code"
                 value={currentSecretCode}
@@ -1136,7 +1136,7 @@ export default function FaucetDetails() {
                 navigator.clipboard.writeText(currentSecretCode);
                 toast({
                   title: "Copied to Clipboard",
-                  description: "The secret code has been copied to your clipboard",
+                  description: "The Drop code has been copied to your clipboard",
                 });
               }}
               className="text-xs sm:text-sm"

@@ -1336,7 +1336,7 @@ export async function retrieveSecretCode(faucetAddress: string): Promise<string>
     // Check localStorage first
     const cachedCode = getFromStorage(`secretCode_${faucetAddress}`);
     if (cachedCode && /^[A-Z0-9]{6}$/.test(cachedCode)) {
-      console.log(`Retrieved secret code for ${faucetAddress} from localStorage`);
+      console.log(`Retrieved Drop code for ${faucetAddress} from localStorage`);
       return cachedCode;
     }
 
@@ -1353,23 +1353,23 @@ export async function retrieveSecretCode(faucetAddress: string): Promise<string>
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.detail || "Failed to retrieve secret code");
+      throw new Error(errorData.detail || "Failed to retrieve Drop code");
     }
 
     const result = await response.json();
     const secretCode = result.secretCode;
 
     if (!secretCode || !/^[A-Z0-9]{6}$/.test(secretCode)) {
-      throw new Error("Invalid secret code format received from backend");
+      throw new Error("Invalid Drop code format received from backend");
     }
 
-    // Store the retrieved secret code in localStorage for future use
+    // Store the retrieved Drop code in localStorage for future use
     saveToStorage(`secretCode_${faucetAddress}`, secretCode);
 
-    console.log(`Retrieved and stored secret code for ${faucetAddress} from backend`);
+    console.log(`Retrieved and stored Drop code for ${faucetAddress} from backend`);
     return secretCode;
   } catch (error: any) {
-    console.error("Error retrieving secret code:", error);
-    throw new Error(error.message || "Failed to retrieve secret code");
+    console.error("Error retrieving Drop code:", error);
+    throw new Error(error.message || "Failed to retrieve Drop code");
   }
 }

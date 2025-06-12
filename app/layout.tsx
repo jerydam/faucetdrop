@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "FaucetDrops",
-  description: "Token dropping make easy",
+  description: "Token Drops Made Easy ✅",
     
 }
 

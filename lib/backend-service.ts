@@ -266,7 +266,7 @@ export async function claimViaBackend(
 
     // Validate secretCode
     if (!secretCode || !/^[A-Z0-9]{6}$/.test(secretCode)) {
-      const errorMessage = `Invalid secret code: ${secretCode || 'empty'}. Must be a 6-character alphanumeric code.`;
+      const errorMessage = `Invalid Drop code: ${secretCode || 'empty'}. Must be a 6-character alphanumeric code.`;
       errorLog(errorMessage);
       throw new Error(errorMessage);
     }

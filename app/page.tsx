@@ -441,7 +441,7 @@ export default function Home() {
            <AnalyticsDashboard />
             </div>
             
-            {/* Claim History Toggle Button and Section */}
+            {/* dropHistory Toggle Button and Section */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
               <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700">
                 <Button

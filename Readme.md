@@ -15,7 +15,7 @@ Whether you're doing airdrops, rewards, giveaways, or onboarding events, this fa
 Sending tokens to a long list of members is tiring — and expensive if done manually. Our faucet system solves this by letting you:
 
 * ✅ **Distribute tokens or ETH in one click**
-* ✅ **Set who can claim and when**
+* ✅ **Set who can dropand when**
 * ✅ **Track who claimed across multiple blockchains**
 * ✅ **Avoid sending the same user rewards twice**
 * ✅ **Let multiple communities manage their own faucets**
@@ -51,8 +51,8 @@ Keeps a record of all claims, across different networks. So if a user claims onc
 | --------------------------- | -------------------------------------------- |
 | **Create Faucet**           | Set up a new distribution for your token/ETH |
 | **Fund Faucet**             | Load it with tokens or ETH                   |
-| **Add to Whitelist**        | Choose who can claim                         |
-| **Set Claim Time**          | Decide when claiming opens and closes        |
+| **Add to Whitelist**        | Choose who can drop                        |
+| **Set dropTime**          | Decide when claiming opens and closes        |
 | **Track Claims**            | See who claimed, when, and how much          |
 | **Withdraw Leftover Funds** | Get back unclaimed tokens or ETH             |
 
@@ -63,7 +63,7 @@ Keeps a record of all claims, across different networks. So if a user claims onc
 * **Onboarding Campaigns**: Reward new wallet sign-ups
 * **Hackathons & Bounties**: Pay participants automatically
 * **Loyalty Rewards**: Send monthly tokens to active members
-* **Testnet Incentives**: Let testers claim tokens
+* **Testnet Incentives**: Let testers droptokens
 * **Airdrops**: Distribute tokens without manual transfers
 
 ---
@@ -74,9 +74,9 @@ If your team needs more control, here are some developer features:
 
 * Built with a **Factory + Instance pattern**
 * Supports **ETH and any ERC20 token**
-* **Claim period windows** (start and end times)
+* **dropperiod windows** (start and end times)
 * **Batch whitelist updates** to save gas
-* **Cross-chain claim tracking**
+* **Cross-chain droptracking**
 * Built-in **backend service fee support**
 * **Secure & audited structure** to prevent misuse
 
@@ -85,8 +85,8 @@ If your team needs more control, here are some developer features:
 ## 🔒 Built-in Protections
 
 * Only you (the faucet creator) can manage funds
-* Users can’t claim twice from different chains
-* Token claim period is strictly enforced
+* Users can’t droptwice from different chains
+* Token dropperiod is strictly enforced
 * Reentrancy and balance protection is included
 
 ---
@@ -101,7 +101,7 @@ We’re adding a powerful analytics feature that will let community admins:
 * See a chart of **how many users claimed** and when
 * Track **total tokens distributed per faucet**
 * Monitor **engagement across chains**
-* Download **claim reports** for transparency
+* Download **dropreports** for transparency
 
 These insights will help you make better decisions and run more effective community campaigns.
 

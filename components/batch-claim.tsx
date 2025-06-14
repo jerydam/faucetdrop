@@ -9,21 +9,22 @@ import { Textarea } from "@/components/ui/textarea"
 import { claimViaBackend } from "@/lib/backend-service"
 import { Users } from "lucide-react"
 // Add the useNetwork import
-import { useNetwork } from "@/hooks/use-network"
+import { NetworkProvider, useNetwork } from "@/hooks/use-network"
 
 interface BatchclaimProps {
   faucetAddress: string
 }
 
-// Update the Batchclaim component to include network checking
+// Update the Batchdropcomponent to include network checking
 export function Batchclaim({ faucetAddress }: BatchclaimProps) {
   const { toast } = useToast()
   const { address, ensureCorrectNetwork } = useWallet()
   const { network } = useNetwork()
   const [addresses, setAddresses] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
-
-  const handleBatchclaim = async () => {
+  const [secretCode, setSecretCode] = useState("")
+  const Provider = NetworkProvider // Ensure Provider is correctly imported or defined
+  const handleBatchclaim= async () => {
     if (!address) {
       toast({
         title: "Wallet not connected",
@@ -61,23 +62,23 @@ export function Batchclaim({ faucetAddress }: BatchclaimProps) {
       // Process each address sequentially
       for (const userAddress of addressList) {
         try {
-          await claimViaBackend(userAddress, faucetAddress)
+          await claimViaBackend(userAddress, faucetAddress, Provider,secretCode)
           successCount++
         } catch (error) {
-          console.error(`Error claiming for ${userAddress}:`, error)
+          console.error(`Error  droping for ${userAddress}:`, error)
           failCount++
         }
       }
 
       toast({
-        title: "Batch claim processed",
-        description: `Successfully claimed for ${successCount} addresses. Failed: ${failCount}`,
+        title: "Batch drop processed",
+        description: `Successfully  droped for ${successCount} addresses. Failed: ${failCount}`,
         variant: successCount > 0 ? "default" : "destructive",
       })
     } catch (error) {
-      console.error("Error in batch claim:", error)
+      console.error("Error in batch  drop:", error)
       toast({
-        title: "Batch claim failed",
+        title: "Batch drop failed",
         description: error instanceof Error ? error.message : "Unknown error occurred",
         variant: "destructive",
       })
@@ -89,8 +90,8 @@ export function Batchclaim({ faucetAddress }: BatchclaimProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Batch claim</CardTitle>
-        <CardDescription>claim tokens for multiple addresses at once</CardDescription>
+        <CardTitle>Batch drop</CardTitle>
+        <CardDescription>drop tokens for multiple addresses at once</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -103,7 +104,7 @@ export function Batchclaim({ faucetAddress }: BatchclaimProps) {
               disabled={isProcessing}
             />
             <p className="text-sm text-muted-foreground">
-              Enter Ethereum addresses to claim tokens for. The backend will process these claims.
+              Enter Ethereum addresses to drop tokens for. The backend will process these  drops.
             </p>
           </div>
         </div>
@@ -115,7 +116,7 @@ export function Batchclaim({ faucetAddress }: BatchclaimProps) {
           ) : (
             <>
               <Users className="mr-2 h-4 w-4" />
-              Process Batch claim
+              Process Batch  drop
             </>
           )}
         </Button>

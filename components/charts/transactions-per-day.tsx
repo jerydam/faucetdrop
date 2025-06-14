@@ -131,7 +131,7 @@ export function TransactionsPerDayChart() {
     <div className="space-y-6">
       <div className="text-center">
         <p className="text-4xl font-bold text-primary">{totalTransactions.toLocaleString()}</p>
-        <p className="text-sm text-muted-foreground">Total DropList Across All Networks</p>
+        <p className="text-sm text-muted-foreground">Total transactions across all Networks</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -149,7 +149,7 @@ export function TransactionsPerDayChart() {
               <div className="text-right">
                 <p className="text-2xl font-bold">{network.totalCheckIns.toLocaleString()}</p>
                 <p className="text-xs text-muted-foreground">
-                  {network.name === "Arbitrum" ? "transactions" : "check-ins"}
+                  {network.name === "Arbitrum" ? "transactions" : "transactions"}
                 </p>
               </div>
             </div>
@@ -175,7 +175,7 @@ export function TransactionsPerDayChart() {
       {totalTransactions === 0 && (
         <div className="text-center py-8">
           <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-          <p className="text-muted-foreground">No check-ins or transactions recorded yet</p>
+          <p className="text-muted-foreground">No transactions recorded yet</p>
         </div>
       )}
     </div>

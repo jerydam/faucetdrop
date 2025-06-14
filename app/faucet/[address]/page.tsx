@@ -205,20 +205,20 @@ export default function FaucetDetails() {
       );
 
       toast({
-        title: "Claim status reset",
+        title: "drop status reset",
         description: `${addresses.length} addresses have been ${
-          isResetEnabled ? "enabled to claim again" : "disabled from claiming"
+          isResetEnabled ? "enabled to drop again" : "disabled from dropping"
         }`,
       });
 
       setResetAddresses("");
     } catch (error: any) {
-      console.error("Error resetting claim status:", error);
+      console.error("Error resetting drop status:", error);
       if (error.message === "Switch to the network to perform operation") {
         checkNetwork();
       } else {
         toast({
-          title: "Failed to reset claim status",
+          title: "Failed to reset drop status",
           description: error.message || "Unknown error occurred",
           variant: "destructive",
         });
@@ -366,7 +366,7 @@ export default function FaucetDetails() {
     if (!isConnected || !address || !provider) {
       toast({
         title: "Wallet not connected",
-        description: "Please connect your wallet to claim tokens",
+        description: "Please connect your wallet to drop tokens",
         variant: "destructive",
       });
       return;
@@ -399,7 +399,7 @@ export default function FaucetDetails() {
       }
       await window.ethereum.request({ method: 'eth_requestAccounts' });
   
-      console.log("Sending claim request with Drop code:", secretCode); // Debug log
+      console.log("Sending drop request with Drop code:", secretCode); // Debug log
   
       const result = await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode);
       const formattedTxHash = result.txHash.startsWith('0x') ? result.txHash : `0x${result.txHash}` as `0x${string}`;
@@ -420,23 +420,23 @@ export default function FaucetDetails() {
       );
   
       toast({
-        title: "Tokens claimed successfully",
-        description: `You have claimed ${
+        title: "Tokens droped successfully",
+        description: `You have droped ${
           faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""
-        } ${tokenSymbol} and recorded the claim on-chain on ${networkName}`,
+        } ${tokenSymbol} and recorded the drop on-chain on ${networkName}`,
       });
   
       setShowClaimPopup(true);
       setSecretCode("");
       await loadFaucetDetails();
     } catch (error: any) {
-      console.error("Error claiming tokens:", error);
+      console.error("Error dropping tokens:", error);
       let errorMessage = error.message || "Unknown error occurred";
       if (errorMessage.includes("Unauthorized: Invalid Drop code")) {
         errorMessage = "Invalid Drop code. Please check and try again.";
       }
       toast({
-        title: "Failed to claim tokens",
+        title: "Failed to drop tokens",
         description: errorMessage,
         variant: "destructive",
       });
@@ -562,7 +562,7 @@ export default function FaucetDetails() {
   if (!claimAmount || !startTime || !endTime) {
     toast({
       title: "Invalid Input",
-      description: "Please fill in all claim parameters",
+      description: "Please fill in all drop parameters",
       variant: "destructive",
     });
     return;
@@ -592,7 +592,7 @@ export default function FaucetDetails() {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.detail || "Failed to set claim parameters");
+      throw new Error(errorData.detail || "Failed to set drop parameters");
     }
 
     const result = await response.json();
@@ -601,7 +601,7 @@ export default function FaucetDetails() {
     // Store the Drop code in localStorage
     saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend);
 
-    // Update smart contract with claim parameters (without Drop code)
+    // Update smart contract with drop parameters (without Drop code)
     await setClaimParameters(
       provider as BrowserProvider,
       faucetAddress,
@@ -616,18 +616,18 @@ export default function FaucetDetails() {
     setShowSecretCodeDialog(true);
 
     toast({
-      title: "Claim parameters updated",
+      title: "drop parameters updated",
       description: `Parameters updated successfully. Drop code generated and stored.`,
     });
 
     await loadFaucetDetails();
   } catch (error: any) {
-    console.error("Error updating claim parameters:", error);
+    console.error("Error updating drop parameters:", error);
     if (error.message === "Switch to the network to perform operation") {
       checkNetwork();
     } else {
       toast({
-        title: "Failed to update claim parameters",
+        title: "Failed to update drop parameters",
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       });
@@ -773,7 +773,7 @@ export default function FaucetDetails() {
                       </span>
                     </div>
                     <div className="flex flex-col p-3 sm:p-4 border rounded-lg">
-                      <span className="text-xs sm:text-sm text-muted-foreground">Claim Amount</span>
+                      <span className="text-xs sm:text-sm text-muted-foreground">drop Amount</span>
                       <span className="text-lg sm:text-2xl font-bold truncate">
                         {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}
                       </span>
@@ -781,7 +781,7 @@ export default function FaucetDetails() {
                     <div className="flex flex-col p-3 sm:p-4 border rounded-lg">
                       <span className="text-xs sm:text-sm text-muted-foreground">Status</span>
                       <span className="text-base sm:text-lg font-medium">
-                        {hasClaimed ? "Already Claimed" : "Available to Claim"}
+                        {hasClaimed ? "Already droped" : "available to drop"}
                       </span>
                     </div>
                   </div>
@@ -811,7 +811,7 @@ export default function FaucetDetails() {
                       className="text-xs sm:text-sm"
                       maxLength={6}
                     />
-                    <p className="text-xs text-muted-foreground">Enter the 6-character alphanumeric code to claim tokens</p>
+                    <p className="text-xs text-muted-foreground">Enter the 6-character alphanumeric code to drop tokens</p>
                   </div>
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2 px-4 sm:px-6">
@@ -820,7 +820,7 @@ export default function FaucetDetails() {
                     onClick={handleFollow}
                     disabled={hasFollowed}
                   >
-                    {hasFollowed ? "Followed on 𝕏" : "Follow on 𝕏 to Claim"}
+                    {hasFollowed ? "Followed on 𝕏" : "Follow on 𝕏 to drop"}
                   </Button>
                   <Button
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm"
@@ -828,7 +828,7 @@ export default function FaucetDetails() {
                     onClick={handleBackendClaim}
                     disabled={isClaiming || !address || !faucetDetails.isClaimActive || hasClaimed || !isSecretCodeValid}
                   >
-                    {isClaiming ? "Claiming..." : hasClaimed ? "Already Claimed" : `Claim ${
+                    {isClaiming ? "Claiming..." : hasClaimed ? "Already droped" : `drop ${
                             faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""
                           } ${tokenSymbol}`}
                   </Button>
@@ -905,7 +905,7 @@ export default function FaucetDetails() {
                       <TabsContent value="parameters" className="space-y-4 mt-4">
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="claim-amount" className="text-xs sm:text-sm">Claim Amount</Label>
+                            <Label htmlFor="claim-amount" className="text-xs sm:text-sm">drop Amount</Label>
                             <Input
                               id="claim-amount"
                               placeholder="0.0"
@@ -913,7 +913,7 @@ export default function FaucetDetails() {
                               onChange={(e) => setClaimAmount(e.target.value)}
                               className="text-xs sm:text-sm"
                             />
-                            <p className="text-xs text-muted-foreground">Amount of {tokenSymbol} users can claim</p>
+                            <p className="text-xs text-muted-foreground">Amount of {tokenSymbol} users can drop</p>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -998,7 +998,7 @@ export default function FaucetDetails() {
                               onCheckedChange={setIsResetEnabled}
                             />
                             <Label htmlFor="reset-mode" className="text-xs sm:text-sm">
-                              {isResetEnabled ? "Enable claiming (reset to unclaimed)" : "Disable claiming (set as claimed)"}
+                              {isResetEnabled ? "Enable dropping (reset to unclaimed)" : "Disable dropping (set as droped)"}
                             </Label>
                           </div>
 
@@ -1013,13 +1013,13 @@ export default function FaucetDetails() {
                               className="text-xs sm:text-sm"
                             />
                             <p className="text-xs text-muted-foreground">
-                              Reset claim status for specific addresses. Enable = allow them to claim again, Disable = prevent them from claiming.
+                              Reset drop status for specific addresses. Enable = allow them to drop again, Disable = prevent them from dropping.
                             </p>
                           </div>
 
                           <Button onClick={handleResetClaimed} className="text-xs sm:text-sm">
                             <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                            Reset Claim Status
+                            Reset drop Status
                           </Button>
                         </div>
                       </TabsContent>
@@ -1045,14 +1045,14 @@ export default function FaucetDetails() {
       <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
         <DialogContent className="w-11/12 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Claim Successful!</DialogTitle>
+            <DialogTitle className="text-lg sm:text-xl">drop Successful!</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              You have successfully claimed{" "}
+              You have successfully droped{" "}
               {faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col space-y-4 py-4">
-            <p className="text-xs sm:text-sm">Share your claim on X to help spread the word about FaucetDrops!</p>
+            <p className="text-xs sm:text-sm">Share your drop on X to help spread the word about FaucetDrops!</p>
           </div>
           <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
             <Button type="button" variant="default" onClick={handleShareOnX} className="flex items-center gap-2 text-xs sm:text-sm">
@@ -1068,7 +1068,7 @@ export default function FaucetDetails() {
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">Drop code Generated</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              A new Drop code has been generated for this faucet. Share this code with users to allow them to claim tokens. Do well to keep it secure!
+              A new Drop code has been generated for this faucet. Share this code with users to allow them to drop tokens. Do well to keep it secure!
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col space-y-4 py-4">

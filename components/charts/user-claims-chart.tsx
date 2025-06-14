@@ -67,7 +67,7 @@ export function UserClaimsChart() {
       console.log("Claims chart data:", chartData)
       setData(chartData)
     } catch (error) {
-      console.error("Error fetching claim data:", error)
+      console.error("Error fetching dropdata:", error)
     } finally {
       setLoading(false)
     }

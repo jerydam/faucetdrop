@@ -393,10 +393,10 @@ export function AnalyticsDashboard({ data: propData, loading: propLoading, error
             <Card>
               <CardHeader className="px-4 md:px-6">
                 <CardTitle className="text-lg md:text-xl">
-                  Total transactions Transactions
+                  Total transactions
                 </CardTitle>
                 <CardDescription className="text-sm">
-                  Total number of transactions transactions across Celo and Lisk networks
+                  Total number of transactions across all networks
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-4 md:px-6">

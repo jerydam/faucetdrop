@@ -20,15 +20,31 @@ export interface Network {
   }
 }
 
+
+
 interface NetworkContextType {
   network: Network | null
   networks: Network[]
   setNetwork: (network: Network) => void
   switchNetwork: (chainId: number) => Promise<void>
-  ensureCorrectNetwork: (chainId: number) => Promise<boolean>
 }
 
+// Define networks for all major EVM chains
 const networks: Network[] = [
+  // {
+  //   name: "Ethereum Mainnet",
+  //   chainId: 1,
+  //   rpcUrl: "https://eth-mainnet.g.alchemy.com/v2/your-api-key",
+  //   blockExplorer: "https://etherscan.io",
+  //   color: "#627EEA",
+  //   factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+  //   tokenAddress: ZeroAddress, // FTM (native)
+  //    nativeCurrency: {
+  //     name: "Ethereum",
+  //     symbol: "ETH",
+  //     decimals: 18,
+  //   },
+  // },
   {
     name: "Celo",
     chainId: 42220,
@@ -74,12 +90,140 @@ const networks: Network[] = [
       decimals: 18,
     },
   },
+//   {
+//     name: "Optimism",
+//     chainId: 10,
+//     rpcUrl: "https://opt-mainnet.g.alchemy.com/v2/your-api-key",
+//     blockExplorer: "https://optimistic.etherscan.io",
+//     color: "#FF0420",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+//     tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+//   {
+//     name: "Polygon",
+//     chainId: 137,
+//     rpcUrl: "https://polygon-mainnet.g.alchemy.com/v2/your-api-key",
+//     blockExplorer: "https://polygonscan.com",
+//     color: "#8247E5",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+//     tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+//   {
+//     name: "Swell Network",
+//     chainId: 11155111,
+//     rpcUrl: "https://swell-sepolia-rpc.gateway.pokt.network",
+//     blockExplorer: "https://sepolia.etherscan.io",
+//     color: "#FFB800",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+//     tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+//   {
+//     name: "Kaia",
+//     chainId: 11155112,
+//     rpcUrl: "https://kaia-sepolia-rpc.gateway.pokt.network",
+//     blockExplorer: "https://sepolia.etherscan.io",
+//     color: "#FFB800",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+//  tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+//   {
+//     name: "RootStock",
+//     chainId: 80001,
+//     rpcUrl: "https://polygon-mumbai.g.alchemy.com/v2/your-api-key",
+//     blockExplorer: "https://mumbai.polygonscan.com",
+//     color: "#8247E5",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+//  tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+//   {
+//     name: "Avalanche",
+//     chainId: 43114,
+//     rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+//     blockExplorer: "https://snowtrace.io",
+//     color: "#E84142",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+//  tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+//    {
+//     name: "BNB Smart Chain",
+//     chainId: 56,
+//     rpcUrl: "https://bsc-dataseed.binance.org",
+//     blockExplorer: "https://bscscan.com",
+//     color: "#F0B90B",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+//  tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+  
+//   {
+//     name: "Fantom",
+//     chainId: 250,
+//     rpcUrl: "https://rpc.ftm.tools",
+//     blockExplorer: "https://ftmscan.com",
+//     color: "#1969FF",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
+//  tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+//   {
+//     name: "CrossFi",
+//     chainId: 4002,
+//     rpcUrl: "https://rpc.testnet.fantom.network",
+//     blockExplorer: "https://testnet.ftmscan.com",
+//     color: "#1969FF",
+//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual addres
+//     tokenAddress: ZeroAddress, // FTM (native)
+//      nativeCurrency: {
+//       name: "Ethereum",
+//       symbol: "ETH",
+//       decimals: 18,
+//     },
+//   },
+
   {
     chainId:8453,
     name: "Base Mainnet",
     rpcUrl: "https://mainnet.base.org",
     blockExplorer: "https://basescan.org",
-    factoryAddress: "0xYourFactoryAddressForBase", // Replace with actual address
+    factoryAddress: "0xYourFactoryAddressForBase", // Replace with actual addres
     color: "#0052FF",
     tokenAddress: ZeroAddress, // ETH (native)
     nativeCurrency: {
@@ -97,7 +241,6 @@ const NetworkContext = createContext<NetworkContextType>({
   networks: networks,
   setNetwork: () => {},
   switchNetwork: async () => {},
-  ensureCorrectNetwork: async () => false,
 })
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
@@ -267,7 +410,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         networks,
         setNetwork: handleSetNetwork,
         switchNetwork,
-        ensureCorrectNetwork,
       }}
     >
       {children}

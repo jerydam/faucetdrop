@@ -262,7 +262,7 @@ export async function claimViaBackend(
       throw new Error(`Unsupported chainId: ${chainId}. Please switch to Lisk, Celo, or Arbitrum.`);
     }
 
-    debugLog(`Starting claim process for chainId: ${chainId}`);
+    debugLog(`Starting dropprocess for chainId: ${chainId}`);
 
     // Validate secretCode
     if (!secretCode || !/^[A-Z0-9]{6}$/.test(secretCode)) {
@@ -305,7 +305,7 @@ export async function claimViaBackend(
       requestLog.divviDebugInfo = divviResult.debugInfo;
     }
 
-    debugLog('Sending claim request', requestLog);
+    debugLog('Sending droprequest', requestLog);
 
     const response = await fetch(`${API_URL}/claim`, {
       method: "POST",
@@ -339,7 +339,7 @@ export async function claimViaBackend(
     }
 
     const result = await response.json();
-    successLog('Claim request successful', { 
+    successLog('droprequest successful', { 
       success: result.success, 
       txHash: result.txHash 
     });

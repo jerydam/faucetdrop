@@ -445,7 +445,7 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
     try {
       claimAmount = await contract.claimAmount()
     } catch (error) {
-      console.warn(`Error getting claim amount:`, error)
+      console.warn(`Error getting dropamount:`, error)
     }
     try {
       startTime = await contract.startTime()
@@ -460,7 +460,7 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
     try {
       isClaimActive = await contract.isClaimActive()
     } catch (error) {
-      console.warn(`Error getting claim active status:`, error)
+      console.warn(`Error getting dropactive status:`, error)
     }
     try {
       const balanceResult = await contract.getFaucetBalance()
@@ -516,7 +516,7 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
         const userAddress = await signer.getAddress()
         hasClaimed = await contract.hasClaimed(userAddress)
       } catch (error) {
-        console.warn(`Error checking claim status:`, error)
+        console.warn(`Error checking dropstatus:`, error)
       }
     }
 
@@ -557,7 +557,7 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
   }
 }
 
-// Store claim in storage contract
+// Store dropin storage contract
 export async function storeClaim(
   provider: BrowserProvider,
   claimer: string,
@@ -606,7 +606,7 @@ export async function storeClaim(
     const maxFeePerGas = feeData.maxFeePerGas || undefined
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
 
-    console.log("Store claim params:", {
+    console.log("Store dropparams:", {
       claimer,
       faucetAddress,
       amount: amount.toString(),
@@ -628,12 +628,12 @@ export async function storeClaim(
       maxPriorityFeePerGas,
     })
 
-    console.log("Store claim transaction hash:", tx.hash)
+    console.log("Store droptransaction hash:", tx.hash)
     const receipt = await tx.wait()
     if (!receipt) {
-      throw new Error("Store claim transaction receipt is null")
+      throw new Error("Store droptransaction receipt is null")
     }
-    console.log("Store claim transaction confirmed:", receipt.hash)
+    console.log("Store droptransaction confirmed:", receipt.hash)
     await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
 
     return tx.hash
@@ -971,7 +971,7 @@ export async function fundFaucet(
   }
 }
 
-// Set claim parameters
+// Set dropparameters
 export async function setClaimParameters(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1007,7 +1007,7 @@ export async function setClaimParameters(
     const maxFeePerGas = feeData.maxFeePerGas || undefined
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
 
-    console.log("Set claim parameters params:", {
+    console.log("Set dropparameters params:", {
       faucetAddress,
       claimAmount: claimAmount.toString(),
       startTime,
@@ -1028,25 +1028,25 @@ export async function setClaimParameters(
       maxPriorityFeePerGas,
     })
 
-    console.log("Set claim parameters transaction hash:", tx.hash)
+    console.log("Set dropparameters transaction hash:", tx.hash)
     const receipt = await tx.wait()
     if (!receipt) {
-      throw new Error("Set claim parameters transaction receipt is null")
+      throw new Error("Set dropparameters transaction receipt is null")
     }
-    console.log("Set claim parameters transaction confirmed:", receipt.hash)
+    console.log("Set dropparameters transaction confirmed:", receipt.hash)
     await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
 
     return tx.hash
   } catch (error: any) {
-    console.error("Error setting claim parameters:", error)
+    console.error("Error setting dropparameters:", error)
     if (error.message?.includes("network changed")) {
       throw new Error("Network changed during transaction. Please try again with a stable network connection.")
     }
-    throw new Error(error.reason || error.message || "Failed to set claim parameters")
+    throw new Error(error.reason || error.message || "Failed to set dropparameters")
   }
 }
 
-// Update claim parameters on-chain
+// Update dropparameters on-chain
 export async function updateClaimParametersOnChain(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1082,7 +1082,7 @@ export async function updateClaimParametersOnChain(
     const maxFeePerGas = feeData.maxFeePerGas || undefined
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
 
-    console.log("Update claim parameters params:", {
+    console.log("Update dropparameters params:", {
       faucetAddress,
       claimAmount: claimAmount.toString(),
       startTime,
@@ -1103,21 +1103,21 @@ export async function updateClaimParametersOnChain(
       maxPriorityFeePerGas,
     })
 
-    console.log("Update claim parameters transaction hash:", tx.hash)
+    console.log("Update dropparameters transaction hash:", tx.hash)
     const receipt = await tx.wait()
     if (!receipt) {
-      throw new Error("Update claim parameters transaction receipt is null")
+      throw new Error("Update dropparameters transaction receipt is null")
     }
-    console.log("Update claim parameters transaction confirmed:", receipt.hash)
+    console.log("Update dropparameters transaction confirmed:", receipt.hash)
     await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
 
     return tx.hash
   } catch (error: any) {
-    console.error("Error updating claim parameters on-chain:", error)
+    console.error("Error updating dropparameters on-chain:", error)
     if (error.message?.includes("network changed")) {
       throw new Error("Network changed during transaction. Please try again with a stable network connection.")
     }
-    throw new Error(error.reason || error.message || "Failed to update claim parameters")
+    throw new Error(error.reason || error.message || "Failed to update dropparameters")
   }
 }
 

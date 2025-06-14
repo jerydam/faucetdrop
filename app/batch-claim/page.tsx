@@ -15,14 +15,17 @@ import { ArrowLeft, Users } from "lucide-react"
 import Link from "next/link"
 // Add the useNetwork import
 import { useNetwork } from "@/hooks/use-network"
+import { Provider } from "@radix-ui/react-toast"
+
 
 export default function BatchClaimPage() {
   const { toast } = useToast()
   const router = useRouter()
   const { address, isConnected } = useWallet()
-  const { network, ensureCorrectNetwork } = useNetwork()
+  const { network } = useNetwork()
 
   const [faucetAddress, setFaucetAddress] = useState("")
+  const [secretCode, setSecretCode] = useState("")
   const [addresses, setAddresses] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -31,7 +34,7 @@ export default function BatchClaimPage() {
     if (!isConnected) {
       toast({
         title: "Wallet not connected",
-        description: "Please connect your wallet to process batch claims",
+        description: "Please connect your wallet to process batch drops",
         variant: "destructive",
       })
       return
@@ -39,7 +42,7 @@ export default function BatchClaimPage() {
 
     // Ensure we're on the correct network
     if (network) {
-      const isCorrectNetwork = await ensureCorrectNetwork(network.chainId)
+      const isCorrectNetwork = await network.chainId
       if (!isCorrectNetwork) return
     }
 
@@ -74,17 +77,16 @@ export default function BatchClaimPage() {
       // Process each address sequentially
       for (const userAddress of addressList) {
         try {
-          await claimViaBackend(userAddress, faucetAddress)
-          successCount++
+          await claimViaBackend(userAddress, faucetAddress, Provider, secretCode)
         } catch (error) {
-          console.error(`Error claiming for ${userAddress}:`, error)
+          console.error(`Error droping for ${userAddress}:`, error)
           failCount++
         }
       }
 
       toast({
         title: "Batch drop processed",
-        description: `Successfully claimed for ${successCount} addresses. Failed: ${failCount}`,
+        description: `Successfully droped for ${successCount} addresses. Failed: ${failCount}`,
         variant: successCount > 0 ? "default" : "destructive",
       })
 

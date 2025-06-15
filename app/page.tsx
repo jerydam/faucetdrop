@@ -49,7 +49,6 @@ export default function Home() {
   const [isAllowedAddress, setIsAllowedAddress] = useState(false)
   const [isDivviSubmitted, setIsDivviSubmitted] = useState(false)
   const [currentNetwork, setCurrentNetwork] = useState<"celo" | "lisk" | null>(null)
-  const [showClaimHistory, setShowClaimHistory] = useState(false)
 
   // Define the array of allowed wallet addresses (case-insensitive)
   const allowedAddresses = [
@@ -71,7 +70,7 @@ export default function Home() {
     "0x3207D4728c32391405C7122E59CCb115A4af31eA",
   ].map((addr) => addr.toLowerCase())
 
-  const contractABI = [ 
+  const contractABI = [
     {
       anonymous: false,
       inputs: [
@@ -155,6 +154,14 @@ export default function Home() {
     }
   }, [])
 
+  // Auto-trigger check-in when wallet is connected, address is allowed, and Divvi submission is successful
+  useEffect(() => {
+    if (isWalletConnected && isAllowedAddress && isDivviSubmitted && !isCheckingIn && currentNetwork) {
+      console.log("Conditions met, triggering auto check-in after Divvi submission...")
+      handleCheckIn()
+    }
+  }, [isWalletConnected, isAllowedAddress, isDivviSubmitted, currentNetwork])
+
   const connectWallet = async () => {
     if (!window.ethereum) {
       setCheckInStatus("Please install MetaMask or a compatible Web3 wallet.")
@@ -222,7 +229,7 @@ export default function Home() {
     setCheckInStatus("")
 
     try {
-      console.log("Starting transactions process...")
+      console.log("Starting check-in process...")
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
       console.log("Signer:", signer)
@@ -292,7 +299,7 @@ export default function Home() {
           setIsDivviSubmitted(true)
         } catch (divviError) {
           const { message } = getErrorInfo(divviError)
-          console.error("Divvi reporting failed, but transactions completed:", message)
+          console.error("Divvi reporting failed, but check-in completed:", message)
           setCheckInStatus(
             `Checked in on ${NETWORKS[currentNetwork].name} at ${timestamp} with balance ${Number.parseFloat(balanceEther).toFixed(4)} ${currentNetwork === "celo" ? "CELO" : "LSK"}, but failed to report to Divvi. Please contact support.`,
           )
@@ -305,15 +312,15 @@ export default function Home() {
       setTimeout(() => setIsDivviSubmitted(false), 1000)
     } catch (error) {
       const { code, message } = getErrorInfo(error)
-      console.error("transactions failed:", { code, message, fullError: error })
+      console.error("Check-in failed:", { code, message, fullError: error })
 
-      let statusMessage = "transactions failed: Please try again."
+      let statusMessage = "Check-in failed: Please try again."
       if (code === "INSUFFICIENT_FUNDS") {
-        statusMessage = "transactions failed: Insufficient funds in your wallet."
+        statusMessage = "Check-in failed: Insufficient funds in your wallet."
       } else if (code === 4001) {
-        statusMessage = "transactions failed: Transaction rejected by user."
+        statusMessage = "Check-in failed: Transaction rejected by user."
       } else if (message) {
-        statusMessage = `transactions failed: ${message}`
+        statusMessage = `Check-in failed: ${message}`
       }
 
       setCheckInStatus(statusMessage)
@@ -326,7 +333,7 @@ export default function Home() {
     } finally {
       setIsCheckingIn(false)
     }
-  }
+     }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">

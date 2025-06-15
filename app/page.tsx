@@ -5,13 +5,12 @@ import { NetworkSelector } from "@/components/network-selector"
 import { WalletConnect } from "@/components/wallet-connect"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
 import { Button } from "@/components/ui/button"
-import { Plus, Users, History, ChevronDown, ChevronUp } from "lucide-react"
+import { Plus, Users } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { ethers, Contract } from "ethers"
 import { useState, useEffect } from "react"
 import { appendDivviReferralData, reportTransactionToDivvi } from "../lib/divvi-integration"
-import { NetworkGrid } from "@/components/network"
 
 // Helper function to safely extract error information
 const getErrorInfo = (error: unknown): { code?: string | number; message: string } => {
@@ -333,7 +332,7 @@ export default function Home() {
     } finally {
       setIsCheckingIn(false)
     }
-     }
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
@@ -364,7 +363,17 @@ export default function Home() {
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full lg:w-auto">
                 <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-                                
+                  <Link href="/batch-claim" className="flex-1 xs:flex-none">
+                    <Button 
+                      variant="outline" 
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <Users className="h-4 w-4" />
+                      <span className="hidden xs:inline">Batch Claim</span>
+                      <span className="xs:hidden">Batch</span>
+                    </Button>
+                  </Link>
+                  
                   <Link href="/create" className="flex-1 xs:flex-none">
                     <Button className="w-full sm:w-auto flex items-center justify-center gap-2 text-sm bg-blue-600 hover:bg-blue-700 transition-colors">
                       <Plus className="h-4 w-4" />
@@ -422,7 +431,13 @@ export default function Home() {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Wallet</span>
-                 
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    isAllowedAddress 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                  }`}>
+                    {isAllowedAddress ? 'Authorized' : 'Not Authorized'}
+                  </span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 font-mono break-all">
                   {userAddress}
@@ -441,40 +456,16 @@ export default function Home() {
 
           {/* Main Content */}
           <div className="space-y-6 sm:space-y-8">
-             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-           <NetworkGrid />
-            </div>
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-           <AnalyticsDashboard />
+           <AnalyticsDashboard /> 
             </div>
             
-            {/* dropHistory Toggle Button and Section */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-              <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700">
-                <Button
-                  onClick={() => setShowClaimHistory(!showClaimHistory)}
-                  variant="outline"
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <History className="h-4 w-4" />
-                  <span>{showClaimHistory ? 'Hide' : 'Show'} Drop History</span>
-                  {showClaimHistory ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              
-              {showClaimHistory && (
-                <div className="transition-all duration-300 ease-in-out">
-                  <FaucetList />
-                </div>
-              )}
+              <FaucetList />
             </div>
           </div>
         </div>
       </div>
     </main>
   )
-}
+    }

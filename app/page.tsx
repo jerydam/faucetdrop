@@ -11,7 +11,7 @@ import Image from "next/image"
 import { ethers, Contract } from "ethers"
 import { useState, useEffect } from "react"
 import { appendDivviReferralData, reportTransactionToDivvi } from "../lib/divvi-integration"
-
+import { NetworkGrid } from "@/components/network"
 // Helper function to safely extract error information
 const getErrorInfo = (error: unknown): { code?: string | number; message: string } => {
   if (error && typeof error === "object") {
@@ -456,6 +456,9 @@ export default function Home() {
 
           {/* Main Content */}
           <div className="space-y-6 sm:space-y-8">
+             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+           <NetworkGrid />
+            </div>
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
            <AnalyticsDashboard /> 
             </div>

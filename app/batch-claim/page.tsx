@@ -13,15 +13,13 @@ import { NetworkSelector } from "@/components/network-selector"
 import { claimViaBackend } from "@/lib/backend-service"
 import { ArrowLeft, Users } from "lucide-react"
 import Link from "next/link"
-// Add the useNetwork import
 import { useNetwork } from "@/hooks/use-network"
-import { Provider } from "@radix-ui/react-toast"
-
+import { BrowserProvider } from "ethers"
 
 export default function BatchClaimPage() {
   const { toast } = useToast()
   const router = useRouter()
-  const { address, isConnected } = useWallet()
+  const { address, isConnected, provider } = useWallet()
   const { network } = useNetwork()
 
   const [faucetAddress, setFaucetAddress] = useState("")
@@ -29,12 +27,20 @@ export default function BatchClaimPage() {
   const [addresses, setAddresses] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // Update the handleBatchClaim function to include network checking
   const handleBatchClaim = async () => {
     if (!isConnected) {
       toast({
         title: "Wallet not connected",
         description: "Please connect your wallet to process batch drops",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!provider) {
+      toast({
+        title: "Provider not available",
+        description: "Wallet provider is not available",
         variant: "destructive",
       })
       return
@@ -77,16 +83,17 @@ export default function BatchClaimPage() {
       // Process each address sequentially
       for (const userAddress of addressList) {
         try {
-          await claimViaBackend(userAddress, faucetAddress, Provider, secretCode)
+          await claimViaBackend(userAddress, faucetAddress, provider as BrowserProvider, secretCode)
+          successCount++
         } catch (error) {
-          console.error(`Error droping for ${userAddress}:`, error)
+          console.error(`Error dropping for ${userAddress}:`, error)
           failCount++
         }
       }
 
       toast({
         title: "Batch drop processed",
-        description: `Successfully droped for ${successCount} addresses. Failed: ${failCount}`,
+        description: `Successfully dropped for ${successCount} addresses. Failed: ${failCount}`,
         variant: successCount > 0 ? "default" : "destructive",
       })
 
@@ -116,7 +123,7 @@ export default function BatchClaimPage() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <h1 className="text-3xl font-bold">Batch drop</h1>
+            <h1 className="text-3xl font-bold">Batch Drop</h1>
             <div className="ml-auto">
               <NetworkSelector />
             </div>
@@ -124,7 +131,7 @@ export default function BatchClaimPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Batch drop Tokens</CardTitle>
+              <CardTitle>Batch Drop Tokens</CardTitle>
               <CardDescription>Drop tokens for multiple addresses at once</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -138,6 +145,21 @@ export default function BatchClaimPage() {
                   disabled={isProcessing}
                 />
                 <p className="text-sm text-muted-foreground">The address of the faucet to drop from</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="secret-code">Drop Code (for backend-managed faucets)</Label>
+                <Input
+                  id="secret-code"
+                  placeholder="Enter 6-character code (e.g., ABC123)"
+                  value={secretCode}
+                  onChange={(e) => setSecretCode(e.target.value.toUpperCase())}
+                  maxLength={6}
+                  disabled={isProcessing}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Required for backend-managed faucets. Leave empty for manual whitelist faucets.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -166,7 +188,7 @@ export default function BatchClaimPage() {
                 ) : (
                   <>
                     <Users className="mr-2 h-4 w-4" />
-                    Process Batch drop
+                    Process Batch Drop
                   </>
                 )}
               </Button>

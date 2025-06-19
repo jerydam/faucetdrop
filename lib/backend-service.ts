@@ -1,7 +1,7 @@
 import { BrowserProvider } from 'ethers';
 import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
 
-const API_URL = "https://fauctdrop-backend-1.onrender.com";
+const API_URL = "http://0.0.0.0:10000";
 const ENABLE_DIVVI_REFERRAL = true;
 const DEBUG_MODE = process.env.NODE_ENV === 'development';
 
@@ -10,7 +10,7 @@ interface ClaimPayload {
   faucetAddress: string;
   shouldWhitelist: boolean;
   chainId: number;
-  secretCode: string;
+  secretCode?: string;
   divviReferralData?: string;
 }
 
@@ -262,7 +262,7 @@ export async function claimViaBackend(
       throw new Error(`Unsupported chainId: ${chainId}. Please switch to Lisk, Celo, or Arbitrum.`);
     }
 
-    debugLog(`Starting dropprocess for chainId: ${chainId}`);
+    debugLog(`Starting drop process for chainId: ${chainId}`);
 
     // Validate secretCode
     if (!secretCode || !/^[A-Z0-9]{6}$/.test(secretCode)) {
@@ -305,7 +305,7 @@ export async function claimViaBackend(
       requestLog.divviDebugInfo = divviResult.debugInfo;
     }
 
-    debugLog('Sending droprequest', requestLog);
+    debugLog('Sending drop request', requestLog);
 
     const response = await fetch(`${API_URL}/claim`, {
       method: "POST",
@@ -339,7 +339,7 @@ export async function claimViaBackend(
     }
 
     const result = await response.json();
-    successLog('droprequest successful', { 
+    successLog('Drop request successful', { 
       success: result.success, 
       txHash: result.txHash 
     });
@@ -361,135 +361,120 @@ export async function claimViaBackend(
   }
 }
 
-export async function testDivviIntegration(chainId?: number): Promise<DivviIntegrationResult> {
-  const testChainId = chainId || 42220;
-  
-  debugLog(`Testing Divvi integration for chainId: ${testChainId}`);
-  
-  const result = await processDivviReferralData(testChainId);
-  
-  return {
-    isApplicable: isCeloNetwork(testChainId),
-    isWorking: !!result.data && !result.error,
-    data: result.data,
-    error: result.error,
-    debugInfo: result.debugInfo
-  };
-}
-
-export function debugReferralParams(): {
-  url: string;
-  params: Record<string, string>;
-  referralParams: Record<string, string>;
-  recommendations: string[];
-} {
-  if (typeof window === 'undefined') {
-    return {
-      url: 'Not in browser environment',
-      params: {},
-      referralParams: {},
-      recommendations: ['Run this function in a browser environment']
-    };
-  }
-
-  const url = new URL(window.location.href);
-  const params = Object.fromEntries(url.searchParams.entries());
-  
-  const commonReferralParams = ['ref', 'referral', 'r', 'divvi', 'affiliate', 'partner', 'code'];
-  const referralParams = Object.fromEntries(
-    commonReferralParams
-      .filter(param => url.searchParams.has(param))
-      .map(param => [param, url.searchParams.get(param) || ''])
-  );
-
-  const recommendations = [];
-  
-  if (Object.keys(referralParams).length === 0) {
-    recommendations.push('No referral parameters found in URL');
-    recommendations.push('Try adding ?ref=YOUR_CODE or ?divvi=YOUR_CODE to the URL');
-  } else {
-    recommendations.push('Referral parameters found - check if appendDivviReferralData() uses them correctly');
-  }
-
-  if (url.protocol === 'http:' && url.hostname !== 'localhost') {
-    recommendations.push('Consider using HTTPS for production');
-  }
-
-  const result = {
-    url: window.location.href,
-    params,
-    referralParams,
-    recommendations
-  };
-
-  debugLog('URL Analysis:', result);
-  
-  return result;
-}
-
-export async function checkDivviHealth(): Promise<{
-  status: 'healthy' | 'warning' | 'error';
-  checks: Array<{ name: string; passed: boolean; message: string }>;
-  summary: string;
-}> {
-  const checks = [];
-  
-  checks.push({
-    name: 'Browser Environment',
-    passed: typeof window !== 'undefined',
-    message: typeof window !== 'undefined' ? 'Running in browser' : 'Not in browser environment'
-  });
-
-  let divviFunctionAvailable = false;
+export async function claimNoCodeViaBackend(
+  userAddress: string,
+  faucetAddress: string,
+  provider: BrowserProvider
+): Promise<{ success: boolean; txHash: string; whitelistTx?: string; divviDebug?: any }> {
   try {
-    divviFunctionAvailable = typeof appendDivviReferralData === 'function';
-  } catch (e) {
-    // Function not available
-  }
-  
-  checks.push({
-    name: 'Divvi Function',
-    passed: divviFunctionAvailable,
-    message: divviFunctionAvailable ? 'appendDivviReferralData function is available' : 'appendDivviReferralData function not found'
-  });
-
-  const urlCheck = debugReferralParams();
-  const hasReferralParams = Object.keys(urlCheck.referralParams).length > 0;
-  
-  checks.push({
-    name: 'Referral Parameters',
-    passed: hasReferralParams,
-    message: hasReferralParams ? `Found: ${Object.keys(urlCheck.referralParams).join(', ')}` : 'No referral parameters in URL'
-  });
-
-  let testResult = null;
-  if (divviFunctionAvailable) {
-    testResult = await testDivviIntegration(42220);
-    checks.push({
-      name: 'Data Generation',
-      passed: testResult.isWorking,
-      message: testResult.isWorking ? 'Successfully generated referral data' : (testResult.error || 'Failed to generate data')
+    debugLog('Input to claimNoCodeViaBackend', {
+      userAddress,
+      faucetAddress
     });
+
+    if (typeof window === 'undefined' || !window.ethereum) {
+      throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet in a supported browser.");
+    }
+
+    if (!provider) {
+      throw new Error("Provider not initialized. Please ensure your wallet is connected.");
+    }
+
+    const network = await provider.getNetwork();
+    const chainId = Number(network.chainId);
+
+    const validChainIds = [1135, 42220, 42161];
+    if (!validChainIds.includes(chainId)) {
+      throw new Error(`Unsupported chainId: ${chainId}. Please switch to Lisk, Celo, or Arbitrum.`);
+    }
+
+    debugLog(`Starting drop process for chainId: ${chainId}`);
+
+    let payload: ClaimPayload = {
+      userAddress,
+      faucetAddress,
+      shouldWhitelist: true,
+      chainId
+    };
+
+    const divviResult = await processDivviReferralData(chainId);
+    
+    if (divviResult.data) {
+      payload.divviReferralData = divviResult.data;
+      successLog('Added Divvi referral data to payload', { 
+        length: divviResult.data.length,
+        preview: `${divviResult.data.slice(0, 20)}...`
+      });
+    } else if (divviResult.error) {
+      debugLog(`Proceeding without Divvi data: ${divviResult.error}`);
+    }
+
+    const requestLog: RequestLogData = {
+      userAddress,
+      faucetAddress,
+      chainId,
+      hasDivviData: !!payload.divviReferralData,
+      divviDataLength: payload.divviReferralData?.length || 0,
+      timestamp: new Date().toISOString()
+    };
+
+    if (DEBUG_MODE) {
+      requestLog.payload = JSON.stringify(payload, null, 2);
+      requestLog.divviDebugInfo = divviResult.debugInfo;
+    }
+
+    debugLog('Sending drop request without code', requestLog);
+
+    const response = await fetch(`${API_URL}/claim-no-code`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        errorData = { 
+          detail: `Failed to parse backend response. Status: ${response.status} ${response.statusText}` 
+        };
+      }
+      
+      errorLog('Backend request failed', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData
+      });
+      
+      throw new Error(
+        errorData.detail ||
+        errorData.message ||
+        `Backend request failed (${response.status}): ${JSON.stringify(errorData)}`
+      );
+    }
+
+    const result = await response.json();
+    successLog('Drop request without code successful', { 
+      success: result.success, 
+      txHash: result.txHash 
+    });
+
+    if (result.success && result.txHash) {
+      setTimeout(() => {
+        reportToDivvi(result.txHash, chainId);
+      }, 100);
+    }
+
+    if (DEBUG_MODE) {
+      result.divviDebug = divviResult.debugInfo;
+    }
+
+    return result;
+  } catch (error) {
+    errorLog('Error in claimNoCodeViaBackend', error);
+    throw error;
   }
-
-  const passedChecks = checks.filter(c => c.passed).length;
- const totalChecks = checks.length;
-
-  debugLog('Divvi health check results', { checks, passedChecks, totalChecks });
-
-  let status: 'healthy' | 'warning' | 'error';
-  let summary: string;
-
-  if (passedChecks === totalChecks) {
-    status = 'healthy';
-    summary = 'All Divvi integration checks passed';
-  } else if (passedChecks >= totalChecks / 2) {
-    status = 'warning';
-    summary = `${passedChecks}/${totalChecks} checks passed - some issues detected`;
-  } else {
-    status = 'error';
-    summary = `${passedChecks}/${totalChecks} checks passed - major issues detected`;
-  }
-
-  return { status, checks, summary };
 }

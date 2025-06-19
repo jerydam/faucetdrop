@@ -46,13 +46,14 @@ const networks: Network[] = [
   //   },
   // },
   {
+    //{previous celo: 0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB}
     name: "Celo",
     chainId: 42220,
     rpcUrl: "https://forno.celo.org",
     blockExplorer: "https://celoscan.io",
     explorerUrl: "https://celoscan.io",
     color: "#35D07F",
-    factoryAddress: "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
+    factoryAddress: "0xdcC1ACa70042F6019a0E6F800C351Ecbcbc60Fe7",
     tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", // Wrapped CELO
     nativeCurrency: {
       name: "Celo",

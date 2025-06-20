@@ -9,20 +9,20 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Header } from "@/components/header"
 import {
   getFaucetDetails,
   isWhitelisted,
+  getAllAdmins,
   setWhitelistBatch,
   setCustomClaimAmountsBatch,
   resetAllClaims,
   fundFaucet,
   withdrawTokens,
   setClaimParameters,
-  resetClaimedStatus,
   retrieveSecretCode,
   saveToStorage,
   getFromStorage,
@@ -32,7 +32,7 @@ import {
   storeClaim,
 } from "@/lib/faucet"
 import { formatUnits, parseUnits, type BrowserProvider } from "ethers"
-import { Clock, Coins, Download, Share2, Upload, Users, Key, RotateCcw, Edit, Trash2, FileUp } from "lucide-react"
+import { Clock, Coins, Download, Share2, Upload, Users, Key, RotateCcw, Edit, Trash2, FileUp, Menu } from "lucide-react"
 import { claimViaBackend, claimNoCodeViaBackend } from "@/lib/backend-service"
 import { useNetwork } from "@/hooks/use-network"
 import { TokenBalance } from "@/components/token-balance"
@@ -46,6 +46,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export default function FaucetDetails() {
   const { address: faucetAddress } = useParams<{ address: string }>()
@@ -55,7 +61,6 @@ export default function FaucetDetails() {
   const router = useRouter()
   const { address, chainId, isConnected, provider } = useWallet()
   const { networks, setNetwork } = useNetwork()
-
   const [faucetDetails, setFaucetDetails] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isClaiming, setIsClaiming] = useState(false)
@@ -85,25 +90,25 @@ export default function FaucetDetails() {
   const [secretCode, setSecretCode] = useState("")
   const [generatedSecretCode, setGeneratedSecretCode] = useState("")
   const [showSecretCodeDialog, setShowSecretCodeDialog] = useState(false)
-  const [resetAddresses, setResetAddresses] = useState("")
-  const [isResetEnabled, setIsResetEnabled] = useState(true)
   const [currentSecretCode, setCurrentSecretCode] = useState("")
   const [showCurrentSecretDialog, setShowCurrentSecretDialog] = useState(false)
   const [userIsWhitelisted, setUserIsWhitelisted] = useState(false)
   const [userIsAdmin, setUserIsAdmin] = useState(false)
   const [backendMode, setBackendMode] = useState(true)
   const [customClaimFile, setCustomClaimFile] = useState<File | null>(null)
+  const [adminList, setAdminList] = useState<string[]>([])
+  const [activeTab, setActiveTab] = useState("fund") // Track active tab for dropdown
 
   const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase()
   const canAccessAdminControls = isOwner || userIsAdmin
   const isSecretCodeValid = secretCode.length === 6 && /^[A-Z0-9]{6}$/.test(secretCode)
 
-  // Check if user can claim based on backend mode
   const canClaim = backendMode
     ? faucetDetails?.isClaimActive && !hasClaimed && isSecretCodeValid
     : faucetDetails?.isClaimActive && !hasClaimed && userIsWhitelisted
 
   const xProfileLink = "https://x.com/FaucetDrops"
+
   const popupContent = (amount: string, txHash: string | null) =>
     `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
       txHash
@@ -111,7 +116,6 @@ export default function FaucetDetails() {
         : "Transaction not available"
     }`
 
-  // Calculate platform fee (5%), net funded amount, and recommended input for original amount
   const calculateFee = (amount: string) => {
     try {
       const parsedAmount = parseUnits(amount, tokenDecimals)
@@ -153,7 +157,6 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!isOwner) {
       toast({
         title: "Unauthorized",
@@ -162,12 +165,10 @@ export default function FaucetDetails() {
       })
       return
     }
-
     try {
       const code = await retrieveSecretCode(faucetAddress)
       setCurrentSecretCode(code)
       setShowCurrentSecretDialog(true)
-
       const wasCached = getFromStorage(`secretCode_${faucetAddress}`) === code
       toast({
         title: "Drop code Retrieved",
@@ -182,57 +183,6 @@ export default function FaucetDetails() {
     }
   }
 
-  const handleResetClaimed = async () => {
-    if (!isConnected || !provider || !resetAddresses.trim() || !chainId) {
-      toast({
-        title: "Invalid Input",
-        description: "Please connect your wallet, ensure a network is selected, and enter valid addresses",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!checkNetwork()) return
-
-    try {
-      const addresses = resetAddresses
-        .split(/[\n,]/)
-        .map((addr) => addr.trim())
-        .filter((addr) => addr.length > 0)
-
-      if (addresses.length === 0) return
-
-      await resetClaimedStatus(
-        provider as BrowserProvider,
-        faucetAddress,
-        addresses,
-        isResetEnabled,
-        BigInt(chainId),
-        BigInt(Number(networkId)),
-      )
-
-      toast({
-        title: "Drop status reset",
-        description: `${addresses.length} addresses have been ${
-          isResetEnabled ? "enabled to drop again" : "disabled from dropping"
-        }`,
-      })
-
-      setResetAddresses("")
-    } catch (error: any) {
-      console.error("Error resetting drop status:", error)
-      if (error.message === "Switch to the network to perform operation") {
-        checkNetwork()
-      } else {
-        toast({
-          title: "Failed to reset drop status",
-          description: error.message || "Unknown error occurred",
-          variant: "destructive",
-        })
-      }
-    }
-  }
-
   const handleUpdateFaucetName = async () => {
     if (!isConnected || !provider || !newFaucetName.trim() || !chainId) {
       toast({
@@ -242,9 +192,7 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       await updateFaucetName(
         provider as BrowserProvider,
@@ -253,12 +201,10 @@ export default function FaucetDetails() {
         BigInt(chainId),
         BigInt(Number(networkId)),
       )
-
       toast({
         title: "Faucet name updated",
         description: `Faucet name has been updated to ${newFaucetName}`,
       })
-
       setNewFaucetName("")
       setShowEditNameDialog(false)
       await loadFaucetDetails()
@@ -281,17 +227,13 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       await deleteFaucet(provider as BrowserProvider, faucetAddress, BigInt(chainId), BigInt(Number(networkId)))
-
       toast({
         title: "Faucet deleted",
         description: "Faucet has been successfully deleted",
       })
-
       setShowDeleteDialog(false)
       router.push("/")
     } catch (error: any) {
@@ -313,9 +255,7 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       await addAdmin(
         provider as BrowserProvider,
@@ -324,14 +264,13 @@ export default function FaucetDetails() {
         BigInt(chainId),
         BigInt(Number(networkId)),
       )
-
       toast({
         title: "Admin added",
         description: `Address ${newAdminAddress} has been added as an admin`,
       })
-
       setNewAdminAddress("")
       setShowAddAdminDialog(false)
+      await loadFaucetDetails()
     } catch (error: any) {
       console.error("Error adding admin:", error)
       toast({
@@ -344,12 +283,10 @@ export default function FaucetDetails() {
 
   useEffect(() => {
     if (!faucetDetails) return
-
     const updateCountdown = () => {
       const now = Date.now()
       const start = Number(faucetDetails.startTime) * 1000
       const end = Number(faucetDetails.endTime) * 1000
-
       if (start > now) {
         const diff = start - now
         const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -360,7 +297,6 @@ export default function FaucetDetails() {
       } else {
         setStartCountdown("Already Active")
       }
-
       if (end > now && faucetDetails.isClaimActive) {
         const diff = end - now
         const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -374,7 +310,6 @@ export default function FaucetDetails() {
         setEndCountdown("N/A")
       }
     }
-
     updateCountdown()
     const interval = setInterval(updateCountdown, 1000)
     return () => clearInterval(interval)
@@ -396,7 +331,6 @@ export default function FaucetDetails() {
       setLoading(false)
       return
     }
-
     try {
       setLoading(true)
       const targetNetwork = networks.find((n) => n.chainId === Number(networkId))
@@ -410,11 +344,24 @@ export default function FaucetDetails() {
         router.push("/")
         return
       }
-
       setSelectedNetwork(targetNetwork)
       const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
       const details = await getFaucetDetails(detailsProvider, faucetAddress)
+      console.log("Faucet details:", details)
       setFaucetDetails(details)
+
+      const admins = await getAllAdmins(detailsProvider, faucetAddress)
+      setAdminList(admins)
+      console.log("Admin list set to:", admins)
+
+      if (address) {
+        const isUserAdmin = admins.some((admin: string) => admin.toLowerCase() === address.toLowerCase())
+        setUserIsAdmin(isUserAdmin)
+        console.log("User admin status set to:", isUserAdmin, "based on admins:", admins)
+      } else {
+        setUserIsAdmin(false)
+        console.log("No address connected, user admin status set to false")
+      }
 
       if (details.claimAmount) {
         setClaimAmount(formatUnits(details.claimAmount, details.tokenDecimals))
@@ -427,17 +374,14 @@ export default function FaucetDetails() {
         const date = new Date(Number(details.endTime) * 1000)
         setEndTime(date.toISOString().slice(0, 16))
       }
-
       setTokenSymbol(details.tokenSymbol || "CELO")
       setTokenDecimals(details.tokenDecimals || 18)
       setHasClaimed(details.hasClaimed || false)
-      setUserIsAdmin(details.isUserAdmin || false)
       setBackendMode(details.backendMode)
-
-      // Check if user is whitelisted (for manual mode)
       if (address && !details.backendMode) {
         const whitelisted = await isWhitelisted(detailsProvider, faucetAddress, address)
         setUserIsWhitelisted(whitelisted)
+        console.log("User Drop-list status set to:", whitelisted)
       }
     } catch (error) {
       console.error("Error loading faucet details:", error)
@@ -488,7 +432,6 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!chainId || !networkId) {
       toast({
         title: "Network not detected",
@@ -497,7 +440,6 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (backendMode && !isSecretCodeValid) {
       toast({
         title: "Invalid Drop code",
@@ -506,36 +448,28 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!backendMode && !userIsWhitelisted) {
       toast({
-        title: "Not Whitelisted",
-        description: "You are not whitelisted to claim from this faucet",
+        title: "Not Drop-listed",
+        description: "You are not Drop-listed to claim from this faucet",
         variant: "destructive",
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       setIsClaiming(true)
       if (!window.ethereum) {
         throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet.")
       }
       await window.ethereum.request({ method: "eth_requestAccounts" })
-
       console.log("Sending drop request", { backendMode, secretCode: backendMode ? secretCode : "N/A" })
-
       const result = backendMode
         ? await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode)
         : await claimNoCodeViaBackend(address, faucetAddress, provider as BrowserProvider)
-
       const formattedTxHash = result.txHash.startsWith("0x") ? result.txHash : (`0x${result.txHash}` as `0x${string}`)
       setTxHash(formattedTxHash)
-
       const networkName = selectedNetwork?.name || "Unknown Network"
-
       const claimAmountBN = faucetDetails?.claimAmount || BigInt(0)
       await storeClaim(
         provider as BrowserProvider,
@@ -547,14 +481,12 @@ export default function FaucetDetails() {
         BigInt(Number(networkId)),
         networkName,
       )
-
       toast({
         title: "Tokens dropped successfully",
         description: `You have dropped ${
           faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""
         } ${tokenSymbol} and recorded the drop on-chain on ${networkName}`,
       })
-
       setShowClaimPopup(true)
       setSecretCode("")
       await loadFaucetDetails()
@@ -596,12 +528,10 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       const amount = parseUnits(adjustedFundAmount, tokenDecimals)
-      const hash = await fundFaucet(
+      await fundFaucet(
         provider as BrowserProvider,
         faucetAddress,
         amount,
@@ -609,12 +539,10 @@ export default function FaucetDetails() {
         BigInt(chainId),
         BigInt(Number(networkId)),
       )
-
       toast({
         title: "Faucet funded successfully",
         description: `You have added ${formatUnits(amount, tokenDecimals)} ${tokenSymbol} to the faucet (after 5% platform fee)`,
       })
-
       setFundAmount("")
       setAdjustedFundAmount("")
       setShowFundPopup(false)
@@ -642,9 +570,7 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       const amount = parseUnits(withdrawAmount, tokenDecimals)
       await withdrawTokens(
@@ -654,12 +580,10 @@ export default function FaucetDetails() {
         BigInt(chainId),
         BigInt(Number(networkId)),
       )
-
       toast({
         title: "Tokens withdrawn successfully",
         description: `You have withdrawn ${withdrawAmount} ${tokenSymbol} from the faucet`,
       })
-
       setWithdrawAmount("")
       await loadFaucetDetails()
     } catch (error: any) {
@@ -685,7 +609,6 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!claimAmount || !startTime || !endTime) {
       toast({
         title: "Invalid Input",
@@ -694,14 +617,11 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       const claimAmountBN = parseUnits(claimAmount, tokenDecimals)
       const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
       const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
-
       if (backendMode) {
         const response = await fetch("https://fauctdrop-backend-1.onrender.com/set-claim-parameters", {
           method: "POST",
@@ -716,20 +636,16 @@ export default function FaucetDetails() {
             chainId: Number(chainId),
           }),
         })
-
         if (!response.ok) {
           const errorData = await response.json()
           throw new Error(errorData.detail || "Failed to set drop parameters")
         }
-
         const result = await response.json()
         const secretCodeFromBackend = result.secretCode
-
         saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend)
         setGeneratedSecretCode(secretCodeFromBackend)
         setShowSecretCodeDialog(true)
       }
-
       await setClaimParameters(
         provider as BrowserProvider,
         faucetAddress,
@@ -739,12 +655,10 @@ export default function FaucetDetails() {
         BigInt(chainId),
         BigInt(Number(networkId)),
       )
-
       toast({
         title: "Drop parameters updated",
         description: `Parameters updated successfully. ${backendMode ? "Drop code generated and stored." : ""}`,
       })
-
       await loadFaucetDetails()
     } catch (error: any) {
       console.error("Error updating drop parameters:", error)
@@ -769,17 +683,13 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       const addresses = whitelistAddresses
         .split(/[\n,]/)
         .map((addr) => addr.trim())
         .filter((addr) => addr.length > 0)
-
       if (addresses.length === 0) return
-
       await setWhitelistBatch(
         provider as BrowserProvider,
         faucetAddress,
@@ -788,20 +698,16 @@ export default function FaucetDetails() {
         BigInt(chainId),
         BigInt(Number(networkId)),
       )
-
       toast({
-        title: "Whitelist updated",
-        description: `${addresses.length} addresses have been ${
-          isWhitelistEnabled ? "added to" : "removed from"
-        } the whitelist`,
+        title: "Drop-list updated",
+        description: `${addresses.length} addresses have been ${isWhitelistEnabled ? "added to" : "removed from"} the Drop-list`,
       })
-
       setWhitelistAddresses("")
       await loadFaucetDetails()
     } catch (error: any) {
-      console.error("Error updating whitelist:", error)
+      console.error("Error updating Drop-list:", error)
       toast({
-        title: "Failed to update whitelist",
+        title: "Failed to update Drop-list",
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
@@ -811,7 +717,6 @@ export default function FaucetDetails() {
   const handleCustomClaimFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-
     setCustomClaimFile(file)
   }
 
@@ -824,15 +729,12 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       const text = await customClaimFile.text()
       const lines = text.split("\n").filter((line) => line.trim())
       const users: string[] = []
       const amounts: bigint[] = []
-
       for (const line of lines) {
         const [address, amount] = line.split(",").map((s) => s.trim())
         if (address && amount) {
@@ -840,11 +742,9 @@ export default function FaucetDetails() {
           amounts.push(parseUnits(amount, tokenDecimals))
         }
       }
-
       if (users.length === 0) {
         throw new Error("No valid entries found in file")
       }
-
       await setCustomClaimAmountsBatch(
         provider as BrowserProvider,
         faucetAddress,
@@ -853,12 +753,10 @@ export default function FaucetDetails() {
         BigInt(chainId),
         BigInt(Number(networkId)),
       )
-
       toast({
         title: "Custom claim amounts set",
         description: `Set custom amounts for ${users.length} addresses`,
       })
-
       setCustomClaimFile(null)
       await loadFaucetDetails()
     } catch (error: any) {
@@ -880,17 +778,13 @@ export default function FaucetDetails() {
       })
       return
     }
-
     if (!checkNetwork()) return
-
     try {
       await resetAllClaims(provider as BrowserProvider, faucetAddress, BigInt(chainId), BigInt(Number(networkId)))
-
       toast({
         title: "All claims reset",
         description: "All users can now claim again",
       })
-
       await loadFaucetDetails()
     } catch (error: any) {
       console.error("Error resetting all claims:", error)
@@ -918,15 +812,14 @@ export default function FaucetDetails() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="flex flex-col gap-6 sm:gap-8 max-w-3xl sm:max-w-4xl mx-auto">
           <Header pageTitle="Faucet Details" />
-
           {faucetDetails ? (
             <>
-              <Card className="w-full sm:max-w-2xl mx-auto">
+              <Card className="w-full mx-auto">
                 <CardHeader className="px-4 sm:px-6">
-                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-4">
                       <CardTitle className="text-lg sm:text-xl">{faucetDetails.name || tokenSymbol} Faucet</CardTitle>
-                      {isOwner && (
+                      {canAccessAdminControls && (
                         <div className="flex gap-2">
                           <Button
                             variant="ghost"
@@ -947,7 +840,7 @@ export default function FaucetDetails() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {selectedNetwork ? (
                         <Badge
                           style={{ backgroundColor: selectedNetwork.color }}
@@ -960,18 +853,18 @@ export default function FaucetDetails() {
                       )}
                       <Badge variant={backendMode ? "default" : "secondary"}>{backendMode ? "Auto" : "Manual"}</Badge>
                       {faucetDetails.isClaimActive ? (
-                        <span className="text-xs sm:text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-2 sm:px-3 py-1 rounded-full">
+                        <span className="text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded-full">
                           Active
                         </span>
                       ) : (
-                        <span className="text-xs sm:text-sm bg-red-500/20 text-red-600 dark:text-red-400 px-2 sm:px-3 py-1 rounded-full">
+                        <span className="text-xs bg-red-500/20 text-red-600 dark:text-red-400 px-2 py-1 rounded-full">
                           Inactive
                         </span>
                       )}
                     </div>
                   </div>
                   <CardDescription className="text-xs sm:text-sm">
-                    <div className="flex flex-col gap-1 sm:gap-2 mt-2">
+                    <div className="flex flex-col gap-2 mt-2">
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
                         <span className="font-medium">Faucet Address:</span>
                         <span className="text-xs font-mono break-all">{faucetAddress}</span>
@@ -986,9 +879,9 @@ export default function FaucetDetails() {
                       </div>
                       {!backendMode && (
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-                          <span className="font-medium">Whitelist Status:</span>
+                          <span className="font-medium">Drop-list Status:</span>
                           <span className={`text-xs ${userIsWhitelisted ? "text-green-600" : "text-red-600"}`}>
-                            {userIsWhitelisted ? "Whitelisted" : "Not Whitelisted"}
+                            {userIsWhitelisted ? "Drop-listed" : "Not Drop-listed"}
                           </span>
                         </div>
                       )}
@@ -1017,8 +910,7 @@ export default function FaucetDetails() {
                     <div className="flex flex-col p-3 sm:p-4 border rounded-lg">
                       <span className="text-xs sm:text-sm text-muted-foreground">Drop Amount</span>
                       <span className="text-lg sm:text-2xl font-bold truncate">
-                        {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"}{" "}
-                        {tokenSymbol}
+                        {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}
                       </span>
                     </div>
                     <div className="flex flex-col p-3 sm:p-4 border rounded-lg">
@@ -1028,7 +920,6 @@ export default function FaucetDetails() {
                       </span>
                     </div>
                   </div>
-
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
@@ -1039,7 +930,6 @@ export default function FaucetDetails() {
                       <span className="text-xs sm:text-sm">{endCountdown}</span>
                     </div>
                   </div>
-
                   {backendMode && (
                     <div className="space-y-2">
                       <Label htmlFor="secret-code" className="text-xs sm:text-sm">
@@ -1076,16 +966,13 @@ export default function FaucetDetails() {
                     {isClaiming
                       ? "Claiming..."
                       : hasClaimed
-                        ? "Already dropped"
-                        : `Drop ${
-                            faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""
-                          } ${tokenSymbol}`}
+                      ? "Already dropped"
+                      : `Drop ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`}
                   </Button>
                 </CardFooter>
               </Card>
-
               {canAccessAdminControls && (
-                <Card className="w-full sm:max-w-2xl mx-auto">
+                <Card className="w-full mx-auto">
                   <CardHeader className="px-4 sm:px-6">
                     <CardTitle className="text-lg sm:text-xl">Admin Controls</CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
@@ -1093,8 +980,43 @@ export default function FaucetDetails() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="px-4 sm:px-6">
-                    <Tabs defaultValue="fund">
-                      <TabsList className="grid grid-cols-5">
+                    <Tabs defaultValue="fund" value={activeTab} onValueChange={setActiveTab}>
+                      <div className="sm:hidden">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="w-full flex justify-between items-center text-xs">
+                              {activeTab === "fund" && "Fund"}
+                              {activeTab === "parameters" && "Parameters"}
+                              {activeTab === "Drop-list" && "Drop-list"}
+                              {activeTab === "custom" && "Custom"}
+                              {activeTab === "admin-power" && "Admin Power"}
+                              <Menu className="h-4 w-4 ml-2" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="w-full">
+                            <DropdownMenuItem onClick={() => setActiveTab("fund")} className="text-xs">
+                              <Upload className="h-3 w-3 mr-2" /> Fund
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setActiveTab("parameters")} className="text-xs">
+                              <Coins className="h-3 w-3 mr-2" /> Parameters
+                            </DropdownMenuItem>
+                            {!backendMode && (
+                              <DropdownMenuItem onClick={() => setActiveTab("Drop-list")} className="text-xs">
+                                <Users className="h-3 w-3 mr-2" /> Drop-list
+                              </DropdownMenuItem>
+                            )}
+                            {!backendMode && (
+                              <DropdownMenuItem onClick={() => setActiveTab("custom")} className="text-xs">
+                                <FileUp className="h-3 w-3 mr-2" /> Custom
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => setActiveTab("admin-power")} className="text-xs">
+                              <RotateCcw className="h-3 w-3 mr-2" /> Admin Power
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <TabsList className="hidden sm:grid grid-cols-5 gap-2 w-full">
                         <TabsTrigger value="fund" className="text-xs sm:text-sm">
                           <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Fund
@@ -1106,7 +1028,7 @@ export default function FaucetDetails() {
                         {!backendMode && (
                           <TabsTrigger value="whitelist" className="text-xs sm:text-sm">
                             <Users className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                            Whitelist
+                            Drop-list
                           </TabsTrigger>
                         )}
                         {!backendMode && (
@@ -1115,12 +1037,11 @@ export default function FaucetDetails() {
                             Custom
                           </TabsTrigger>
                         )}
-                        <TabsTrigger value="batch" className="text-xs sm:text-sm">
+                        <TabsTrigger value="admin-power" className="text-xs sm:text-sm">
                           <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                          Batch
+                          Admin Power
                         </TabsTrigger>
                       </TabsList>
-
                       <TabsContent value="fund" className="space-y-4 mt-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                           <div className="space-y-2">
@@ -1144,7 +1065,6 @@ export default function FaucetDetails() {
                               Add {tokenSymbol} to the faucet (5% platform fee applies)
                             </p>
                           </div>
-
                           <div className="space-y-2">
                             <Label htmlFor="withdraw-amount" className="text-xs sm:text-sm">
                               Withdraw Amount
@@ -1171,7 +1091,6 @@ export default function FaucetDetails() {
                           </div>
                         </div>
                       </TabsContent>
-
                       <TabsContent value="parameters" className="space-y-4 mt-4">
                         <div className="space-y-4">
                           <div className="space-y-2">
@@ -1187,7 +1106,6 @@ export default function FaucetDetails() {
                             />
                             <p className="text-xs text-muted-foreground">Amount of {tokenSymbol} users can drop</p>
                           </div>
-
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                               <Label htmlFor="start-time" className="text-xs sm:text-sm">
@@ -1201,7 +1119,6 @@ export default function FaucetDetails() {
                                 className="text-xs sm:text-sm"
                               />
                             </div>
-
                             <div className="space-y-2">
                               <Label htmlFor="end-time" className="text-xs sm:text-sm">
                                 End Time
@@ -1215,7 +1132,6 @@ export default function FaucetDetails() {
                               />
                             </div>
                           </div>
-
                           <div className="flex flex-col sm:flex-row gap-2">
                             <Button
                               onClick={handleUpdateClaimParameters}
@@ -1237,7 +1153,6 @@ export default function FaucetDetails() {
                           </div>
                         </div>
                       </TabsContent>
-
                       {!backendMode && (
                         <TabsContent value="whitelist" className="space-y-4 mt-4">
                           <div className="space-y-4">
@@ -1248,353 +1163,323 @@ export default function FaucetDetails() {
                                 onCheckedChange={setIsWhitelistEnabled}
                               />
                               <Label htmlFor="whitelist-mode" className="text-xs sm:text-sm">
-                                {isWhitelistEnabled ? "Add to whitelist" : "Remove from whitelist"}
+                                {isWhitelistEnabled ? "Add to Drop-list" : "Remove from Drop-list"}
                               </Label>
                             </div>
-
                             <div className="space-y-2">
                               <Label htmlFor="whitelist-addresses" className="text-xs sm:text-sm">
-                                Addresses (one per line or comma separated)
+                                Addresses (one per line or comma-separated)
                               </Label>
-                              <Textarea
-                                id="whitelist-addresses"
-                                placeholder="0x..."
-                                value={whitelistAddresses}
-                                onChange={(e) => setWhitelistAddresses(e.target.value)}
-                                rows={5}
-                                className="text-xs sm:text-sm"
-                              />
-                            </div>
-
-                            <Button onClick={handleUpdateWhitelist} className="text-xs sm:text-sm">
-                              Update Whitelist
-                            </Button>
-                          </div>
-                        </TabsContent>
-                      )}
-
-                      {!backendMode && (
-                        <TabsContent value="custom" className="space-y-4 mt-4">
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="custom-claim-file" className="text-xs sm:text-sm">
-                                Upload Custom Claim Amounts
-                              </Label>
-                              <Input
-                                id="custom-claim-file"
-                                type="file"
-                                accept=".csv,.txt"
-                                onChange={handleCustomClaimFile}
-                                className="text-xs sm:text-sm"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Upload a CSV file with format: address,amount (one per line)
-                              </p>
-                            </div>
-
-                            <Button
-                              onClick={handleUploadCustomClaims}
-                              disabled={!customClaimFile}
-                              className="text-xs sm:text-sm"
-                            >
-                              <FileUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                              Upload Custom Claims
-                            </Button>
-                          </div>
-                        </TabsContent>
-                      )}
-
-                      <TabsContent value="batch" className="space-y-4 mt-4">
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label className="text-xs sm:text-sm">Batch Operations</Label>
-                            <p className="text-xs text-muted-foreground">
-                              Reset all claims to allow all users to claim again
-                            </p>
-                          </div>
-
-                          <Button onClick={handleResetAllClaims} variant="destructive" className="text-xs sm:text-sm">
-                            <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                            Reset All Claims
-                          </Button>
-
-                          <div className="space-y-2">
-                            <div className="flex items-center space-x-2">
-                              <Switch id="reset-mode" checked={isResetEnabled} onCheckedChange={setIsResetEnabled} />
-                              <Label htmlFor="reset-mode" className="text-xs sm:text-sm">
-                                {isResetEnabled ? "Enable drop for addresses" : "Disable drop for addresses"}
-                              </Label>
-                            </div>
-
-                            <Label htmlFor="reset-addresses" className="text-xs sm:text-sm">
-                              Addresses to reset (one per line or comma separated)
-                            </Label>
-                            <Textarea
-                              id="reset-addresses"
-                              placeholder="0x..."
-                              value={resetAddresses}
-                              onChange={(e) => setResetAddresses(e.target.value)}
-                              rows={3}
-                              className="text-xs sm:text-sm"
-                            />
-
-                            <Button onClick={handleResetClaimed} className="text-xs sm:text-sm">
-                              Reset Drop Status
-                            </Button>
-                          </div>
-
-                          {isOwner && (
-                            <div className="space-y-2">
-                              <Label htmlFor="new-admin" className="text-xs sm:text-sm">
-                                Add Admin
-                              </Label>
-                              <div className="flex gap-2">
-                                <Input
-                                  id="new-admin"
+                                <Textarea
+                                  id="whitelist-addresses"
                                   placeholder="0x..."
-                                  value={newAdminAddress}
-                                  onChange={(e) => setNewAdminAddress(e.target.value)}
+                                  value={whitelistAddresses}
+                                  onChange={(e) => setWhitelistAddresses(e.target.value)}
+                                  rows={5}
                                   className="text-xs sm:text-sm"
                                 />
-                                <Button
-                                  onClick={() => setShowAddAdminDialog(true)}
-                                  disabled={!newAdminAddress}
-                                  className="text-xs sm:text-sm"
-                                >
-                                  Add Admin
-                                </Button>
                               </div>
+                              <Button onClick={handleUpdateWhitelist} className="text-xs sm:text-sm">
+                                Update Drop-list
+                              </Button>
                             </div>
-                          )}
-                        </div>
-                      </TabsContent>
-                    </Tabs>
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          ) : (
-            <Card className="w-full sm:max-w-2xl mx-auto">
-              <CardContent className="py-6 sm:py-10 text-center">
-                <p className="text-sm sm:text-base">Faucet not found or error loading details</p>
-                <Button className="mt-4 text-xs sm:text-sm" onClick={() => router.push("/")}>
-                  Return to Home
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+                          </TabsContent>
+                        )}
+                        {!backendMode && (
+                          <TabsContent value="custom" className="space-y-4 mt-4">
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="custom-claim-file" className="text-xs sm:text-sm">
+                                  Upload Custom Claim Amounts
+                                </Label>
+                                <Input
+                                  id="custom-claim-file"
+                                  type="file"
+                                  accept=".csv,.txt"
+                                  onChange={handleCustomClaimFile}
+                                  className="text-xs sm:text-sm"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Upload a CSV file with format: address,amount (one per line)
+                                </p>
+                              </div>
+                              <Button
+                                onClick={handleUploadCustomClaims}
+                                disabled={!customClaimFile}
+                                className="text-xs sm:text-sm"
+                              >
+                                <FileUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                Upload Custom Claims
+                              </Button>
+                            </div>
+                          </TabsContent>
+                        )}
+                        <TabsContent value="admin-power" className="space-y-4 mt-4">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label className="text-xs sm:text-sm">Current Admins</Label>
+                              {adminList.length > 0 ? (
+                                <ul className="list-disc pl-5 text-xs sm:text-sm">
+                                  {adminList.map((admin) => (
+                                    <li key={admin} className="font-mono break-all">{admin}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-xs sm:text-sm text-muted-foreground">No admins found</p>
+                              )}
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs sm:text-sm">Reset All Claims</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Allow all users to claim again
+                              </p>
+                              <Button onClick={handleResetAllClaims} variant="destructive" className="text-xs sm:text-sm">
+                                <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                Reset All Claims
+                              </Button>
+                            </div>
+                            {isOwner && (
+                              <div className="space-y-2">
+                                <Label htmlFor="new-admin" className="text-xs sm:text-sm">
+                                  Add Admin
+                                </Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    id="new-admin"
+                                    placeholder="0x..."
+                                    value={newAdminAddress}
+                                    onChange={(e) => setNewAdminAddress(e.target.value)}
+                                    className="text-xs sm:text-sm"
+                                  />
+                                  <Button
+                                    onClick={() => setShowAddAdminDialog(true)}
+                                    disabled={!newAdminAddress}
+                                    className="text-xs sm:text-sm"
+                                  >
+                                    Add Admin
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </TabsContent>
+                      </Tabs>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            ) : (
+              <Card className="w-full mx-auto">
+                <CardContent className="py-6 sm:py-10 text-center">
+                  <p className="text-sm sm:text-base">Faucet not found or error loading details</p>
+                  <Button className="mt-4 text-xs sm:text-sm" onClick={() => router.push("/")}>
+                    Return to Home
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
-      </div>
-
-      <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
-        <DialogContent className="w-11/12 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              You have successfully dropped{" "}
-              {faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col space-y-4 py-4">
-            <p className="text-xs sm:text-sm">Share your drop on X to help spread the word about FaucetDrops!</p>
-          </div>
-          <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
-            <Button
-              type="button"
-              variant="default"
-              onClick={handleShareOnX}
-              className="flex items-center gap-2 text-xs sm:text-sm"
-            >
-              <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
-              Share on 𝕏
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
-        <DialogContent className="w-11/12 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Confirm Funding</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Review the funding details before proceeding.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
-                Amount to Fund
-              </Label>
-              <Input
-                id="adjusted-fund-amount"
-                value={adjustedFundAmount}
-                onChange={(e) => setAdjustedFundAmount(e.target.value)}
-                className="text-xs sm:text-sm"
-              />
+        <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
+          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                You have successfully dropped{" "}
+                {faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col space-y-4 py-4">
+              <p className="text-xs sm:text-sm">Share your drop on X to help spread the word about FaucetDrops!</p>
             </div>
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>
-                Platform fee (5%): {fee} {tokenSymbol}
-              </p>
-              <p>
-                Net amount to faucet: {netAmount} {tokenSymbol}
-              </p>
-              <p className="text-blue-600">
-                Tip: To fund exactly {fundAmount} {tokenSymbol}, enter {recommendedInput} {tokenSymbol}
-              </p>
-            </div>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowFundPopup(false)} className="text-xs sm:text-sm">
-              Cancel
-            </Button>
-            <Button onClick={confirmFund} className="text-xs sm:text-sm">
-              Confirm Fund
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showSecretCodeDialog} onOpenChange={setShowSecretCodeDialog}>
-        <DialogContent className="w-11/12 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Drop Code Generated</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Your Drop code has been generated and stored. Share this code with users to allow them to drop tokens.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="text-center">
-              <div className="text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                {generatedSecretCode}
+            <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
+              <Button
+                type="button"
+                variant="default"
+                onClick={handleShareOnX}
+                className="flex items-center gap-2 text-xs sm:text-sm"
+              >
+                <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                Share on 𝕏
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
+          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Confirm Funding</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Review the funding details before proceeding.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
+                  Amount to Fund
+                </Label>
+                <Input
+                  id="adjusted-fund-amount"
+                  value={adjustedFundAmount}
+                  onChange={(e) => setAdjustedFundAmount(e.target.value)}
+                  className="text-xs sm:text-sm"
+                />
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>Platform fee (5%): {fee} {tokenSymbol}</p>
+                <p>Net amount to faucet: {netAmount} {tokenSymbol}</p>
+                <p className="text-blue-600">
+                  Tip: To fund exactly {fundAmount} {tokenSymbol}, enter {recommendedInput} {tokenSymbol}
+                </p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground text-center">
-              This code is required for users to drop tokens. Keep it safe and share it only with intended users.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowSecretCodeDialog(false)} className="text-xs sm:text-sm w-full">
-              Got it
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
-        <DialogContent className="w-11/12 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Current Drop Code</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              This is the current Drop code for your faucet.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="text-center">
-              <div className="text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                {currentSecretCode}
+            <DialogFooter className="flex flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setShowFundPopup(false)} className="text-xs sm:text-sm">
+                Cancel
+              </Button>
+              <Button onClick={confirmFund} className="text-xs sm:text-sm">
+                Confirm Fund
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={showSecretCodeDialog} onOpenChange={setShowSecretCodeDialog}>
+          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Drop Code Generated</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Your Drop code has been generated and stored. Share this code with users to allow them to drop tokens.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="text-center">
+                <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                  {generatedSecretCode}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                This code is required for users to drop tokens. Keep it safe and share it only with intended users.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setShowSecretCodeDialog(false)} className="text-xs sm:text-sm w-full">
+                Got it
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
+          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Current Drop Code</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                This is the current drop code for your faucet.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="text-center">
+                <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                  {currentSecretCode}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Share this code with users to allow them to drop tokens from your faucet.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setShowCurrentSecretDialog(false)} className="text-xs sm:text-sm w-full">
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
+          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Edit Faucet Name</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">Enter a new name for your faucet.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-faucet" className="text-xs sm:text-sm">
+                  New Faucet Name
+                </Label>
+                <Input
+                  id="new-faucet-name"
+                  value={newFaucetName}
+                  onChange={(e) => setNewFaucetName(e.target.value)}
+                  placeholder="Enter new faucet name"
+                  className="text-xs sm:text-sm"
+                />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Share this code with users to allow them to drop tokens from your faucet.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowCurrentSecretDialog(false)} className="text-xs sm:text-sm w-full">
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
-        <DialogContent className="w-11/12 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Edit Faucet Name</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">Enter a new name for your faucet.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="new-faucet-name" className="text-xs sm:text-sm">
-                New Faucet Name
-              </Label>
-              <Input
-                id="new-faucet-name"
-                value={newFaucetName}
-                onChange={(e) => setNewFaucetName(e.target.value)}
-                placeholder="Enter new faucet name"
-                className="text-xs sm:text-sm"
-              />
+            <DialogFooter className="flex flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setShowEditNameDialog(false)} className="text-xs sm:text-sm">
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateFaucetName} disabled={!newFaucetName.trim()} className="text-xs sm:text-sm">
+                Update Name
+              </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl text-red-600">Delete Faucet</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Are you sure you want to delete this faucet? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-xs text-muted-foreground">
+                Deleting the faucet will permanently remove it and all associated data. Make sure to withdraw any
+                remaining tokens first.
+              </p>
             </div>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowEditNameDialog(false)} className="text-xs sm:text-sm">
-              Cancel
-            </Button>
-            <Button onClick={handleUpdateFaucetName} disabled={!newFaucetName.trim()} className="text-xs sm:text-sm">
-              Update Name
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="w-11/12 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl text-red-600">Delete Faucet</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Are you sure you want to delete this faucet? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-xs text-muted-foreground">
-              Deleting the faucet will permanently remove it and all associated data. Make sure to withdraw any
-              remaining tokens first.
-            </p>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="text-xs sm:text-sm">
-              Cancel
-            </Button>
-            <Button onClick={handleDeleteFaucet} variant="destructive" className="text-xs sm:text-sm">
-              Delete Faucet
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
-        <DialogContent className="w-11/12 sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Add Admin</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Add a new admin to help manage this faucet.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="admin-address" className="text-xs sm:text-sm">
-                Admin Address
-              </Label>
-              <Input
-                id="admin-address"
-                value={newAdminAddress}
-                onChange={(e) => setNewAdminAddress(e.target.value)}
-                placeholder="0x..."
-                className="text-xs sm:text-sm"
-              />
+            <DialogFooter className="flex flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="text-xs sm:text-sm">
+                Cancel
+              </Button>
+              <Button onClick={handleDeleteFaucet} variant="destructive" className="text-xs sm:text-sm">
+                Delete Faucet
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
+          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Add Admin</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Add a new admin to help manage this faucet.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="admin-address" className="text-xs sm:text-sm">
+                  Admin Address
+                </Label>
+                <Input
+                  id="admin-address"
+                  value={newAdminAddress}
+                  onChange={(e) => setNewAdminAddress(e.target.value)}
+                  placeholder="0x..."
+                  className="text-xs sm:text-sm"
+                />
+              </div>
             </div>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowAddAdminDialog(false)} className="text-xs sm:text-sm">
-              Cancel
-            </Button>
-            <Button onClick={handleAddAdmin} disabled={!newAdminAddress.trim()} className="text-xs sm:text-sm">
-              Add Admin
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter className="flex flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setShowAddAdminDialog(false)} className="text-xs sm:text-sm">
+                Cancel
+              </Button>
+              <Button onClick={handleAddAdmin} disabled={!newAdminAddress.trim()} className="text-xs sm:text-sm">
+                Add
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+     
     </main>
   )
 }

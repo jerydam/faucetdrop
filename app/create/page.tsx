@@ -17,19 +17,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Loader2, Info } from "lucide-react";
 import { Header } from "@/components/header";
-import { Switch } from "@/components/ui/switch";
 
 export default function CreateFaucet() {
   const { provider, address, isConnected, connect, chainId } = useWallet();
   const { network } = useNetwork();
   const { toast } = useToast();
   const [name, setName] = useState("");
+  const [useBackend, setUseBackend] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [useBackend, setUseBackend] = useState(true); // Backend toggle
 
   useEffect(() => {
     if (network && chainId !== null && BigInt(chainId) !== BigInt(network.chainId)) {
@@ -79,7 +79,6 @@ export default function CreateFaucet() {
         chainId: chainId.toString(),
         networkId: network.chainId.toString(),
         useBackend,
-        faucetType: useBackend ? "Backend Managed" : "Manual Whitelist",
       });
 
       const faucetAddress = await createFaucet(
@@ -87,9 +86,9 @@ export default function CreateFaucet() {
         factoryAddress,
         name,
         tokenAddress,
-        BigInt(chainId), // Convert chainId to bigint
-        BigInt(network.chainId), // Convert network.chainId to bigint
-        useBackend // Pass the backend toggle
+        BigInt(chainId),
+        BigInt(network.chainId),
+        useBackend
       );
 
       if (!faucetAddress) {
@@ -98,7 +97,7 @@ export default function CreateFaucet() {
 
       toast({
         title: "Faucet Created",
-        description: `Your ${useBackend ? "backend-managed" : "manually-managed"} faucet has been created at ${faucetAddress}`,
+        description: `Your faucet has been created at ${faucetAddress}`,
       });
 
       window.location.href = `/faucet/${faucetAddress}?networkId=${network.chainId}`;
@@ -171,50 +170,34 @@ export default function CreateFaucet() {
                 />
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Faucet Management Type</Label>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="backend-toggle"
-                      checked={useBackend}
-                      onCheckedChange={setUseBackend}
-                    />
-                    <Label htmlFor="backend-toggle">
-                      {useBackend ? "Backend Managed (Automatic)" : "Manual Whitelist Management"}
-                    </Label>
-                  </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="use-backend">Use Backend Management</Label>
+                  <Switch
+                    id="use-backend"
+                    checked={useBackend}
+                    onCheckedChange={setUseBackend}
+                  />
                 </div>
-
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertTitle>
-                    {useBackend ? "Backend Managed Mode" : "Manual Whitelist Mode"}
-                  </AlertTitle>
-                  <AlertDescription>
-                    {useBackend ? (
-                      <div>
-                        <p>The backend will automatically handle:</p>
-                        <ul className="list-disc pl-5 mt-2">
-                          <li>User whitelist validation</li>
-                          <li>Claim processing with secret codes</li>
-                          <li>Automatic token distribution</li>
-                        </ul>
-                      </div>
-                    ) : (
-                      <div>
-                        <p>You will manually manage:</p>
-                        <ul className="list-disc pl-5 mt-2">
-                          <li>Adding addresses to whitelist</li>
-                          <li>Setting custom claim amounts per user</li>
-                          <li>Claim button visibility (only for whitelisted users)</li>
-                          <li>File uploads for batch operations</li>
-                        </ul>
-                      </div>
-                    )}
-                  </AlertDescription>
-                </Alert>
+                <p className="text-sm text-gray-500">
+                  {useBackend
+                    ? "Backend management enabled for automatic claim processing, user whitelist validation, and secret codes."
+                    : "Manual management enabled. Admins will control claims directly."}
+                </p>
               </div>
+
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>Faucet Configuration</AlertTitle>
+                <AlertDescription>
+                  <p>The faucet will be configured with:</p>
+                  <ul className="list-disc pl-5 mt-2">
+                    <li>{useBackend ? "Backend-managed" : "Manual"} claim processing</li>
+                    <li>Admin-controlled operations</li>
+                    <li>Token distribution based on set parameters</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
 
               <Alert>
                 <AlertCircle className="h-4 w-4" />
@@ -228,8 +211,7 @@ export default function CreateFaucet() {
                         ? `Native Token (${network?.nativeCurrency?.symbol || "ETH"})`
                         : `ERC20 Token (${network?.tokenAddress})`}
                     </li>
-                    <li>Backend: Always configured for claim processing</li>
-                    <li>Faucet Type: {useBackend ? "0 (Backend Managed)" : "1 (Manual Whitelist)"}</li>
+                    <li>Backend: {useBackend ? "Enabled" : "Disabled"}</li>
                   </ul>
                 </AlertDescription>
               </Alert>
@@ -248,7 +230,7 @@ export default function CreateFaucet() {
                 ) : !isConnected ? (
                   "Connect & Create Faucet"
                 ) : (
-                  `Create ${useBackend ? "Backend-Managed" : "Manual"} Faucet`
+                  "Create Faucet"
                 )}
               </Button>
             </CardFooter>

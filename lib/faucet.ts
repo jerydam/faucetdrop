@@ -2,7 +2,7 @@ import { type BrowserProvider, Contract, JsonRpcProvider, ZeroAddress, isAddress
 import { FAUCET_ABI, ERC20_ABI, FACTORY_ABI, STORAGE_ABI, CHECKIN_ABI } from "./abis"
 import { appendDivviReferralData, reportTransactionToDivvi } from "./divvi-integration"
 
-// Fetch faucets for a specific network using getAllFaucetDetails
+// Fetch faucets for a specific network using getAllFaucets and getFaucetDetails
 interface Network {
   chainId: bigint
   name: string
@@ -66,23 +66,28 @@ async function checkPermissions(
   callerAddress: string,
 ): Promise<{ isOwner: boolean; isAdmin: boolean; isPaused: boolean }> {
   try {
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider)
-    const [owner, isAdmin, isPaused] = await Promise.all([
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider);
+    const [owner, adminsResponse, isPaused] = await Promise.all([
       faucetContract.owner(),
-      faucetContract.isAdmin(callerAddress).catch(() => false),
+      faucetContract.getAllAdmins(),
       faucetContract.paused(),
-    ])
+    ]);
+    // Flatten the admins array
+    const admins = Array.isArray(adminsResponse)
+      ? adminsResponse.flat().filter((admin: string) => isAddress(admin))
+      : [];
+    const isAdmin = admins.some((admin: string) => admin.toLowerCase() === callerAddress.toLowerCase());
     console.log(
       `Permissions for ${callerAddress}: isOwner=${owner.toLowerCase() === callerAddress.toLowerCase()}, isAdmin=${isAdmin}, isPaused=${isPaused}`,
-    )
+    );
     return {
       isOwner: owner.toLowerCase() === callerAddress.toLowerCase(),
       isAdmin,
       isPaused,
-    }
+    };
   } catch (error: any) {
-    console.error(`Error checking permissions for ${faucetAddress}:`, error)
-    throw new Error("Failed to check permissions")
+    console.error(`Error checking permissions for ${faucetAddress}:`, error);
+    throw new Error("Failed to check permissions");
   }
 }
 
@@ -336,39 +341,40 @@ export async function createFaucet(
   tokenAddress: string,
   chainId: bigint,
   networkId: bigint,
-  useBackend = true, // New parameter for backend toggle
+  useBackend: boolean,
 ): Promise<string> {
   try {
     if (!name.trim()) {
-      throw new Error("Faucet name cannot be empty")
+      throw new Error("Faucet name cannot be empty");
     }
     if (!isAddress(tokenAddress)) {
-      throw new Error(`Invalid token address: ${tokenAddress}`)
+      throw new Error(`Invalid token address: ${tokenAddress}`);
     }
 
-    const signer = await provider.getSigner()
-    const signerAddress = await signer.getAddress()
-    const factoryContract = new Contract(factoryAddress, FACTORY_ABI, signer)
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const factoryContract = new Contract(factoryAddress, FACTORY_ABI, signer);
 
-    // Always use the backend address - we need it for claim handling
-    // The backend toggle only affects whitelist management, not the backend address
-    const backendAddress = VALID_BACKEND_ADDRESS
+    const backendAddress = VALID_BACKEND_ADDRESS;
 
-    // Encode function data with supported parameters
-    const data = factoryContract.interface.encodeFunctionData("createFaucet", [name, tokenAddress, backendAddress])
-    const dataWithReferral = appendDivviReferralData(data)
+    const data = factoryContract.interface.encodeFunctionData("createFaucet", [
+      name,
+      tokenAddress,
+      backendAddress,
+      useBackend,
+    ]);
+    const dataWithReferral = appendDivviReferralData(data);
 
-    // Estimate gas
     const gasEstimate = await provider.estimateGas({
       to: factoryAddress,
       data: dataWithReferral,
       from: signerAddress,
-    })
-    const feeData = await provider.getFeeData()
-    const gasPrice = feeData.gasPrice || BigInt(0)
-    const maxFeePerGas = feeData.maxFeePerGas || undefined
-    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
-    const gasCost = gasEstimate * gasPrice
+    });
+    const feeData = await provider.getFeeData();
+    const gasPrice = feeData.gasPrice || BigInt(0);
+    const maxFeePerGas = feeData.maxFeePerGas || undefined;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
+    const gasCost = gasEstimate * gasPrice;
 
     console.log("Create faucet params:", {
       factoryAddress,
@@ -381,60 +387,97 @@ export async function createFaucet(
       signerAddress,
       gasEstimate: gasEstimate.toString(),
       gasPrice: gasPrice.toString(),
-      maxFeePerGas: maxFeePerGas?.toString(),
-      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
       gasCost: gasCost.toString(),
-    })
+    });
 
     const tx = await signer.sendTransaction({
       to: factoryAddress,
       data: dataWithReferral,
-      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
+      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
       maxFeePerGas,
       maxPriorityFeePerGas,
-    })
+    });
 
-    console.log("Transaction hash:", tx.hash)
-    const receipt = await tx.wait()
+    console.log("Transaction hash:", tx.hash);
+    const receipt = await tx.wait();
     if (!receipt) {
-      throw new Error("Transaction receipt is null")
+      throw new Error("Transaction receipt is null");
     }
-    console.log("Transaction confirmed:", receipt.hash)
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
+    console.log("Transaction confirmed:", receipt.hash);
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
     const event = receipt.logs
       .map((log) => {
         try {
-          return factoryContract.interface.parseLog(log)
+          return factoryContract.interface.parseLog(log);
         } catch {
-          return null
+          return null;
         }
       })
-      .find((parsed) => parsed?.name === "FaucetCreated")
+      .find((parsed) => parsed?.name === "FaucetCreated");
 
     if (!event || !("args" in event) || !event.args || !event.args.faucet) {
-      throw new Error("Failed to retrieve faucet address from transaction")
+      throw new Error("Failed to retrieve faucet address from transaction");
     }
-
-    // Store the backend preference in localStorage for this faucet
-    saveToStorage(`faucet_backend_mode_${event.args.faucet}`, useBackend)
 
     console.log("New faucet created:", {
       faucetAddress: event.args.faucet,
       backendAddress,
       useBackend,
-    })
+    });
 
-    return event.args.faucet
+    return event.args.faucet;
   } catch (error: any) {
-    console.error("Error creating faucet:", error)
+    console.error("Error creating faucet:", error);
     if (error.message?.includes("network changed")) {
-      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
+      throw new Error("Network changed during transaction. Please try again with a stable network connection.");
     }
     if (error.data && typeof error.data === "string") {
-      throw new Error(decodeRevertError(error.data))
+      throw new Error(decodeRevertError(error.data));
     }
-    throw new Error(error.reason || error.message || "Failed to create faucet")
+    throw new Error(error.reason || error.message || "Failed to create faucet");
+  }
+}
+
+export async function getAllAdmins(
+  provider: BrowserProvider | JsonRpcProvider,
+  faucetAddress: string,
+): Promise<string[]> {
+  try {
+    if (!isAddress(faucetAddress)) {
+      throw new Error("Invalid faucet address");
+    }
+
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider);
+    const adminsResponse = await faucetContract.getAllAdmins();
+    const admins = Array.isArray(adminsResponse)
+      ? adminsResponse.flat().filter((admin: string) => isAddress(admin))
+      : [];
+    console.log(`Fetched admins for faucet ${faucetAddress}:`, admins);
+    return admins;
+  } catch (error: any) {
+    console.error(`Error fetching admins for ${faucetAddress}:`, error);
+    return [];
+  }
+}
+
+export async function isAdmin(
+  provider: BrowserProvider | JsonRpcProvider,
+  faucetAddress: string,
+  userAddress: string,
+): Promise<boolean> {
+  try {
+    if (!isAddress(faucetAddress) || !isAddress(userAddress)) {
+      throw new Error("Invalid faucet or user address");
+    }
+
+    const admins = await getAllAdmins(provider, faucetAddress);
+    const isAdminStatus = admins.some((admin: string) => admin.toLowerCase() === userAddress.toLowerCase());
+    console.log(`Admin check for ${userAddress} on faucet ${faucetAddress}: ${isAdminStatus}`);
+    return isAdminStatus;
+  } catch (error: any) {
+    console.error(`Error checking admin status for ${userAddress} on ${faucetAddress}:`, error);
+    return false;
   }
 }
 
@@ -459,156 +502,156 @@ export async function isWhitelisted(
   }
 }
 
-// Check if user is admin
-export async function isAdmin(
+// Get faucet backend mode from contract
+export async function getFaucetBackendMode(
   provider: BrowserProvider | JsonRpcProvider,
   faucetAddress: string,
-  userAddress: string,
 ): Promise<boolean> {
   try {
-    if (!isAddress(faucetAddress) || !isAddress(userAddress)) {
-      throw new Error("Invalid faucet or user address")
+    if (!isAddress(faucetAddress)) {
+      throw new Error("Invalid faucet address");
     }
 
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider)
-    const isAdminStatus = await faucetContract.isAdmin(userAddress)
-    console.log(`Admin check for ${userAddress} on faucet ${faucetAddress}: ${isAdminStatus}`)
-    return isAdminStatus
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider);
+    const useBackend = await faucetContract.getUseBackend();
+    console.log(`Backend mode for faucet ${faucetAddress}: ${useBackend}`);
+    return useBackend;
   } catch (error: any) {
-    console.error(`Error checking admin status for ${userAddress} on ${faucetAddress}:`, error)
-    return false
+    console.error(`Error fetching backend mode for ${faucetAddress}:`, error);
+    return false; // Default to false if contract call fails
   }
 }
 
-// Get faucet backend mode from localStorage
-export function getFaucetBackendMode(faucetAddress: string): boolean {
-  return getFromStorage(`faucet_backend_mode_${faucetAddress}`) ?? true // Default to backend enabled
-}
-
-// Get faucet details with admin check
+// Get faucet details with admin check and backend mode from contract
 export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvider, faucetAddress: string) {
   try {
-    console.log(`Getting details for faucet ${faucetAddress}`)
-    let contract
+    console.log(`Getting details for faucet ${faucetAddress}`);
+    let contract;
     if ("getSigner" in provider && typeof provider.getSigner === "function") {
       try {
-        contract = new Contract(faucetAddress, FAUCET_ABI, await provider.getSigner())
+        contract = new Contract(faucetAddress, FAUCET_ABI, await provider.getSigner());
       } catch (error) {
-        console.warn(`Error getting signer, falling back to provider for ${faucetAddress}:`, error)
-        contract = new Contract(faucetAddress, FAUCET_ABI, provider)
+        console.warn(`Error getting signer, falling back to provider for ${faucetAddress}:`, error);
+        contract = new Contract(faucetAddress, FAUCET_ABI, provider);
       }
     } else {
-      contract = new Contract(faucetAddress, FAUCET_ABI, provider)
+      contract = new Contract(faucetAddress, FAUCET_ABI, provider);
     }
 
-    let tokenAddress = ZeroAddress
-    let ownerAddress = ZeroAddress
-    let faucetName = "Unknown Faucet"
-    let claimAmount = BigInt(0)
-    let startTime = BigInt(0)
-    let endTime = BigInt(0)
-    let isClaimActive = false
-    let balance = BigInt(0)
-    let isEther = true
-    let tokenSymbol = "CELO" // Default for Celo
-    let tokenDecimals = 18
+    let tokenAddress = ZeroAddress;
+    let ownerAddress = ZeroAddress;
+    let faucetName = "Unknown Faucet";
+    let claimAmount = BigInt(0);
+    let startTime = BigInt(0);
+    let endTime = BigInt(0);
+    let isClaimActive = false;
+    let balance = BigInt(0);
+    let isEther = true;
+    let tokenSymbol = "CELO";
+    let tokenDecimals = 18;
+    let useBackend = false;
 
     try {
-      tokenAddress = await contract.token()
+      tokenAddress = await contract.token();
     } catch (error) {
-      console.warn(`Error getting token address:`, error)
+      console.warn(`Error getting token address:`, error);
     }
     try {
-      ownerAddress = await contract.owner()
+      ownerAddress = await contract.owner();
     } catch (error) {
-      console.warn(`Error getting owner address:`, error)
+      console.warn(`Error getting owner address:`, error);
     }
     try {
-      faucetName = await contract.name()
+      faucetName = await contract.name();
     } catch (error) {
-      console.warn(`Error getting name:`, error)
+      console.warn(`Error getting name:`, error);
     }
     try {
-      claimAmount = await contract.claimAmount()
+      claimAmount = await contract.claimAmount();
     } catch (error) {
-      console.warn(`Error getting claim amount:`, error)
+      console.warn(`Error getting claim amount:`, error);
     }
     try {
-      startTime = await contract.startTime()
+      startTime = await contract.startTime();
     } catch (error) {
-      console.warn(`Error getting start time:`, error)
+      console.warn(`Error getting start time:`, error);
     }
     try {
-      endTime = await contract.endTime()
+      endTime = await contract.endTime();
     } catch (error) {
-      console.warn(`Error getting end time:`, error)
+      console.warn(`Error getting end time:`, error);
     }
     try {
-      isClaimActive = await contract.isClaimActive()
+      isClaimActive = await contract.isClaimActive();
     } catch (error) {
-      console.warn(`Error getting claim active status:`, error)
+      console.warn(`Error getting claim active status:`, error);
     }
     try {
-      const balanceResult = await contract.getFaucetBalance()
-      balance = balanceResult[0]
-      isEther = balanceResult[1]
-      const network = await provider.getNetwork()
+      useBackend = await contract.getUseBackend();
+    } catch (error) {
+      console.warn(`Error getting backend mode:`, error);
+    }
+    try {
+      const balanceResult = await contract.getFaucetBalance();
+      balance = balanceResult[0];
+      isEther = balanceResult[1];
+      const network = await provider.getNetwork();
       tokenSymbol = isEther
         ? isCeloNetwork(network.chainId)
           ? "CELO"
           : network.chainId === BigInt(1135)
             ? "LISK"
             : "ETH"
-        : tokenSymbol
+        : tokenSymbol;
     } catch (error) {
-      console.warn(`Error getting balance:`, error)
+      console.warn(`Error getting balance:`, error);
       if (tokenAddress !== ZeroAddress) {
         try {
-          const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider)
-          balance = await tokenContract.balanceOf(faucetAddress)
-          isEther = false
+          const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider);
+          balance = await tokenContract.balanceOf(faucetAddress);
+          isEther = false;
         } catch (innerError) {
-          console.warn(`Error getting token balance:`, innerError)
+          console.warn(`Error getting token balance:`, innerError);
         }
       } else {
         try {
-          balance = await provider.getBalance(faucetAddress)
-          isEther = true
+          balance = await provider.getBalance(faucetAddress);
+          isEther = true;
         } catch (innerError) {
-          console.warn(`Error getting native balance:`, innerError)
+          console.warn(`Error getting native balance:`, innerError);
         }
       }
     }
 
     if (!isEther && tokenAddress !== ZeroAddress) {
       try {
-        const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider)
-        tokenSymbol = await tokenContract.symbol()
+        const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider);
+        tokenSymbol = await tokenContract.symbol();
       } catch (error) {
-        console.warn(`Error getting token symbol:`, error)
+        console.warn(`Error getting token symbol:`, error);
       }
       try {
-        const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider)
-        tokenDecimals = await tokenContract.decimals()
+        const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider);
+        tokenDecimals = await tokenContract.decimals();
       } catch (error) {
-        console.warn(`Error getting token decimals:`, error)
+        console.warn(`Error getting token decimals:`, error);
       }
     }
 
-    let hasClaimed = false
-    let isUserAdmin = false
+    let hasClaimed = false;
+    let isUserAdmin = false;
     if ("getSigner" in provider && typeof provider.getSigner === "function") {
       try {
-        const signer = await provider.getSigner()
-        const userAddress = await signer.getAddress()
-        hasClaimed = await contract.hasClaimed(userAddress)
-        isUserAdmin = await contract.isAdmin(userAddress)
+        const signer = await provider.getSigner();
+        const userAddress = await signer.getAddress();
+        hasClaimed = await contract.hasClaimed(userAddress);
+        isUserAdmin = await isAdmin(provider, faucetAddress, userAddress);
       } catch (error) {
-        console.warn(`Error checking claim status or admin status:`, error)
+        console.warn(`Error checking claim status or admin status:`, error);
       }
     }
 
-    console.log(`Successfully got details for faucet ${faucetAddress}`)
+    console.log(`Successfully got details for faucet ${faucetAddress}`);
     return {
       faucetAddress,
       token: tokenAddress,
@@ -624,10 +667,10 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
       tokenDecimals,
       hasClaimed,
       isUserAdmin,
-      backendMode: getFaucetBackendMode(faucetAddress),
-    }
+      backendMode: useBackend,
+    };
   } catch (error) {
-    console.error(`Error getting faucet details for ${faucetAddress}:`, error)
+    console.error(`Error getting faucet details for ${faucetAddress}:`, error);
     return {
       faucetAddress,
       token: ZeroAddress,
@@ -643,9 +686,9 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
       tokenDecimals: 18,
       hasClaimed: false,
       isUserAdmin: false,
-      backendMode: true,
+      backendMode: false,
       error: error instanceof Error ? error.message : "Unknown error",
-    }
+    };
   }
 }
 
@@ -750,21 +793,21 @@ export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
       return []
     }
 
-    // Fetch faucet details from factory
-    let faucetDetails: any[] = []
+    // Fetch all faucet addresses
+    let faucetAddresses: string[] = []
     try {
-      faucetDetails = await factoryContract.getAllFaucetDetails()
+      faucetAddresses = await factoryContract.getAllFaucets()
     } catch (error) {
-      console.error(`Error calling getAllFaucetDetails on ${network.name}:`, error)
+      console.error(`Error calling getAllFaucets on ${network.name}:`, error)
       return []
     }
 
-    // Process each faucet to get full details
+    // Process each faucet address to get full details
     const results = await Promise.all(
-      faucetDetails.map(async (faucet: any) => {
-        if (!faucet.faucetAddress || faucet.faucetAddress === ZeroAddress) return null
+      faucetAddresses.map(async (faucetAddress: string) => {
+        if (!faucetAddress || faucetAddress === ZeroAddress) return null
         try {
-          const details = await getFaucetDetails(provider, faucet.faucetAddress)
+          const details = await getFaucetDetails(provider, faucetAddress)
           return {
             ...details,
             network: {
@@ -775,7 +818,7 @@ export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
             },
           }
         } catch (error) {
-          console.warn(`Error getting details for faucet ${faucet.faucetAddress} on ${network.name}:`, error)
+          console.warn(`Error getting details for faucet ${faucetAddress} on ${network.name}:`, error)
           return null
         }
       }),
@@ -1060,77 +1103,6 @@ export async function fundFaucet(
       throw new Error("Network changed during transaction. Please try again with a stable network connection.")
     }
     throw new Error(error.reason || error.message || "Failed to fund faucet")
-  }
-}
-
-// Set claim parameters
-export async function setClaimParameters(
-  provider: BrowserProvider,
-  faucetAddress: string,
-  claimAmount: bigint,
-  startTime: number,
-  endTime: number,
-  chainId: bigint,
-  networkId: bigint,
-): Promise<string> {
-  if (!checkNetwork(chainId, networkId)) {
-    throw new Error("Switch to the network to perform operation")
-  }
-
-  try {
-    const signer = await provider.getSigner()
-    const signerAddress = await signer.getAddress()
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
-
-    const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [claimAmount, startTime, endTime])
-    const dataWithReferral = appendDivviReferralData(data)
-
-    // Estimate gas
-    const gasEstimate = await provider.estimateGas({
-      to: faucetAddress,
-      data: dataWithReferral,
-      from: signerAddress,
-    })
-    const feeData = await provider.getFeeData()
-    const maxFeePerGas = feeData.maxFeePerGas || undefined
-    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined
-
-    console.log("Set claim parameters params:", {
-      faucetAddress,
-      claimAmount: claimAmount.toString(),
-      startTime,
-      endTime,
-      chainId: chainId.toString(),
-      networkId: networkId.toString(),
-      signerAddress,
-      gasEstimate: gasEstimate.toString(),
-      maxFeePerGas: maxFeePerGas?.toString(),
-      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
-    })
-
-    const tx = await signer.sendTransaction({
-      to: faucetAddress,
-      data: dataWithReferral,
-      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-    })
-
-    console.log("Set claim parameters transaction hash:", tx.hash)
-    const receipt = await tx.wait()
-    if (!receipt) {
-      throw new Error("Set claim parameters transaction receipt is null")
-    }
-    console.log("Set claim parameters transaction confirmed:", receipt.hash)
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
-
-    return tx.hash
-  } catch (error: any) {
-    console.error("Error setting claim parameters:", error)
-    if (error.message?.includes("network changed")) {
-      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
-    }
-    throw new Error(error.reason || error.message || "Failed to set claim parameters")
   }
 }
 
@@ -1547,59 +1519,61 @@ function decodeRevertError(data: string): string {
   return "Unknown contract error occurred"
 }
 
+// Update faucet name with admin check
 export async function updateFaucetName(
   provider: BrowserProvider,
-  faucet: string, // Modified parameter name to avoid conflict
+  faucet: string,
   name: string,
   chainId: bigint,
   networkId: bigint,
 ): Promise<`0x${string}`> {
   try {
     if (!checkNetwork(chainId, networkId)) {
-      throw new Error("Switch to the correct network to perform this operation")
+      throw new Error("Switch to the correct network to perform this operation");
     }
 
     if (!name.trim()) {
-      throw new Error("Faucet name cannot be empty")
+      throw new Error("Faucet name cannot be empty");
     }
 
-    const signer = await provider.getSigner()
-    const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucet, signerAddress)
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const permissions = await checkPermissions(provider, faucet, signerAddress);
     if (permissions.isPaused) {
-      throw new Error("Faucet is paused and cannot be modified")
+      throw new Error("Faucet is paused and cannot be modified");
     }
     if (!permissions.isOwner && !permissions.isAdmin) {
-      throw new Error("Only the owner or admin can update the faucet name")
+      throw new Error("Only the owner or admin can update the faucet name");
     }
 
-    const faucetContract = new Contract(faucet, FAUCET_ABI, signer)
-    const gasEstimate = await faucetContract.updateName.estimateGas(name)
-    const feeData = await provider.getFeeData()
+    const faucetContract = new Contract(faucet, FAUCET_ABI, signer);
+    const gasEstimate = await faucetContract.updateName.estimateGas(name);
+    const feeData = await provider.getFeeData();
 
     const tx = await faucetContract.updateName(name, {
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
       maxFeePerGas: feeData.maxFeePerGas,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
-    })
+    });
 
-    console.log(`Update faucet name transaction sent: ${tx.hash}`)
-    const receipt = await tx.wait()
+    console.log(`Update faucet name transaction sent: ${tx.hash}`);
+    const receipt = await tx.wait();
     if (!receipt) {
-      throw new Error("Transaction receipt is null")
+      throw new Error("Transaction receipt is null");
     }
 
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
-    return tx.hash as `0x${string}`
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
+    return tx.hash as `0x${string}`;
   } catch (error: any) {
-    console.error("Error updating faucet name:", error)
+    console.error("Error updating faucet name:", error);
     if (error.data && typeof error.data === "string") {
-      throw new Error(decodeRevertError(error.data))
+      throw new Error(decodeRevertError(error.data));
     }
-    throw new Error(error.reason || error.message || "Failed to update faucet name")
+    throw new Error(error.reason || error.message || "Failed to update faucet name");
   }
 }
 
+// Delete faucet with admin check
 export async function deleteFaucet(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1608,47 +1582,48 @@ export async function deleteFaucet(
 ): Promise<`0x${string}`> {
   try {
     if (!checkNetwork(chainId, networkId)) {
-      throw new Error("Switch to the correct network to perform this operation")
+      throw new Error("Switch to the correct network to perform this operation");
     }
 
-    const signer = await provider.getSigner()
-    const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucetAddress, signerAddress)
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const permissions = await checkPermissions(provider, faucetAddress, signerAddress);
     if (permissions.isPaused) {
-      throw new Error("Faucet is paused and cannot be deleted")
+      throw new Error("Faucet is paused and cannot be deleted");
     }
-    if (!permissions.isOwner) {
-      throw new Error("Only the owner can delete the faucet")
+    if (!permissions.isOwner && !permissions.isAdmin) {
+      throw new Error("Only the owner or admin can delete the faucet");
     }
 
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
-    const gasEstimate = await faucetContract.deleteFaucet.estimateGas()
-    const feeData = await provider.getFeeData()
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
+    const gasEstimate = await faucetContract.deleteFaucet.estimateGas();
+    const feeData = await provider.getFeeData();
 
     const tx = await faucetContract.deleteFaucet({
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
       maxFeePerGas: feeData.maxFeePerGas,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
-    })
+    });
 
-    console.log(`Delete faucet transaction sent: ${tx.hash}`)
-    const receipt = await tx.wait()
+    console.log(`Delete faucet transaction sent: ${tx.hash}`);
+    const receipt = await tx.wait();
     if (!receipt) {
-      throw new Error("Transaction receipt is null")
+      throw new Error("Transaction receipt is null");
     }
 
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
-    faucetDetailsCache.delete(faucetAddress)
-    return tx.hash as `0x${string}`
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
+    faucetDetailsCache.delete(faucetAddress);
+    return tx.hash as `0x${string}`;
   } catch (error: any) {
-    console.error("Error deleting faucet:", error)
+    console.error("Error deleting faucet:", error);
     if (error.data && typeof error.data === "string") {
-      throw new Error(decodeRevertError(error.data))
+      throw new Error(decodeRevertError(error.data));
     }
-    throw new Error(error.reason || error.message || "Failed to delete faucet")
+    throw new Error(error.reason || error.message || "Failed to delete faucet");
   }
 }
 
+// Add admin with permission check
 export async function addAdmin(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1658,46 +1633,124 @@ export async function addAdmin(
 ): Promise<`0x${string}`> {
   try {
     if (!checkNetwork(chainId, networkId)) {
-      throw new Error("Switch to the correct network to perform this operation")
+      throw new Error("Switch to the correct network to perform this operation");
     }
 
     if (!isAddress(adminAddress)) {
-      throw new Error("Invalid admin address")
+      throw new Error("Invalid admin address");
     }
 
-    const signer = await provider.getSigner()
-    const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucetAddress, signerAddress)
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const permissions = await checkPermissions(provider, faucetAddress, signerAddress);
     if (permissions.isPaused) {
-      throw new Error("Faucet is paused and cannot be modified")
+      throw new Error("Faucet is paused and cannot be modified");
     }
-    if (!permissions.isOwner) {
-      throw new Error("Only the owner can add an admin")
+    if (!permissions.isOwner && !permissions.isAdmin) {
+      throw new Error("Only the owner or admin can add an admin");
     }
 
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
-    const gasEstimate = await faucetContract.addAdmin.estimateGas(adminAddress)
-    const feeData = await provider.getFeeData()
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
+    const gasEstimate = await faucetContract.addAdmin.estimateGas(adminAddress);
+    const feeData = await provider.getFeeData();
 
     const tx = await faucetContract.addAdmin(adminAddress, {
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
       maxFeePerGas: feeData.maxFeePerGas,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
-    })
+    });
 
-    console.log(`Add admin transaction sent: ${tx.hash}`)
-    const receipt = await tx.wait()
+    console.log(`Add admin transaction sent: ${tx.hash}`);
+    const receipt = await tx.wait();
     if (!receipt) {
-      throw new Error("Transaction receipt is null")
+      throw new Error("Transaction receipt is null");
     }
 
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
-    return tx.hash as `0x${string}`
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
+    return tx.hash as `0x${string}`;
   } catch (error: any) {
-    console.error("Error adding admin:", error)
+    console.error("Error adding admin:", error);
     if (error.data && typeof error.data === "string") {
-      throw new Error(decodeRevertError(error.data))
+      throw new Error(decodeRevertError(error.data));
     }
-    throw new Error(error.reason || error.message || "Failed to add admin")
+    throw new Error(error.reason || error.message || "Failed to add admin");
+  }
+}
+
+// Set claim parameters with admin check
+export async function setClaimParameters(
+  provider: BrowserProvider,
+  faucetAddress: string,
+  claimAmount: bigint,
+  startTime: number,
+  endTime: number,
+  chainId: bigint,
+  networkId: bigint,
+): Promise<string> {
+  if (!checkNetwork(chainId, networkId)) {
+    throw new Error("Switch to the network to perform operation");
+  }
+
+  try {
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const permissions = await checkPermissions(provider, faucetAddress, signerAddress);
+    if (permissions.isPaused) {
+      throw new Error("Faucet is paused and cannot be modified");
+    }
+    if (!permissions.isOwner && !permissions.isAdmin) {
+      throw new Error("Only the owner or admin can set claim parameters");
+    }
+
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
+
+    const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [claimAmount, startTime, endTime]);
+    const dataWithReferral = appendDivviReferralData(data);
+
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    });
+    const feeData = await provider.getFeeData();
+    const maxFeePerGas = feeData.maxFeePerGas || undefined;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
+
+    console.log("Set claim parameters params:", {
+      faucetAddress,
+      claimAmount: claimAmount.toString(),
+      startTime,
+      endTime,
+      chainId: chainId.toString(),
+      networkId: networkId.toString(),
+      signerAddress,
+      gasEstimate: gasEstimate.toString(),
+      maxFeePerGas: maxFeePerGas?.toString(),
+      maxPriorityFeePerGas: maxPriorityFeePerGas?.toString(),
+    });
+
+    const tx = await signer.sendTransaction({
+      to: faucetAddress,
+      data: dataWithReferral,
+      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    });
+
+    console.log("Set claim parameters transaction hash:", tx.hash);
+    const receipt = await tx.wait();
+    if (!receipt) {
+      throw new Error("Set claim parameters transaction receipt is null");
+    }
+    console.log("Set claim parameters transaction confirmed:", receipt.hash);
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
+
+    return tx.hash;
+  } catch (error: any) {
+    console.error("Error setting claim parameters:", error);
+    if (error.message?.includes("network changed")) {
+      throw new Error("Network changed during transaction. Please try again with a stable network connection.");
+    }
+    throw new Error(error.reason || error.message || "Failed to set claim parameters");
   }
 }

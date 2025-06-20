@@ -5,6 +5,17 @@ export const FACTORY_ABI = [
 		"type": "constructor"
 	},
 	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "faucet",
+				"type": "address"
+			}
+		],
+		"name": "FaucetDeletedError",
+		"type": "error"
+	},
+	{
 		"inputs": [],
 		"name": "FaucetNotRegistered",
 		"type": "error"
@@ -170,6 +181,11 @@ export const FACTORY_ABI = [
 				"internalType": "address",
 				"name": "_backend",
 				"type": "address"
+			},
+			{
+				"internalType": "bool",
+				"name": "_useBackend",
+				"type": "bool"
 			}
 		],
 		"name": "createFaucet",
@@ -250,6 +266,11 @@ export const FACTORY_ABI = [
 					{
 						"internalType": "bool",
 						"name": "isEther",
+						"type": "bool"
+					},
+					{
+						"internalType": "bool",
+						"name": "useBackend",
 						"type": "bool"
 					}
 				],
@@ -379,6 +400,11 @@ export const FACTORY_ABI = [
 					{
 						"internalType": "bool",
 						"name": "isEther",
+						"type": "bool"
+					},
+					{
+						"internalType": "bool",
+						"name": "useBackend",
 						"type": "bool"
 					}
 				],
@@ -586,6 +612,11 @@ export const FAUCET_ABI = [
 				"type": "address"
 			},
 			{
+				"internalType": "bool",
+				"name": "_useBackend",
+				"type": "bool"
+			},
+			{
 				"internalType": "address",
 				"name": "_owner",
 				"type": "address"
@@ -632,6 +663,17 @@ export const FAUCET_ABI = [
 	{
 		"inputs": [],
 		"name": "EmptyName",
+		"type": "error"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "faucet",
+				"type": "address"
+			}
+		],
+		"name": "FaucetDeletedError",
 		"type": "error"
 	},
 	{
@@ -1053,6 +1095,25 @@ export const FAUCET_ABI = [
 	{
 		"inputs": [
 			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "admins",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
 				"internalType": "address[]",
 				"name": "users",
 				"type": "address[]"
@@ -1146,6 +1207,19 @@ export const FAUCET_ABI = [
 	},
 	{
 		"inputs": [],
+		"name": "deleted",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
 		"name": "endTime",
 		"outputs": [
 			{
@@ -1197,6 +1271,19 @@ export const FAUCET_ABI = [
 				"internalType": "bool",
 				"name": "",
 				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getAllAdmins",
+		"outputs": [
+			{
+				"internalType": "address[]",
+				"name": "",
+				"type": "address[]"
 			}
 		],
 		"stateMutability": "view",
@@ -1331,6 +1418,19 @@ export const FAUCET_ABI = [
 			{
 				"internalType": "bool",
 				"name": "isEther",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getUseBackend",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
 				"type": "bool"
 			}
 		],
@@ -1682,6 +1782,19 @@ export const FAUCET_ABI = [
 		"name": "updateName",
 		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "useBackend",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{

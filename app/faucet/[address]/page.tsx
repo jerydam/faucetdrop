@@ -987,7 +987,7 @@ export default function FaucetDetails() {
                             <Button variant="outline" className="w-full flex justify-between items-center text-xs">
                               {activeTab === "fund" && "Fund"}
                               {activeTab === "parameters" && "Parameters"}
-                              {activeTab === "Drop-list" && "Drop-list"}
+                              {activeTab === "whitelist" && "Drop-list"}
                               {activeTab === "custom" && "Custom"}
                               {activeTab === "admin-power" && "Admin Power"}
                               <Menu className="h-4 w-4 ml-2" />

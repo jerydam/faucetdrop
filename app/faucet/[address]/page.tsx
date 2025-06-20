@@ -1001,7 +1001,7 @@ export default function FaucetDetails() {
                               <Coins className="h-3 w-3 mr-2" /> Parameters
                             </DropdownMenuItem>
                             {!backendMode && (
-                              <DropdownMenuItem onClick={() => setActiveTab("Drop-list")} className="text-xs">
+                              <DropdownMenuItem onClick={() => setActiveTab("whitelist")} className="text-xs">
                                 <Users className="h-3 w-3 mr-2" /> Drop-list
                               </DropdownMenuItem>
                             )}

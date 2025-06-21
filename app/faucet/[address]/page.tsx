@@ -723,7 +723,7 @@ export default function FaucetDetails() {
       const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
       const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
       if (backendMode) {
-        const response = await fetch("https://fauctdrop-backend-1.onrender.com/set-claim-parameters", {
+        const response = await fetch(" https://fauctdrop-backend.onrender.com/set-claim-parameters", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

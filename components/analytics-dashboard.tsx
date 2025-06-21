@@ -9,6 +9,10 @@ import { UserClaimsChart } from "./charts/user-claims-chart"
 import { BarChart3, PieChart, TrendingUp, Users, Loader2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from "recharts"
+import { ethers } from "ethers"
+import { useNetwork } from "@/hooks/use-network"
+import { FACTORY_ABI } from "@/lib/abis"
+import { getFaucetsForNetwork } from "@/lib/faucet"
 
 // Types for our data
 interface DashboardStats {
@@ -41,27 +45,150 @@ interface AnalyticsDashboardProps {
   error?: string
 }
 
-// Hook to fetch dashboard data
+// Hook to fetch and process dashboard data
 function useDashboardData() {
+  const { network } = useNetwork()
   const [data, setData] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!network) {
+        setError("No network selected")
+        setLoading(false)
+        return
+      }
+
       try {
         setLoading(true)
-        // Replace this with your actual API endpoint
-        const response = await fetch('/api/dashboard/stats')
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch dashboard data')
+        console.log("Fetching data for network:", network.name, network.factoryAddress)
+
+        // Fetch faucets using getFaucetsForNetwork
+        const faucets = await getFaucetsForNetwork(network)
+        const faucetsCreatedRecent = faucets.length
+        console.log("Faucets created (getFaucetsForNetwork):", faucetsCreatedRecent)
+
+        // For change calculation, assume previous period is unavailable
+        const faucetsCreatedPrevious = 0 // Update if historical data is available
+        const faucetsCreatedChange = faucetsCreatedPrevious > 0 
+          ? `+${((faucetsCreatedRecent - faucetsCreatedPrevious) / faucetsCreatedPrevious * 100).toFixed(1)}% from last month`
+          : "+0.0% from last month"
+
+        // Fetch transactions for other metrics
+        const provider = new ethers.JsonRpcProvider(network.rpcUrl)
+        const contract = new ethers.Contract(network.factoryAddress, FACTORY_ABI, provider)
+        const transactions: Array<{
+          faucetAddress: string
+          transactionType: string
+          initiator: string
+          amount: ethers.BigNumberish
+          isEther: boolean
+          timestamp: ethers.BigNumberish
+        }> = await contract.getAllTransactions()
+        console.log("Raw transactions:", transactions)
+        console.log("Unique transaction types:", [...new Set(transactions.map(tx => tx.transactionType))])
+
+        // Process transactions
+        const currentDate = new Date()
+        const thirtyDaysAgo = new Date(currentDate.getTime() - 30 * 24 * 60 * 60 * 1000)
+        const lastMonthStart = new Date(currentDate.getTime() - 60 * 24 * 60 * 60 * 1000)
+        const lastMonthEnd = thirtyDaysAgo
+
+        const recentTransactions = transactions.filter(tx => {
+          const timestampNum = Number(ethers.toBigInt(tx.timestamp)) * 1000
+          const txDate = new Date(timestampNum)
+          return txDate >= thirtyDaysAgo && txDate <= currentDate
+        })
+        const previousTransactions = transactions.filter(tx => {
+          const timestampNum = Number(ethers.toBigInt(tx.timestamp)) * 1000
+          const txDate = new Date(timestampNum)
+          return txDate >= lastMonthStart && txDate < lastMonthEnd
+        })
+
+        // Daily Transactions
+        const dailyTransactionsRecent = recentTransactions.length
+        const dailyTransactionsPrevious = previousTransactions.length
+        const dailyTransactionsChange = dailyTransactionsPrevious > 0 
+          ? `+${((dailyTransactionsRecent - dailyTransactionsPrevious) / dailyTransactionsPrevious * 100).toFixed(1)}% from last month`
+          : "+0.0% from last month"
+
+        // New Users
+        const uniqueUsers = new Set<string>()
+        const userFirstTx: { [address: string]: number } = {}
+        transactions.forEach(tx => {
+          const timestampNum = Number(ethers.toBigInt(tx.timestamp))
+          if (!userFirstTx[tx.initiator]) {
+            userFirstTx[tx.initiator] = timestampNum
+            uniqueUsers.add(tx.initiator)
+          }
+        })
+
+        const newUsersRecent = new Set(
+          recentTransactions.map(tx => tx.initiator)
+        ).size
+        const newUsersPrevious = new Set(
+          previousTransactions.map(tx => tx.initiator)
+        ).size
+        const newUsersChange = newUsersPrevious > 0 
+          ? `+${((newUsersRecent - newUsersPrevious) / newUsersPrevious * 100).toFixed(1)}% from last month`
+          : "+0.0% from last month"
+
+        // Generate chart data for new users (last 14 days)
+        const chartStartDate = new Date(currentDate.getTime() - 14 * 24 * 60 * 60 * 1000)
+        const chartData: Array<{ date: string, users: number, cumulative: number }> = []
+        let cumulativeUsers = 0
+        for (let i = 0; i < 14; i++) {
+          const date = new Date(chartStartDate.getTime() + i * 24 * 60 * 60 * 1000)
+          const dateStr = date.toISOString().split('T')[0]
+          const dailyNewUsers = transactions.filter(tx => {
+            const timestampNum = Number(ethers.toBigInt(tx.timestamp)) * 1000
+            const txDate = new Date(timestampNum)
+            return txDate.toISOString().split('T')[0] === dateStr && userFirstTx[tx.initiator] === Number(ethers.toBigInt(tx.timestamp))
+          }).length
+          cumulativeUsers += dailyNewUsers
+          chartData.push({
+            date: dateStr,
+            users: dailyNewUsers,
+            cumulative: cumulativeUsers
+          })
         }
-        
-        const result = await response.json()
-        setData(result)
+
+        // User Claims
+        const userClaimsRecent = recentTransactions.filter(tx => tx.transactionType === "Claim").length
+        const userClaimsPrevious = previousTransactions.filter(tx => tx.transactionType === "Claim").length
+        const userClaimsChange = userClaimsPrevious > 0 
+          ? `+${((userClaimsRecent - userClaimsPrevious) / userClaimsPrevious * 100).toFixed(1)}% from last month`
+          : "+0.0% from last month"
+
+        // Set processed data
+        const dashboardData: DashboardStats = {
+          faucetsCreated: {
+            total: faucetsCreatedRecent,
+            change: faucetsCreatedChange
+          },
+          dailyTransactions: {
+            total: dailyTransactionsRecent,
+            change: dailyTransactionsChange
+          },
+          newUsers: {
+            total: newUsersRecent,
+            change: newUsersChange,
+            chartData
+          },
+          userClaims: {
+            total: userClaimsRecent,
+            change: userClaimsChange
+          }
+        }
+
+        console.log("Dashboard data:", dashboardData)
+        setData(dashboardData)
+        setError(null)
       } catch (err) {
-        // For demo purposes, use mock data when API fails
+        console.error("Error fetching data:", err)
+        setError(`Failed to fetch data from ${network?.name || 'blockchain'}`)
+        // Fallback to mock data
         const mockData: DashboardStats = {
           faucetsCreated: {
             total: 6,
@@ -96,15 +223,15 @@ function useDashboardData() {
             change: "+7.2% from last month"
           }
         }
+        console.log("Using mock data:", mockData)
         setData(mockData)
-        setError(null) // Clear error when using mock data
       } finally {
         setLoading(false)
       }
     }
 
     fetchData()
-  }, [])
+  }, [network])
 
   return { data, loading, error }
 }
@@ -220,6 +347,7 @@ function NewUsersGraph({ data, loading }: { data?: Array<{date: string, users: n
     </div>
   )
 }
+
 function ErrorCard({ message }: { message: string }) {
   return (
     <Card className="border-destructive">
@@ -273,6 +401,7 @@ function StatCard({
 export function AnalyticsDashboard({ data: propData, loading: propLoading, error: propError }: AnalyticsDashboardProps = {}) {
   // Use hook data if no props provided
   const hookData = useDashboardData()
+  const { network } = useNetwork() // Added to access network for header
   
   const data = propData ?? hookData.data
   const loading = propLoading ?? hookData.loading
@@ -284,7 +413,7 @@ export function AnalyticsDashboard({ data: propData, loading: propLoading, error
         {/* Header */}
         <div className="text-center md:text-left">
           <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight">
-            Analytics Dashboard
+            Analytics Dashboard ({network?.name || "No Network"})
           </h1>
           {loading && (
             <div className="flex items-center justify-center md:justify-start mt-2">
@@ -297,7 +426,6 @@ export function AnalyticsDashboard({ data: propData, loading: propLoading, error
         {/* Stats Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           {error ? (
-            // Show error for all cards
             <>
               <ErrorCard message={error} />
               <ErrorCard message={error} />
@@ -393,7 +521,7 @@ export function AnalyticsDashboard({ data: propData, loading: propLoading, error
             <Card>
               <CardHeader className="px-4 md:px-6">
                 <CardTitle className="text-lg md:text-xl">
-                  Total transactions
+                  Total Transactions
                 </CardTitle>
                 <CardDescription className="text-sm">
                   Total number of transactions across all networks

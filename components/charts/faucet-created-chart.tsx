@@ -1,15 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { useNetwork } from "@/hooks/use-network"
 import { getFaucetsForNetwork } from "@/lib/faucet"
 import { Loader2 } from "lucide-react"
 
 interface ChartData {
-  name: string
-  value: number
-  color: string
+  network: string
+  faucets: number
 }
 
 export function FaucetsCreatedChart() {
@@ -26,9 +25,8 @@ export function FaucetsCreatedChart() {
         for (const network of networks) {
           const faucets = await getFaucetsForNetwork(network)
           chartData.push({
-            name: network.name,
-            value: faucets.length,
-            color: network.color,
+            network: network.name,
+            faucets: faucets.length,
           })
         }
 
@@ -51,7 +49,7 @@ export function FaucetsCreatedChart() {
     )
   }
 
-  const totalFaucets = data.reduce((sum, item) => sum + item.value, 0)
+  const totalFaucets = data.reduce((sum, item) => sum + item.faucets, 0)
 
   return (
     <div className="space-y-4">
@@ -61,24 +59,14 @@ export function FaucetsCreatedChart() {
       </div>
 
       <ResponsiveContainer width="100%" height={300}>
-        <PieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            labelLine={false}
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-            outerRadius={80}
-            fill="#8884d8"
-            dataKey="value"
-          >
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
-            ))}
-          </Pie>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="network" />
+          <YAxis />
           <Tooltip />
           <Legend />
-        </PieChart>
+          <Bar dataKey="faucets" fill="#8884d8" />
+        </BarChart>
       </ResponsiveContainer>
     </div>
   )

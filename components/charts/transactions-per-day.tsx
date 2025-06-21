@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Contract, JsonRpcProvider } from "ethers"
-import { CHECKIN_ABI } from "@/lib/abis"
+import { CHECKIN_ABI, FACTORY_ABI } from "@/lib/abis"
 import { Loader2, Activity } from "lucide-react"
 
 const NETWORKS = {
@@ -10,7 +10,7 @@ const NETWORKS = {
     chainId: 42220, // Celo Mainnet
     contractAddresses: [
       "0x71C00c430ab70a622dc0b2888C4239cab9F244b0",
-      "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700"
+      "0xDD74823C1D3eA2aC423A9c4eb77f710472bdC700",
     ],
     name: "Celo",
     rpcUrl: "https://forno.celo.org",
@@ -74,18 +74,47 @@ export function TransactionsPerDayChart() {
                 console.error(`Error fetching Arbitrum events:`, error)
                 checkInCount = 0
               }
+              // Fetch additional transactions from factory contract
+              const factoryContract = new Contract(network.contractAddress, FACTORY_ABI, provider)
+              try {
+                const factoryTxCount = await factoryContract.getTotalTransactions()
+                checkInCount += Number(factoryTxCount)
+                console.log(`Arbitrum factory transactions:`, Number(factoryTxCount))
+              } catch (error) {
+                console.error(`Error fetching Arbitrum factory transactions:`, error)
+              }
             } else if ('contractAddresses' in network) {
               // Handle networks with multiple contract addresses (e.g., Celo)
               for (const address of network.contractAddresses) {
                 const contract = new Contract(address, CHECKIN_ABI, provider)
                 const totalCheckIns = await contract.totalCheckIns()
                 checkInCount += Number(totalCheckIns)
+
+                // Fetch additional transactions from factory contract
+                const factoryContract = new Contract(address, FACTORY_ABI, provider)
+                try {
+                  const factoryTxCount = await factoryContract.getTotalTransactions()
+                  checkInCount += Number(factoryTxCount)
+                  console.log(`${network.name} factory transactions for ${address}:`, Number(factoryTxCount))
+                } catch (error) {
+                  console.error(`Error fetching ${network.name} factory transactions for ${address}:`, error)
+                }
               }
             } else if ('contractAddress' in network) {
               // Handle networks with a single contract address
               const contract = new Contract(network.contractAddress, CHECKIN_ABI, provider)
               const totalCheckIns = await contract.totalCheckIns()
               checkInCount = Number(totalCheckIns)
+
+              // Fetch additional transactions from factory contract
+              const factoryContract = new Contract(network.contractAddress, FACTORY_ABI, provider)
+              try {
+                const factoryTxCount = await factoryContract.getTotalTransactions()
+                checkInCount += Number(factoryTxCount)
+                console.log(`${network.name} factory transactions:`, Number(factoryTxCount))
+              } catch (error) {
+                console.error(`Error fetching ${network.name} factory transactions:`, error)
+              }
             }
 
             stats.push({

@@ -1,7 +1,7 @@
 import { BrowserProvider } from 'ethers';
 import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
 
-const API_URL = "https://fauctdrop-backend.onrender.com"; // Update with your actual backend URL
+const API_URL = "http://0.0.0.0:10000"; // Update with your actual backend URL
 const ENABLE_DIVVI_REFERRAL = true;
 const DEBUG_MODE = process.env.NODE_ENV === 'development';
 

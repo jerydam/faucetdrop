@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react";
-import { useWallet } from "@/hooks/use-wallet";
 import { useNetwork } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +18,7 @@ export function FaucetList() {
     {
       claimer: string;
       faucet: string;
+      faucetName: string; // Added faucetName field
       amount: bigint;
       txHash: `0x${string}`;
       networkName: string;
@@ -89,6 +89,7 @@ export function FaucetList() {
             <div className="block sm:hidden space-y-3">
               {paginatedClaims.map((claim, index) => {
                 const network = networks.find((n) => n.chainId === claim.chainId);
+                const displayName = claim.faucetName || `${claim.faucet.slice(0, 6)}...${claim.faucet.slice(-4)}`;
                 return (
                   <Card key={`${claim.txHash}-${index}`} className="p-3">
                     <div className="space-y-2 text-xs">
@@ -103,9 +104,9 @@ export function FaucetList() {
                         <span className="text-muted-foreground">Faucet:</span>
                         <Link
                           href={`/faucet/${claim.faucet}?networkId=${claim.chainId}`}
-                          className="text-blue-600 hover:underline font-mono text-right break-all max-w-[150px]"
+                          className="text-blue-600 hover:underline text-right max-w-[150px]"
                         >
-                          {claim.faucet.slice(0, 6)}...{claim.faucet.slice(-4)}
+                          {displayName}
                         </Link>
                       </div>
                       
@@ -163,6 +164,7 @@ export function FaucetList() {
                 <TableBody>
                   {paginatedClaims.map((claim, index) => {
                     const network = networks.find((n) => n.chainId === claim.chainId);
+                    const displayName = claim.faucetName || claim.faucet;
                     return (
                       <TableRow key={`${claim.txHash}-${index}`}>
                         <TableCell className="text-xs sm:text-sm font-mono">
@@ -170,13 +172,13 @@ export function FaucetList() {
                             {claim.claimer}
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs sm:text-sm font-mono">
+                        <TableCell className="text-xs sm:text-sm">
                           <Link
                             href={`/faucet/${claim.faucet}?networkId=${claim.chainId}`}
                             className="text-blue-600 hover:underline max-w-[120px] truncate block"
-                            title={claim.faucet}
+                            title={displayName}
                           >
-                            {claim.faucet}
+                            {displayName}
                           </Link>
                         </TableCell>
                         <TableCell className="text-xs sm:text-sm">

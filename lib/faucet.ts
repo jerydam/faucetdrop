@@ -21,7 +21,7 @@ const NATIVE_TOKEN_MAP: Record<string, string> = {
 }
 
 // Load backend address from .env
-const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178"
+const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 
 // Storage contract address
 const STORAGE_CONTRACT_ADDRESS = "0x3fC5162779F545Bb4ea7980471b823577825dc8A"

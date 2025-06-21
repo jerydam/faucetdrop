@@ -21,7 +21,7 @@ const NATIVE_TOKEN_MAP: Record<string, string> = {
 }
 
 // Load backend address from .env
-const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
+const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x0307daA1F0d3Ac9e1b78707d18E79B13BE6b7178"
 
 // Storage contract address
 const STORAGE_CONTRACT_ADDRESS = "0x3fC5162779F545Bb4ea7980471b823577825dc8A"
@@ -595,7 +595,7 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
       const balanceResult = await contract.getFaucetBalance();
       balance = balanceResult[0];
       isEther = balanceResult[1];
-      const network = await provider.getNetwork();
+      const network = await provider.getFeeData();
       tokenSymbol = isEther
         ? isCeloNetwork(network.chainId)
           ? "CELO"
@@ -807,6 +807,13 @@ export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
       faucetAddresses.map(async (faucetAddress: string) => {
         if (!faucetAddress || faucetAddress === ZeroAddress) return null
         try {
+          const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider)
+          const isDeleted = await faucetContract.deleted()
+          if (isDeleted) {
+            console.log(`Faucet ${faucetAddress} is deleted, skipping`)
+            return null
+          }
+
           const details = await getFaucetDetails(provider, faucetAddress)
           return {
             ...details,
@@ -828,6 +835,55 @@ export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
   } catch (error) {
     console.error(`Error fetching faucets for ${network.name}:`, error)
     return []
+  }
+}
+
+// Fetch transaction history for a specific faucet (admin only)
+export async function getFaucetTransactionHistory(
+  provider: BrowserProvider,
+  faucetAddress: string,
+  network: Network,
+): Promise<{
+  faucetAddress: string
+  transactionType: string
+  initiator: string
+  amount: bigint
+  isEther: boolean
+  timestamp: number
+}[]> {
+  try {
+    if (!isAddress(faucetAddress)) {
+      throw new Error(`Invalid faucet address: ${faucetAddress}`)
+    }
+
+    const signer = await provider.getSigner()
+    const signerAddress = await signer.getAddress()
+    const permissions = await checkPermissions(provider, faucetAddress, signerAddress)
+
+    if (!permissions.isOwner && !permissions.isAdmin) {
+      throw new Error("Only the owner or admin can view transaction history")
+    }
+
+    const factoryContract = new Contract(network.factoryAddress, FACTORY_ABI, provider)
+    const transactions = await factoryContract.getAllTransactions()
+
+    // Filter transactions for the specific faucet
+    const filteredTransactions = transactions
+      .filter((tx: any) => tx.faucetAddress.toLowerCase() === faucetAddress.toLowerCase())
+      .map((tx: any) => ({
+        faucetAddress: tx.faucetAddress as string,
+        transactionType: tx.transactionType as string,
+        initiator: tx.initiator as string,
+        amount: BigInt(tx.amount),
+        isEther: tx.isEther as boolean,
+        timestamp: Number(tx.timestamp),
+      }))
+
+    console.log(`Fetched ${filteredTransactions.length} transactions for faucet ${faucetAddress}`)
+    return filteredTransactions
+  } catch (error: any) {
+    console.error(`Error fetching transaction history for faucet ${faucetAddress}:`, error)
+    throw new Error(error.message || "Failed to fetch transaction history")
   }
 }
 

@@ -46,7 +46,7 @@ const networks: Network[] = [
   //   },
   // },
   {
-    //{previous celo: 0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB, 0xdcC1ACa70042F6019a0E6F800C351Ecbcbc60Fe7}
+    //{previous celo: 0xdcC1ACa70042F6019a0E6F800C351Ecbcbc60Fe7, 0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB}
     name: "Celo",
     chainId: 42220,
     rpcUrl: "https://forno.celo.org",

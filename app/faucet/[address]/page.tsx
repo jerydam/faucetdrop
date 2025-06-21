@@ -30,9 +30,10 @@ import {
   deleteFaucet,
   addAdmin,
   storeClaim,
+  getFaucetTransactionHistory,
 } from "@/lib/faucet"
 import { formatUnits, parseUnits, type BrowserProvider } from "ethers"
-import { Clock, Coins, Download, Share2, Upload, Users, Key, RotateCcw, Edit, Trash2, FileUp, Menu } from "lucide-react"
+import { Clock, Coins, Download, Share2, Upload, Users, Key, RotateCcw, Edit, Trash2, FileUp, Menu, History, Copy } from "lucide-react"
 import { claimViaBackend, claimNoCodeViaBackend } from "@/lib/backend-service"
 import { useNetwork } from "@/hooks/use-network"
 import { TokenBalance } from "@/components/token-balance"
@@ -52,6 +53,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 
 export default function FaucetDetails() {
   const { address: faucetAddress } = useParams<{ address: string }>()
@@ -64,6 +74,16 @@ export default function FaucetDetails() {
   const [faucetDetails, setFaucetDetails] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isClaiming, setIsClaiming] = useState(false)
+  const [isFunding, setIsFunding] = useState(false)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [isUpdatingParameters, setIsUpdatingParameters] = useState(false)
+  const [isUpdatingWhitelist, setIsUpdatingWhitelist] = useState(false)
+  const [isUploadingCustomClaims, setIsUploadingCustomClaims] = useState(false)
+  const [isResettingClaims, setIsResettingClaims] = useState(false)
+  const [isUpdatingName, setIsUpdatingName] = useState(false)
+  const [isDeletingFaucet, setIsDeletingFaucet] = useState(false)
+  const [isAddingAdmin, setIsAddingAdmin] = useState(false)
+  const [isRetrievingSecret, setIsRetrievingSecret] = useState(false)
   const [fundAmount, setFundAmount] = useState("")
   const [adjustedFundAmount, setAdjustedFundAmount] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
@@ -90,14 +110,18 @@ export default function FaucetDetails() {
   const [secretCode, setSecretCode] = useState("")
   const [generatedSecretCode, setGeneratedSecretCode] = useState("")
   const [showSecretCodeDialog, setShowSecretCodeDialog] = useState(false)
-  const [currentSecretCode, setCurrentSecretCode] = useState("")
   const [showCurrentSecretDialog, setShowCurrentSecretDialog] = useState(false)
   const [userIsWhitelisted, setUserIsWhitelisted] = useState(false)
   const [userIsAdmin, setUserIsAdmin] = useState(false)
   const [backendMode, setBackendMode] = useState(true)
   const [customClaimFile, setCustomClaimFile] = useState<File | null>(null)
   const [adminList, setAdminList] = useState<string[]>([])
-  const [activeTab, setActiveTab] = useState("fund") // Track active tab for dropdown
+  const [activeTab, setActiveTab] = useState("fund")
+  const [transactions, setTransactions] = useState<
+    { faucetAddress: string; transactionType: string; initiator: string; amount: bigint; isEther: boolean; timestamp: number }[]
+  >([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const transactionsPerPage = 10
 
   const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase()
   const canAccessAdminControls = isOwner || userIsAdmin
@@ -148,6 +172,24 @@ export default function FaucetDetails() {
     setShowClaimPopup(false)
   }
 
+  const handleCopySecretCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code)
+      toast({
+        title: "Code Copied",
+        description: "Drop code has been copied to your clipboard.",
+      })
+      setShowSecretCodeDialog(false)
+      setShowCurrentSecretDialog(false)
+    } catch (error) {
+      toast({
+        title: "Copy Failed",
+        description: "Failed to copy the code. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleRetrieveSecretCode = async () => {
     if (!faucetAddress) {
       toast({
@@ -166,8 +208,9 @@ export default function FaucetDetails() {
       return
     }
     try {
+      setIsRetrievingSecret(true)
       const code = await retrieveSecretCode(faucetAddress)
-      setCurrentSecretCode(code)
+      setSecretCode(code)
       setShowCurrentSecretDialog(true)
       const wasCached = getFromStorage(`secretCode_${faucetAddress}`) === code
       toast({
@@ -180,6 +223,8 @@ export default function FaucetDetails() {
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
+    } finally {
+      setIsRetrievingSecret(false)
     }
   }
 
@@ -194,6 +239,7 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsUpdatingName(true)
       await updateFaucetName(
         provider as BrowserProvider,
         faucetAddress,
@@ -215,6 +261,8 @@ export default function FaucetDetails() {
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
+    } finally {
+      setIsUpdatingName(false)
     }
   }
 
@@ -229,6 +277,7 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsDeletingFaucet(true)
       await deleteFaucet(provider as BrowserProvider, faucetAddress, BigInt(chainId), BigInt(Number(networkId)))
       toast({
         title: "Faucet deleted",
@@ -243,6 +292,8 @@ export default function FaucetDetails() {
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
+    } finally {
+      setIsDeletingFaucet(false)
     }
   }
 
@@ -257,6 +308,7 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsAddingAdmin(true)
       await addAdmin(
         provider as BrowserProvider,
         faucetAddress,
@@ -271,10 +323,38 @@ export default function FaucetDetails() {
       setNewAdminAddress("")
       setShowAddAdminDialog(false)
       await loadFaucetDetails()
+      setAdminList((prev) => [...prev, newAdminAddress])
     } catch (error: any) {
       console.error("Error adding admin:", error)
       toast({
         title: "Failed to add admin",
+        description: error.message || "Unknown error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAddingAdmin(false)
+    }
+  }
+
+  const loadTransactionHistory = async () => {
+    if (!isConnected || !provider || !chainId || !selectedNetwork) {
+      return
+    }
+    if (!canAccessAdminControls) {
+      return
+    }
+    try {
+      const txs = await getFaucetTransactionHistory(
+        provider as BrowserProvider,
+        faucetAddress,
+        selectedNetwork,
+      )
+      const sortedTxs = txs.sort((a, b) => b.timestamp - a.timestamp)
+      setTransactions(sortedTxs)
+    } catch (error: any) {
+      console.error("Error loading transaction history:", error)
+      toast({
+        title: "Failed to load transaction history",
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
@@ -320,6 +400,12 @@ export default function FaucetDetails() {
       loadFaucetDetails()
     }
   }, [provider, faucetAddress, networkId, address])
+
+  useEffect(() => {
+    if (canAccessAdminControls && provider && faucetAddress && selectedNetwork) {
+      loadTransactionHistory()
+    }
+  }, [canAccessAdminControls, provider, faucetAddress, selectedNetwork])
 
   const loadFaucetDetails = async () => {
     if (!faucetAddress || !networkId) {
@@ -412,7 +498,11 @@ export default function FaucetDetails() {
           description: "Switch to the network to perform operation",
           variant: "destructive",
           action: (
-            <Button onClick={() => setNetwork(targetNetwork)} variant="outline">
+            <Button
+              onClick={() => setNetwork(targetNetwork)}
+              variant="outline"
+              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+            >
               Switch to {targetNetwork.name}
             </Button>
           ),
@@ -490,6 +580,7 @@ export default function FaucetDetails() {
       setShowClaimPopup(true)
       setSecretCode("")
       await loadFaucetDetails()
+      await loadTransactionHistory()
     } catch (error: any) {
       console.error("Error dropping tokens:", error)
       let errorMessage = error.message || "Unknown error occurred"
@@ -530,6 +621,7 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsFunding(true)
       const amount = parseUnits(adjustedFundAmount, tokenDecimals)
       await fundFaucet(
         provider as BrowserProvider,
@@ -547,6 +639,7 @@ export default function FaucetDetails() {
       setAdjustedFundAmount("")
       setShowFundPopup(false)
       await loadFaucetDetails()
+      await loadTransactionHistory()
     } catch (error: any) {
       console.error("Error funding faucet:", error)
       if (error.message === "Switch to the network to perform operation") {
@@ -558,6 +651,8 @@ export default function FaucetDetails() {
           variant: "destructive",
         })
       }
+    } finally {
+      setIsFunding(false)
     }
   }
 
@@ -572,6 +667,7 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsWithdrawing(true)
       const amount = parseUnits(withdrawAmount, tokenDecimals)
       await withdrawTokens(
         provider as BrowserProvider,
@@ -586,6 +682,7 @@ export default function FaucetDetails() {
       })
       setWithdrawAmount("")
       await loadFaucetDetails()
+      await loadTransactionHistory()
     } catch (error: any) {
       console.error("Error withdrawing tokens:", error)
       if (error.message === "Switch to the network to perform operation") {
@@ -597,6 +694,8 @@ export default function FaucetDetails() {
           variant: "destructive",
         })
       }
+    } finally {
+      setIsWithdrawing(false)
     }
   }
 
@@ -619,6 +718,7 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsUpdatingParameters(true)
       const claimAmountBN = parseUnits(claimAmount, tokenDecimals)
       const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
       const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
@@ -660,6 +760,7 @@ export default function FaucetDetails() {
         description: `Parameters updated successfully. ${backendMode ? "Drop code generated and stored." : ""}`,
       })
       await loadFaucetDetails()
+      await loadTransactionHistory()
     } catch (error: any) {
       console.error("Error updating drop parameters:", error)
       if (error.message === "Switch to the network to perform operation") {
@@ -671,6 +772,8 @@ export default function FaucetDetails() {
           variant: "destructive",
         })
       }
+    } finally {
+      setIsUpdatingParameters(false)
     }
   }
 
@@ -685,6 +788,7 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsUpdatingWhitelist(true)
       const addresses = whitelistAddresses
         .split(/[\n,]/)
         .map((addr) => addr.trim())
@@ -704,6 +808,7 @@ export default function FaucetDetails() {
       })
       setWhitelistAddresses("")
       await loadFaucetDetails()
+      await loadTransactionHistory()
     } catch (error: any) {
       console.error("Error updating Drop-list:", error)
       toast({
@@ -711,6 +816,8 @@ export default function FaucetDetails() {
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
+    } finally {
+      setIsUpdatingWhitelist(false)
     }
   }
 
@@ -731,6 +838,7 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsUploadingCustomClaims(true)
       const text = await customClaimFile.text()
       const lines = text.split("\n").filter((line) => line.trim())
       const users: string[] = []
@@ -759,6 +867,7 @@ export default function FaucetDetails() {
       })
       setCustomClaimFile(null)
       await loadFaucetDetails()
+      await loadTransactionHistory()
     } catch (error: any) {
       console.error("Error setting custom claim amounts:", error)
       toast({
@@ -766,6 +875,8 @@ export default function FaucetDetails() {
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
+    } finally {
+      setIsUploadingCustomClaims(false)
     }
   }
 
@@ -780,12 +891,14 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
+      setIsResettingClaims(true)
       await resetAllClaims(provider as BrowserProvider, faucetAddress, BigInt(chainId), BigInt(Number(networkId)))
       toast({
         title: "All claims reset",
         description: "All users can now claim again",
       })
       await loadFaucetDetails()
+      await loadTransactionHistory()
     } catch (error: any) {
       console.error("Error resetting all claims:", error)
       toast({
@@ -793,6 +906,35 @@ export default function FaucetDetails() {
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
+    } finally {
+      setIsResettingClaims(false)
+    }
+  }
+
+  const totalPages = Math.ceil(transactions.length / transactionsPerPage)
+  const startIndex = (currentPage - 1) * transactionsPerPage
+  const endIndex = startIndex + transactionsPerPage
+  const currentTransactions = transactions.slice(startIndex, endIndex)
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+    }
+  }
+
+  const getTokenName = (isEther: boolean) => {
+    if (!isEther) {
+      return tokenSymbol
+    }
+    switch (selectedNetwork?.name) {
+      case "Celo":
+        return "CELO"
+      case "Lisk":
+        return "LISK"
+      case "Arbitrum":
+        return "ETH"
+      default:
+        return "ETH"
     }
   }
 
@@ -826,6 +968,7 @@ export default function FaucetDetails() {
                             size="icon"
                             onClick={() => setShowEditNameDialog(true)}
                             title="Edit Faucet Name"
+                            className="hover:bg-accent hover:text-accent-foreground"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -834,6 +977,7 @@ export default function FaucetDetails() {
                             size="icon"
                             onClick={() => setShowDeleteDialog(true)}
                             title="Delete Faucet"
+                            className="hover:bg-accent hover:text-accent-foreground"
                           >
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
@@ -951,20 +1095,20 @@ export default function FaucetDetails() {
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2 px-4 sm:px-6">
                   <Button
-                    className="w-full h-8 sm:h-9 text-xs sm:text-sm"
+                    className="w-full h-8 sm:h-9 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                     onClick={handleFollow}
                     disabled={hasFollowed}
                   >
                     {hasFollowed ? "Followed on 𝕏" : "Follow on 𝕏 to drop"}
                   </Button>
                   <Button
-                    className="w-full h-8 sm:h-9 text-xs sm:text-sm"
+                    className="w-full h-8 sm:h-9 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                     variant="outline"
                     onClick={handleBackendClaim}
                     disabled={isClaiming || !address || !canClaim}
                   >
                     {isClaiming
-                      ? "Claiming..."
+                      ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Claiming...</span>
                       : hasClaimed
                       ? "Already dropped"
                       : `Drop ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`}
@@ -984,62 +1128,70 @@ export default function FaucetDetails() {
                       <div className="sm:hidden">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="w-full flex justify-between items-center text-xs">
+                            <Button variant="outline" className="w-full flex justify-between items-center text-xs hover:bg-accent hover:text-accent-foreground">
                               {activeTab === "fund" && "Fund"}
                               {activeTab === "parameters" && "Parameters"}
                               {activeTab === "whitelist" && "Drop-list"}
                               {activeTab === "custom" && "Custom"}
                               {activeTab === "admin-power" && "Admin Power"}
+                              {activeTab === "history" && "History"}
                               <Menu className="h-4 w-4 ml-2" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent className="w-full">
-                            <DropdownMenuItem onClick={() => setActiveTab("fund")} className="text-xs">
+                            <DropdownMenuItem onClick={() => setActiveTab("fund")} className="text-xs hover:bg-accent hover:text-accent-foreground">
                               <Upload className="h-3 w-3 mr-2" /> Fund
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setActiveTab("parameters")} className="text-xs">
+                            <DropdownMenuItem onClick={() => setActiveTab("parameters")} className="text-xs hover:bg-accent hover:text-accent-foreground">
                               <Coins className="h-3 w-3 mr-2" /> Parameters
                             </DropdownMenuItem>
                             {!backendMode && (
-                              <DropdownMenuItem onClick={() => setActiveTab("whitelist")} className="text-xs">
+                              <DropdownMenuItem onClick={() => setActiveTab("whitelist")} className="text-xs hover:bg-accent hover:text-accent-foreground">
                                 <Users className="h-3 w-3 mr-2" /> Drop-list
                               </DropdownMenuItem>
                             )}
                             {!backendMode && (
-                              <DropdownMenuItem onClick={() => setActiveTab("custom")} className="text-xs">
+                              <DropdownMenuItem onClick={() => setActiveTab("custom")} className="text-xs hover:bg-accent hover:text-accent-foreground">
                                 <FileUp className="h-3 w-3 mr-2" /> Custom
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem onClick={() => setActiveTab("admin-power")} className="text-xs">
+                            <DropdownMenuItem onClick={() => setActiveTab("admin-power")} className="text-xs hover:bg-accent hover:text-accent-foreground">
                               <RotateCcw className="h-3 w-3 mr-2" /> Admin Power
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setActiveTab("history")} className="text-xs hover:bg-accent hover:text-accent-foreground">
+                              <History className="h-3 w-3 mr-2" /> History
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                      <TabsList className="hidden sm:grid grid-cols-5 gap-2 w-full">
-                        <TabsTrigger value="fund" className="text-xs sm:text-sm">
+                      <TabsList className="hidden sm:grid grid-cols-6 gap-2 w-full">
+                        <TabsTrigger value="fund" className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
                           <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Fund
                         </TabsTrigger>
-                        <TabsTrigger value="parameters" className="text-xs sm:text-sm">
+                        <TabsTrigger value="parameters" className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
                           <Coins className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Parameters
                         </TabsTrigger>
                         {!backendMode && (
-                          <TabsTrigger value="whitelist" className="text-xs sm:text-sm">
+                          <TabsTrigger value="whitelist" className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
                             <Users className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                             Drop-list
                           </TabsTrigger>
                         )}
                         {!backendMode && (
-                          <TabsTrigger value="custom" className="text-xs sm:text-sm">
+                          <TabsTrigger value="custom" className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
                             <FileUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                             Custom
                           </TabsTrigger>
                         )}
-                        <TabsTrigger value="admin-power" className="text-xs sm:text-sm">
+                        <TabsTrigger value="admin-power" className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
                           <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                           Admin Power
+                        </TabsTrigger>
+                        <TabsTrigger value="history" className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
+                          <History className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                          History
                         </TabsTrigger>
                       </TabsList>
                       <TabsContent value="fund" className="space-y-4 mt-4">
@@ -1056,9 +1208,22 @@ export default function FaucetDetails() {
                                 onChange={(e) => setFundAmount(e.target.value)}
                                 className="text-xs sm:text-sm"
                               />
-                              <Button onClick={handleFund} disabled={!fundAmount} className="text-xs sm:text-sm">
-                                <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                                Fund
+                              <Button
+                                onClick={handleFund}
+                                disabled={isFunding || !fundAmount}
+                                className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                              >
+                                {isFunding ? (
+                                  <span className="flex items-center">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                    Funding...
+                                  </span>
+                                ) : (
+                                  <>
+                                    <Upload className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                    Fund
+                                  </>
+                                )}
                               </Button>
                             </div>
                             <p className="text-xs text-muted-foreground">
@@ -1079,12 +1244,21 @@ export default function FaucetDetails() {
                               />
                               <Button
                                 onClick={handleWithdraw}
-                                disabled={!withdrawAmount}
+                                disabled={isWithdrawing || !withdrawAmount}
                                 variant="outline"
-                                className="text-xs sm:text-sm"
+                                className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                               >
-                                <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                                Withdraw
+                                {isWithdrawing ? (
+                                  <span className="flex items-center">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                    Withdrawing...
+                                  </span>
+                                ) : (
+                                  <>
+                                    <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                    Withdraw
+                                  </>
+                                )}
                               </Button>
                             </div>
                             <p className="text-xs text-muted-foreground">Withdraw {tokenSymbol} from the faucet</p>
@@ -1135,19 +1309,36 @@ export default function FaucetDetails() {
                           <div className="flex flex-col sm:flex-row gap-2">
                             <Button
                               onClick={handleUpdateClaimParameters}
-                              className="text-xs sm:text-sm flex-1"
-                              disabled={!claimAmount || !startTime || !endTime}
+                              className="text-xs sm:text-sm flex-1 hover:bg-accent hover:text-accent-foreground"
+                              disabled={isUpdatingParameters || !claimAmount || !startTime || !endTime}
                             >
-                              Update Parameters {backendMode && "& Generate Drop Code"}
+                              {isUpdatingParameters ? (
+                                <span className="flex items-center">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                  Updating...
+                                </span>
+                              ) : (
+                                `Update Parameters ${backendMode && "& Generate Drop Code"}`
+                              )}
                             </Button>
                             {backendMode && (
                               <Button
                                 onClick={handleRetrieveSecretCode}
                                 variant="outline"
-                                className="text-xs sm:text-sm"
+                                className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                                disabled={isRetrievingSecret}
                               >
-                                <Key className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                                Get Current Code
+                                {isRetrievingSecret ? (
+                                  <span className="flex items-center">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                    Retrieving...
+                                  </span>
+                                ) : (
+                                  <>
+                                    <Key className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                    Get Current Code
+                                  </>
+                                )}
                               </Button>
                             )}
                           </div>
@@ -1170,316 +1361,483 @@ export default function FaucetDetails() {
                               <Label htmlFor="whitelist-addresses" className="text-xs sm:text-sm">
                                 Addresses (one per line or comma-separated)
                               </Label>
-                                <Textarea
-                                  id="whitelist-addresses"
-                                  placeholder="0x..."
-                                  value={whitelistAddresses}
-                                  onChange={(e) => setWhitelistAddresses(e.target.value)}
-                                  rows={5}
-                                  className="text-xs sm:text-sm"
-                                />
-                              </div>
-                              <Button onClick={handleUpdateWhitelist} className="text-xs sm:text-sm">
-                                Update Drop-list
-                              </Button>
-                            </div>
-                          </TabsContent>
-                        )}
-                        {!backendMode && (
-                          <TabsContent value="custom" className="space-y-4 mt-4">
-                            <div className="space-y-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="custom-claim-file" className="text-xs sm:text-sm">
-                                  Upload Custom Claim Amounts
-                                </Label>
-                                <Input
-                                  id="custom-claim-file"
-                                  type="file"
-                                  accept=".csv,.txt"
-                                  onChange={handleCustomClaimFile}
-                                  className="text-xs sm:text-sm"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                  Upload a CSV file with format: address,amount (one per line)
-                                </p>
-                              </div>
-                              <Button
-                                onClick={handleUploadCustomClaims}
-                                disabled={!customClaimFile}
+                              <Textarea
+                                id="whitelist-addresses"
+                                placeholder="0x..."
+                                value={whitelistAddresses}
+                                onChange={(e) => setWhitelistAddresses(e.target.value)}
+                                rows={5}
                                 className="text-xs sm:text-sm"
-                              >
-                                <FileUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                                Upload Custom Claims
-                              </Button>
+                              />
                             </div>
-                          </TabsContent>
-                        )}
-                        <TabsContent value="admin-power" className="space-y-4 mt-4">
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label className="text-xs sm:text-sm">Current Admins</Label>
-                              {adminList.length > 0 ? (
-                                <ul className="list-disc pl-5 text-xs sm:text-sm">
-                                  {adminList.map((admin) => (
-                                    <li key={admin} className="font-mono break-all">{admin}</li>
-                                  ))}
-                                </ul>
+                            <Button
+                              onClick={handleUpdateWhitelist}
+                              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                              disabled={isUpdatingWhitelist}
+                            >
+                              {isUpdatingWhitelist ? (
+                                <span className="flex items-center">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                  Updating...
+                                </span>
                               ) : (
-                                <p className="text-xs sm:text-sm text-muted-foreground">No admins found</p>
+                                "Update Drop-list"
                               )}
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-xs sm:text-sm">Reset All Claims</Label>
-                              <p className="text-xs text-muted-foreground">
-                                Allow all users to claim again
-                              </p>
-                              <Button onClick={handleResetAllClaims} variant="destructive" className="text-xs sm:text-sm">
-                                <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                                Reset All Claims
-                              </Button>
-                            </div>
-                            {isOwner && (
-                              <div className="space-y-2">
-                                <Label htmlFor="new-admin" className="text-xs sm:text-sm">
-                                  Add Admin
-                                </Label>
-                                <div className="flex gap-2">
-                                  <Input
-                                    id="new-admin"
-                                    placeholder="0x..."
-                                    value={newAdminAddress}
-                                    onChange={(e) => setNewAdminAddress(e.target.value)}
-                                    className="text-xs sm:text-sm"
-                                  />
-                                  <Button
-                                    onClick={() => setShowAddAdminDialog(true)}
-                                    disabled={!newAdminAddress}
-                                    className="text-xs sm:text-sm"
-                                  >
-                                    Add Admin
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
+                            </Button>
                           </div>
                         </TabsContent>
-                      </Tabs>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
-            ) : (
-              <Card className="w-full mx-auto">
-                <CardContent className="py-6 sm:py-10 text-center">
-                  <p className="text-sm sm:text-base">Faucet not found or error loading details</p>
-                  <Button className="mt-4 text-xs sm:text-sm" onClick={() => router.push("/")}>
-                    Return to Home
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                      )}
+                      {!backendMode && (
+                        <TabsContent value="custom" className="space-y-4 mt-4">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="custom-claim-file" className="text-xs sm:text-sm">
+                                Upload Custom Claim Amounts
+                              </Label>
+                              <Input
+                                id="custom-claim-file"
+                                type="file"
+                                accept=".csv,.txt"
+                                onChange={handleCustomClaimFile}
+                                className="text-xs sm:text-sm"
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Upload a CSV file with format: address,amount (one per line)
+                              </p>
+                            </div>
+                            <Button
+                              onClick={handleUploadCustomClaims}
+                              disabled={isUploadingCustomClaims || !customClaimFile}
+                              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                            >
+                              {isUploadingCustomClaims ? (
+                                <span className="flex items-center">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                  Uploading...
+                                </span>
+                              ) : (
+                                <>
+                                  <FileUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                  Upload Custom Claims
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </TabsContent>
+                      )}
+                      <TabsContent value="admin-power" className="space-y-4 mt-4">
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs sm:text-sm">Current Admins</Label>
+                            {adminList.length > 0 ? (
+                              <ul className="list-disc pl-5 text-xs sm:text-sm">
+                                {adminList.map((admin) => (
+                                  <li key={admin} className="font-mono break-all">{admin}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-xs sm:text-sm text-muted-foreground">No admins found</p>
+                            )}
+                          </div>
+                          {isOwner && (
+                            <div className="space-y-2">
+                              <Label htmlFor="new-admin" className="text-xs sm:text-sm">
+                                Add Admin
+                              </Label>
+                              <div className="flex gap-2">
+                                <Input
+                                  id="new-admin"
+                                  placeholder="0x..."
+                                  value={newAdminAddress}
+                                  onChange={(e) => setNewAdminAddress(e.target.value)}
+                                  className="text-xs sm:text-sm"
+                                />
+                                <Button
+                                  onClick={() => setShowAddAdminDialog(true)}
+                                  disabled={isAddingAdmin || !newAdminAddress}
+                                  className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                                >
+                                  {isAddingAdmin ? (
+                                    <span className="flex items-center">
+                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                      Adding...
+                                    </span>
+                                  ) : (
+                                    "Add Admin"
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <Label className="text-xs sm:text-sm">Reset All Claims</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Allow all users to claim again
+                            </p>
+                            <Button
+                              onClick={handleResetAllClaims}
+                              variant="destructive"
+                              className="text-xs sm:text-sm hover:bg-destructive/90 hover:text-destructive-foreground"
+                              disabled={isResettingClaims}
+                            >
+                              {isResettingClaims ? (
+                                <span className="flex items-center">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                  Resetting...
+                                </span>
+                              ) : (
+                                <>
+                                  <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                  Reset All Claims
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </TabsContent>
+                      <TabsContent value="history" className="space-y-4 mt-4">
+                        <div className="space-y-4">
+                          <Label className="text-xs sm:text-sm">Transaction History</Label>
+                          {transactions.length > 0 ? (
+                            <>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="text-xs sm:text-sm">Type</TableHead>
+                                    <TableHead className="text-xs sm:text-sm">Initiator</TableHead>
+                                    <TableHead className="text-xs sm:text-sm">Amount</TableHead>
+                                    <TableHead className="text-xs sm:text-sm">Token</TableHead>
+                                    <TableHead className="text-xs sm:text-sm">Date</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {currentTransactions.map((tx, index) => (
+                                    <TableRow key={`${tx.timestamp}-${index}`}>
+                                      <TableCell className="text-xs sm:text-sm capitalize">{tx.transactionType}</TableCell>
+                                      <TableCell className="text-xs sm:text-sm font-mono truncate max-w-[100px] sm:max-w-[150px]">
+                                        {tx.initiator}
+                                      </TableCell>
+                                      <TableCell className="text-xs sm:text-sm">
+                                        {formatUnits(tx.amount, tokenDecimals)}
+                                      </TableCell>
+                                      <TableCell className="text-xs sm:text-sm">
+                                        {getTokenName(tx.isEther)}
+                                      </TableCell>
+                                      <TableCell className="text-xs sm:text-sm">
+                                        {new Date(tx.timestamp * 1000).toLocaleString()}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                              {totalPages > 1 && (
+                                <Pagination>
+                                  <PaginationContent>
+                                    <PaginationItem>
+                                      <PaginationPrevious
+                                        href="#"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          handlePageChange(currentPage - 1)
+                                        }}
+                                        className={`text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground ${
+                                          currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                                        }`}
+                                      />
+                                    </PaginationItem>
+                                    {[...Array(totalPages)].map((_, i) => (
+                                      <PaginationItem key={i + 1}>
+                                        <PaginationLink
+                                          href="#"
+                                          onClick={(e) => {
+                                            e.preventDefault()
+                                            handlePageChange(i + 1)
+                                          }}
+                                          isActive={currentPage === i + 1}
+                                          className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                                        >
+                                          {i + 1}
+                                        </PaginationLink>
+                                      </PaginationItem>
+                                    ))}
+                                    <PaginationItem>
+                                      <PaginationNext
+                                        href="#"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          handlePageChange(currentPage + 1)
+                                        }}
+                                        className={`text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground ${
+                                          currentPage === totalPages ? "pointer-events-none opacity-50" : ""
+                                        }`}
+                                      />
+                                    </PaginationItem>
+                                  </PaginationContent>
+                                </Pagination>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-xs sm:text-sm text-muted-foreground">No transactions found</p>
+                          )}
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <Card className="w-full mx-auto">
+              <CardContent className="py-6 sm:py-10 text-center">
+                <p className="text-sm sm:text-base">Faucet not found or error loading details</p>
+                <Button
+                  className="mt-4 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => router.push("/")}
+                >
+                  Return to Home
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
-        <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
-          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                You have successfully dropped{" "}
-                {faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col space-y-4 py-4">
-              <p className="text-xs sm:text-sm">Share your drop on X to help spread the word about FaucetDrops!</p>
+      </div>
+      <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
+        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              You have successfully dropped{" "}
+              {faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col space-y-4 py-4">
+            <p className="text-xs sm:text-sm">Share your drop on X to help spread the word about FaucetDrops!</p>
+          </div>
+          <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="default"
+              onClick={handleShareOnX}
+              className="flex items-center gap-2 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+            >
+              <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
+              Share on 𝕏
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
+        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Confirm Funding</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Review the funding details before proceeding.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
+                Amount to Fund
+              </Label>
+              <Input
+                id="adjusted-fund-amount"
+                value={adjustedFundAmount}
+                onChange={(e) => setAdjustedFundAmount(e.target.value)}
+                className="text-xs sm:text-sm"
+              />
             </div>
-            <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
-              <Button
-                type="button"
-                variant="default"
-                onClick={handleShareOnX}
-                className="flex items-center gap-2 text-xs sm:text-sm"
-              >
-                <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                Share on 𝕏
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
-          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Confirm Funding</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                Review the funding details before proceeding.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
-                  Amount to Fund
-                </Label>
-                <Input
-                  id="adjusted-fund-amount"
-                  value={adjustedFundAmount}
-                  onChange={(e) => setAdjustedFundAmount(e.target.value)}
-                  className="text-xs sm:text-sm"
-                />
-              </div>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>Platform fee (5%): {fee} {tokenSymbol}</p>
-                <p>Net amount to faucet: {netAmount} {tokenSymbol}</p>
-                <p className="text-blue-600">
-                  Tip: To fund exactly {fundAmount} {tokenSymbol}, enter {recommendedInput} {tokenSymbol}
-                </p>
-              </div>
-            </div>
-            <DialogFooter className="flex flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => setShowFundPopup(false)} className="text-xs sm:text-sm">
-                Cancel
-              </Button>
-              <Button onClick={confirmFund} className="text-xs sm:text-sm">
-                Confirm Fund
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <Dialog open={showSecretCodeDialog} onOpenChange={setShowSecretCodeDialog}>
-          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Drop Code Generated</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                Your Drop code has been generated and stored. Share this code with users to allow them to drop tokens.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="text-center">
-                <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                  {generatedSecretCode}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground text-center">
-                This code is required for users to drop tokens. Keep it safe and share it only with intended users.
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>Platform fee (5%): {fee} {tokenSymbol}</p>
+              <p>Net amount to faucet: {netAmount} {tokenSymbol}</p>
+              <p className="text-blue-600">
+                Tip: To fund exactly {fundAmount} {tokenSymbol}, enter {recommendedInput} {tokenSymbol}
               </p>
             </div>
-            <DialogFooter>
-              <Button onClick={() => setShowSecretCodeDialog(false)} className="text-xs sm:text-sm w-full">
-                Got it
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
-          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Current Drop Code</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                This is the current drop code for your faucet.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="text-center">
-                <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                  {currentSecretCode}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground text-center">
-                Share this code with users to allow them to drop tokens from your faucet.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button onClick={() => setShowCurrentSecretDialog(false)} className="text-xs sm:text-sm w-full">
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
-          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Edit Faucet Name</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">Enter a new name for your faucet.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="new-faucet" className="text-xs sm:text-sm">
-                  New Faucet Name
-                </Label>
-                <Input
-                  id="new-faucet-name"
-                  value={newFaucetName}
-                  onChange={(e) => setNewFaucetName(e.target.value)}
-                  placeholder="Enter new faucet name"
-                  className="text-xs sm:text-sm"
-                />
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowFundPopup(false)}
+              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmFund}
+              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+              disabled={isFunding}
+            >
+              {isFunding ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                  Confirming...
+                </span>
+              ) : (
+                "Confirm Fund"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showSecretCodeDialog} onOpenChange={setShowSecretCodeDialog}>
+        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Drop Code Generated</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Your Drop code has been generated and stored. Share this code with users to allow them to drop tokens.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="text-center">
+              <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                {generatedSecretCode}
               </div>
             </div>
-            <DialogFooter className="flex flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => setShowEditNameDialog(false)} className="text-xs sm:text-sm">
-                Cancel
-              </Button>
-              <Button onClick={handleUpdateFaucetName} disabled={!newFaucetName.trim()} className="text-xs sm:text-sm">
-                Update Name
-              </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl text-red-600">Delete Faucet</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                Are you sure you want to delete this faucet? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <p className="text-xs text-muted-foreground">
-                Deleting the faucet will permanently remove it and all associated data. Make sure to withdraw any
-                remaining tokens first.
-              </p>
-            </div>
-            <DialogFooter className="flex flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="text-xs sm:text-sm">
-                Cancel
-              </Button>
-              <Button onClick={handleDeleteFaucet} variant="destructive" className="text-xs sm:text-sm">
-                Delete Faucet
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
-          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Add Admin</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                Add a new admin to help manage this faucet.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="admin-address" className="text-xs sm:text-sm">
-                  Admin Address
-                </Label>
-                <Input
-                  id="admin-address"
-                  value={newAdminAddress}
-                  onChange={(e) => setNewAdminAddress(e.target.value)}
-                  placeholder="0x..."
-                  className="text-xs sm:text-sm"
-                />
+            <p className="text-xs text-muted-foreground text-center">
+              This code is required for users to drop tokens. Keep it safe and share it only with intended users.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => handleCopySecretCode(generatedSecretCode)}
+              className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
+            >
+              <Copy className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              Copy Code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
+        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Current Drop Code</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              This is the current drop code for your faucet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="text-center">
+              <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                {secretCode}
               </div>
             </div>
-            <DialogFooter className="flex flex-col sm:flex-row gap-2">
-              <Button variant="outline" onClick={() => setShowAddAdminDialog(false)} className="text-xs sm:text-sm">
-                Cancel
-              </Button>
-              <Button onClick={handleAddAdmin} disabled={!newAdminAddress.trim()} className="text-xs sm:text-sm">
-                Add
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-     
+            <p className="text-xs text-muted-foreground text-center">
+              Share this code with users to allow them to drop tokens from your faucet.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => handleCopySecretCode(secretCode)}
+              className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
+            >
+              <Copy className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              Copy Code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
+        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Edit Faucet Name</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">Enter a new name for your faucet.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-faucet" className="text-xs sm:text-sm">
+                New Faucet Name
+              </Label>
+              <Input
+                id="new-faucet-name"
+                value={newFaucetName}
+                onChange={(e) => setNewFaucetName(e.target.value)}
+                placeholder="Enter new faucet name"
+                className="text-xs sm:text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowEditNameDialog(false)}
+              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateFaucetName}
+              disabled={isUpdatingName || !newFaucetName.trim()}
+              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+            >
+              {isUpdatingName ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                  Updating...
+                </span>
+              ) : (
+                "Update Name"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl text-red-600">Delete Faucet</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Are you sure you want to delete this faucet? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-xs text-muted-foreground">
+              Deleting the faucet will permanently remove it and all associated data. Make sure to withdraw any
+              remaining tokens first.
+            </p>
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="text-xs sm:text-sm">
+              Cancel
+            </Button>
+            <Button onClick={handleDeleteFaucet} variant="destructive" className="text-xs sm:text-sm">
+              Delete Faucet
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
+        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">Add Admin</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Add a new admin to help manage this faucet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="admin-address" className="text-xs sm:text-sm">
+                Admin Address
+              </Label>
+              <Input
+                id="admin-address"
+                value={newAdminAddress}
+                onChange={(e) => setNewAdminAddress(e.target.value)}
+                placeholder="0x..."
+                className="text-xs sm:text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowAddAdminDialog(false)} className="text-xs sm:text-sm">
+              Cancel
+            </Button>
+            <Button onClick={handleAddAdmin} disabled={!newAdminAddress.trim()} className="text-xs sm:text-sm">
+              Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }

@@ -352,9 +352,9 @@ export default function FaucetDetails() {
       const sortedTxs = txs.sort((a, b) => b.timestamp - a.timestamp)
       setTransactions(sortedTxs)
     } catch (error: any) {
-      console.error("Error loading transaction history:", error)
+      console.error("Error loading  Activity Log:", error)
       toast({
-        title: "Failed to load transaction history",
+        title: "Failed to load  Activity Log",
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
@@ -1134,7 +1134,7 @@ export default function FaucetDetails() {
                               {activeTab === "whitelist" && "Drop-list"}
                               {activeTab === "custom" && "Custom"}
                               {activeTab === "admin-power" && "Admin Power"}
-                              {activeTab === "history" && "History"}
+                              {activeTab === "history" && "Activity Log"}
                               <Menu className="h-4 w-4 ml-2" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -1159,7 +1159,7 @@ export default function FaucetDetails() {
                               <RotateCcw className="h-3 w-3 mr-2" /> Admin Power
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setActiveTab("history")} className="text-xs hover:bg-accent hover:text-accent-foreground">
-                              <History className="h-3 w-3 mr-2" /> History
+                              <History className="h-3 w-3 mr-2" />  Activity Log
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -1191,7 +1191,7 @@ export default function FaucetDetails() {
                         </TabsTrigger>
                         <TabsTrigger value="history" className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
                           <History className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                          History
+                           Activity Log
                         </TabsTrigger>
                       </TabsList>
                       <TabsContent value="fund" className="space-y-4 mt-4">
@@ -1497,7 +1497,7 @@ export default function FaucetDetails() {
                       </TabsContent>
                       <TabsContent value="history" className="space-y-4 mt-4">
                         <div className="space-y-4">
-                          <Label className="text-xs sm:text-sm">Transaction History</Label>
+                          <Label className="text-xs sm:text-sm"> Activity Log</Label>
                           {transactions.length > 0 ? (
                             <>
                               <Table>

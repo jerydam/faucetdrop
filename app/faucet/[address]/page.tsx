@@ -1318,7 +1318,7 @@ export default function FaucetDetails() {
                                   Updating...
                                 </span>
                               ) : (
-                                `Update Parameters ${backendMode && "& Generate Drop Code"}`
+                                "Update Parameters"
                               )}
                             </Button>
                             {backendMode && (

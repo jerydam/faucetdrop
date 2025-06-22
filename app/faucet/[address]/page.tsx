@@ -700,82 +700,98 @@ export default function FaucetDetails() {
   }
 
   const handleUpdateClaimParameters = async () => {
-    if (!isConnected || !provider || !chainId) {
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet and ensure a network is selected",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!claimAmount || !startTime || !endTime) {
-      toast({
-        title: "Invalid Input",
-        description: "Please fill in all drop parameters",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!checkNetwork()) return
-    try {
-      setIsUpdatingParameters(true)
-      const claimAmountBN = parseUnits(claimAmount, tokenDecimals)
-      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
-      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
-      if (backendMode) {
-        const response = await fetch(" https://fauctdrop-backend.onrender.com/set-claim-parameters", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            faucetAddress,
-            claimAmount: claimAmountBN.toString(),
-            startTime: startTimestamp,
-            endTime: endTimestamp,
-            chainId: Number(chainId),
-          }),
-        })
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.detail || "Failed to set drop parameters")
-        }
-        const result = await response.json()
-        const secretCodeFromBackend = result.secretCode
-        saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend)
-        setGeneratedSecretCode(secretCodeFromBackend)
-        setShowSecretCodeDialog(true)
-      }
-      await setClaimParameters(
-        provider as BrowserProvider,
-        faucetAddress,
-        claimAmountBN,
-        startTimestamp,
-        endTimestamp,
-        BigInt(chainId),
-        BigInt(Number(networkId)),
-      )
-      toast({
-        title: "Drop parameters updated",
-        description: `Parameters updated successfully. ${backendMode ? "Drop code generated and stored." : ""}`,
-      })
-      await loadFaucetDetails()
-      await loadTransactionHistory()
-    } catch (error: any) {
-      console.error("Error updating drop parameters:", error)
-      if (error.message === "Switch to the network to perform operation") {
-        checkNetwork()
-      } else {
-        toast({
-          title: "Failed to update drop parameters",
-          description: error.message || "Unknown error occurred",
-          variant: "destructive",
-        })
-      }
-    } finally {
-      setIsUpdatingParameters(false)
-    }
+  if (!isConnected || !provider || !chainId) {
+    toast({
+      title: "Wallet not connected",
+      description: "Please connect your wallet and ensure a network is selected",
+      variant: "destructive",
+    })
+    return
   }
+  if (!claimAmount || !startTime || !endTime) {
+    toast({
+      title: "Invalid Input",
+      description: "Please fill in all drop parameters",
+      variant: "destructive",
+    })
+    return
+  }
+  if (!checkNetwork()) return
+
+  try {
+    setIsUpdatingParameters(true)
+    const claimAmountBN = parseUnits(claimAmount, tokenDecimals)
+    const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
+    const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
+    
+    let secretCodeFromBackend = ""
+    
+    // If backend mode, get the secret code from backend first
+    if (backendMode) {
+      const response = await fetch("https://fauctdrop-backend.onrender.com/set-claim-parameters", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          faucetAddress,
+          claimAmount: claimAmountBN.toString(),
+          startTime: startTimestamp,
+          endTime: endTimestamp,
+          chainId: Number(chainId),
+        }),
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || "Failed to set drop parameters")
+      }
+      
+      const result = await response.json()
+      secretCodeFromBackend = result.secretCode
+    }
+
+    // Update smart contract parameters
+    await setClaimParameters(
+      provider as BrowserProvider,
+      faucetAddress,
+      claimAmountBN,
+      startTimestamp,
+      endTimestamp,
+      BigInt(chainId),
+      BigInt(Number(networkId)),
+    )
+
+    // Only show secret code dialog after smart contract update is successful
+    if (backendMode && secretCodeFromBackend) {
+      saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend)
+      setGeneratedSecretCode(secretCodeFromBackend)
+      setShowSecretCodeDialog(true)
+    }
+
+    toast({
+      title: "Drop parameters updated",
+      description: `Parameters updated successfully. ${backendMode ? "Drop code generated and stored." : ""}`,
+    })
+    
+    await loadFaucetDetails()
+    await loadTransactionHistory()
+    
+  } catch (error: any) {
+    console.error("Error updating drop parameters:", error)
+    if (error.message === "Switch to the network to perform operation") {
+      checkNetwork()
+    } else {
+      toast({
+        title: "Failed to update drop parameters",
+        description: error.message || "Unknown error occurred",
+        variant: "destructive",
+      })
+    }
+  } finally {
+    setIsUpdatingParameters(false)
+  }
+}
 
   const handleUpdateWhitelist = async () => {
     if (!isConnected || !provider || !whitelistAddresses.trim() || !chainId) {

@@ -202,7 +202,7 @@ export default function FaucetDetails() {
     if (!isOwner) {
       toast({
         title: "Unauthorized",
-        description: "Only the faucet owner can retrieve the Drop code",
+        description: "Only the faucet Admin can retrieve the Drop code",
         variant: "destructive",
       })
       return
@@ -555,7 +555,7 @@ export default function FaucetDetails() {
       await window.ethereum.request({ method: "eth_requestAccounts" })
       console.log("Sending drop request", { backendMode, secretCode: backendMode ? secretCode : "N/A" })
       const result = backendMode
-        ? await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode)
+        ? await claimNoCodeViaBackend(address, faucetAddress, provider as BrowserProvider)
         : await claimNoCodeViaBackend(address, faucetAddress, provider as BrowserProvider)
       const formattedTxHash = result.txHash.startsWith("0x") ? result.txHash : (`0x${result.txHash}` as `0x${string}`)
       setTxHash(formattedTxHash)

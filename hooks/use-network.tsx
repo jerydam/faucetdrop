@@ -11,7 +11,7 @@ export interface Network {
   blockExplorer: string
   explorerUrl?: string
   color: string
-  factoryAddress: string
+  factoryAddress: string  
   tokenAddress: string
   nativeCurrency: {
     name: string

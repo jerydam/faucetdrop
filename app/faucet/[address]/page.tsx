@@ -1124,7 +1124,7 @@ export default function FaucetDetails() {
                     disabled={isClaiming || !address || !canClaim}
                   >
                     {isClaiming
-                      ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Claiming...</span>
+                      ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Droping...</span>
                       : hasClaimed
                       ? "Already dropped"
                       : `Drop ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`}

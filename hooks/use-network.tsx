@@ -68,7 +68,7 @@ const networks: Network[] = [
     blockExplorer: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
-    factoryAddress: "0xc5f8c2A85520c0A3595C29e004b2f5D9e7CE3b0B",
+    factoryAddress: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
     tokenAddress: ZeroAddress, // LISK (native)
     nativeCurrency: {
       name: "Lisk",
@@ -83,7 +83,7 @@ const networks: Network[] = [
     blockExplorer: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
-    factoryAddress: "0x6087810cFc24310E85736Cbd500e4c1d5a45E196",
+    factoryAddress: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
     tokenAddress: ZeroAddress, // ETH (native)
     nativeCurrency: {
       name: "Ethereum",
@@ -91,140 +91,13 @@ const networks: Network[] = [
       decimals: 18,
     },
   },
-//   {
-//     name: "Optimism",
-//     chainId: 10,
-//     rpcUrl: "https://opt-mainnet.g.alchemy.com/v2/your-api-key",
-//     blockExplorer: "https://optimistic.etherscan.io",
-//     color: "#FF0420",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-//     tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
-//   {
-//     name: "Polygon",
-//     chainId: 137,
-//     rpcUrl: "https://polygon-mainnet.g.alchemy.com/v2/your-api-key",
-//     blockExplorer: "https://polygonscan.com",
-//     color: "#8247E5",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-//     tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
-//   {
-//     name: "Swell Network",
-//     chainId: 11155111,
-//     rpcUrl: "https://swell-sepolia-rpc.gateway.pokt.network",
-//     blockExplorer: "https://sepolia.etherscan.io",
-//     color: "#FFB800",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-//     tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
-//   {
-//     name: "Kaia",
-//     chainId: 11155112,
-//     rpcUrl: "https://kaia-sepolia-rpc.gateway.pokt.network",
-//     blockExplorer: "https://sepolia.etherscan.io",
-//     color: "#FFB800",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-//  tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
-//   {
-//     name: "RootStock",
-//     chainId: 80001,
-//     rpcUrl: "https://polygon-mumbai.g.alchemy.com/v2/your-api-key",
-//     blockExplorer: "https://mumbai.polygonscan.com",
-//     color: "#8247E5",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-//  tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
-//   {
-//     name: "Avalanche",
-//     chainId: 43114,
-//     rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
-//     blockExplorer: "https://snowtrace.io",
-//     color: "#E84142",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-//  tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
-//    {
-//     name: "BNB Smart Chain",
-//     chainId: 56,
-//     rpcUrl: "https://bsc-dataseed.binance.org",
-//     blockExplorer: "https://bscscan.com",
-//     color: "#F0B90B",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-//  tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
-  
-//   {
-//     name: "Fantom",
-//     chainId: 250,
-//     rpcUrl: "https://rpc.ftm.tools",
-//     blockExplorer: "https://ftmscan.com",
-//     color: "#1969FF",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-//  tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
-//   {
-//     name: "CrossFi",
-//     chainId: 4002,
-//     rpcUrl: "https://rpc.testnet.fantom.network",
-//     blockExplorer: "https://testnet.ftmscan.com",
-//     color: "#1969FF",
-//     factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual addres
-//     tokenAddress: ZeroAddress, // FTM (native)
-//      nativeCurrency: {
-//       name: "Ethereum",
-//       symbol: "ETH",
-//       decimals: 18,
-//     },
-//   },
 
   {
     chainId:8453,
     name: "Base Mainnet",
     rpcUrl: "https://mainnet.base.org",
     blockExplorer: "https://basescan.org",
-    factoryAddress: "0xYourFactoryAddressForBase", // Replace with actual addres
+    factoryAddress: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de", // Replace with actual addres
     color: "#0052FF",
     tokenAddress: ZeroAddress, // ETH (native)
     nativeCurrency: {

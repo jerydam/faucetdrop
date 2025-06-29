@@ -43,7 +43,22 @@ export function FaucetList() {
   const [page, setPage] = useState(1);
   const [isExpanded, setIsExpanded] = useState(false);
   const [faucetNames, setFaucetNames] = useState<Record<string, string>>({});
-  const claimsPerPage = 10;
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // Dynamic claims per page based on screen size
+  const claimsPerPage = isMobile ? 5 : 10;
+
+  useEffect(() => {
+    // Check if screen is mobile size
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640); // sm breakpoint in Tailwind
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const loadClaims = async () => {
@@ -130,6 +145,11 @@ export function FaucetList() {
       loadClaims();
     }
   }, [networks, toast]);
+
+  // Recalculate pagination when mobile state changes
+  useEffect(() => {
+    setPage(1); // Reset to first page when switching between mobile/desktop
+  }, [isMobile]);
 
   const totalPages = Math.ceil(claims.length / claimsPerPage);
   const paginatedClaims = claims.slice((page - 1) * claimsPerPage, page * claimsPerPage);

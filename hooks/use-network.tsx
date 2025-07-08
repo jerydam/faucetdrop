@@ -38,9 +38,8 @@ const networks: Network[] = [
     explorerUrl: "https://celoscan.io",
     color: "#35D07F",
     factoryAddresses: [
-      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d", // Example: Add new factory address
+      "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", // Example: Add new factory address
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
       "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
       "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d" // Example: Add new factory address
     ],

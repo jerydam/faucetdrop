@@ -1,5 +1,5 @@
 import { type BrowserProvider, Contract, JsonRpcProvider, ZeroAddress, isAddress, getAddress } from "ethers"
-import { FAUCET_ABI, ERC20_ABI, FACTORY_ABI, STORAGE_ABI} from "./abis"
+import { FAUCET_ABI, ERC20_ABI, CHECKIN_ABI, FACTORY_ABI, STORAGE_ABI} from "./abis"
 import { appendDivviReferralData, reportTransactionToDivvi } from "./divvi-integration"
 
 // Fetch faucets for a specific network using getAllFaucets and getFaucetDetails
@@ -8,7 +8,7 @@ interface Network {
   name: string
   rpcUrl: string
   blockExplorer: string
-  factoryAddresses: string
+  factoryAddresses: string[] // Changed to array to handle multiple addresses
   color: string
   storageAddress?: string // Optional, defaults to FAUCET_STORAGE_ADDRESS
 }
@@ -336,7 +336,7 @@ export async function fetchStorageData(): Promise<
 // Create a faucet with backend toggle support
 export async function createFaucet(
   provider: BrowserProvider,
-  factoryAddresses: string,
+  factoryAddress: string, // Changed to single address
   name: string,
   tokenAddress: string,
   chainId: bigint,
@@ -350,10 +350,13 @@ export async function createFaucet(
     if (!isAddress(tokenAddress)) {
       throw new Error(`Invalid token address: ${tokenAddress}`);
     }
+    if (!isAddress(factoryAddress)) {
+      throw new Error(`Invalid factory address: ${factoryAddress}`);
+    }
 
     const signer = await provider.getSigner();
     const signerAddress = await signer.getAddress();
-    const factoryContract = new Contract(factoryAddresses, FACTORY_ABI, signer);
+    const factoryContract = new Contract(factoryAddress, FACTORY_ABI, signer);
 
     const backendAddress = VALID_BACKEND_ADDRESS;
 
@@ -366,7 +369,7 @@ export async function createFaucet(
     const dataWithReferral = appendDivviReferralData(data);
 
     const gasEstimate = await provider.estimateGas({
-      to: factoryAddresses,
+      to: factoryAddress,
       data: dataWithReferral,
       from: signerAddress,
     });
@@ -377,7 +380,7 @@ export async function createFaucet(
     const gasCost = gasEstimate * gasPrice;
 
     console.log("Create faucet params:", {
-      factoryAddresses,
+      factoryAddress,
       name,
       tokenAddress,
       backendAddress,
@@ -391,7 +394,7 @@ export async function createFaucet(
     });
 
     const tx = await signer.sendTransaction({
-      to: factoryAddresses,
+      to: factoryAddress,
       data: dataWithReferral,
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
       maxFeePerGas,
@@ -406,17 +409,17 @@ export async function createFaucet(
     console.log("Transaction confirmed:", receipt.hash);
     await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
-    const event = receipt.logs
-      .map((log) => {
+    const event = receipt?.logs
+      ?.map((log) => {
         try {
-          return factoryContract.interface.parseLog(log);
+          return factoryContract.interface.parseLog({ data: log.data, topics: log.topics as string[] });
         } catch {
           return null;
         }
       })
       .find((parsed) => parsed?.name === "FaucetCreated");
 
-    if (!event || !("args" in event) || !event.args || !event.args.faucet) {
+    if (!event || !event.args || !event.args.faucet) {
       throw new Error("Failed to retrieve faucet address from transaction");
     }
 
@@ -426,7 +429,7 @@ export async function createFaucet(
       useBackend,
     });
 
-    return event.args.faucet;
+    return event.args.faucet as string;
   } catch (error: any) {
     console.error("Error creating faucet:", error);
     if (error.message?.includes("network changed")) {
@@ -455,9 +458,9 @@ export async function getAllAdmins(
       : [];
     console.log(`Fetched admins for faucet ${faucetAddress}:`, admins);
     return admins;
-  } catch (error: any) {
+  }  catch (error: any) {
     console.error(`Error fetching admins for ${faucetAddress}:`, error);
-    return [];
+    throw new Error(error.message || "Failed to fetch admins");
   }
 }
 
@@ -526,7 +529,7 @@ export async function getFaucetBackendMode(
 export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvider, faucetAddress: string) {
   try {
     console.log(`Getting details for faucet ${faucetAddress}`);
-    let contract;
+    let contract: Contract;
     if ("getSigner" in provider && typeof provider.getSigner === "function") {
       try {
         contract = new Contract(faucetAddress, FAUCET_ABI, await provider.getSigner());
@@ -595,7 +598,7 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
       const balanceResult = await contract.getFaucetBalance();
       balance = balanceResult[0];
       isEther = balanceResult[1];
-      const network = await provider.getFeeData();
+      const network = await provider.getNetwork();
       tokenSymbol = isEther
         ? isCeloNetwork(network.chainId)
           ? "CELO"
@@ -787,13 +790,18 @@ export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
     let allFaucets: any[] = []
 
     // Fetch faucets from all factory addresses
-    for (const factoryAddresses of network.factoryAddresses) {
-      const factoryContract = new Contract(factoryAddresses, FACTORY_ABI, provider)
+    for (const factoryAddress of network.factoryAddresses) {
+      if (!isAddress(factoryAddress)) {
+        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`);
+        continue;
+      }
+
+      const factoryContract = new Contract(factoryAddress, FACTORY_ABI, provider)
 
       // Check if factory contract exists
-      const code = await provider.getCode(factoryAddresses)
+      const code = await provider.getCode(factoryAddress)
       if (code === "0x") {
-        console.warn(`No contract at factory address ${factoryAddresses} on ${network.name}`)
+        console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`)
         continue
       }
 
@@ -802,7 +810,7 @@ export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
       try {
         faucetAddresses = await factoryContract.getAllFaucets()
       } catch (error) {
-        console.error(`Error calling getAllFaucets for ${factoryAddresses} on ${network.name}:`, error)
+        console.error(`Error calling getAllFaucets for ${factoryAddress} on ${network.name}:`, error)
         continue
       }
 
@@ -827,7 +835,7 @@ export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
                 color: network.color,
                 blockExplorer: network.blockExplorer,
               },
-              factoryAddresses, // Include factory address for reference
+              factoryAddress, // Include factory address for reference
             }
           } catch (error) {
             console.warn(`Error getting details for faucet ${faucetAddress} on ${network.name}:`, error)
@@ -872,10 +880,34 @@ export async function getFaucetTransactionHistory(
       throw new Error("Only the owner or admin can view transaction history")
     }
 
-    const factoryContract = new Contract(network.factoryAddresses, FACTORY_ABI, provider)
-    const transactions = await factoryContract.getAllTransactions()
+    let transactions: any[] = [];
 
-    // Filter transactions for the specific faucet
+    // Iterate through all factory addresses to collect transactions
+    for (const factoryAddress of network.factoryAddresses) {
+      if (!isAddress(factoryAddress)) {
+        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`);
+        continue;
+      }
+
+      const factoryContract = new Contract(factoryAddress, FACTORY_ABI, provider);
+
+      // Check if factory contract exists
+      const code = await provider.getCode(factoryAddress);
+      if (code === "0x") {
+        console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`);
+        continue;
+      }
+
+      // Use getFaucetTransactions from the new ABI
+      try {
+        const factoryTxs = await factoryContract.getFaucetTransactions(faucetAddress);
+        transactions.push(...factoryTxs);
+      } catch (error) {
+        console.warn(`Error fetching transactions from factory ${factoryAddress}:`, error);
+      }
+    }
+
+    // Map and filter transactions
     const filteredTransactions = transactions
       .filter((tx: any) => tx.faucetAddress.toLowerCase() === faucetAddress.toLowerCase())
       .map((tx: any) => ({
@@ -885,7 +917,7 @@ export async function getFaucetTransactionHistory(
         amount: BigInt(tx.amount),
         isEther: tx.isEther as boolean,
         timestamp: Number(tx.timestamp),
-      }))
+      }));
 
     console.log(`Fetched ${filteredTransactions.length} transactions for faucet ${faucetAddress}`)
     return filteredTransactions
@@ -1523,7 +1555,7 @@ export async function retrieveSecretCode(faucetAddress: string): Promise<string>
     }
 
     // Fallback to backend if not found in localStorage
-    const response = await fetch(" https://fauctdrop-backend.onrender.com/retrieve-secret-code", {
+    const response = await fetch("https://fauctdrop-backend.onrender.com/retrieve-secret-code", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1738,6 +1770,60 @@ export async function addAdmin(
       throw new Error(decodeRevertError(error.data));
     }
     throw new Error(error.reason || error.message || "Failed to add admin");
+  }
+}
+
+// Remove admin with permission check
+export async function removeAdmin(
+  provider: BrowserProvider,
+  faucetAddress: string,
+  adminAddress: string,
+  chainId: bigint,
+  networkId: bigint,
+): Promise<`0x${string}`> {
+  try {
+    if (!checkNetwork(chainId, networkId)) {
+      throw new Error("Switch to the correct network to perform this operation");
+    }
+
+    if (!isAddress(adminAddress)) {
+      throw new Error("Invalid admin address");
+    }
+
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const permissions = await checkPermissions(provider, faucetAddress, signerAddress);
+    if (permissions.isPaused) {
+      throw new Error("Faucet is paused and cannot be modified");
+    }
+    if (!permissions.isOwner && !permissions.isAdmin) {
+      throw new Error("Only the owner or admin can remove an admin");
+    }
+
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
+    const gasEstimate = await faucetContract.removeAdmin.estimateGas(adminAddress);
+    const feeData = await provider.getFeeData();
+
+    const tx = await faucetContract.removeAdmin(adminAddress, {
+      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
+      maxFeePerGas: feeData.maxFeePerGas,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+    });
+
+    console.log(`Remove admin transaction sent: ${tx.hash}`);
+    const receipt = await tx.wait();
+    if (!receipt) {
+      throw new Error("Transaction receipt is null");
+    }
+
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
+    return tx.hash as `0x${string}`;
+  } catch (error: any) {
+    console.error("Error removing admin:", error);
+    if (error.data && typeof error.data === "string") {
+      throw new Error(decodeRevertError(error.data));
+    }
+    throw new Error(error.reason || error.message || "Failed to remove admin");
   }
 }
 

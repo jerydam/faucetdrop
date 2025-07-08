@@ -74,6 +74,12 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
         symbol: "cEUR",
         decimals: 18,
       },
+       {
+        address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+        name: "Glo Dollar",
+        symbol: "USDGLO",
+        decimals: 18,
+      },
       {
         address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
         name: "Good dollar",
@@ -82,7 +88,44 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       },
     ],
   },
-  // ... (other chain configs remain unchanged)
+   // Celo Alfajores Testnet
+  44787: {
+    chainId: 44787,
+    name: "Celo Alfajores",
+    nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
+    nativeTokenAddress: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9", // CELO token address on testnet
+     factoryAddresses: [
+      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
+      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de" // Example: Add new factory address
+    ],
+    defaultTokens: [
+      {
+        address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
+        name: "Celo Dollar",
+        symbol: "cUSD",
+        decimals: 18,
+      },
+    ],
+  },
+  // Polygon
+  137: {
+    chainId: 8,
+    name: "Base Mainnet",
+    nativeCurrency: { name: "Base", symbol: "ETH", decimals: 18 },
+    nativeTokenAddress: "0x0000000000000000000000000000000000001010", // Polygon native token address
+     factoryAddresses: [
+      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
+      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de" // Example: Add new factory address
+    ],
+    defaultTokens: [
+      {
+        address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+        name: "USD Coin",
+        symbol: "USDC",
+        decimals: 6,
+      },
+    ],
+  },
 }
 
 export default function CreateFaucet() {

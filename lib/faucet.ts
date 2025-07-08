@@ -1747,13 +1747,24 @@ export async function addAdmin(
     }
 
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
-    const gasEstimate = await faucetContract.addAdmin.estimateGas(adminAddress);
-    const feeData = await provider.getFeeData();
+    const data = faucetContract.interface.encodeFunctionData("addAdmin", [adminAddress]);
+    const dataWithReferral = appendDivviReferralData(data);
 
-    const tx = await faucetContract.addAdmin(adminAddress, {
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    });
+    const feeData = await provider.getFeeData();
+    const maxFeePerGas = feeData.maxFeePerGas || undefined;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
+
+    const tx = await signer.sendTransaction({
+      to: faucetAddress,
+      data: dataWithReferral,
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
-      maxFeePerGas: feeData.maxFeePerGas,
-      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
     });
 
     console.log(`Add admin transaction sent: ${tx.hash}`);
@@ -1801,13 +1812,24 @@ export async function removeAdmin(
     }
 
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
-    const gasEstimate = await faucetContract.removeAdmin.estimateGas(adminAddress);
-    const feeData = await provider.getFeeData();
+    const data = faucetContract.interface.encodeFunctionData("removeAdmin", [adminAddress]);
+    const dataWithReferral = appendDivviReferralData(data);
 
-    const tx = await faucetContract.removeAdmin(adminAddress, {
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    });
+    const feeData = await provider.getFeeData();
+    const maxFeePerGas = feeData.maxFeePerGas || undefined;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
+
+    const tx = await signer.sendTransaction({
+      to: faucetAddress,
+      data: dataWithReferral,
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
-      maxFeePerGas: feeData.maxFeePerGas,
-      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
     });
 
     console.log(`Remove admin transaction sent: ${tx.hash}`);

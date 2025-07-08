@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
 import { Header } from "@/components/header"
 import {
   getFaucetDetails,
@@ -118,6 +117,7 @@ export default function FaucetDetails() {
   const [backendMode, setBackendMode] = useState(true)
   const [customClaimFile, setCustomClaimFile] = useState<File | null>(null)
   const [adminList, setAdminList] = useState<string[]>([])
+  const [factoryOwner, setFactoryOwner] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("fund")
   const [transactions, setTransactions] = useState<
     { faucetAddress: string; transactionType: string; initiator: string; amount: bigint; isEther: boolean; timestamp: number }[]
@@ -353,6 +353,15 @@ export default function FaucetDetails() {
     }
   }
 
+  const checkAdminStatus = (inputAddress: string) => {
+    if (!inputAddress.trim()) {
+      setIsAddingAdmin(true)
+      return
+    }
+    const isAdmin = adminList.some((admin) => admin.toLowerCase() === inputAddress.toLowerCase())
+    setIsAddingAdmin(!isAdmin)
+  }
+
   const loadTransactionHistory = async () => {
     if (!isConnected || !provider || !chainId || !selectedNetwork) {
       return
@@ -454,20 +463,22 @@ export default function FaucetDetails() {
       setFaucetDetails(details)
 
       const admins = await getAllAdmins(detailsProvider, faucetAddress)
-      setAdminList(admins)
-      console.log("Admin list set to:", admins)
+      const [factoryOwnerAddr, ...otherAdmins] = admins
+      setFactoryOwner(factoryOwnerAddr)
+      setAdminList(otherAdmins)
+      console.log("Admin list set to:", otherAdmins, "Factory owner:", factoryOwnerAddr)
 
       if (address) {
-        const isUserAdmin = admins.some((admin: string) => admin.toLowerCase() === address.toLowerCase())
+        const isUserAdmin = otherAdmins.some((admin: string) => admin.toLowerCase() === address.toLowerCase())
         setUserIsAdmin(isUserAdmin)
-        console.log("User admin status set to:", isUserAdmin, "based on admins:", admins)
+        console.log("User admin status set to:", isUserAdmin, "based on admins:", otherAdmins)
       } else {
         setUserIsAdmin(false)
         console.log("No address connected, user admin status set to false")
       }
 
       if (details.claimAmount) {
-        setClaimAmount(formatUnits(details.claimAmount, details.tokenDecimals))
+        setClaimAmount(formatUnits(details.claimAmount, tokenDecimals))
       }
       if (details.startTime) {
         const date = new Date(Number(details.startTime) * 1000)
@@ -559,6 +570,14 @@ export default function FaucetDetails() {
       toast({
         title: "Not Drop-listed",
         description: "You are not Drop-listed to claim from this faucet",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!hasFollowed) {
+      toast({
+        title: "Follow Required",
+        description: "Please follow @FaucetDrops on X to claim tokens",
         variant: "destructive",
       })
       return
@@ -1135,7 +1154,7 @@ export default function FaucetDetails() {
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                     variant="outline"
                     onClick={handleBackendClaim}
-                    disabled={isClaiming || !address || !canClaim}
+                    disabled={isClaiming || !address || !canClaim || !hasFollowed}
                   >
                     {isClaiming
                       ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Droping...</span>
@@ -1479,12 +1498,15 @@ export default function FaucetDetails() {
                                   id="new-admin"
                                   placeholder="0x..."
                                   value={newAdminAddress}
-                                  onChange={(e) => setNewAdminAddress(e.target.value)}
-                                  className="text-xs sm:text-sm"
+                                  onChange={(e) => {
+                                    setNewAdminAddress(e.target.value)
+                                    checkAdminStatus(e.target.value)
+                                  }}
+                                  className="text-xs sm:text-sm font-mono"
                                 />
                                 <Button
                                   onClick={() => setShowAddAdminDialog(true)}
-                                  disabled={isManagingAdmin || !newAdminAddress}
+                                  disabled={isManagingAdmin || !newAdminAddress.trim()}
                                   className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                                 >
                                   {isManagingAdmin ? (
@@ -1556,357 +1578,347 @@ export default function FaucetDetails() {
                                       <TableCell className="text-xs sm:text-sm">
                                         {new Date(tx.timestamp * 1000).toLocaleString()}
                                       </TableCell>
-                                    </TableRow>
+                                      </TableRow>
                                   ))}
-                                </TableBody>
-                              </Table>
-                              {totalPages > 1 && (
-                                <Pagination>
-                                  <PaginationContent>
-                                    <PaginationItem>
-                                      <PaginationPrevious
-                                        href="#"
-                                        onClick={(e) => {
-                                          e.preventDefault()
-                                          handlePageChange(currentPage - 1)
-                                        }}
-                                        className={`text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground ${
-                                          currentPage === 1 ? "pointer-events-none opacity-50" : ""
-                                        }`}
-                                      />
-                                    </PaginationItem>
-                                    {[...Array(totalPages)].map((_, i) => (
-                                      <PaginationItem key={i + 1}>
-                                        <PaginationLink
-                                          href="#"
-                                          onClick={(e) => {
-                                            e.preventDefault()
-                                            handlePageChange(i + 1)
-                                          }}
-                                          isActive={currentPage === i + 1}
-                                          className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-                                        >
-                                          {i + 1}
-                                        </PaginationLink>
-                                      </PaginationItem>
-                                    ))}
-                                    <PaginationItem>
-                                      <PaginationNext
-                                        href="#"
-                                        onClick={(e) => {
-                                          e.preventDefault()
-                                          handlePageChange(currentPage + 1)
-                                        }}
-                                        className={`text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground ${
-                                          currentPage === totalPages ? "pointer-events-none opacity-50" : ""
-                                        }`}
-                                      />
-                                    </PaginationItem>
-                                  </PaginationContent>
-                                </Pagination>
+                                    </TableBody>
+                                  </Table>
+                                  {totalPages > 1 && (
+                                    <Pagination>
+                                      <PaginationContent>
+                                        <PaginationItem>
+                                          <PaginationPrevious
+                                            href="#"
+                                            onClick={(e) => {
+                                              e.preventDefault()
+                                              handlePageChange(currentPage - 1)
+                                            }}
+                                            className={`text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground ${
+                                              currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                                            }`}
+                                          />
+                                        </PaginationItem>
+                                        {[...Array(totalPages)].map((_, i) => (
+                                          <PaginationItem key={i + 1}>
+                                            <PaginationLink
+                                              href="#"
+                                              onClick={(e) => {
+                                                e.preventDefault()
+                                                handlePageChange(i + 1)
+                                              }}
+                                              isActive={currentPage === i + 1}
+                                              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                                            >
+                                              {i + 1}
+                                            </PaginationLink>
+                                          </PaginationItem>
+                                        ))}
+                                        <PaginationItem>
+                                          <PaginationNext
+                                            href="#"
+                                            onClick={(e) => {
+                                              e.preventDefault()
+                                              handlePageChange(currentPage + 1)
+                                            }}
+                                            className={`text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground ${
+                                              currentPage === totalPages ? "pointer-events-none opacity-50" : ""
+                                            }`}
+                                          />
+                                        </PaginationItem>
+                                      </PaginationContent>
+                                    </Pagination>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="text-xs sm:text-sm text-muted-foreground">No transactions found</p>
                               )}
-                            </>
-                          ) : (
-                            <p className="text-xs sm:text-sm text-muted-foreground">No transactions found</p>
-                          )}
-                        </div>
-                      </TabsContent>
-                    </Tabs>
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              ) : (
+                <Card className="w-full mx-auto">
+                  <CardContent className="py-6 sm:py-10 text-center">
+                    <p className="text-sm sm:text-base">Faucet not found or error loading details</p>
+                    <Button
+                      className="mt-4 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => router.push("/")}
+                    >
+                      Return to Home
+                    </Button>
                   </CardContent>
                 </Card>
               )}
-            </>
-          ) : (
-            <Card className="w-full mx-auto">
-              <CardContent className="py-6 sm:py-10 text-center">
-                <p className="text-sm sm:text-base">Faucet not found or error loading details</p>
+            </div>
+          </div>
+          <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
+            <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  You have successfully dropped{" "}
+                  {faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col space-y-4 py-4">
+                <p className="text-xs sm:text-sm">Share your drop on X to help spread the word about FaucetDrops!</p>
+              </div>
+              <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
                 <Button
-                  className="mt-4 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-                  onClick={() => router.push("/")}
+                  type="button"
+                  variant="default"
+                  onClick={handleShareOnX}
+                  className="flex items-center gap-2 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                 >
-                  Return to Home
+                  <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                  Share on 𝕏
                 </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-      <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              You have successfully dropped{" "}
-              {faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col space-y-4 py-4">
-            <p className="text-xs sm:text-sm">Share your drop on X to help spread the word about FaucetDrops!</p>
-          </div>
-          <DialogFooter className="sm:justify-start flex flex-col sm:flex-row gap-2">
-            <Button
-              type="button"
-              variant="default"
-              onClick={handleShareOnX}
-              className="flex items-center gap-2 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-            >
-              <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
-              Share on 𝕏
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Confirm Funding</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Review the funding details before proceeding.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
-                Amount to Fund
-              </Label>
-              <Input
-                id="adjusted-fund-amount"
-                value={adjustedFundAmount}
-                onChange={(e) => setAdjustedFundAmount(e.target.value)}
-                className="text-xs sm:text-sm"
-              />
-            </div>
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>Platform fee (5%): {fee} {tokenSymbol}</p>
-              <p>Net amount to faucet: {netAmount} {tokenSymbol}</p>
-              <p className="text-blue-600">
-                Tip: To fund exactly {fundAmount} {tokenSymbol}, enter {recommendedInput} {tokenSymbol}
-              </p>
-            </div>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowFundPopup(false)}
-              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={confirmFund}
-              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-              disabled={isFunding}
-            >
-              {isFunding ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  Confirming...
-                </span>
-              ) : (
-                "Confirm Fund"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showSecretCodeDialog} onOpenChange={setShowSecretCodeDialog}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Drop Code Generated</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Your Drop code has been generated and stored. Share this code with users to allow them to drop tokens.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="text-center">
-              <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                {generatedSecretCode}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
+            <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg sm:text-xl">Confirm Funding</DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  Review the funding details before proceeding.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
+                    Amount to Fund
+                  </Label>
+                  <Input
+                    id="adjusted-fund-amount"
+                    value={adjustedFundAmount}
+                    onChange={(e) => setAdjustedFundAmount(e.target.value)}
+                    className="text-xs sm:text-sm"
+                  />
+                </div>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Platform fee (5%): {fee} {tokenSymbol}</p>
+                  <p>Net amount to faucet: {netAmount} {tokenSymbol}</p>
+                  <p className="text-blue-600">
+                    Tip: To fund exactly {fundAmount} {tokenSymbol}, enter {recommendedInput} {tokenSymbol}
+                  </p>
+                </div>
               </div>
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              This code is required for users to drop tokens. Keep it safe and share it only with intended users.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => handleCopySecretCode(generatedSecretCode)}
-              className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
-            >
-              <Copy className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              Copy Code
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Current Drop Code</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              This is the current drop code for your faucet.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="text-center">
-              <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                {secretCode}
+              <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFundPopup(false)}
+                  className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirmFund}
+                  className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                  disabled={isFunding}
+                >
+                  {isFunding ? (
+                    <span className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                      Confirming...
+                    </span>
+                  ) : (
+                    "Confirm Fund"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={showSecretCodeDialog} onOpenChange={setShowSecretCodeDialog}>
+            <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg sm:text-xl">Drop Code Generated</DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  Your Drop code has been generated and stored. Share this code with users to allow them to drop tokens.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="text-center">
+                  <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                    {generatedSecretCode}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  This code is required for users to drop tokens. Keep it safe and share it only with intended users.
+                </p>
               </div>
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Share this code with users to allow them to drop tokens from your faucet.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => handleCopySecretCode(secretCode)}
-              className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
-            >
-              <Copy className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              Copy Code
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Edit Faucet Name</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">Enter a new name for your faucet.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="new-faucet-name" className="text-xs sm:text-sm">
-                New Faucet Name
-              </Label>
-              <Input
-                id="new-faucet-name"
-                value={newFaucetName}
-                onChange={(e) => setNewFaucetName(e.target.value)}
-                placeholder="Enter new faucet name"
-                className="text-xs sm:text-sm"
-              />
-            </div>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowEditNameDialog(false)}
-              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpdateFaucetName}
-              disabled={isUpdatingName || !newFaucetName.trim()}
-              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-            >
-              {isUpdatingName ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  Updating...
-                </span>
-              ) : (
-                "Update Name"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl text-red-600">Delete Faucet</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Are you sure you want to delete this faucet? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-xs text-muted-foreground">
-              Deleting the faucet will permanently remove it and all associated data. Make sure to withdraw any
-              remaining tokens first.
-            </p>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}             className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDeleteFaucet}
-              variant="destructive"
-              className="text-xs sm:text-sm hover:bg-destructive/90 hover:text-destructive-foreground"
-              disabled={isDeletingFaucet}
-            >
-              {isDeletingFaucet ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  Deleting...
-                </span>
-              ) : (
-                "Delete Faucet"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">{isAddingAdmin ? "Add Admin" : "Remove Admin"}</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              {isAddingAdmin
-                ? "Enter the address to grant admin privileges for this faucet."
-                : "Enter the address to revoke admin privileges from this faucet."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="admin-mode"
-                checked={isAddingAdmin}
-                onCheckedChange={setIsAddingAdmin}
-              />
-              <Label htmlFor="admin-mode" className="text-xs sm:text-sm">
-                {isAddingAdmin ? "Add Admin" : "Remove Admin"}
-              </Label>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="admin-address" className="text-xs sm:text-sm">
-                Admin Address
-              </Label>
-              <Input
-                id="admin-address"
-                placeholder="0x..."
-                value={newAdminAddress}
-                onChange={(e) => setNewAdminAddress(e.target.value)}
-                className="text-xs sm:text-sm font-mono"
-              />
-            </div>
-          </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowAddAdminDialog(false)}
-              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleManageAdmin}
-              disabled={isManagingAdmin || !newAdminAddress.trim()}
-              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-            >
-              {isManagingAdmin ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  {isAddingAdmin ? "Adding..." : "Removing..."}
-                </span>
-              ) : (
-                isAddingAdmin ? "Add Admin" : "Remove Admin"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </main>
-  )
-}
+              <DialogFooter>
+                <Button
+                  onClick={() => handleCopySecretCode(generatedSecretCode)}
+                  className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
+                >
+                  <Copy className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  Copy Code
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
+            <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg sm:text-xl">Current Drop Code</DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  This is the current drop code for your faucet.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="text-center">
+                  <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                    {secretCode}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  Share this code with users to allow them to drop tokens from your faucet.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => handleCopySecretCode(secretCode)}
+                  className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
+                >
+                  <Copy className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  Copy Code
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
+            <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg sm:text-xl">Edit Faucet Name</DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">Enter a new name for your faucet.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="new-faucet-name" className="text-xs sm:text-sm">
+                    New Faucet Name
+                  </Label>
+                  <Input
+                    id="new-faucet-name"
+                    value={newFaucetName}
+                    onChange={(e) => setNewFaucetName(e.target.value)}
+                    placeholder="Enter new faucet name"
+                    className="text-xs sm:text-sm"
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowEditNameDialog(false)}
+                  className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateFaucetName}
+                  className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                  disabled={isUpdatingName || !newFaucetName.trim()}
+                >
+                  {isUpdatingName ? (
+                    <span className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                      Updating...
+                    </span>
+                  ) : (
+                    "Update Name"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg sm:text-xl">Delete Faucet</DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  Are you sure you want to delete this faucet? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteDialog(false)}
+                  className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteFaucet}
+                  className="text-xs sm:text-sm hover:bg-destructive/90 hover:text-destructive-foreground"
+                  disabled={isDeletingFaucet}
+                >
+                  {isDeletingFaucet ? (
+                    <span className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                      Deleting...
+                    </span>
+                  ) : (
+                    "Delete Faucet"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
+            <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg sm:text-xl">{isAddingAdmin ? "Add Admin" : "Remove Admin"}</DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  {isAddingAdmin
+                    ? "Enter the address to grant admin privileges."
+                    : "Enter the address to revoke admin privileges."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-address" className="text-xs sm:text-sm">
+                    Admin Address
+                  </Label>
+                  <Input
+                    id="admin-address"
+                    value={newAdminAddress}
+                    onChange={(e) => {
+                      setNewAdminAddress(e.target.value)
+                      checkAdminStatus(e.target.value)
+                    }}
+                    placeholder="0x..."
+                    className="text-xs sm:text-sm font-mono"
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowAddAdminDialog(false)}
+                  className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleManageAdmin}
+                  className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                  disabled={isManagingAdmin || !newAdminAddress.trim()}
+                >
+                  {isManagingAdmin ? (
+                    <span className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                      {isAddingAdmin ? "Adding..." : "Removing..."}
+                    </span>
+                  ) : (
+                    isAddingAdmin ? "Add Admin" : "Remove Admin"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </main>
+      )
+    }

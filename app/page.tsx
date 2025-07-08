@@ -97,17 +97,6 @@ export default function Home() {
             </div>
           </header>
 
-          {/* Status Message */}
-          {checkInStatus && (
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-3 sm:p-4">
-              <div className="text-center">
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 break-words leading-relaxed">
-                  {checkInStatus}
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* User Info Card (for mobile) */}
           {isWalletConnected && (
             <div className="lg:hidden bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-3 sm:p-4">

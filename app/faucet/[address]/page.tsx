@@ -29,6 +29,7 @@ import {
   updateFaucetName,
   deleteFaucet,
   addAdmin,
+  removeAdmin,
   storeClaim,
   getFaucetTransactionHistory,
 } from "@/lib/faucet"
@@ -82,7 +83,7 @@ export default function FaucetDetails() {
   const [isResettingClaims, setIsResettingClaims] = useState(false)
   const [isUpdatingName, setIsUpdatingName] = useState(false)
   const [isDeletingFaucet, setIsDeletingFaucet] = useState(false)
-  const [isAddingAdmin, setIsAddingAdmin] = useState(false)
+  const [isManagingAdmin, setIsManagingAdmin] = useState(false)
   const [isRetrievingSecret, setIsRetrievingSecret] = useState(false)
   const [fundAmount, setFundAmount] = useState("")
   const [adjustedFundAmount, setAdjustedFundAmount] = useState("")
@@ -103,6 +104,7 @@ export default function FaucetDetails() {
   const [showAddAdminDialog, setShowAddAdminDialog] = useState(false)
   const [newFaucetName, setNewFaucetName] = useState("")
   const [newAdminAddress, setNewAdminAddress] = useState("")
+  const [isAddingAdmin, setIsAddingAdmin] = useState(true)
   const [txHash, setTxHash] = useState<string | null>(null)
   const [startCountdown, setStartCountdown] = useState<string | null>(null)
   const [endCountdown, setEndCountdown] = useState<string>("")
@@ -297,7 +299,7 @@ export default function FaucetDetails() {
     }
   }
 
-  const handleAddAdmin = async () => {
+  const handleManageAdmin = async () => {
     if (!isConnected || !provider || !newAdminAddress.trim() || !chainId) {
       toast({
         title: "Invalid Input",
@@ -308,31 +310,46 @@ export default function FaucetDetails() {
     }
     if (!checkNetwork()) return
     try {
-      setIsAddingAdmin(true)
-      await addAdmin(
-        provider as BrowserProvider,
-        faucetAddress,
-        newAdminAddress,
-        BigInt(chainId),
-        BigInt(Number(networkId)),
-      )
-      toast({
-        title: "Admin added",
-        description: `Address ${newAdminAddress} has been added as an admin`,
-      })
+      setIsManagingAdmin(true)
+      if (isAddingAdmin) {
+        await addAdmin(
+          provider as BrowserProvider,
+          faucetAddress,
+          newAdminAddress,
+          BigInt(chainId),
+          BigInt(Number(networkId)),
+        )
+        toast({
+          title: "Admin added",
+          description: `Address ${newAdminAddress} has been added as an admin`,
+        })
+        setAdminList((prev) => [...prev, newAdminAddress])
+      } else {
+        await removeAdmin(
+          provider as BrowserProvider,
+          faucetAddress,
+          newAdminAddress,
+          BigInt(chainId),
+          BigInt(Number(networkId)),
+        )
+        toast({
+          title: "Admin removed",
+          description: `Address ${newAdminAddress} has been removed as an admin`,
+        })
+        setAdminList((prev) => prev.filter((admin) => admin.toLowerCase() !== newAdminAddress.toLowerCase()))
+      }
       setNewAdminAddress("")
       setShowAddAdminDialog(false)
       await loadFaucetDetails()
-      setAdminList((prev) => [...prev, newAdminAddress])
     } catch (error: any) {
-      console.error("Error adding admin:", error)
+      console.error("Error managing admin:", error)
       toast({
-        title: "Failed to add admin",
+        title: `Failed to ${isAddingAdmin ? "add" : "remove"} admin`,
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
     } finally {
-      setIsAddingAdmin(false)
+      setIsManagingAdmin(false)
     }
   }
 
@@ -352,9 +369,9 @@ export default function FaucetDetails() {
       const sortedTxs = txs.sort((a, b) => b.timestamp - a.timestamp)
       setTransactions(sortedTxs)
     } catch (error: any) {
-      console.error("Error loading  Activity Log:", error)
+      console.error("Error loading Activity Log:", error)
       toast({
-        title: "Failed to load  Activity Log",
+        title: "Failed to load Activity Log",
         description: error.message || "Unknown error occurred",
         variant: "destructive",
       })
@@ -555,7 +572,7 @@ export default function FaucetDetails() {
       await window.ethereum.request({ method: "eth_requestAccounts" })
       console.log("Sending drop request", { backendMode, secretCode: backendMode ? secretCode : "N/A" })
       const result = backendMode
-        ? await claimNoCodeViaBackend(address, faucetAddress, provider as BrowserProvider)
+        ? await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode)
         : await claimNoCodeViaBackend(address, faucetAddress, provider as BrowserProvider)
       const formattedTxHash = result.txHash.startsWith("0x") ? result.txHash : (`0x${result.txHash}` as `0x${string}`)
       setTxHash(formattedTxHash)
@@ -700,98 +717,95 @@ export default function FaucetDetails() {
   }
 
   const handleUpdateClaimParameters = async () => {
-  if (!isConnected || !provider || !chainId) {
-    toast({
-      title: "Wallet not connected",
-      description: "Please connect your wallet and ensure a network is selected",
-      variant: "destructive",
-    })
-    return
-  }
-  if (!claimAmount || !startTime || !endTime) {
-    toast({
-      title: "Invalid Input",
-      description: "Please fill in all drop parameters",
-      variant: "destructive",
-    })
-    return
-  }
-  if (!checkNetwork()) return
-
-  try {
-    setIsUpdatingParameters(true)
-    const claimAmountBN = parseUnits(claimAmount, tokenDecimals)
-    const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
-    const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
-    
-    let secretCodeFromBackend = ""
-    
-    // If backend mode, get the secret code from backend first
-    if (backendMode) {
-      const response = await fetch("https://fauctdrop-backend.onrender.com/set-claim-parameters", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          faucetAddress,
-          claimAmount: claimAmountBN.toString(),
-          startTime: startTimestamp,
-          endTime: endTimestamp,
-          chainId: Number(chainId),
-        }),
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || "Failed to set drop parameters")
-      }
-      
-      const result = await response.json()
-      secretCodeFromBackend = result.secretCode
-    }
-
-    // Update smart contract parameters
-    await setClaimParameters(
-      provider as BrowserProvider,
-      faucetAddress,
-      claimAmountBN,
-      startTimestamp,
-      endTimestamp,
-      BigInt(chainId),
-      BigInt(Number(networkId)),
-    )
-
-    // Only show secret code dialog after smart contract update is successful
-    if (backendMode && secretCodeFromBackend) {
-      saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend)
-      setGeneratedSecretCode(secretCodeFromBackend)
-      setShowSecretCodeDialog(true)
-    }
-
-    toast({
-      title: "Drop parameters updated",
-      description: `Parameters updated successfully. ${backendMode ? "Drop code generated and stored." : ""}`,
-    })
-    
-    await loadFaucetDetails()
-    await loadTransactionHistory()
-    
-  } catch (error: any) {
-    console.error("Error updating drop parameters:", error)
-    if (error.message === "Switch to the network to perform operation") {
-      checkNetwork()
-    } else {
+    if (!isConnected || !provider || !chainId) {
       toast({
-        title: "Failed to update drop parameters",
-        description: error.message || "Unknown error occurred",
+        title: "Wallet not connected",
+        description: "Please connect your wallet and ensure a network is selected",
         variant: "destructive",
       })
+      return
     }
-  } finally {
-    setIsUpdatingParameters(false)
+    if (!claimAmount || !startTime || !endTime) {
+      toast({
+        title: "Invalid Input",
+        description: "Please fill in all drop parameters",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!checkNetwork()) return
+
+    try {
+      setIsUpdatingParameters(true)
+      const claimAmountBN = parseUnits(claimAmount, tokenDecimals)
+      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
+      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
+      
+      let secretCodeFromBackend = ""
+      
+      if (backendMode) {
+        const response = await fetch("https://fauctdrop-backend.onrender.com/set-claim-parameters", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            faucetAddress,
+            claimAmount: claimAmountBN.toString(),
+            startTime: startTimestamp,
+            endTime: endTimestamp,
+            chainId: Number(chainId),
+          }),
+        })
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.detail || "Failed to set drop parameters")
+        }
+        
+        const result = await response.json()
+        secretCodeFromBackend = result.secretCode
+      }
+
+      await setClaimParameters(
+        provider as BrowserProvider,
+        faucetAddress,
+        claimAmountBN,
+        startTimestamp,
+        endTimestamp,
+        BigInt(chainId),
+        BigInt(Number(networkId)),
+      )
+
+      if (backendMode && secretCodeFromBackend) {
+        saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend)
+        setGeneratedSecretCode(secretCodeFromBackend)
+        setShowSecretCodeDialog(true)
+      }
+
+      toast({
+        title: "Drop parameters updated",
+        description: `Parameters updated successfully. ${backendMode ? "Drop code generated and stored." : ""}`,
+      })
+      
+      await loadFaucetDetails()
+      await loadTransactionHistory()
+      
+    } catch (error: any) {
+      console.error("Error updating drop parameters:", error)
+      if (error.message === "Switch to the network to perform operation") {
+        checkNetwork()
+      } else {
+        toast({
+          title: "Failed to update drop parameters",
+          description: error.message || "Unknown error occurred",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsUpdatingParameters(false)
+    }
   }
-}
 
   const handleUpdateWhitelist = async () => {
     if (!isConnected || !provider || !whitelistAddresses.trim() || !chainId) {
@@ -1175,7 +1189,7 @@ export default function FaucetDetails() {
                               <RotateCcw className="h-3 w-3 mr-2" /> Admin Power
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setActiveTab("history")} className="text-xs hover:bg-accent hover:text-accent-foreground">
-                              <History className="h-3 w-3 mr-2" />  Activity Log
+                              <History className="h-3 w-3 mr-2" /> Activity Log
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -1207,7 +1221,7 @@ export default function FaucetDetails() {
                         </TabsTrigger>
                         <TabsTrigger value="history" className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
                           <History className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                           Activity Log
+                          Activity Log
                         </TabsTrigger>
                       </TabsList>
                       <TabsContent value="fund" className="space-y-4 mt-4">
@@ -1458,7 +1472,7 @@ export default function FaucetDetails() {
                           {isOwner && (
                             <div className="space-y-2">
                               <Label htmlFor="new-admin" className="text-xs sm:text-sm">
-                                Add Admin
+                                {isAddingAdmin ? "Add Admin" : "Remove Admin"}
                               </Label>
                               <div className="flex gap-2">
                                 <Input
@@ -1470,16 +1484,16 @@ export default function FaucetDetails() {
                                 />
                                 <Button
                                   onClick={() => setShowAddAdminDialog(true)}
-                                  disabled={isAddingAdmin || !newAdminAddress}
+                                  disabled={isManagingAdmin || !newAdminAddress}
                                   className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                                 >
-                                  {isAddingAdmin ? (
+                                  {isManagingAdmin ? (
                                     <span className="flex items-center">
                                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                                      Adding...
+                                      {isAddingAdmin ? "Adding..." : "Removing..."}
                                     </span>
                                   ) : (
-                                    "Add Admin"
+                                    isAddingAdmin ? "Add Admin" : "Remove Admin"
                                   )}
                                 </Button>
                               </div>
@@ -1513,7 +1527,7 @@ export default function FaucetDetails() {
                       </TabsContent>
                       <TabsContent value="history" className="space-y-4 mt-4">
                         <div className="space-y-4">
-                          <Label className="text-xs sm:text-sm"> Activity Log</Label>
+                          <Label className="text-xs sm:text-sm">Activity Log</Label>
                           {transactions.length > 0 ? (
                             <>
                               <Table>
@@ -1761,7 +1775,7 @@ export default function FaucetDetails() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="new-faucet" className="text-xs sm:text-sm">
+              <Label htmlFor="new-faucet-name" className="text-xs sm:text-sm">
                 New Faucet Name
               </Label>
               <Input
@@ -1813,11 +1827,23 @@ export default function FaucetDetails() {
             </p>
           </div>
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="text-xs sm:text-sm">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}             className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground">
               Cancel
             </Button>
-            <Button onClick={handleDeleteFaucet} variant="destructive" className="text-xs sm:text-sm">
-              Delete Faucet
+            <Button
+              onClick={handleDeleteFaucet}
+              variant="destructive"
+              className="text-xs sm:text-sm hover:bg-destructive/90 hover:text-destructive-foreground"
+              disabled={isDeletingFaucet}
+            >
+              {isDeletingFaucet ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                  Deleting...
+                </span>
+              ) : (
+                "Delete Faucet"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1825,31 +1851,58 @@ export default function FaucetDetails() {
       <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
         <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Add Admin</DialogTitle>
+            <DialogTitle className="text-lg sm:text-xl">{isAddingAdmin ? "Add Admin" : "Remove Admin"}</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              Add a new admin to help manage this faucet.
+              {isAddingAdmin
+                ? "Enter the address to grant admin privileges for this faucet."
+                : "Enter the address to revoke admin privileges from this faucet."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="admin-mode"
+                checked={isAddingAdmin}
+                onCheckedChange={setIsAddingAdmin}
+              />
+              <Label htmlFor="admin-mode" className="text-xs sm:text-sm">
+                {isAddingAdmin ? "Add Admin" : "Remove Admin"}
+              </Label>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="admin-address" className="text-xs sm:text-sm">
                 Admin Address
               </Label>
               <Input
                 id="admin-address"
+                placeholder="0x..."
                 value={newAdminAddress}
                 onChange={(e) => setNewAdminAddress(e.target.value)}
-                placeholder="0x..."
-                className="text-xs sm:text-sm"
+                className="text-xs sm:text-sm font-mono"
               />
             </div>
           </div>
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowAddAdminDialog(false)} className="text-xs sm:text-sm">
+            <Button
+              variant="outline"
+              onClick={() => setShowAddAdminDialog(false)}
+              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+            >
               Cancel
             </Button>
-            <Button onClick={handleAddAdmin} disabled={!newAdminAddress.trim()} className="text-xs sm:text-sm">
-              Add
+            <Button
+              onClick={handleManageAdmin}
+              disabled={isManagingAdmin || !newAdminAddress.trim()}
+              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+            >
+              {isManagingAdmin ? (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                  {isAddingAdmin ? "Adding..." : "Removing..."}
+                </span>
+              ) : (
+                isAddingAdmin ? "Add Admin" : "Remove Admin"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

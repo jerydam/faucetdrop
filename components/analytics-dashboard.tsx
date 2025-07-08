@@ -413,7 +413,7 @@ export function AnalyticsDashboard({ data: propData, loading: propLoading, error
         {/* Header */}
         <div className="text-center md:text-left">
           <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight">
-            Analytics Dashboard ({network?.name || "No Network"})
+            Analytics Dashboard
           </h1>
           {loading && (
             <div className="flex items-center justify-center md:justify-start mt-2">

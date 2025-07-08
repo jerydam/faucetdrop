@@ -11,7 +11,7 @@ export interface Network {
   blockExplorer: string
   explorerUrl?: string
   color: string
-  factoryAddress: string  
+  factoryAddresses: string[] // Changed to array
   tokenAddress: string
   nativeCurrency: {
     name: string
@@ -20,40 +20,29 @@ export interface Network {
   }
 }
 
-
-
 interface NetworkContextType {
   network: Network | null
   networks: Network[]
   setNetwork: (network: Network) => void
   switchNetwork: (chainId: number) => Promise<void>
+  getLatestFactoryAddress: () => string | null // New method to get latest factory address
 }
 
 // Define networks for all major EVM chains
 const networks: Network[] = [
-  // {
-  //   name: "Ethereum Mainnet",
-  //   chainId: 1,
-  //   rpcUrl: "https://eth-mainnet.g.alchemy.com/v2/your-api-key",
-  //   blockExplorer: "https://etherscan.io",
-  //   color: "#627EEA",
-  //   factoryAddress: "0x0000000000000000000000000000000000000000", // Replace with actual address
-  //   tokenAddress: ZeroAddress, // FTM (native)
-  //    nativeCurrency: {
-  //     name: "Ethereum",
-  //     symbol: "ETH",
-  //     decimals: 18,
-  //   },
-  // },
   {
-    //{previous celo: 0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB,0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1, 0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB}
     name: "Celo",
     chainId: 42220,
     rpcUrl: "https://forno.celo.org",
     blockExplorer: "https://celoscan.io",
     explorerUrl: "https://celoscan.io",
     color: "#35D07F",
-    factoryAddress: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
+    factoryAddresses: [
+      "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", // Example: Add new factory address
+      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
+      "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
+      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d" // Example: Add new factory address
+    ],
     tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", // Wrapped CELO
     nativeCurrency: {
       name: "Celo",
@@ -68,7 +57,7 @@ const networks: Network[] = [
     blockExplorer: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
-    factoryAddress: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
+    factoryAddresses: ["0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1"],
     tokenAddress: ZeroAddress, // LISK (native)
     nativeCurrency: {
       name: "Lisk",
@@ -83,7 +72,7 @@ const networks: Network[] = [
     blockExplorer: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
-    factoryAddress: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
+    factoryAddresses: ["0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1"],
     tokenAddress: ZeroAddress, // ETH (native)
     nativeCurrency: {
       name: "Ethereum",
@@ -91,13 +80,12 @@ const networks: Network[] = [
       decimals: 18,
     },
   },
-
   {
-    chainId:8453,
+    chainId: 8453,
     name: "Base Mainnet",
     rpcUrl: "https://mainnet.base.org",
     blockExplorer: "https://basescan.org",
-    factoryAddress: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de", // Replace with actual addres
+    factoryAddresses: ["0x9D6f441b31FBa22700bb3217229eb89b13FB49de"],
     color: "#0052FF",
     tokenAddress: ZeroAddress, // ETH (native)
     nativeCurrency: {
@@ -108,13 +96,12 @@ const networks: Network[] = [
   },
 ];
 
-
-
 const NetworkContext = createContext<NetworkContextType>({
   network: null,
   networks: networks,
   setNetwork: () => {},
   switchNetwork: async () => {},
+  getLatestFactoryAddress: () => null,
 })
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
@@ -122,6 +109,10 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   const [network, setNetwork] = useState<Network | null>(networks[0])
   const [currentChainId, setCurrentChainId] = useState<number | null>(null)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
+
+  const getLatestFactoryAddress = () => {
+    return network?.factoryAddresses[network.factoryAddresses.length - 1] || null
+  }
 
   useEffect(() => {
     const detectCurrentChain = async () => {
@@ -154,7 +145,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
           if (detectedNetwork) {
             setNetwork(detectedNetwork)
           }
-          // Reload the page on chain change
           window.location.reload()
         } catch (error) {
           console.error("Error handling chain change:", error)
@@ -208,7 +198,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       console.log(`Successfully switched to ${targetNetwork.name}`)
       setNetwork(targetNetwork)
       setCurrentChainId(chainId)
-      // Reload the page after successful network switch
       window.location.reload()
     } catch (error: any) {
       console.warn(`Error switching to ${targetNetwork.name}:`, error)
@@ -239,7 +228,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
           setNetwork(targetNetwork)
           setCurrentChainId(chainId)
-          // Reload the page after adding and switching network
           window.location.reload()
         } catch (addError: any) {
           console.error(`Error adding network ${targetNetwork.name}:`, addError)
@@ -262,16 +250,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const ensureCorrectNetwork = async (chainId: number): Promise<boolean> => {
-    if (currentChainId === chainId) {
-      console.log(`Already on the correct network: ${chainId}`)
-      return true
-    }
-
-    console.log(`Network mismatch: current=${currentChainId}, required=${chainId}`)
-    return false
-  }
-
   const handleSetNetwork = (newNetwork: Network) => {
     setNetwork(newNetwork)
     switchNetwork(newNetwork.chainId)
@@ -284,6 +262,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         networks,
         setNetwork: handleSetNetwork,
         switchNetwork,
+        getLatestFactoryAddress,
       }}
     >
       {children}

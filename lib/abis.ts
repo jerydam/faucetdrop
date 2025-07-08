@@ -642,6 +642,11 @@ export const FAUCET_ABI = [
 	},
 	{
 		"inputs": [],
+		"name": "CannotRemoveFactoryOwner",
+		"type": "error"
+	},
+	{
+		"inputs": [],
 		"name": "ClaimAmountNotSet",
 		"type": "error"
 	},
@@ -759,6 +764,19 @@ export const FAUCET_ABI = [
 			}
 		],
 		"name": "AdminAdded",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "admin",
+				"type": "address"
+			}
+		],
+		"name": "AdminRemoved",
 		"type": "event"
 	},
 	{
@@ -1585,6 +1603,19 @@ export const FAUCET_ABI = [
 		"type": "function"
 	},
 	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_admin",
+				"type": "address"
+			}
+		],
+		"name": "removeAdmin",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
 		"inputs": [],
 		"name": "renounceOwnership",
 		"outputs": [],
@@ -2313,3 +2344,4 @@ export const STORAGE_ABI = [
 		"type": "function"
 	}
 ]
+export const CHECKIN_ABI = []

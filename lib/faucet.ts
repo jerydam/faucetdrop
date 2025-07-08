@@ -1,5 +1,5 @@
 import { type BrowserProvider, Contract, JsonRpcProvider, ZeroAddress, isAddress, getAddress } from "ethers"
-import { FAUCET_ABI, ERC20_ABI, FACTORY_ABI, STORAGE_ABI, CHECKIN_ABI } from "./abis"
+import { FAUCET_ABI, ERC20_ABI, FACTORY_ABI, STORAGE_ABI} from "./abis"
 import { appendDivviReferralData, reportTransactionToDivvi } from "./divvi-integration"
 
 // Fetch faucets for a specific network using getAllFaucets and getFaucetDetails
@@ -8,7 +8,7 @@ interface Network {
   name: string
   rpcUrl: string
   blockExplorer: string
-  factoryAddress: string
+  factoryAddresses: string
   color: string
   storageAddress?: string // Optional, defaults to FAUCET_STORAGE_ADDRESS
 }
@@ -336,7 +336,7 @@ export async function fetchStorageData(): Promise<
 // Create a faucet with backend toggle support
 export async function createFaucet(
   provider: BrowserProvider,
-  factoryAddress: string,
+  factoryAddresses: string,
   name: string,
   tokenAddress: string,
   chainId: bigint,
@@ -353,7 +353,7 @@ export async function createFaucet(
 
     const signer = await provider.getSigner();
     const signerAddress = await signer.getAddress();
-    const factoryContract = new Contract(factoryAddress, FACTORY_ABI, signer);
+    const factoryContract = new Contract(factoryAddresses, FACTORY_ABI, signer);
 
     const backendAddress = VALID_BACKEND_ADDRESS;
 
@@ -366,7 +366,7 @@ export async function createFaucet(
     const dataWithReferral = appendDivviReferralData(data);
 
     const gasEstimate = await provider.estimateGas({
-      to: factoryAddress,
+      to: factoryAddresses,
       data: dataWithReferral,
       from: signerAddress,
     });
@@ -377,7 +377,7 @@ export async function createFaucet(
     const gasCost = gasEstimate * gasPrice;
 
     console.log("Create faucet params:", {
-      factoryAddress,
+      factoryAddresses,
       name,
       tokenAddress,
       backendAddress,
@@ -391,7 +391,7 @@ export async function createFaucet(
     });
 
     const tx = await signer.sendTransaction({
-      to: factoryAddress,
+      to: factoryAddresses,
       data: dataWithReferral,
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
       maxFeePerGas,
@@ -784,54 +784,62 @@ export async function storeClaim(
 export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
   try {
     const provider = new JsonRpcProvider(network.rpcUrl)
-    const factoryContract = new Contract(network.factoryAddress, FACTORY_ABI, provider)
+    let allFaucets: any[] = []
 
-    // Check if factory contract exists
-    const code = await provider.getCode(network.factoryAddress)
-    if (code === "0x") {
-      console.warn(`No contract at factory address ${network.factoryAddress} on ${network.name}`)
-      return []
-    }
+    // Fetch faucets from all factory addresses
+    for (const factoryAddresses of network.factoryAddresses) {
+      const factoryContract = new Contract(factoryAddresses, FACTORY_ABI, provider)
 
-    // Fetch all faucet addresses
-    let faucetAddresses: string[] = []
-    try {
-      faucetAddresses = await factoryContract.getAllFaucets()
-    } catch (error) {
-      console.error(`Error calling getAllFaucets on ${network.name}:`, error)
-      return []
-    }
+      // Check if factory contract exists
+      const code = await provider.getCode(factoryAddresses)
+      if (code === "0x") {
+        console.warn(`No contract at factory address ${factoryAddresses} on ${network.name}`)
+        continue
+      }
 
-    // Process each faucet address to get full details
-    const results = await Promise.all(
-      faucetAddresses.map(async (faucetAddress: string) => {
-        if (!faucetAddress || faucetAddress === ZeroAddress) return null
-        try {
-          const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider)
-          const isDeleted = await faucetContract.deleted()
-          if (isDeleted) {
-            console.log(`Faucet ${faucetAddress} is deleted, skipping`)
+      // Fetch all faucet addresses for this factory
+      let faucetAddresses: string[] = []
+      try {
+        faucetAddresses = await factoryContract.getAllFaucets()
+      } catch (error) {
+        console.error(`Error calling getAllFaucets for ${factoryAddresses} on ${network.name}:`, error)
+        continue
+      }
+
+      // Process each faucet address to get full details
+      const results = await Promise.all(
+        faucetAddresses.map(async (faucetAddress: string) => {
+          if (!faucetAddress || faucetAddress === ZeroAddress) return null
+          try {
+            const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider)
+            const isDeleted = await faucetContract.deleted()
+            if (isDeleted) {
+              console.log(`Faucet ${faucetAddress} is deleted, skipping`)
+              return null
+            }
+
+            const details = await getFaucetDetails(provider, faucetAddress)
+            return {
+              ...details,
+              network: {
+                chainId: network.chainId,
+                name: network.name,
+                color: network.color,
+                blockExplorer: network.blockExplorer,
+              },
+              factoryAddresses, // Include factory address for reference
+            }
+          } catch (error) {
+            console.warn(`Error getting details for faucet ${faucetAddress} on ${network.name}:`, error)
             return null
           }
+        }),
+      )
 
-          const details = await getFaucetDetails(provider, faucetAddress)
-          return {
-            ...details,
-            network: {
-              chainId: network.chainId,
-              name: network.name,
-              color: network.color,
-              blockExplorer: network.blockExplorer,
-            },
-          }
-        } catch (error) {
-          console.warn(`Error getting details for faucet ${faucetAddress} on ${network.name}:`, error)
-          return null
-        }
-      }),
-    )
+      allFaucets.push(...results.filter((result) => result !== null))
+    }
 
-    return results.filter((result) => result !== null)
+    return allFaucets
   } catch (error) {
     console.error(`Error fetching faucets for ${network.name}:`, error)
     return []
@@ -864,7 +872,7 @@ export async function getFaucetTransactionHistory(
       throw new Error("Only the owner or admin can view transaction history")
     }
 
-    const factoryContract = new Contract(network.factoryAddress, FACTORY_ABI, provider)
+    const factoryContract = new Contract(network.factoryAddresses, FACTORY_ABI, provider)
     const transactions = await factoryContract.getAllTransactions()
 
     // Filter transactions for the specific faucet

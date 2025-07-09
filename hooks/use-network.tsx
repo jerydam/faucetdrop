@@ -1,3 +1,4 @@
+
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
@@ -11,7 +12,7 @@ export interface Network {
   blockExplorer: string
   explorerUrl?: string
   color: string
-  factoryAddresses: string[] // Changed to array
+  factoryAddresses: string[]
   tokenAddress: string
   nativeCurrency: {
     name: string
@@ -25,7 +26,7 @@ interface NetworkContextType {
   networks: Network[]
   setNetwork: (network: Network) => void
   switchNetwork: (chainId: number) => Promise<void>
-  getLatestFactoryAddress: () => string | null // New method to get latest factory address
+  getLatestFactoryAddress: (network?: Network) => string | null
 }
 
 // Define networks for all major EVM chains
@@ -38,12 +39,12 @@ const networks: Network[] = [
     explorerUrl: "https://celoscan.io",
     color: "#35D07F",
     factoryAddresses: [
-      "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", // Example: Add new factory address
+      "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
       "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
-      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d" // Example: Add new factory address
+      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d"
     ],
-    tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", // Wrapped CELO
+    tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
     nativeCurrency: {
       name: "Celo",
       symbol: "CELO",
@@ -58,7 +59,7 @@ const networks: Network[] = [
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
     factoryAddresses: ["0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1"],
-    tokenAddress: ZeroAddress, // LISK (native)
+    tokenAddress: ZeroAddress,
     nativeCurrency: {
       name: "Lisk",
       symbol: "LISK",
@@ -73,7 +74,7 @@ const networks: Network[] = [
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
     factoryAddresses: ["0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1"],
-    tokenAddress: ZeroAddress, // ETH (native)
+    tokenAddress: ZeroAddress,
     nativeCurrency: {
       name: "Ethereum",
       symbol: "ETH",
@@ -83,11 +84,11 @@ const networks: Network[] = [
   {
     chainId: 8453,
     name: "Base Mainnet",
-    rpcUrl: "https://mainnet.base.org",
+    rpcUrl: "https://base-mainnet.infura.io/v3/4233dd5f7d8642e69f835323532525b7", // Replace with your Alchemy API key
     blockExplorer: "https://basescan.org",
     factoryAddresses: ["0x9D6f441b31FBa22700bb3217229eb89b13FB49de"],
     color: "#0052FF",
-    tokenAddress: ZeroAddress, // ETH (native)
+    tokenAddress: ZeroAddress,
     nativeCurrency: {
       name: "Ethereum",
       symbol: "ETH",
@@ -110,8 +111,9 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   const [currentChainId, setCurrentChainId] = useState<number | null>(null)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
 
-  const getLatestFactoryAddress = () => {
-    return network?.factoryAddresses[network.factoryAddresses.length - 1] || null
+  const getLatestFactoryAddress = (targetNetwork?: Network) => {
+    const selectedNetwork = targetNetwork || network
+    return selectedNetwork?.factoryAddresses[selectedNetwork.factoryAddresses.length - 1] || null
   }
 
   useEffect(() => {

@@ -23,10 +23,18 @@ export function FaucetsCreatedChart() {
         const chartData: ChartData[] = []
 
         for (const network of networks) {
-          const faucets = await getFaucetsForNetwork(network)
+          let totalFaucets = 0
+
+          // Iterate over all factory addresses for the network
+          for (const factoryAddress of network.factoryAddresses) {
+            // Fetch faucets for the specific factory address
+            const faucets = await getFaucetsForNetwork(network, factoryAddress)
+            totalFaucets += faucets.length
+          }
+
           chartData.push({
             network: network.name,
-            faucets: faucets.length,
+            faucets: totalFaucets,
           })
         }
 

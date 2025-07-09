@@ -1154,10 +1154,10 @@ export default function FaucetDetails() {
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                     variant="outline"
                     onClick={handleBackendClaim}
-                    disabled={isClaiming || !address || !canClaim || !hasFollowed}
+                    disabled={isClaiming || !address}
                   >
                     {isClaiming
-                      ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Droping...</span>
+                      ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Dropping...</span>
                       : hasClaimed
                       ? "Already dropped"
                       : `Drop ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`}

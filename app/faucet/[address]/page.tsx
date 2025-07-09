@@ -574,14 +574,6 @@ export default function FaucetDetails() {
       })
       return
     }
-    if (!hasFollowed) {
-      toast({
-        title: "Follow Required",
-        description: "Please follow @FaucetDrops on X to claim tokens",
-        variant: "destructive",
-      })
-      return
-    }
     if (!checkNetwork()) return
     try {
       setIsClaiming(true)

@@ -71,7 +71,7 @@
       nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
       nativeTokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
       factoryAddresses: [
-        "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
+        "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
         "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
       ],
       defaultTokens: [
@@ -107,7 +107,7 @@
       nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
       nativeTokenAddress: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9",
       factoryAddresses: [
-        "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
+        "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
         "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
       ],
       defaultTokens: [
@@ -125,7 +125,7 @@
       nativeCurrency: { name: "Base", symbol: "ETH", decimals: 18 },
       nativeTokenAddress: "0x0000000000000000000000000000000000001010",
       factoryAddresses: [
-        "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
+        "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
         "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
       ],
       defaultTokens: [
@@ -423,7 +423,7 @@
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card 
             className={`cursor-pointer border-2 transition-all ${
-              faucetType === FAUCET_TYPES.OPEN ? 'border-blue-500 bg-[#034e79]' : 'border-gray-200 hover:border-gray-300'
+              faucetType === FAUCET_TYPES.OPEN ? 'border-blue-500 dark:bg-gray-800' : 'border-gray-200 hover:border-gray-300'
             }`}
             onClick={() => setFaucetType(FAUCET_TYPES.OPEN)}
           >
@@ -449,7 +449,7 @@
 
           <Card 
             className={`cursor-pointer border-2 transition-all ${
-              faucetType === FAUCET_TYPES.GATED ? 'border-blue-500 bg-[#034e79]' : 'border-gray-200 hover:border-gray-300'
+              faucetType === FAUCET_TYPES.GATED ? 'border-blue-500 bg-gray-800' : 'border-gray-200 hover:border-gray-300'
             }`}
             onClick={() => setFaucetType(FAUCET_TYPES.GATED)}
           >
@@ -498,7 +498,7 @@
             <Card 
               key={index}
               className={`cursor-pointer border-2 transition-all ${
-                selectedTemplate === template.name ? 'border-blue-500 bg-[#034e79]' : 'border-gray-200 hover:border-gray-300'
+                selectedTemplate === template.name ? 'border-blue-500 dark:bg-gray-800' : 'border-gray-200 hover:border-gray-300'
               }`}
               onClick={() => handleTemplateSelect(template.name)}
             >

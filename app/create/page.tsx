@@ -1,711 +1,778 @@
-"use client"
+  "use client"
 
-import { Alert } from "@/components/ui/alert"
-import { useState, useEffect } from "react"
-import { useWallet } from "@/hooks/use-wallet"
-import { useNetwork } from "@/hooks/use-network"
-import { useToast } from "@/hooks/use-toast"
-import { createFaucet } from "@/lib/faucet"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Loader2, Info } from "lucide-react"
-import { Header } from "@/components/header"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Progress } from "@/components/ui/progress"
-import { Textarea } from "@/components/ui/textarea"
-import { format } from "date-fns"
+  import { Alert } from "@/components/ui/alert"
+  import { useState, useEffect } from "react"
+  import { useWallet } from "@/hooks/use-wallet"
+  import { useNetwork } from "@/hooks/use-network"
+  import { useToast } from "@/hooks/use-toast"
+  import { createFaucet } from "@/lib/faucet"
+  import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
+  } from "@/components/ui/card"
+  import { Button } from "@/components/ui/button"
+  import { Input } from "@/components/ui/input"
+  import { Label } from "@/components/ui/label"
+  import { Switch } from "@/components/ui/switch"
+  import { AlertDescription, AlertTitle } from "@/components/ui/alert"
+  import { 
+    AlertCircle, 
+    Loader2, 
+    Info, 
+    ArrowRight, 
+    ArrowLeft, 
+    CheckCircle,
+    Users,
+    Key,
+    Globe,
+    Shield,
+    Calendar,
+    Hash
+  } from "lucide-react"
+  import { Header } from "@/components/header"
+  import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+  } from "@/components/ui/select"
 
-interface Token {
-  address: string
-  name: string
-  symbol: string
-  decimals: number
-  isNative?: boolean
-}
-
-interface ChainConfig {
-  chainId: number
-  name: string
-  nativeCurrency: {
+  interface Token {
+    address: string
     name: string
     symbol: string
     decimals: number
-  }
-  nativeTokenAddress: string
-  factoryAddresses: string[]
-  defaultTokens: Token[]
-}
-
-interface FaucetConfig {
-  faucetType: "open" | "droplist"
-  requireDropCode: boolean
-  startTime?: Date
-  endTime?: Date
-  maxClaims?: number
-  adminWallets: string[]
-  droplistWallets: string[]
-}
-
-const CHAIN_CONFIGS: Record<number, ChainConfig> = {
-  42220: {
-    chainId: 42220,
-    name: "Celo",
-    nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
-    nativeTokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
-    factoryAddresses: [
-      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
-      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-    ],
-    defaultTokens: [
-      {
-        address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
-        name: "Celo Dollar",
-        symbol: "cUSD",
-        decimals: 18,
-      },
-      {
-        address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
-        name: "Celo Euro",
-        symbol: "cEUR",
-        decimals: 18,
-      },
-      {
-        address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
-        name: "Glo Dollar",
-        symbol: "USDGLO",
-        decimals: 18,
-      },
-      {
-        address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
-        name: "Good dollar",
-        symbol: "G$",
-        decimals: 18,
-      },
-    ],
-  },
-  44787: {
-    chainId: 44787,
-    name: "Celo Alfajores",
-    nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
-    nativeTokenAddress: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9",
-    factoryAddresses: [
-      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
-      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-    ],
-    defaultTokens: [
-      {
-        address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
-        name: "Celo Dollar",
-        symbol: "cUSD",
-        decimals: 18,
-      },
-    ],
-  },
-  137: {
-    chainId: 137, // Corrected chainId for Polygon
-    name: "Polygon",
-    nativeCurrency: { name: "Matic", symbol: "MATIC", decimals: 18 },
-    nativeTokenAddress: "0x0000000000000000000000000000000000001010",
-    factoryAddresses: [
-      "0xE2d0E09D4201509d2BFeAc0EF9a166f1C308a28d",
-      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-    ],
-    defaultTokens: [
-      {
-        address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-        name: "USD Coin",
-        symbol: "USDC",
-        decimals: 6,
-      },
-    ],
-  },
-}
-
-export default function CreateFaucet() {
-  const { provider, address, isConnected, connect, chainId } = useWallet()
-  const { network, getLatestFactoryAddress } = useNetwork()
-  const { toast } = useToast()
-  const [step, setStep] = useState(1)
-  const [name, setName] = useState("")
-  const [useBackend, setUseBackend] = useState(true)
-  const [isCreating, setIsCreating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedToken, setSelectedToken] = useState<string>("")
-  const [availableTokens, setAvailableTokens] = useState<Token[]>([])
-  const [isLoadingTokens, setIsLoadingTokens] = useState(false)
-  const [faucetConfig, setFaucetConfig] = useState<FaucetConfig>({
-    faucetType: "open",
-    requireDropCode: true,
-    startTime: undefined,
-    endTime: undefined,
-    maxClaims: undefined,
-    adminWallets: [],
-    droplistWallets: [],
-  })
-  const [csvFile, setCsvFile] = useState<File | null>(null)
-
-  const getCurrentChainConfig = (): ChainConfig | null => {
-    if (!network?.chainId) return null
-    return CHAIN_CONFIGS[Number(network.chainId)] || null
+    isNative?: boolean
   }
 
-  const fetchAvailableTokens = async (): Promise<Token[]> => {
-    const chainConfig = getCurrentChainConfig()
-    if (!chainConfig) return []
-
-    const tokens: Token[] = []
-    tokens.push({
-      address: chainConfig.nativeTokenAddress,
-      name: chainConfig.nativeCurrency.name,
-      symbol: chainConfig.nativeCurrency.symbol,
-      decimals: chainConfig.nativeCurrency.decimals,
-      isNative: true,
-    })
-    tokens.push(...chainConfig.defaultTokens)
-    return tokens
-  }
-
-  useEffect(() => {
-    const chainConfig = getCurrentChainConfig()
-    if (network && chainId !== null && BigInt(chainId) !== BigInt(network.chainId)) {
-      setError(`Please switch to the ${network.name} network to create a faucet`)
-    } else if (network && !chainConfig) {
-      setError(`Chain ${network.name} (ID: ${network.chainId}) is not supported yet`)
-    } else {
-      setError(null)
+  interface ChainConfig {
+    chainId: number
+    name: string
+    nativeCurrency: {
+      name: string
+      symbol: string
+      decimals: number
     }
-  }, [network, chainId])
+    nativeTokenAddress: string
+    factoryAddresses: string[]
+    defaultTokens: Token[]
+  }
 
-  useEffect(() => {
-    const loadTokens = async () => {
-      if (!network) return
+  // Chain configurations
+  const CHAIN_CONFIGS: Record<number, ChainConfig> = {
+    42220: {
+      chainId: 42220,
+      name: "Celo",
+      nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
+      nativeTokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
+      factoryAddresses: [
+        "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
+        "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
+      ],
+      defaultTokens: [
+        {
+          address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
+          name: "Celo Dollar",
+          symbol: "cUSD",
+          decimals: 18,
+        },
+        {
+          address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
+          name: "Celo Euro",
+          symbol: "cEUR",
+          decimals: 18,
+        },
+        {
+          address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+          name: "Glo Dollar",
+          symbol: "USDGLO",
+          decimals: 18,
+        },
+        {
+          address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
+          name: "Good dollar",
+          symbol: "G$",
+          decimals: 18,
+        },
+      ],
+    },
+    44787: {
+      chainId: 44787,
+      name: "Celo Alfajores",
+      nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
+      nativeTokenAddress: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9",
+      factoryAddresses: [
+        "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
+        "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
+      ],
+      defaultTokens: [
+        {
+          address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
+          name: "Celo Dollar",
+          symbol: "cUSD",
+          decimals: 18,
+        },
+      ],
+    },
+    137: {
+      chainId: 8,
+      name: "Base Mainnet",
+      nativeCurrency: { name: "Base", symbol: "ETH", decimals: 18 },
+      nativeTokenAddress: "0x0000000000000000000000000000000000001010",
+      factoryAddresses: [
+        "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
+        "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
+      ],
+      defaultTokens: [
+        {
+          address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+          name: "USD Coin",
+          symbol: "USDC",
+          decimals: 6,
+        },
+      ],
+    },
+  }
+
+  const FAUCET_TYPES = {
+    OPEN: 'open',
+    GATED: 'gated'
+  }
+
+  const TEMPLATES = {
+    [FAUCET_TYPES.OPEN]: [
+      {
+        name: "Community Airdrop",
+        description: "Wide distribution to community members",
+        useCase: "Best for token launches and community rewards"
+      },
+      {
+        name: "Event Distribution",
+        description: "Token distribution at events or conferences",
+        useCase: "Perfect for hackathons, meetups, conferences"
+      },
+      {
+        name: "Marketing Campaign",
+        description: "Public token distribution for promotion",
+        useCase: "Great for increasing awareness and adoption"
+      }
+    ],
+    [FAUCET_TYPES.GATED]: [
+      {
+        name: "Contest Rewards",
+        description: "Rewards for specific contest winners",
+        useCase: "Best for competitions and challenges"
+      },
+      {
+        name: "Private Airdrop",
+        description: "Exclusive distribution to selected wallets",
+        useCase: "Perfect for investors, team members, advisors"
+      },
+      {
+        name: "DAO Rewards",
+        description: "Rewards for DAO contributors and members",
+        useCase: "Great for governance participation rewards"
+      }
+    ]
+  }
+
+  export default function CreateFaucetWizard() {
+    const { provider, address, isConnected, connect, chainId } = useWallet()
+    const { network, getLatestFactoryAddress } = useNetwork()
+    const { toast } = useToast()
+    
+    // Wizard state
+    const [currentStep, setCurrentStep] = useState(1)
+    const [faucetType, setFaucetType] = useState<string>('')
+    const [selectedTemplate, setSelectedTemplate] = useState<string>('')
+    
+    // Form state
+    const [name, setName] = useState("")
+    const [selectedToken, setSelectedToken] = useState<string>("")
+    const [requireDropCode, setRequireDropCode] = useState(true)
+    const [maxClaims, setMaxClaims] = useState("100")
+    const [claimAmount, setClaimAmount] = useState("10")
+    
+    // Loading and error states
+    const [isCreating, setIsCreating] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [availableTokens, setAvailableTokens] = useState<Token[]>([])
+    const [isLoadingTokens, setIsLoadingTokens] = useState(false)
+
+    const getCurrentChainConfig = (): ChainConfig | null => {
+      if (!network?.chainId) return null
+      return CHAIN_CONFIGS[Number(network.chainId)] || null
+    }
+
+    const fetchAvailableTokens = async (): Promise<Token[]> => {
       const chainConfig = getCurrentChainConfig()
-      if (!chainConfig) {
-        setError(`Chain ${network.name} (ID: ${network.chainId}) is not supported yet`)
-        return
-      }
-      setIsLoadingTokens(true)
-      try {
-        const tokens = await fetchAvailableTokens()
-        setAvailableTokens(tokens)
-        if (tokens.length > 0 && !selectedToken) {
-          setSelectedToken(tokens[0].address)
-        }
-      } catch (error) {
-        console.error("Failed to load tokens:", error)
-        setError("Failed to load available tokens")
-      } finally {
-        setIsLoadingTokens(false)
-      }
+      if (!chainConfig) return []
+
+      const tokens: Token[] = []
+      tokens.push({
+        address: chainConfig.nativeTokenAddress,
+        name: chainConfig.nativeCurrency.name,
+        symbol: chainConfig.nativeCurrency.symbol,
+        decimals: chainConfig.nativeCurrency.decimals,
+        isNative: true,
+      })
+      tokens.push(...chainConfig.defaultTokens)
+      return tokens
     }
-    loadTokens()
-  }, [network, selectedToken])
 
-  const getSelectedTokenInfo = (): Token | null => {
-    return availableTokens.find(token => token.address === selectedToken) || null
-  }
-
-  const validateWalletAddress = (address: string): boolean => {
-    return /^0x[a-fA-F0-9]{40}$/.test(address)
-  }
-
-  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setCsvFile(file)
-    try {
-      const text = await file.text()
-      const addresses = text.split("\n").map(line => line.trim()).filter(line => line)
-      const validAddresses = addresses.filter(validateWalletAddress)
-      const invalidAddresses = addresses.filter(addr => !validateWalletAddress(addr))
-
-      if (invalidAddresses.length > 0) {
-        setError(`Invalid wallet addresses found: ${invalidAddresses.join(", ")}`)
+    useEffect(() => {
+      const chainConfig = getCurrentChainConfig()
+      if (network && chainId !== null && BigInt(chainId) !== BigInt(network.chainId)) {
+        setError(`Please switch to the ${network.name} network to create a faucet`)
+      } else if (network && !chainConfig) {
+        setError(`Chain ${network.name} (ID: ${network.chainId}) is not supported yet`)
       } else {
-        setFaucetConfig(prev => ({ ...prev, droplistWallets: validAddresses }))
         setError(null)
       }
-    } catch (error) {
-      setError("Failed to process CSV file")
-    }
-  }
+    }, [network, chainId])
 
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      setError("Please enter a faucet name")
-      return
-    }
-    if (!selectedToken) {
-      setError("Please select a token")
-      return
-    }
-    if (chainId === null) {
-      setError("Wallet chain ID is not available. Please ensure your wallet is connected.")
-      return
-    }
-    if (faucetConfig.faucetType === "droplist" && faucetConfig.droplistWallets.length === 0) {
-      setError("Please add at least one wallet address for the drop-list")
-      return
-    }
-    if (faucetConfig.startTime && faucetConfig.endTime && faucetConfig.startTime >= faucetConfig.endTime) {
-      setError("End time must be after start time")
-      return
+    useEffect(() => {
+      const loadTokens = async () => {
+        if (!network) return
+        const chainConfig = getCurrentChainConfig()
+        if (!chainConfig) {
+          setError(`Chain ${network.name} (ID: ${network.chainId}) is not supported yet`)
+          return
+        }
+        setIsLoadingTokens(true)
+        try {
+          const tokens = await fetchAvailableTokens()
+          setAvailableTokens(tokens)
+          if (tokens.length > 0 && !selectedToken) {
+            setSelectedToken(tokens[0].address)
+          }
+        } catch (error) {
+          console.error("Failed to load tokens:", error)
+          setError("Failed to load available tokens")
+        } finally {
+          setIsLoadingTokens(false)
+        }
+      }
+      loadTokens()
+    }, [network, selectedToken])
+
+    const getSelectedTokenInfo = (): Token | null => {
+      return availableTokens.find(token => token.address === selectedToken) || null
     }
 
-    setError(null)
+    const handleNext = () => {
+      if (currentStep < 4) {
+        setCurrentStep(currentStep + 1)
+      }
+    }
 
-    if (!isConnected) {
-      try {
-        await connect()
-      } catch (error) {
-        console.error("Failed to connect wallet:", error)
-        setError("Failed to connect wallet. Please try again.")
+    const handlePrevious = () => {
+      if (currentStep > 1) {
+        setCurrentStep(currentStep - 1)
+      }
+    }
+
+    const handleTemplateSelect = (template: string) => {
+      setSelectedTemplate(template)
+      setName(template)
+    }
+
+    const handleCreate = async () => {
+      if (!name.trim()) {
+        setError("Please enter a faucet name")
         return
       }
-    }
-
-    if (!provider || !network || chainId === null) {
-      setError("Wallet not connected or network not selected")
-      return
-    }
-
-    setIsCreating(true)
-
-    try {
-      const chainConfig = getCurrentChainConfig()
-      if (!chainConfig) {
-        throw new Error(`Chain ${network?.name} is not supported`)
+      if (!selectedToken) {
+        setError("Please select a token")
+        return
+      }
+      if (chainId === null) {
+        setError("Wallet chain ID is not available. Please ensure your wallet is connected.")
+        return
       }
 
-      const factoryAddress = getLatestFactoryAddress()
-      if (!factoryAddress) {
-        throw new Error("No factory address available for this network")
+      setError(null)
+
+      if (!isConnected) {
+        try {
+          await connect()
+        } catch (error) {
+          console.error("Failed to connect wallet:", error)
+          setError("Failed to connect wallet. Please try again.")
+          return
+        }
       }
 
-      const tokenAddress = selectedToken
-
-      console.log("Creating faucet with params:", {
-        factoryAddress,
-        name,
-        tokenAddress,
-        chainId: chainId.toString(),
-        networkId: network.chainId.toString(),
-        useBackend,
-        chainConfig: chainConfig.name,
-        faucetConfig,
-      })
-
-      const faucetAddress = await createFaucet(
-        provider,
-        factoryAddress,
-        name,
-        tokenAddress,
-        BigInt(chainId),
-        BigInt(network.chainId),
-        useBackend,
-       
-      )
-
-      if (!faucetAddress) {
-        throw new Error("Failed to get created faucet address")
+      if (!provider || !network || chainId === null) {
+        setError("Wallet not connected or network not selected")
+        return
       }
 
-      const selectedTokenInfo = getSelectedTokenInfo()
-      toast({
-        title: "Faucet Created",
-        description: `Your ${selectedTokenInfo?.symbol || "token"} faucet has been created at ${faucetAddress}`,
-      })
+      setIsCreating(true)
 
-      window.location.href = `/faucet/${faucetAddress}?networkId=${network.chainId}`
-    } catch (error: any) {
-      console.error("Error creating faucet:", error)
-      let errorMessage = error.message || "Failed to create faucet"
+      try {
+        const chainConfig = getCurrentChainConfig()
+        if (!chainConfig) {
+          throw new Error(`Chain ${network?.name} is not supported`)
+        }
 
-      if (errorMessage.includes("Switch to the network")) {
-        toast({
-          title: "Network Mismatch",
-          description: `Please switch to the ${network?.name} network to create a faucet`,
-          variant: "destructive",
-          action: (
-            <Button
-              onClick={() =>
-                network &&
-                window.ethereum.request({
-                  method: "wallet_switchEthereumChain",
-                  params: [{ chainId: `0x${network.chainId.toString(16)}` }],
-                })
-              }
-            >
-              Switch to {network?.name}
-            </Button>
-          ),
+        const factoryAddress = getLatestFactoryAddress()
+        if (!factoryAddress) {
+          throw new Error("No factory address available for this network")
+        }
+
+        const useBackend = faucetType === FAUCET_TYPES.OPEN && requireDropCode
+        const tokenAddress = selectedToken
+
+        console.log("Creating faucet with params:", {
+          factoryAddress,
+          name,
+          tokenAddress,
+          chainId: chainId.toString(),
+          networkId: network.chainId.toString(),
+          useBackend,
+          faucetType,
+          requireDropCode,
+          chainConfig: chainConfig.name,
         })
-      } else {
+
+        const faucetAddress = await createFaucet(
+          provider,
+          factoryAddress,
+          name,
+          tokenAddress,
+          BigInt(chainId),
+          BigInt(network.chainId),
+          useBackend
+        )
+
+        if (!faucetAddress) {
+          throw new Error("Failed to get created faucet address")
+        }
+
+        const selectedTokenInfo = getSelectedTokenInfo()
         toast({
-          title: "Failed to create faucet",
-          description: errorMessage,
-          variant: "destructive",
+          title: "Faucet Created Successfully! 🎉",
+          description: `Your ${selectedTokenInfo?.symbol || "token"} faucet has been created at ${faucetAddress}`,
         })
+
+        window.location.href = `/faucet/${faucetAddress}?networkId=${network.chainId}`
+      } catch (error: any) {
+        console.error("Error creating faucet:", error)
+        let errorMessage = error.message || "Failed to create faucet"
+
+        if (errorMessage.includes("Switch to the network")) {
+          toast({
+            title: "Network Mismatch",
+            description: `Please switch to the ${network?.name} network to create a faucet`,
+            variant: "destructive",
+            action: (
+              <Button
+                onClick={() =>
+                  network &&
+                  window.ethereum.request({
+                    method: "wallet_switchEthereumChain",
+                    params: [{ chainId: `0x${network.chainId.toString(16)}` }],
+                  })
+                }
+              >
+                Switch to {network?.name}
+              </Button>
+            ),
+          })
+        } else {
+          toast({
+            title: "Failed to create faucet",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        }
+        setError(errorMessage)
+      } finally {
+        setIsCreating(false)
       }
-      setError(errorMessage)
-    } finally {
-      setIsCreating(false)
     }
-  }
 
-  const handleNext = () => {
-    if (step === 1 && !faucetConfig.faucetType) {
-      setError("Please select a faucet type")
-      return
+    const getStepTitle = (step: number) => {
+      switch (step) {
+        case 1: return "Who Can Claim?"
+        case 2: return "Choose Template"
+        case 3: return "Configure Details"
+        case 4: return "Review & Create"
+        default: return "Create Faucet"
+      }
     }
-    if (step === 3 && faucetConfig.startTime && faucetConfig.endTime && faucetConfig.startTime >= faucetConfig.endTime) {
-      setError("End time must be after start time")
-      return
+
+    const getStepDescription = (step: number) => {
+      switch (step) {
+        case 1: return "Choose who can access your faucet"
+        case 2: return "Select a template that fits your use case"
+        case 3: return "Set up your faucet parameters"
+        case 4: return "Review your configuration and create"
+        default: return "Create your token faucet"
+      }
     }
-    if (step === 4 && faucetConfig.faucetType === "droplist" && faucetConfig.droplistWallets.length === 0) {
-      setError("Please add at least one wallet address for the drop-list")
-      return
-    }
-    setError(null)
-    setStep(prev => Math.min(prev + 1, 6))
-  }
 
-  const handleBack = () => {
-    setStep(prev => Math.max(prev - 1, 1))
-  }
-
-  const isDisabled = isCreating || !network || (chainId !== null && network && BigInt(chainId) !== BigInt(network.chainId)) || !selectedToken || !getCurrentChainConfig()
-
-  const selectedTokenInfo = getSelectedTokenInfo()
-  const chainConfig = getCurrentChainConfig()
-
-  const renderStep = () => {
-    switch (step) {
-      case 1:
-        return (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Faucet Name</Label>
-              <Input
-                placeholder="Enter a name for your faucet"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="token-select">Select Token</Label>
-              <Select value={selectedToken} onValueChange={setSelectedToken}>
-                <SelectTrigger id="token-select">
-                  <SelectValue placeholder={isLoadingTokens ? "Loading tokens..." : "Select a token"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTokens.map((token) => (
-                    <SelectItem key={token.address} value={token.address}>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium">{token.symbol}</span>
-                        <span className="text-gray-500">({token.name})</span>
-                        {token.isNative && <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Native</span>}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedTokenInfo && (
-                <p className="text-sm text-gray-500">
-                  Selected: {selectedTokenInfo.name} ({selectedTokenInfo.symbol})
-                  {selectedTokenInfo.isNative ? " - Native Token" : ""}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Who Can Claim from this Faucet?</Label>
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    id="open"
-                    name="faucetType"
-                    value="open"
-                    checked={faucetConfig.faucetType === "open"}
-                    onChange={() => setFaucetConfig(prev => ({ ...prev, faucetType: "open" }))}
-                  />
-                  <Label htmlFor="open">Anyone with a Drop Code <span className="text-sm text-gray-500">(Suitable for open community drops, airdrops)</span></Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    id="droplist"
-                    name="faucetType"
-                    value="droplist"
-                    checked={faucetConfig.faucetType === "droplist"}
-                    onChange={() => setFaucetConfig(prev => ({ ...prev, faucetType: "droplist" }))}
-                  />
-                  <Label htmlFor="droplist">Only wallets I select (Drop-list) <span className="text-sm text-gray-500">(Suitable for private airdrops, contests)</span></Label>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      case 2:
-        if (faucetConfig.faucetType === "droplist") return null
-        return (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Require Drop Code?</Label>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={faucetConfig.requireDropCode}
-                  onCheckedChange={(checked) => setFaucetConfig(prev => ({ ...prev, requireDropCode: checked }))}
-                />
-                <span>{faucetConfig.requireDropCode ? "Yes (Recommended)" : "No (Not recommended - Open to all)"}</span>
-              </div>
-              {!faucetConfig.requireDropCode && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Warning</AlertTitle>
-                  <AlertDescription>Disabling Drop Code makes the faucet accessible to anyone, which may lead to abuse.</AlertDescription>
-                </Alert>
-              )}
-            </div>
-          </div>
-        )
-      case 3:
-        return (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Set Start & End Time for Claiming?</Label>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={!!faucetConfig.startTime || !!faucetConfig.endTime}
-                  onCheckedChange={(checked) => setFaucetConfig(prev => ({
-                    ...prev,
-                    startTime: checked ? new Date() : undefined,
-                    endTime: checked ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : undefined,
-                  }))}
-                />
-                <span>{faucetConfig.startTime ? "Yes" : "No (Faucet stays live until paused/deleted)"}</span>
-              </div>
-              {(faucetConfig.startTime || faucetConfig.endTime) && (
-                <div className="space-y-2">
-                  <div>
-                    <Label>Start Time</Label>
-                    <Input
-                      type="datetime-local"
-                      value={faucetConfig.startTime ? format(faucetConfig.startTime, "yyyy-MM-dd'T'HH:mm") : ""}
-                      onChange={(e) => setFaucetConfig(prev => ({ ...prev, startTime: new Date(e.target.value) }))}
-                    />
-                  </div>
-                  <div>
-                    <Label>End Time</Label>
-                    <Input
-                      type="datetime-local"
-                      value={faucetConfig.endTime ? format(faucetConfig.endTime, "yyyy-MM-dd'T'HH:mm") : ""}
-                      onChange={(e) => setFaucetConfig(prev => ({ ...prev, endTime: new Date(e.target.value) }))}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Set Max Number of Claims?</Label>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  checked={faucetConfig.maxClaims !== undefined}
-                  onCheckedChange={(checked) => setFaucetConfig(prev => ({
-                    ...prev,
-                    maxClaims: checked ? 100 : undefined,
-                  }))}
-                />
-                <span>{faucetConfig.maxClaims !== undefined ? "Yes" : "No (Unlimited claims)"}</span>
-              </div>
-              {faucetConfig.maxClaims !== undefined && (
-                <Input
-                  type="number"
-                  min="1"
-                  value={faucetConfig.maxClaims}
-                  onChange={(e) => setFaucetConfig(prev => ({ ...prev, maxClaims: parseInt(e.target.value) }))}
-                  placeholder="Enter max claims"
-                />
-              )}
-              {faucetConfig.maxClaims === undefined && faucetConfig.faucetType === "open" && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Warning</AlertTitle>
-                  <AlertDescription>Unlimited claims for an open faucet may lead to rapid fund depletion.</AlertDescription>
-                </Alert>
-              )}
-            </div>
-          </div>
-        )
-      case 4:
-        if (faucetConfig.faucetType !== "droplist") return null
-        return (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Add Wallets for Drop-list</Label>
-              <Textarea
-                placeholder="Enter wallet addresses (one per line)"
-                value={faucetConfig.droplistWallets.join("\n")}
-                onChange={(e) => {
-                  const addresses = e.target.value.split("\n").map(addr => addr.trim()).filter(addr => addr)
-                  setFaucetConfig(prev => ({ ...prev, droplistWallets: addresses }))
-                }}
-              />
-              <div className="flex items-center space-x-2">
-                <Label>Upload CSV</Label>
-                <Input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleCsvUpload}
-                />
-              </div>
-              {faucetConfig.droplistWallets.length > 0 && (
-                <p className="text-sm text-gray-500">{faucetConfig.droplistWallets.length} valid wallet(s) added</p>
-              )}
-            </div>
-          </div>
-        )
-      case 5:
-        return (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label>Add Admin Wallets (Optional)</Label>
-              <Textarea
-                placeholder="Enter admin wallet addresses (one per line)"
-                value={faucetConfig.adminWallets.join("\n")}
-                onChange={(e) => {
-                  const addresses = e.target.value.split("\n").map(addr => addr.trim()).filter(addr => addr)
-                  setFaucetConfig(prev => ({ ...prev, adminWallets: addresses }))
-                }}
-              />
-              {faucetConfig.adminWallets.length > 0 && (
-                <p className="text-sm text-gray-500">{faucetConfig.adminWallets.length} admin wallet(s) added</p>
-              )}
-            </div>
-          </div>
-        )
-      case 6:
-        return (
-          <div className="space-y-6">
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertTitle>Faucet Configuration Summary</AlertTitle>
-              <AlertDescription>
-                <p>You are creating a {faucetConfig.faucetType === "open" ? "Open" : "Drop-list"} faucet with the following settings:</p>
-                <ul className="list-disc pl-5 mt-2">
-                  <li><strong>Name:</strong> {name}</li>
-                  <li><strong>Token:</strong> {selectedTokenInfo?.name} ({selectedTokenInfo?.symbol})</li>
-                  <li><strong>Network:</strong> {chainConfig?.name} (Chain ID: {chainConfig?.chainId})</li>
-                  {faucetConfig.faucetType === "open" && (
-                    <li><strong>Drop Code:</strong> {faucetConfig.requireDropCode ? "Required" : "Not required"}</li>
-                  )}
-                  {faucetConfig.faucetType === "droplist" && (
-                    <li><strong>Drop-list Wallets:</strong> {faucetConfig.droplistWallets.length}</li>
-                  )}
-                  <li><strong>Start Time:</strong> {faucetConfig.startTime ? format(faucetConfig.startTime, "PPpp") : "Not set"}</li>
-                  <li><strong>End Time:</strong> {faucetConfig.endTime ? format(faucetConfig.endTime, "PPpp") : "Not set"}</li>
-                  <li><strong>Max Claims:</strong> {faucetConfig.maxClaims ?? "Unlimited"}</li>
-                  <li><strong>Admin Wallets:</strong> {faucetConfig.adminWallets.length || "None"}</li>
-                  <li><strong>Backend Management:</strong> {useBackend ? "Enabled" : "Disabled"}</li>
-                  <li><strong>Factory Contract:</strong> {getLatestFactoryAddress()?.slice(0, 6)}...{getLatestFactoryAddress()?.slice(-4)}</li>
-                </ul>
-              </AlertDescription>
-            </Alert>
-          </div>
-        )
-      default:
-        return null
-    }
-  }
-
-  return (
-    <main className="min-h-screen">
-      <div className="container mx-auto px-4 py-8">
-        <Header pageTitle="Create Faucet Wizard" />
-        <div className="max-w-2xl mx-auto">
-          <Card>
+    const renderStep1 = () => (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card 
+            className={`cursor-pointer border-2 transition-all ${
+              faucetType === FAUCET_TYPES.OPEN ? 'border-blue-500 dark:bg-gray-800' : 'border-gray-200 hover:border-gray-300'
+            }`}
+            onClick={() => setFaucetType(FAUCET_TYPES.OPEN)}
+          >
             <CardHeader>
-              <CardTitle>Create New Faucet</CardTitle>
-              <CardDescription>
-                Step {step} of 6: Create a new token faucet on {chainConfig?.name || network?.name || "the current network"}
-                {chainConfig && ` (Chain ID: ${chainConfig.chainId})`}
+              <div className="flex items-center space-x-2">
+                <Globe className="h-5 w-5 text-green-600" />
+                <CardTitle className="text-lg">Anyone with a Drop Code</CardTitle>
+              </div>
+              <CardDescription className="text-gray-100">
+                Open faucet for wide distribution
               </CardDescription>
-              <Progress value={(step / 6) * 100} className="mt-4" />
             </CardHeader>
-            <CardContent className="space-y-6">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Error</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              {renderStep()}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="use-backend">Use Backend Management</Label>
-                  <Switch
-                    id="use-backend"
-                    checked={useBackend}
-                    onCheckedChange={setUseBackend}
-                  />
-                </div>
-                <p className="text-sm text-gray-500">
-                  {useBackend
-                    ? "Backend management enabled for automatic claim processing, user whitelist validation, and secret codes."
-                    : "Manual management enabled. Admins will control claims directly."}
-                </p>
+            <CardContent>
+              <p className="text-sm text-gray-100">
+                Suitable for open community drops, wide airdrops, event distributions, and marketing campaigns.
+              </p>
+              <div className="mt-3 flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <span className="text-sm text-green-600">Backend managed</span>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button
-                variant="outline"
-                onClick={handleBack}
-                disabled={step === 1}
-              >
-                Back
-              </Button>
-              {step < 6 ? (
-                <Button onClick={handleNext}>Next</Button>
-              ) : (
-                <Button
-                  onClick={handleCreate}
-                  disabled={isDisabled}
-                >
-                  {isCreating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating...
-                    </>
-                  ) : !isConnected ? (
-                    "Connect & Create Faucet"
-                  ) : (
-                    "Create Faucet"
-                  )}
-                </Button>
-              )}
-            </CardFooter>
+          </Card>
+
+          <Card 
+            className={`cursor-pointer border-2 transition-all ${
+              faucetType === FAUCET_TYPES.GATED ? 'border-blue-500 bg-gray-800' : 'border-gray-200 hover:border-gray-300'
+            }`}
+            onClick={() => setFaucetType(FAUCET_TYPES.GATED)}
+          >
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <Shield className="h-5 w-5 text-orange-600" />
+                <CardTitle className="text-lg">Only Wallets I Select</CardTitle>
+              </div>
+              <CardDescription className="text-gray-100">
+                Restricted drop-list faucet
+              </CardDescription >
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-100">
+                Suitable for contests, private airdrops, community rewards, and restricted campaigns.
+              </p>
+              <div className="mt-3 flex items-center space-x-2">
+                <Users className="h-4 w-4 text-orange-500" />
+                <span className="text-sm text-orange-600">Manual management</span>
+              </div>
+            </CardContent>
           </Card>
         </div>
+
+        {faucetType && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertTitle>
+              {faucetType === FAUCET_TYPES.OPEN ? "Open Faucet Selected" : "Gated Faucet Selected"}
+            </AlertTitle>
+            <AlertDescription>
+              {faucetType === FAUCET_TYPES.OPEN 
+                ? "This faucet will be accessible to anyone with a drop code."
+                : "This faucet will be restricted to specific wallet addresses that you droplist."
+              }
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
-    </main>
-  )
-}
+    )
+
+    const renderStep2 = () => (
+      <div className="space-y-6 bg-black">
+        <div className="grid grid-cols-1 gap-4">
+          {TEMPLATES[faucetType as keyof typeof TEMPLATES]?.map((template, index) => (
+            <Card 
+              key={index}
+              className={`cursor-pointer border-2 transition-all ${
+                selectedTemplate === template.name ? 'border-blue-500 dark:bg-gray-800' : 'border-gray-200 hover:border-gray-300'
+              }`}
+              onClick={() => handleTemplateSelect(template.name)}
+            >
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">{template.name}</CardTitle>
+                  {selectedTemplate === template.name && (
+                    <CheckCircle className="h-5 w-5 text-blue-500" />
+                  )}
+                </div>
+                <CardDescription className="text-gray-100">{template.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-100">{template.useCase}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+
+    const renderStep3 = () => (
+      <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Faucet Name</Label>
+            <Input
+              id="name"
+              placeholder="Enter a name for your faucet"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="token-select">Select Token</Label>
+            <Select value={selectedToken} onValueChange={setSelectedToken}>
+              <SelectTrigger id="token-select">
+                <SelectValue placeholder={isLoadingTokens ? "Loading tokens..." : "Select a token"} />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTokens.map((token) => (
+                  <SelectItem key={token.address} value={token.address}>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium">{token.symbol}</span>
+                      <span className="text-gray-100">({token.name})</span>
+                      {token.isNative && <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Native</span>}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {faucetType === FAUCET_TYPES.OPEN && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="drop-code">Require Drop Code</Label>
+                <Switch
+                  id="drop-code"
+                  disabled
+                  checked={requireDropCode}
+                  onCheckedChange={setRequireDropCode}
+                />
+              </div>
+             
+            </div>
+          )}
+        </div>
+      </div>
+    )
+
+    const renderStep4 = () => {
+      const selectedTokenInfo = getSelectedTokenInfo()
+      const chainConfig = getCurrentChainConfig()
+      
+      return (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Faucet Summary</CardTitle>
+              <CardDescription className="text-gray-100">Review your configuration before creating</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-100">Faucet Type</Label>
+                  <p className="flex items-center space-x-2">
+                    {faucetType === FAUCET_TYPES.OPEN ? (
+                      <>
+                        <Globe className="h-4 w-4 text-green-600" />
+                        <span>Open Faucet</span>
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="h-4 w-4 text-orange-600" />
+                        <span>Gated Faucet</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-100">Faucet Name</Label>
+                  <p>{name}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-100">Token</Label>
+                  <p>{selectedTokenInfo?.symbol} ({selectedTokenInfo?.name})</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-100">Network</Label>
+                  <p>{chainConfig?.name}</p>
+                </div>
+                {faucetType === FAUCET_TYPES.OPEN && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-100">Drop Code Required</Label>
+                    <p className="flex items-center space-x-2">
+                      {requireDropCode ? (
+                        <>
+                          <Key className="h-4 w-4 text-green-600" />
+                          <span>Yes</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="h-4 w-4 text-orange-600" />
+                          <span>No</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-100">Max Claims</Label>
+                  <p>{maxClaims}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-100">Claim Amount</Label>
+                  <p>{claimAmount} {selectedTokenInfo?.symbol}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-100">Management</Label>
+                  <p>{faucetType === FAUCET_TYPES.OPEN && requireDropCode ? "Backend Managed" : "Manual"}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {!requireDropCode && faucetType === FAUCET_TYPES.OPEN && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Security Warning</AlertTitle>
+              <AlertDescription>
+                Creating a faucet without drop code requirements is not recommended as it allows unrestricted access.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )
+    }
+
+    const renderCurrentStep = () => {
+      switch (currentStep) {
+        case 1: return renderStep1()
+        case 2: return renderStep2()
+        case 3: return renderStep3()
+        case 4: return renderStep4()
+        default: return renderStep1()
+      }
+    }
+
+    const canProceed = () => {
+      switch (currentStep) {
+        case 1: return faucetType !== ''
+        case 2: return selectedTemplate !== '' || name !== ''
+        case 3: return name.trim() !== '' && selectedToken !== ''
+        case 4: return true
+        default: return false
+      }
+    }
+
+    const isDisabled = isCreating || !network || (chainId !== null && network && BigInt(chainId) !== BigInt(network.chainId)) || !getCurrentChainConfig()
+
+    return (
+      <main className="min-h-screen">
+        <div className="container mx-auto px-4 py-8">
+          <Header pageTitle="Create Faucet" />
+          
+          {/* Progress Bar */}
+          <div className="max-w-4xl mx-auto mb-8">
+            <div className="flex items-center justify-between mb-4">
+              {[1, 2, 3, 4].map((step) => (
+                <div key={step} className="flex items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    step <= currentStep ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-100'
+                  }`}>
+                    {step}
+                  </div>
+                  {step < 4 && (
+                    <div className={`w-16 h-1 mx-2 ${
+                      step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
+                    }`} />
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-gray-100">Step {currentStep} of 4</p>
+            </div>
+          </div>
+
+          <div className="max-w-4xl mx-auto">
+            <Card className="border-0 shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-2xl">{getStepTitle(currentStep)}</CardTitle>
+                <CardDescription className="text-lg">
+                  {getStepDescription(currentStep)}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                {renderCurrentStep()}
+              </CardContent>
+              <CardFooter className="flex justify-between">
+                <Button
+                  variant="outline"
+                  onClick={handlePrevious}
+                  disabled={currentStep === 1}
+                  className="flex items-center space-x-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Previous</span>
+                </Button>
+                
+                {currentStep < 4 ? (
+                  <Button
+                    onClick={handleNext}
+                    disabled={!canProceed()}
+                    className="flex items-center space-x-2"
+                  >
+                    <span>Next</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleCreate}
+                    disabled={isDisabled}
+                    className="flex items-center space-x-2"
+                  >
+                    {isCreating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Creating...</span>
+                      </>
+                    ) : !isConnected ? (
+                      <span>Connect & Create Faucet</span>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        <span>Create Faucet</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CardFooter>
+            </Card>
+          </div>
+        </div>
+      </main>
+    )
+  }

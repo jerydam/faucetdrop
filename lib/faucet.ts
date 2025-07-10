@@ -1086,6 +1086,7 @@ export async function fundFaucet(
     const contractBalance = await provider.getBalance(faucetAddress)
     const backendAddress = await faucetContract.BACKEND?.()
     const backendFeePercent = await faucetContract.BACKEND_FEE_PERCENT?.()
+    const vaultFeePercent = await faucetContract.VAULT_FEE_PERCENT?.()
     console.log("Funding params:", {
       faucetAddress,
       amount: amount.toString(),
@@ -1097,6 +1098,7 @@ export async function fundFaucet(
       contractBalance: contractBalance.toString(),
       backendAddress,
       backendFeePercent: backendFeePercent?.toString(),
+      vaultFeePercent: vaultFeePercent?.toString(),
     })
 
     const isCelo = isCeloNetwork(chainId)

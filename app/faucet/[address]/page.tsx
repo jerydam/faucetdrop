@@ -62,6 +62,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { Switch } from "@/components/ui/switch"
 
 export default function FaucetDetails() {
   const { address: faucetAddress } = useParams<{ address: string }>()
@@ -145,7 +146,7 @@ export default function FaucetDetails() {
   const calculateFee = (amount: string) => {
     try {
       const parsedAmount = parseUnits(amount, tokenDecimals)
-      const fee = (parsedAmount * BigInt(5)) / BigInt(100)
+      const fee = (parsedAmount * BigInt(3)) / BigInt(100)
       const netAmount = parsedAmount - fee
       const recommendedInput = (parsedAmount * BigInt(100)) / BigInt(95)
       const recommendedInputStr = Number(formatUnits(recommendedInput, tokenDecimals)).toFixed(3)
@@ -1691,7 +1692,7 @@ export default function FaucetDetails() {
                   />
                 </div>
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p>Platform fee (5%): {fee} {tokenSymbol}</p>
+                  <p>Platform fee (3%): {fee} {tokenSymbol}</p>
                   <p>Net amount to faucet: {netAmount} {tokenSymbol}</p>
                   <p className="text-blue-600">
                     Tip: To fund exactly {fundAmount} {tokenSymbol}, enter {recommendedInput} {tokenSymbol}

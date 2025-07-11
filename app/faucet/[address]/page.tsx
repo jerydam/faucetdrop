@@ -88,11 +88,11 @@ export default function FaucetDetails() {
   const [fundAmount, setFundAmount] = useState("")
   const [adjustedFundAmount, setAdjustedFundAmount] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
-  const [claimAmount, setClaimAmount] = useState("")
+  const [claimAmount, setClaimAmount] = useState("0")
+  const [isWhitelistEnabled, setIsWhitelistEnabled] = useState(true)
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
   const [whitelistAddresses, setWhitelistAddresses] = useState("")
-  const [isWhitelistEnabled, setIsWhitelistEnabled] = useState(false)
   const [tokenSymbol, setTokenSymbol] = useState("CELO")
   const [tokenDecimals, setTokenDecimals] = useState(18)
   const [hasClaimed, setHasClaimed] = useState(false)
@@ -119,6 +119,7 @@ export default function FaucetDetails() {
   const [customClaimFile, setCustomClaimFile] = useState<File | null>(null)
   const [adminList, setAdminList] = useState<string[]>([])
   const [factoryOwner, setFactoryOwner] = useState<string | null>(null)
+  const [showAdminPopup, setShowAdminPopup] = useState(false)
   const [activeTab, setActiveTab] = useState("fund")
   const [transactions, setTransactions] = useState<
     { faucetAddress: string; transactionType: string; initiator: string; amount: bigint; isEther: boolean; timestamp: number }[]
@@ -435,80 +436,83 @@ export default function FaucetDetails() {
   }, [canAccessAdminControls, provider, faucetAddress, selectedNetwork])
 
   const loadFaucetDetails = async () => {
-    if (!faucetAddress || !networkId) {
+  if (!faucetAddress || !networkId) {
+    toast({
+      title: "Invalid Parameters",
+      description: "Faucet address or network ID is missing",
+      variant: "destructive",
+    })
+    setLoading(false)
+    return
+  }
+  try {
+    setLoading(true)
+    const targetNetwork = networks.find((n) => n.chainId === Number(networkId))
+    if (!targetNetwork) {
       toast({
-        title: "Invalid Parameters",
-        description: "Faucet address or network ID is missing",
+        title: "Network Not Found",
+        description: `Network ID ${networkId} is not supported`,
         variant: "destructive",
       })
       setLoading(false)
+      router.push("/")
       return
     }
-    try {
-      setLoading(true)
-      const targetNetwork = networks.find((n) => n.chainId === Number(networkId))
-      if (!targetNetwork) {
-        toast({
-          title: "Network Not Found",
-          description: `Network ID ${networkId} is not supported`,
-          variant: "destructive",
-        })
-        setLoading(false)
-        router.push("/")
-        return
+    setSelectedNetwork(targetNetwork)
+    const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
+    const details = await getFaucetDetails(detailsProvider, faucetAddress)
+    console.log("Faucet details:", details)
+    setFaucetDetails(details)
+    const admins = await getAllAdmins(detailsProvider, faucetAddress)
+    const [factoryOwnerAddr, ...otherAdmins] = admins
+    setFactoryOwner(factoryOwnerAddr)
+    // Exclude backend wallet (factoryOwner) from admin list
+    setAdminList(otherAdmins.filter(admin => admin.toLowerCase() !== factoryOwnerAddr.toLowerCase()))
+    console.log("Admin list set to:", otherAdmins.filter(admin => admin.toLowerCase() !== factoryOwnerAddr.toLowerCase()), "Factory owner:", factoryOwnerAddr)
+    if (address) {
+      const isUserAdmin = otherAdmins.some((admin: string) => admin.toLowerCase() === address.toLowerCase())
+      setUserIsAdmin(isUserAdmin)
+      console.log("User admin status set to:", isUserAdmin, "based on admins:", otherAdmins)
+      // Show admin popup if user is admin or owner
+      if (isUserAdmin || (address.toLowerCase() === details.owner.toLowerCase())) {
+        setShowAdminPopup(true)
       }
-      setSelectedNetwork(targetNetwork)
-      const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
-      const details = await getFaucetDetails(detailsProvider, faucetAddress)
-      console.log("Faucet details:", details)
-      setFaucetDetails(details)
-
-      const admins = await getAllAdmins(detailsProvider, faucetAddress)
-      const [factoryOwnerAddr, ...otherAdmins] = admins
-      setFactoryOwner(factoryOwnerAddr)
-      setAdminList(otherAdmins)
-      console.log("Admin list set to:", otherAdmins, "Factory owner:", factoryOwnerAddr)
-
-      if (address) {
-        const isUserAdmin = otherAdmins.some((admin: string) => admin.toLowerCase() === address.toLowerCase())
-        setUserIsAdmin(isUserAdmin)
-        console.log("User admin status set to:", isUserAdmin, "based on admins:", otherAdmins)
-      } else {
-        setUserIsAdmin(false)
-        console.log("No address connected, user admin status set to false")
-      }
-
-      if (details.claimAmount) {
-        setClaimAmount(formatUnits(details.claimAmount, tokenDecimals))
-      }
-      if (details.startTime) {
-        const date = new Date(Number(details.startTime) * 1000)
-        setStartTime(date.toISOString().slice(0, 16))
-      }
-      if (details.endTime) {
-        const date = new Date(Number(details.endTime) * 1000)
-        setEndTime(date.toISOString().slice(0, 16))
-      }
-      setTokenSymbol(details.tokenSymbol || "CELO")
-      setTokenDecimals(details.tokenDecimals || 18)
-      setHasClaimed(details.hasClaimed || false)
-      setBackendMode(details.backendMode)
-      if (address && !details.backendMode) {
-        const whitelisted = await isWhitelisted(detailsProvider, faucetAddress, address)
-        setUserIsWhitelisted(whitelisted)
-        console.log("User Drop-list status set to:", whitelisted)
-      }
-    } catch (error) {
-      console.error("Error loading faucet details:", error)
-      toast({
-        title: "Failed to load faucet details",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
+    } else {
+      setUserIsAdmin(false)
+      console.log("No address connected, user admin status set to false")
     }
+    if (details.claimAmount) {
+      setClaimAmount(formatUnits(details.claimAmount, tokenDecimals))
+    }
+    if (details.startTime) {
+      const date = new Date(Number(details.startTime) * 1000)
+      setStartTime(date.toISOString().slice(0, 16))
+    }
+    if (details.endTime) {
+      const date = new Date(Number(details.endTime) * 1000)
+      setEndTime(date.toISOString().slice(0, 16))
+    }
+    setTokenSymbol(details.tokenSymbol || "CELO")
+    setTokenDecimals(details.tokenDecimals || 18)
+    setHasClaimed(details.hasClaimed || false)
+    setBackendMode(details.backendMode)
+    if (address && !details.backendMode) {
+      const whitelisted = await isWhitelisted(detailsProvider, faucetAddress, address)
+      setUserIsWhitelisted(whitelisted)
+      console.log("User Drop-list status set to:", whitelisted)
+    }
+  } catch (error) {
+    console.error("Error loading faucet details:", error)
+    toast({
+      title: "Failed to load faucet details",
+      description: error instanceof Error ? error.message : "Unknown error occurred",
+      variant: "destructive",
+    })
+  } finally {
+    setLoading(false)
   }
+}
+
 
   const checkNetwork = () => {
     if (!chainId) {
@@ -662,7 +666,7 @@ export default function FaucetDetails() {
       )
       toast({
         title: "Faucet funded successfully",
-        description: `You have added ${formatUnits(amount, tokenDecimals)} ${tokenSymbol} to the faucet (after 5% platform fee)`,
+        description: `You have added ${formatUnits(amount, tokenDecimals)} ${tokenSymbol} to the faucet (after 3% platform fee)`,
       })
       setFundAmount("")
       setAdjustedFundAmount("")
@@ -1269,7 +1273,7 @@ export default function FaucetDetails() {
                               </Button>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                              Add {tokenSymbol} to the faucet (5% platform fee applies)
+                              Add {tokenSymbol} to the faucet (3% platform fee applies)
                             </p>
                           </div>
                           <div className="space-y-2">
@@ -1387,48 +1391,46 @@ export default function FaucetDetails() {
                         </div>
                       </TabsContent>
                       {!backendMode && (
-                        <TabsContent value="whitelist" className="space-y-4 mt-4">
-                          <div className="space-y-4">
-                            <div className="flex items-center space-x-2">
+                      <TabsContent value="whitelist" className="space-y-4 mt-4">
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs sm:text-sm">
+                                {isWhitelistEnabled ? "Add to Drop-list" : "Remove from Drop-list"}
+                              </Label>
                               <Switch
-                                id="whitelist-mode"
                                 checked={isWhitelistEnabled}
                                 onCheckedChange={setIsWhitelistEnabled}
                               />
-                              <Label htmlFor="whitelist-mode" className="text-xs sm:text-sm">
-                                {isWhitelistEnabled ? "Add to Drop-list" : "Remove from Drop-list"}
-                              </Label>
                             </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="whitelist-addresses" className="text-xs sm:text-sm">
-                                Addresses (one per line or comma-separated)
-                              </Label>
-                              <Textarea
-                                id="whitelist-addresses"
-                                placeholder="0x..."
-                                value={whitelistAddresses}
-                                onChange={(e) => setWhitelistAddresses(e.target.value)}
-                                rows={5}
-                                className="text-xs sm:text-sm"
-                              />
-                            </div>
-                            <Button
-                              onClick={handleUpdateWhitelist}
-                              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-                              disabled={isUpdatingWhitelist}
-                            >
-                              {isUpdatingWhitelist ? (
-                                <span className="flex items-center">
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                                  Updating...
-                                </span>
-                              ) : (
-                                "Update Drop-list"
-                              )}
-                            </Button>
+                            <Label htmlFor="whitelist-addresses" className="text-xs sm:text-sm">
+                              Addresses (one per line or comma-separated)
+                            </Label>
+                            <Textarea
+                              id="whitelist-addresses"
+                              value={whitelistAddresses}
+                              onChange={(e) => setWhitelistAddresses(e.target.value)}
+                              rows={5}
+                              className="text-xs sm:text-sm"
+                            />
                           </div>
-                        </TabsContent>
-                      )}
+                          <Button
+                            onClick={handleUpdateWhitelist}
+                            className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
+                            disabled={isUpdatingWhitelist}
+                          >
+                            {isUpdatingWhitelist ? (
+                              <span className="flex items-center">
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                                Updating...
+                              </span>
+                            ) : (
+                              "Update Drop-list"
+                            )}
+                          </Button>
+                        </div>
+                      </TabsContent>
+                    )}
                       {!backendMode && (
                         <TabsContent value="custom" className="space-y-4 mt-4">
                           <div className="space-y-4">
@@ -1646,6 +1648,7 @@ export default function FaucetDetails() {
               )}
             </div>
           </div>
+          
           <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
             <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
               <DialogHeader>
@@ -1908,6 +1911,56 @@ export default function FaucetDetails() {
                   ) : (
                     isAddingAdmin ? "Add Admin" : "Remove Admin"
                   )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+            
+          </Dialog>
+                     {/* Add admin popup dialog */}
+          <Dialog open={showAdminPopup} onOpenChange={setShowAdminPopup}>
+            <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-lg sm:text-xl">Admin Controls Guide</DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  Learn how to manage your faucet as an admin.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <h3 className="text-sm sm:text-base font-semibold">Admin Privileges</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    As an admin, you can perform the following actions on this faucet:
+                  </p>
+                  <ul className="list-disc pl-5 text-xs sm:text-sm text-muted-foreground">
+                    <li><strong>Fund:</strong> Add tokens to the faucet to enable claims.</li>
+                    <li><strong>Withdraw:</strong> Retrieve tokens from the faucet.</li>
+                    <li><strong>Parameters:</strong> Set claim amount, start/end times, and retrieve drop codes (for Auto mode).</li>
+                    {backendMode ? null : (
+                      <>
+                        <li><strong>Drop-list:</strong> Add or remove addresses for restricted claims in Manual mode.</li>
+                        <li><strong>Custom:</strong> Upload a CSV to set specific claim amounts for addresses in Manual mode.</li>
+                      </>
+                    )}
+                    <li><strong>Admin Power:</strong> Add or remove other admins and reset all claims to allow users to claim again.</li>
+                    <li><strong>Activity Log:</strong> View the faucet's transaction history.</li>
+                    {isOwner && (
+                      <>
+                        <li><strong>Edit Name:</strong> Change the faucet's display name.</li>
+                        <li><strong>Delete Faucet:</strong> Permanently remove the faucet (irreversible).</li>
+                      </>
+                    )}
+                  </ul>
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Use the tabs in the Admin Controls section to access these features. Ensure your wallet is connected to the correct network ({selectedNetwork?.name || "Unknown Network"}) to perform these actions.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => setShowAdminPopup(false)}
+                  className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
+                >
+                  Got It
                 </Button>
               </DialogFooter>
             </DialogContent>

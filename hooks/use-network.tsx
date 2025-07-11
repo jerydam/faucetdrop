@@ -57,7 +57,7 @@ const networks: Network[] = [
     blockExplorer: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
-    factoryAddresses: ["0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1"],
+    factoryAddresses: ["0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C"],
     tokenAddress: ZeroAddress,
     nativeCurrency: {
       name: "Lisk",

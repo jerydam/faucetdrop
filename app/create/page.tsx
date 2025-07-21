@@ -357,101 +357,111 @@ export default function CreateFaucetWizard() {
       setCurrentStep(currentStep - 1)
     }
   }
+// Key changes for the CreateFaucetWizard component:
 
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      setError("Please enter a faucet name")
-      return
-    }
-    if (!selectedToken) {
-      setError("Please select a token")
-      return
-    }
-    if (!chainId) {
-      setError("Please connect your wallet to a supported network")
-      return
-    }
+// 1. Update the handleCreate function to handle user address properly
+const handleCreate = async () => {
+  if (!name.trim()) {
+    setError("Please enter a faucet name")
+    return
+  }
+  if (!selectedToken) {
+    setError("Please select a token")
+    return
+  }
+  if (!chainId) {
+    setError("Please connect your wallet to a supported network")
+    return
+  }
 
-    const chainConfig = getCurrentChainConfig()
-    if (!chainConfig) {
-      setError("Current network is not supported")
-      return
-    }
+  const chainConfig = getCurrentChainConfig()
+  if (!chainConfig) {
+    setError("Current network is not supported")
+    return
+  }
 
-    setError(null)
+  setError(null)
 
-    if (!isConnected) {
-      try {
-        await connect()
-      } catch (error) {
-        console.error("Failed to connect wallet:", error)
-        setError("Failed to connect wallet. Please try again.")
-        return
-      }
-    }
-
-    if (!provider) {
-      setError("Wallet not connected")
-      return
-    }
-
-    setIsCreating(true)
+  if (!isConnected) {
     try {
-      const factoryAddress = chainConfig.factoryAddresses[0]
-      if (!factoryAddress) {
-        throw new Error("No factory address available for this network")
-      }
-
-      const useBackend = faucetType === FAUCET_TYPES.OPEN && requireDropCode
-      const tokenAddress = selectedToken
-
-      console.log("Creating faucet with params:", {
-        factoryAddress,
-        name,
-        tokenAddress,
-        chainId: chainId.toString(),
-        useBackend,
-        faucetType,
-        requireDropCode,
-        chainConfig: chainConfig.displayName,
-      })
-
-      const faucetAddress = await createFaucet(
-        provider,
-        factoryAddress,
-        name,
-        tokenAddress,
-        BigInt(chainId),
-        BigInt(chainId),
-        useBackend
-      )
-
-      if (!faucetAddress) {
-        throw new Error("Failed to get created faucet address")
-      }
-
-      const selectedTokenInfo = getSelectedTokenInfo()
-      toast({
-        title: "Faucet Created Successfully! 🎉",
-        description: `Your ${selectedTokenInfo?.symbol || "token"} faucet has been created at ${faucetAddress}`,
-      })
-
-      window.location.href = `/faucet/${faucetAddress}?networkId=${chainId}`
-    } catch (error: any) {
-      console.error("Error creating faucet:", error)
-      let errorMessage = error.message || "Failed to create faucet"
-      
-      toast({
-        title: "Failed to create faucet",
-        description: errorMessage,
-        variant: "destructive",
-      })
-      setError(errorMessage)
-    } finally {
-      setIsCreating(false)
+      await connect()
+    } catch (error) {
+      console.error("Failed to connect wallet:", error)
+      setError("Failed to connect wallet. Please try again.")
+      return
     }
   }
 
+  if (!provider) {
+    setError("Wallet not connected")
+    return
+  }
+
+  // Ensure we have the user's address for Divvi v2
+  if (!address) {
+    setError("Unable to get wallet address")
+    return
+  }
+
+  setIsCreating(true)
+  try {
+    const factoryAddress = chainConfig.factoryAddresses[0]
+    if (!factoryAddress) {
+      throw new Error("No factory address available for this network")
+    }
+
+    const useBackend = faucetType === FAUCET_TYPES.OPEN && requireDropCode
+    const tokenAddress = selectedToken
+
+    console.log("Creating faucet with params:", {
+      factoryAddress,
+      name,
+      tokenAddress,
+      chainId: chainId.toString(),
+      useBackend,
+      faucetType,
+      requireDropCode,
+      chainConfig: chainConfig.displayName,
+      userAddress: address, // Log user address for debugging
+    })
+
+    // The createFaucet function will now automatically use the user's address
+    // from the provider.getSigner() call inside the function
+    const faucetAddress = await createFaucet(
+      provider,
+      factoryAddress,
+      name,
+      tokenAddress,
+      BigInt(chainId),
+      BigInt(chainId),
+      useBackend
+    )
+
+    if (!faucetAddress) {
+      throw new Error("Failed to get created faucet address")
+    }
+
+    const selectedTokenInfo = getSelectedTokenInfo()
+    toast({
+      title: "Faucet Created Successfully! 🎉",
+      description: `Your ${selectedTokenInfo?.symbol || "token"} faucet has been created at ${faucetAddress}`,
+    })
+
+    window.location.href = `/faucet/${faucetAddress}?networkId=${chainId}`
+  } catch (error: any) {
+    console.error("Error creating faucet:", error)
+    let errorMessage = error.message || "Failed to create faucet"
+    
+    toast({
+      title: "Failed to create faucet",
+      description: errorMessage,
+      variant: "destructive",
+    })
+    setError(errorMessage)
+  } finally {
+    setIsCreating(false)
+  }
+}
   const getStepTitle = (step: number) => {
     switch (step) {
       case 1:

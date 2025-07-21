@@ -24,7 +24,7 @@ const STORAGE_NETWORKS = {
   1135: {
     // Custom chain
     contractAddress: "0xc5f8c2A85520c0A3595C29e004b2f5D9e7CE3b0B",
-    rpcUrl: "https://your-custom-rpc-url-here",
+    rpcUrl: "https://mainnet.base.org/",
     name: "Custom"
   },
   42161: {
@@ -356,7 +356,7 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
                 title="Total Faucets"
                 value={finalData?.totalFaucets}
                 change={finalData?.monthlyChange.faucets}
-                icon={BarChart3}
+                icon={PieChart}
                 loading={finalLoading}
               />
               <StatCard
@@ -377,7 +377,7 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
                 title="Total Claims"
                 value={finalData?.totalClaims}
                 change={finalData?.monthlyChange.claims}
-                icon={PieChart}
+                icon={BarChart3}
                 loading={finalLoading}
               />
             </>

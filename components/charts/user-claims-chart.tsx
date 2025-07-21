@@ -30,7 +30,7 @@ const NETWORK_CONFIG: { [key: number]: NetworkConfig } = {
   1135: {
     // Custom chain or testnet
     contractAddress: "0xc5f8c2A85520c0A3595C29e004b2f5D9e7CE3b0B",    
-    rpcUrl: "https://your-custom-rpc-url-here", // Replace with actual RPC URL
+    rpcUrl: "https://mainnet.base.org/", // Replace with actual RPC URL
     name: "Custom Chain"
   },
   42161: {

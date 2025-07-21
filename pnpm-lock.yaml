@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@divvi/referral-sdk':
-        specifier: ^1.0.0
-        version: 1.0.0
+        specifier: ^2.2.0
+        version: 2.2.0
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.56.4(react@19.1.0))
@@ -215,8 +215,8 @@ packages:
   '@coinbase/wallet-sdk@4.3.0':
     resolution: {integrity: sha512-T3+SNmiCw4HzDm4we9wCHCxlP0pqCiwKe4sOwPH3YAK2KSKjxPRydKu6UQJrdONFVLG7ujXvbd/6ZqmvJb8rkw==}
 
-  '@divvi/referral-sdk@1.0.0':
-    resolution: {integrity: sha512-X1i66AFQMJCu5jdOjg6mruSZ70YXolTNE1VHDr9tSHRnoR3EWki1Wtgb+A5fyE0AVl73uWZClqXlEGivyZbQ1w==}
+  '@divvi/referral-sdk@2.2.0':
+    resolution: {integrity: sha512-C02v8YY+H6TunWz1lUGU04pJzaOrnjVbe12Gv/iFo1C9NNE1+o5oVR/xGuxfXqsPJ1tVlvS0s+5kqQEDAl8Blg==}
 
   '@ecies/ciphers@0.2.3':
     resolution: {integrity: sha512-tapn6XhOueMwht3E2UzY0ZZjYokdaw9XtL9kEyjhQ/Fb9vL9xTFbOaI+fV0AWvTpYu4BNloC6getKW6NtSg4mA==}
@@ -3286,7 +3286,7 @@ snapshots:
       eventemitter3: 5.0.1
       preact: 10.26.6
 
-  '@divvi/referral-sdk@1.0.0': {}
+  '@divvi/referral-sdk@2.2.0': {}
 
   '@ecies/ciphers@0.2.3(@noble/ciphers@1.3.0)':
     dependencies:

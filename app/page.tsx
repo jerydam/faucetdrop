@@ -73,7 +73,7 @@ export default function Home() {
                     >
                       <Users className="h-4 w-4" />
                       <span className="hidden xs:inline">Batch Claim</span>
-                      <span className="xs:hidden">Batch</span>
+                      <span className="xs:hidden">Batch Drop</span>
                     </Button>
                   </Link>
                   

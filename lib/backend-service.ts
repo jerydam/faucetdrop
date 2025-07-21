@@ -1,7 +1,7 @@
 import { BrowserProvider } from 'ethers';
 import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
 
-const API_URL = "https://fauctdrop-backend.onrender.com"; // Update with your actual backend URL
+const API_URL = "https://fauctdrop-backend.onrender.com";
 const ENABLE_DIVVI_REFERRAL = true;
 const DEBUG_MODE = process.env.NODE_ENV === 'development';
 
@@ -35,7 +35,7 @@ interface RequestLogData {
 
 interface DebugInfo {
   chainId: number;
-  isCeloNetwork: boolean;
+  isSupportedNetwork: boolean;
   enabled: boolean;
   timestamp: string;
   reason?: string;
@@ -55,8 +55,9 @@ interface DebugInfo {
   errorMessage?: string;
 }
 
-function isCeloNetwork(chainId: number): boolean {
-  return chainId === 42220;
+function isSupportedNetwork(chainId: number): boolean {
+  // Updated to match the supported networks from your integration
+  return [1, 42220, 44787, 62320, 1135, 4202, 8453, 84532, 137].includes(chainId);
 }
 
 function debugLog(message: string, data?: any) {
@@ -98,14 +99,14 @@ function validateAndFixHexData(data: string): { isValid: boolean; fixed: string;
   return { isValid: true, fixed };
 }
 
-async function processDivviReferralData(chainId: number): Promise<{
+async function processDivviReferralData(chainId: number, userAddress: string): Promise<{
   data?: string;
   error?: string;
   debugInfo: DebugInfo;
 }> {
   const debugInfo: DebugInfo = {
     chainId,
-    isCeloNetwork: isCeloNetwork(chainId),
+    isSupportedNetwork: isSupportedNetwork(chainId),
     enabled: ENABLE_DIVVI_REFERRAL,
     timestamp: new Date().toISOString()
   };
@@ -115,15 +116,21 @@ async function processDivviReferralData(chainId: number): Promise<{
     return { debugInfo: { ...debugInfo, reason: 'disabled' } };
   }
 
-  if (!isCeloNetwork(chainId)) {
-    debugLog(`Not a Celo network (chainId: ${chainId})`);
-    return { debugInfo: { ...debugInfo, reason: 'not_celo_network' } };
+  if (!isSupportedNetwork(chainId)) {
+    debugLog(`Network not supported by Divvi (chainId: ${chainId})`);
+    return { debugInfo: { ...debugInfo, reason: 'unsupported_network' } };
+  }
+
+  if (!userAddress) {
+    debugLog('No user address provided for Divvi referral');
+    return { debugInfo: { ...debugInfo, reason: 'no_user_address' } };
   }
 
   try {
-    debugLog('Attempting to get Divvi referral data...');
+    debugLog('Attempting to get Divvi referral data...', { userAddress, chainId });
     
-    const rawData = appendDivviReferralData('');
+    // Updated to use v2 API which requires user address
+    const rawData = appendDivviReferralData('', userAddress as `0x${string}`);
     
     debugInfo.rawData = {
       value: rawData,
@@ -150,6 +157,8 @@ async function processDivviReferralData(chainId: number): Promise<{
     }
 
     successLog('Successfully processed Divvi referral data', {
+      userAddress,
+      chainId,
       original: rawData,
       fixed: validation.fixed,
       length: validation.fixed.length
@@ -177,7 +186,7 @@ async function processDivviReferralData(chainId: number): Promise<{
 }
 
 async function reportToDivvi(txHash: string, chainId: number): Promise<void> {
-  if (!ENABLE_DIVVI_REFERRAL || !isCeloNetwork(chainId)) {
+  if (!ENABLE_DIVVI_REFERRAL || !isSupportedNetwork(chainId)) {
     debugLog('Skipping Divvi reporting (not applicable)');
     return;
   }
@@ -206,27 +215,10 @@ async function reportToDivvi(txHash: string, chainId: number): Promise<void> {
 🔧 Quick Fix for Development:
    Set ENABLE_DIVVI_REFERRAL=false or add domain check
       `);
-    } else if (error instanceof Error) {
-      if (error.message.includes('400')) {
-        errorLog('Bad Request - Check transaction hash and chainId format');
-      } else if (error.message.includes('401') || error.message.includes('403')) {
-        errorLog('Authentication/Authorization error - Check API keys or permissions');
-      } else if (error.message.includes('404')) {
-        errorLog('Divvi API endpoint not found - Check API URL');
-      } else if (error.message.includes('429')) {
-        errorLog('Rate limit exceeded - Too many requests to Divvi API');
-      } else {
-        errorLog('Unknown error occurred', {
-          message: error.message,
-          name: error.name,
-          stack: DEBUG_MODE ? error.stack : undefined
-        });
-      }
     }
   }
 }
 
-// Add comprehensive 400 error debugging
 export async function debugClaimRequest(
   userAddress: string,
   faucetAddress: string,
@@ -257,15 +249,14 @@ export async function debugClaimRequest(
     },
     chainId: {
       value: chainId,
-      isValid: [1135, 42220, 42161].includes(chainId),
+      isValid: [1135, 42220, 42161, 8453, 137].includes(chainId),
       type: typeof chainId,
-      validChains: [1135, 42220, 42161]
+      validChains: [1135, 42220, 42161, 8453, 137]
     }
   };
   
   console.log('📊 Validation Results:', validation);
   
-  // Check for specific validation failures
   const errors = [];
   if (!validation.userAddress.isValid) {
     errors.push(`Invalid userAddress: ${userAddress} (length: ${validation.userAddress.length})`);
@@ -311,9 +302,9 @@ export async function claimNoCodeViaBackend(
     const network = await provider.getNetwork();
     const chainId = Number(network.chainId);
 
-    const validChainIds = [1135, 42220, 42161];
+    const validChainIds = [1, 1135, 42220, 42161, 8453, 84532, 137, 44787];
     if (!validChainIds.includes(chainId)) {
-      throw new Error(`Unsupported chainId: ${chainId}. Please switch to Lisk, Celo, or Arbitrum.`);
+      throw new Error(`Unsupported chainId: ${chainId}. Please switch to a supported network.`);
     }
 
     debugLog(`Starting drop process for chainId: ${chainId}`);
@@ -325,7 +316,8 @@ export async function claimNoCodeViaBackend(
       chainId
     };
 
-    const divviResult = await processDivviReferralData(chainId);
+    // Updated to pass user address to Divvi v2
+    const divviResult = await processDivviReferralData(chainId, userAddress);
     
     if (divviResult.data) {
       payload.divviReferralData = divviResult.data;
@@ -407,8 +399,6 @@ export async function claimNoCodeViaBackend(
   }
 }
 
-
-// Enhanced claimViaBackend with whitelist-first flow
 export async function claimViaBackend(
   userAddress: string,
   faucetAddress: string,
@@ -429,9 +419,9 @@ export async function claimViaBackend(
     const chainId = Number(network.chainId);
     
     // Validate chainId specifically
-    const validChainIds = [1135, 42220, 42161];
+    const validChainIds = [1, 1135, 42220, 42161, 8453, 84532, 137, 44787];
     if (!validChainIds.includes(chainId)) {
-      throw new Error(`Unsupported chainId: ${chainId}. Please switch to Lisk (1135), Celo (42220), or Arbitrum (42161).`);
+      throw new Error(`Unsupported chainId: ${chainId}. Please switch to a supported network.`);
     }
 
     // Clean and validate addresses
@@ -532,12 +522,26 @@ export async function claimViaBackend(
     // Step 3: Claim tokens
     console.log('🎯 Proceeding with token claim...');
     
-    const claimPayload = {
+    let claimPayload: ClaimPayload = {
       userAddress: cleanUserAddress,
       faucetAddress: cleanFaucetAddress,
       secretCode: cleanSecretCode,
+      shouldWhitelist: false, // Don't whitelist again in claim
       chainId
     };
+
+    // Add Divvi referral data for supported networks
+    const divviResult = await processDivviReferralData(chainId, cleanUserAddress);
+    
+    if (divviResult.data) {
+      claimPayload.divviReferralData = divviResult.data;
+      successLog('Added Divvi referral data to claim payload', { 
+        length: divviResult.data.length,
+        preview: `${divviResult.data.slice(0, 20)}...`
+      });
+    } else if (divviResult.error) {
+      debugLog(`Proceeding without Divvi data: ${divviResult.error}`);
+    }
     
     console.log('📤 Sending claim request:', claimPayload);
     
@@ -609,6 +613,13 @@ export async function claimViaBackend(
     
     const claimResult = await claimResponse.json();
     console.log('✅ Claim successful:', claimResult);
+
+    // Report to Divvi if transaction was successful
+    if (claimResult.txHash) {
+      setTimeout(() => {
+        reportToDivvi(claimResult.txHash, chainId);
+      }, 100);
+    }
     
     return {
       success: true,
@@ -616,7 +627,8 @@ export async function claimViaBackend(
       whitelistTx: whitelistTx,
       divviDebug: {
         whitelistTx,
-        claimTx: claimResult.txHash
+        claimTx: claimResult.txHash,
+        divviData: divviResult.debugInfo
       }
     };
     
@@ -647,9 +659,9 @@ export async function whitelistUser(
     const chainId = Number(network.chainId);
     
     // Validate chainId
-    const validChainIds = [1135, 42220, 42161];
+    const validChainIds = [1, 1135, 42220, 42161, 8453, 84532, 137, 44787];
     if (!validChainIds.includes(chainId)) {
-      throw new Error(`Unsupported chainId: ${chainId}. Please switch to Lisk (1135), Celo (42220), or Arbitrum (42161).`);
+      throw new Error(`Unsupported chainId: ${chainId}. Please switch to a supported network.`);
     }
     
     // Clean and validate addresses

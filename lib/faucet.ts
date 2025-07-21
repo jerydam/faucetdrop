@@ -333,10 +333,10 @@ export async function fetchStorageData(): Promise<
   }
 }
 
-// Create a faucet with backend toggle support
+// Create a faucet with backend toggle support - UPDATED FOR DIVVI V2
 export async function createFaucet(
   provider: BrowserProvider,
-  factoryAddress: string, // Changed to single address
+  factoryAddress: string,
   name: string,
   tokenAddress: string,
   chainId: bigint,
@@ -366,7 +366,9 @@ export async function createFaucet(
       backendAddress,
       useBackend,
     ]);
-    const dataWithReferral = appendDivviReferralData(data);
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
 
     const gasEstimate = await provider.estimateGas({
       to: factoryAddress,
@@ -695,7 +697,7 @@ export async function getFaucetDetails(provider: BrowserProvider | JsonRpcProvid
   }
 }
 
-// Store claim in storage contract
+// Store claim in storage contract - UPDATED FOR DIVVI V2
 export async function storeClaim(
   provider: BrowserProvider,
   claimer: string,
@@ -732,7 +734,9 @@ export async function storeClaim(
       formattedTxHash,
       networkName,
     ])
-    const dataWithReferral = appendDivviReferralData(data)
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`)
 
     // Estimate gas
     const gasEstimate = await provider.estimateGas({
@@ -1065,7 +1069,7 @@ export async function getAllClaimsForAllNetworks(networks: Network[]): Promise<
   }
 }
 
-// Fund faucet
+// Fund faucet - UPDATED FOR DIVVI V2
 export async function fundFaucet(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1105,11 +1109,15 @@ export async function fundFaucet(
 
     if (isEther && !isCelo) {
       console.log(`Funding faucet ${faucetAddress} with ${amount} native tokens on chain ${chainId}`)
+      
+      // For native token transfers, add Divvi data to the transaction data field
+      const divviData = appendDivviReferralData("0x", signerAddress as `0x${string}`)
+      
       // Estimate gas for fund transaction
       const gasEstimate = await provider.estimateGas({
         to: faucetAddress,
         value: amount,
-        data: "0x",
+        data: divviData,
       })
       const feeData = await provider.getFeeData()
       const gasPrice = feeData.gasPrice || BigInt(0)
@@ -1123,7 +1131,7 @@ export async function fundFaucet(
       const tx = await signer.sendTransaction({
         to: faucetAddress,
         value: amount,
-        data: "0x",
+        data: divviData,
         gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
         maxFeePerGas: feeData.maxFeePerGas || undefined,
         maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
@@ -1151,7 +1159,10 @@ export async function fundFaucet(
     console.log(`Approving ${amount} ${isEther && isCelo ? "CELO" : "tokens"} for faucet ${faucetAddress}`)
 
     const approveData = tokenContract.interface.encodeFunctionData("approve", [faucetAddress, amount])
-    const approveDataWithReferral = appendDivviReferralData(approveData)
+    
+    // UPDATED: Pass user address for Divvi v2
+    const approveDataWithReferral = appendDivviReferralData(approveData, signerAddress as `0x${string}`)
+    
     const approveGasEstimate = await provider.estimateGas({
       to: tokenAddress,
       data: approveDataWithReferral,
@@ -1174,7 +1185,10 @@ export async function fundFaucet(
 
     console.log(`Funding faucet ${faucetAddress} with ${amount} ${isEther && isCelo ? "CELO" : "tokens"}`)
     const fundData = faucetContract.interface.encodeFunctionData("fund", [amount])
-    const fundDataWithReferral = appendDivviReferralData(fundData)
+    
+    // UPDATED: Pass user address for Divvi v2
+    const fundDataWithReferral = appendDivviReferralData(fundData, signerAddress as `0x${string}`)
+    
     const fundGasEstimate = await provider.estimateGas({
       to: faucetAddress,
       data: fundDataWithReferral,
@@ -1204,7 +1218,7 @@ export async function fundFaucet(
   }
 }
 
-// Withdraw tokens
+// Withdraw tokens - UPDATED FOR DIVVI V2
 export async function withdrawTokens(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1222,7 +1236,9 @@ export async function withdrawTokens(
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
 
     const data = faucetContract.interface.encodeFunctionData("withdraw", [amount])
-    const dataWithReferral = appendDivviReferralData(data)
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`)
 
     // Estimate gas
     const gasEstimate = await provider.estimateGas({
@@ -1271,7 +1287,7 @@ export async function withdrawTokens(
   }
 }
 
-// Set whitelist batch
+// Set whitelist batch - UPDATED FOR DIVVI V2
 export async function setWhitelistBatch(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1290,7 +1306,9 @@ export async function setWhitelistBatch(
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
 
     const data = faucetContract.interface.encodeFunctionData("setWhitelistBatch", [addresses, status])
-    const dataWithReferral = appendDivviReferralData(data)
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`)
 
     // Estimate gas
     const gasEstimate = await provider.estimateGas({
@@ -1340,7 +1358,7 @@ export async function setWhitelistBatch(
   }
 }
 
-// Set custom claim amounts for multiple users (batch operation)
+// Set custom claim amounts for multiple users (batch operation) - UPDATED FOR DIVVI V2
 export async function setCustomClaimAmountsBatch(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1359,7 +1377,9 @@ export async function setCustomClaimAmountsBatch(
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
 
     const data = faucetContract.interface.encodeFunctionData("setCustomClaimAmountsBatch", [users, amounts])
-    const dataWithReferral = appendDivviReferralData(data)
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`)
 
     // Estimate gas
     const gasEstimate = await provider.estimateGas({
@@ -1409,7 +1429,7 @@ export async function setCustomClaimAmountsBatch(
   }
 }
 
-// Reset all claims for a faucet
+// Reset all claims for a faucet - UPDATED FOR DIVVI V2
 export async function resetAllClaims(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1426,7 +1446,9 @@ export async function resetAllClaims(
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
 
     const data = faucetContract.interface.encodeFunctionData("resetAllClaimed", [])
-    const dataWithReferral = appendDivviReferralData(data)
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`)
 
     // Estimate gas
     const gasEstimate = await provider.estimateGas({
@@ -1474,7 +1496,7 @@ export async function resetAllClaims(
   }
 }
 
-// Reset claimed status for specific addresses
+// Reset claimed status for specific addresses - UPDATED FOR DIVVI V2
 export async function resetClaimedStatus(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1493,7 +1515,9 @@ export async function resetClaimedStatus(
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
 
     const data = faucetContract.interface.encodeFunctionData("resetClaimedBatch", [addresses])
-    const dataWithReferral = appendDivviReferralData(data)
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`)
 
     // Estimate gas
     const gasEstimate = await provider.estimateGas({
@@ -1617,7 +1641,7 @@ function decodeRevertError(data: string): string {
   return "Unknown contract error occurred"
 }
 
-// Update faucet name with admin check
+// Update faucet name with admin check - UPDATED FOR DIVVI V2
 export async function updateFaucetName(
   provider: BrowserProvider,
   faucet: string,
@@ -1645,10 +1669,21 @@ export async function updateFaucetName(
     }
 
     const faucetContract = new Contract(faucet, FAUCET_ABI, signer);
-    const gasEstimate = await faucetContract.updateName.estimateGas(name);
+    
+    // UPDATED: For direct contract calls like updateName, we need to encode the data and add Divvi referral
+    const data = faucetContract.interface.encodeFunctionData("updateName", [name]);
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
+    
+    const gasEstimate = await provider.estimateGas({
+      to: faucet,
+      data: dataWithReferral,
+      from: signerAddress,
+    });
     const feeData = await provider.getFeeData();
 
-    const tx = await faucetContract.updateName(name, {
+    const tx = await signer.sendTransaction({
+      to: faucet,
+      data: dataWithReferral,
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
       maxFeePerGas: feeData.maxFeePerGas,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
@@ -1671,7 +1706,7 @@ export async function updateFaucetName(
   }
 }
 
-// Delete faucet with admin check
+// Delete faucet with admin check - UPDATED FOR DIVVI V2
 export async function deleteFaucet(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1694,10 +1729,21 @@ export async function deleteFaucet(
     }
 
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
-    const gasEstimate = await faucetContract.deleteFaucet.estimateGas();
+    
+    // UPDATED: Encode the function data and add Divvi referral
+    const data = faucetContract.interface.encodeFunctionData("deleteFaucet", []);
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
+    
+    const gasEstimate = await provider.estimateGas({
+      to: faucetAddress,
+      data: dataWithReferral,
+      from: signerAddress,
+    });
     const feeData = await provider.getFeeData();
 
-    const tx = await faucetContract.deleteFaucet({
+    const tx = await signer.sendTransaction({
+      to: faucetAddress,
+      data: dataWithReferral,
       gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
       maxFeePerGas: feeData.maxFeePerGas,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
@@ -1721,7 +1767,7 @@ export async function deleteFaucet(
   }
 }
 
-// Add admin with permission check
+// Add admin with permission check - UPDATED FOR DIVVI V2
 export async function addAdmin(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1750,7 +1796,9 @@ export async function addAdmin(
 
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
     const data = faucetContract.interface.encodeFunctionData("addAdmin", [adminAddress]);
-    const dataWithReferral = appendDivviReferralData(data);
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
 
     const gasEstimate = await provider.estimateGas({
       to: faucetAddress,
@@ -1786,7 +1834,7 @@ export async function addAdmin(
   }
 }
 
-// Remove admin with permission check
+// Remove admin with permission check - UPDATED FOR DIVVI V2
 export async function removeAdmin(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1815,7 +1863,9 @@ export async function removeAdmin(
 
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
     const data = faucetContract.interface.encodeFunctionData("removeAdmin", [adminAddress]);
-    const dataWithReferral = appendDivviReferralData(data);
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
 
     const gasEstimate = await provider.estimateGas({
       to: faucetAddress,
@@ -1851,7 +1901,7 @@ export async function removeAdmin(
   }
 }
 
-// Set claim parameters with admin check
+// Set claim parameters with admin check - UPDATED FOR DIVVI V2
 export async function setClaimParameters(
   provider: BrowserProvider,
   faucetAddress: string,
@@ -1879,7 +1929,9 @@ export async function setClaimParameters(
     const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
 
     const data = faucetContract.interface.encodeFunctionData("setClaimParameters", [claimAmount, startTime, endTime]);
-    const dataWithReferral = appendDivviReferralData(data);
+    
+    // UPDATED: Pass user address for Divvi v2
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
 
     const gasEstimate = await provider.estimateGas({
       to: faucetAddress,

@@ -22,21 +22,30 @@ export function FaucetsCreatedChart() {
       try {
         const chartData: ChartData[] = []
 
-        for (const network of networks) {
-          let totalFaucets = 0
-
-          // Iterate over all factory addresses for the network
-          for (const factoryAddress of network.factoryAddresses) {
-            // Fetch faucets for the specific factory address
-            const faucets = await getFaucetsForNetwork(network, factoryAddress)
-            totalFaucets += faucets.length
-          }
-
-          chartData.push({
-            network: network.name,
-            faucets: totalFaucets,
+        // Use Promise.all for parallel processing like in NetworkGrid
+        await Promise.all(
+          networks.map(async (network) => {
+            try {
+              // Use the same fetching method as NetworkGrid - without factory address parameter
+              const faucets = await getFaucetsForNetwork(network)
+              
+              // Sort faucets the same way as NetworkGrid (though not strictly necessary for chart)
+              const sortedFaucets = faucets.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+              
+              chartData.push({
+                network: network.name,
+                faucets: sortedFaucets.length,
+              })
+            } catch (error) {
+              console.error(`Error fetching faucets for ${network.name}:`, error)
+              // Add network with 0 faucets if there's an error to maintain consistency
+              chartData.push({
+                network: network.name,
+                faucets: 0,
+              })
+            }
           })
-        }
+        )
 
         setData(chartData)
       } catch (error) {
@@ -46,7 +55,9 @@ export function FaucetsCreatedChart() {
       }
     }
 
-    fetchFaucetData()
+    if (networks.length > 0) {
+      fetchFaucetData()
+    }
   }, [networks])
 
   if (loading) {
@@ -73,7 +84,7 @@ export function FaucetsCreatedChart() {
           <YAxis />
           <Tooltip />
           <Legend />
-          <Bar dataKey="faucets" fill="#8884d8" />
+          <Bar dataKey="faucets" fill="#1D4ED8" />
         </BarChart>
       </ResponsiveContainer>
     </div>

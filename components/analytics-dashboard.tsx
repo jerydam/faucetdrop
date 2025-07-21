@@ -290,9 +290,7 @@ function StatCard({
         <div className="text-2xl font-bold">
           {value?.toLocaleString() ?? 0}
         </div>
-        <p className={`text-xs ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-          {change ?? 'No data'}
-        </p>
+       
       </CardContent>
     </Card>
   )
@@ -358,7 +356,7 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
                 title="Total Faucets"
                 value={finalData?.totalFaucets}
                 change={finalData?.monthlyChange.faucets}
-                icon={PieChart}
+                icon={BarChart3}
                 loading={finalLoading}
               />
               <StatCard
@@ -379,7 +377,7 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
                 title="Total Claims"
                 value={finalData?.totalClaims}
                 change={finalData?.monthlyChange.claims}
-                icon={BarChart3}
+                icon={PieChart}
                 loading={finalLoading}
               />
             </>

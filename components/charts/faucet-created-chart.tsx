@@ -84,7 +84,7 @@ export function FaucetsCreatedChart() {
           <YAxis />
           <Tooltip />
           <Legend />
-          <Bar dataKey="faucets" fill="#1D4ED8" />
+          <Bar dataKey="faucets" fill="#0052FF" />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -199,10 +199,7 @@ export function FaucetList() {
             <CardTitle className="text-lg sm:text-xl">Recent Drops</CardTitle>
             {dataSourceStats.total > 0 && (
               <div className="flex gap-1">
-                <Badge variant="outline" className="text-xs">
-                  <Database className="h-3 w-3 mr-1" />
-                  {dataSourceStats.storage}
-                </Badge>
+               
                 <Badge variant="outline" className="text-xs">
                   <Factory className="h-3 w-3 mr-1" />
                   {dataSourceStats.factory}
@@ -243,8 +240,7 @@ export function FaucetList() {
         </div>
         {isExpanded && dataSourceStats.total > 0 && (
           <div className="text-sm text-muted-foreground">
-            Total: {dataSourceStats.total} drops 
-            ({dataSourceStats.storage} from storage, {dataSourceStats.factory} from factory transactions)
+            Total: {dataSourceStats.total} drops  transactions
           </div>
         )}
       </CardHeader>

@@ -67,12 +67,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 // Required X/Twitter accounts that users must follow
 const REQUIRED_FOLLOWS = [
   {
-    name: "FaucetDrops",
+    name: "FaucetDrops on 𝕏",
     url: "https://x.com/FaucetDrops",
     handle: "@FaucetDrops"
   },
   {
-    name: "FaucetDrops Chat", 
+    name: "FaucetDrops Telegram chat", 
     url: "https://t.me/faucetdropschat",
     handle: "@faucetdropschat"
   },
@@ -1462,7 +1462,7 @@ try {
                         All Accounts {REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Joined/Followed' : 'Followed'}
                       </>
                     ) : (
-                      `${REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Join/Follow' : 'Follow'} Required Accounts`
+                      `${REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Complete Activities' : 'Complete Activities'} to receive drops`
                     )}
                   </Button>
                   <Button
@@ -2015,9 +2015,7 @@ try {
                   </div>
                 ))}
               </div>
-              <div className="text-xs text-muted-foreground">
-                <p>Click "{getActionText('default')}" next to each account to open the link in a new tab. Once you've {REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'joined/followed' : 'followed'} all accounts, you can claim tokens.</p>
-              </div>
+             
               <DialogFooter>
                 <Button
                   onClick={() => setShowFollowDialog(false)}

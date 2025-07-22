@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "FaucetDrops",
-  description: "Token Drops Made Easy ✅",
+  description: "Token Drops Made Easy 💧",
     
 }
 
@@ -22,7 +22,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <title>FaucetDrops</title>
       <link rel="icon" href="/favicon.png" /> 
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>

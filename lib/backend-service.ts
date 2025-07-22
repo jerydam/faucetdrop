@@ -8,7 +8,6 @@ const DEBUG_MODE = process.env.NODE_ENV === 'development';
 interface ClaimPayload {
   userAddress: string;
   faucetAddress: string;
-  shouldWhitelist: boolean;
   chainId: number;
   secretCode?: string;
   divviReferralData?: string;
@@ -284,7 +283,7 @@ export async function claimNoCodeViaBackend(
   userAddress: string,
   faucetAddress: string,
   provider: BrowserProvider
-): Promise<{ success: boolean; txHash: string; whitelistTx?: string; divviDebug?: any }> {
+): Promise<{ success: boolean; txHash: string; divviDebug?: any }> {
   try {
     debugLog('Input to claimNoCodeViaBackend', {
       userAddress,
@@ -312,7 +311,6 @@ export async function claimNoCodeViaBackend(
     let payload: ClaimPayload = {
       userAddress,
       faucetAddress,
-      shouldWhitelist: true,
       chainId
     };
 
@@ -404,9 +402,9 @@ export async function claimViaBackend(
   faucetAddress: string,
   provider: BrowserProvider,
   secretCode: string
-): Promise<{ success: boolean; txHash: string; whitelistTx?: string; divviDebug?: any }> {
+): Promise<{ success: boolean; txHash: string; divviDebug?: any }> {
   try {
-    console.log('🚀 Starting enhanced claim process with whitelist-first flow...');
+    console.log('🚀 Starting claim process...');
     
     // Debug input parameters first
     const validation = await debugClaimRequest(userAddress, faucetAddress, secretCode, 42220);
@@ -436,97 +434,13 @@ export async function claimViaBackend(
       chainId
     });
 
-    // Step 1: Check if user is already whitelisted
-    let whitelistTx: string | undefined;
-    try {
-      console.log('🔍 Checking whitelist status...');
-      const whitelistStatus = await fetch(
-        `${API_URL}/whitelist-status/${cleanFaucetAddress}/${cleanUserAddress}?chain_id=${chainId}`
-      );
-      
-      if (whitelistStatus.ok) {
-        const statusData = await whitelistStatus.json();
-        console.log('📋 Whitelist status:', statusData);
-        
-        if (!statusData.isWhitelisted) {
-          console.log('📝 User not whitelisted, whitelisting now...');
-          
-          // Step 2: Whitelist the user
-          const whitelistPayload = {
-            userAddress: cleanUserAddress,
-            faucetAddress: cleanFaucetAddress,
-            secretCode: cleanSecretCode,
-            chainId
-          };
-          
-          console.log('📤 Sending whitelist request:', whitelistPayload);
-          
-          const whitelistResponse = await fetch(`${API_URL}/whitelist`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(whitelistPayload),
-          });
-          
-          if (!whitelistResponse.ok) {
-            const whitelistError = await whitelistResponse.text();
-            console.error('❌ Whitelist failed:', whitelistError);
-            throw new Error(`Failed to whitelist user: ${whitelistError}`);
-          }
-          
-          const whitelistResult = await whitelistResponse.json();
-          console.log('✅ Whitelist successful:', whitelistResult);
-          whitelistTx = whitelistResult.txHash;
-          
-          // Wait a moment for the whitelist transaction to be processed
-          console.log('⏳ Waiting for whitelist transaction to be processed...');
-          await new Promise(resolve => setTimeout(resolve, 3000));
-        } else {
-          console.log('✅ User already whitelisted');
-        }
-      } else {
-        console.warn('⚠️ Could not check whitelist status, proceeding with whitelist attempt...');
-        
-        // Attempt to whitelist anyway
-        const whitelistPayload = {
-          userAddress: cleanUserAddress,
-          faucetAddress: cleanFaucetAddress,
-          secretCode: cleanSecretCode,
-          chainId
-        };
-        
-        const whitelistResponse = await fetch(`${API_URL}/whitelist`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(whitelistPayload),
-        });
-        
-        if (whitelistResponse.ok) {
-          const whitelistResult = await whitelistResponse.json();
-          console.log('✅ Whitelist successful:', whitelistResult);
-          whitelistTx = whitelistResult.txHash;
-          
-          // Wait a moment for the whitelist transaction to be processed
-          console.log('⏳ Waiting for whitelist transaction to be processed...');
-          await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-      }
-    } catch (whitelistError) {
-      console.error('❌ Whitelist process failed:', whitelistError);
-      // Don't throw here, let's try to claim anyway in case user is already whitelisted
-    }
-
-    // Step 3: Claim tokens
+    // Claim tokens directly
     console.log('🎯 Proceeding with token claim...');
     
     let claimPayload: ClaimPayload = {
       userAddress: cleanUserAddress,
       faucetAddress: cleanFaucetAddress,
       secretCode: cleanSecretCode,
-      shouldWhitelist: false, // Don't whitelist again in claim
       chainId
     };
 
@@ -595,9 +509,7 @@ export async function claimViaBackend(
       } else if (claimResponse.status === 403) {
         const errorMessage = errorData.detail || errorData.message || 'Forbidden';
         
-        if (errorMessage.includes('not whitelisted')) {
-          throw new Error(`User still not whitelisted after whitelist attempt. This might be a timing issue. Please try again in a few seconds.`);
-        } else if (errorMessage.includes('Invalid or expired secret code')) {
+        if (errorMessage.includes('Invalid or expired secret code')) {
           throw new Error(`Secret code is invalid or expired: ${errorMessage}`);
         } else {
           throw new Error(`Access denied (403): ${errorMessage}`);
@@ -624,9 +536,7 @@ export async function claimViaBackend(
     return {
       success: true,
       txHash: claimResult.txHash,
-      whitelistTx: whitelistTx,
       divviDebug: {
-        whitelistTx,
         claimTx: claimResult.txHash,
         divviData: divviResult.debugInfo
       }
@@ -641,95 +551,6 @@ export async function claimViaBackend(
       secretCode: secretCode ? `${secretCode.substring(0, 2)}****` : 'undefined',
       timestamp: new Date().toISOString()
     });
-    throw error;
-  }
-}
-
-// Helper function to whitelist user separately (if needed)
-export async function whitelistUser(
-  userAddress: string,
-  faucetAddress: string,
-  provider: BrowserProvider,
-  secretCode: string
-): Promise<{ success: boolean; txHash: string | null; message?: string }> {
-  try {
-    console.log('🚀 Starting whitelist process...');
-    
-    const network = await provider.getNetwork();
-    const chainId = Number(network.chainId);
-    
-    // Validate chainId
-    const validChainIds = [1, 1135, 42220, 42161, 8453, 84532, 137, 44787];
-    if (!validChainIds.includes(chainId)) {
-      throw new Error(`Unsupported chainId: ${chainId}. Please switch to a supported network.`);
-    }
-    
-    // Clean and validate addresses
-    const cleanUserAddress = userAddress.trim();
-    const cleanFaucetAddress = faucetAddress.trim();
-    const cleanSecretCode = secretCode.trim().toUpperCase();
-    
-    const whitelistPayload = {
-      userAddress: cleanUserAddress,
-      faucetAddress: cleanFaucetAddress,
-      secretCode: cleanSecretCode,
-      chainId
-    };
-    
-    console.log('📤 Sending whitelist request:', whitelistPayload);
-    
-    const response = await fetch(`${API_URL}/whitelist`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(whitelistPayload),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-      throw new Error(errorData.detail || `Whitelist failed with status ${response.status}`);
-    }
-    
-    const result = await response.json();
-    console.log('✅ Whitelist successful:', result);
-    
-    return result;
-    
-  } catch (error) {
-    console.error('❌ Error in whitelistUser:', error);
-    throw error;
-  }
-}
-
-// Helper function to check whitelist status
-export async function checkWhitelistStatus(
-  userAddress: string,
-  faucetAddress: string,
-  provider: BrowserProvider
-): Promise<{ isWhitelisted: boolean; faucetAddress: string; userAddress: string; chainId: number }> {
-  try {
-    const network = await provider.getNetwork();
-    const chainId = Number(network.chainId);
-    
-    const cleanUserAddress = userAddress.trim();
-    const cleanFaucetAddress = faucetAddress.trim();
-    
-    const response = await fetch(
-      `${API_URL}/whitelist-status/${cleanFaucetAddress}/${cleanUserAddress}?chain_id=${chainId}`
-    );
-    
-    if (!response.ok) {
-      throw new Error(`Failed to check whitelist status: ${response.status}`);
-    }
-    
-    const result = await response.json();
-    console.log('📋 Whitelist status:', result);
-    
-    return result;
-    
-  } catch (error) {
-    console.error('❌ Error checking whitelist status:', error);
     throw error;
   }
 }

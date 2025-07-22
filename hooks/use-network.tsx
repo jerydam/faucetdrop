@@ -57,7 +57,9 @@ const networks: Network[] = [
     blockExplorer: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
-    factoryAddresses: ["0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C"],
+    factoryAddresses: ["0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
+      "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2"
+    ],
     tokenAddress: ZeroAddress,
     nativeCurrency: {
       name: "Lisk",
@@ -72,7 +74,7 @@ const networks: Network[] = [
     blockExplorer: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
-    factoryAddresses: ["0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1"],
+    factoryAddresses: ["0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36"],
     tokenAddress: ZeroAddress,
     nativeCurrency: {
       name: "Ethereum",

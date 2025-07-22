@@ -107,24 +107,25 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       },
     ],
   },
-  44787: {
-    chainId: 44787,
-    name: "Celo Alfajores",
-    displayName: "Celo Alfajores Testnet",
-    nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
-    nativeTokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
+ 
+  42161: {
+    chainId: 42161,
+    name: "Arbitrum",
+    displayName: "Arbitrum",
+    nativeCurrency: { name: "ETHER", symbol: "ETH", decimals: 18 },
+    nativeTokenAddress: zeroAddress,
     factoryAddresses: [
       "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
     ],
-    rpcUrls: ["https://alfajores-forno.celo-testnet.org"],
-    blockExplorerUrls: ["https://alfajores-blockscout.celo-testnet.org"],
+    rpcUrls: ["https://arb1.arbitrum.io/rpc"],
+    blockExplorerUrls: ["https://arbiscan.io"],
     isTestnet: true,
     defaultTokens: [
       {
-        address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
-        name: "Celo Dollar",
-        symbol: "cUSD",
-        decimals: 18,
+         address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+        name: "USD Coin",
+        symbol: "USDC",
+        decimals: 6,
       },
     ],
   },
@@ -135,7 +136,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
     nativeTokenAddress: zeroAddress,
     factoryAddresses: [
-      "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
+      "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
     ],
     rpcUrls: ["https://rpc.api.lisk.com"],
     blockExplorerUrls: ["https://blockscout.lisk.com"],
@@ -163,48 +164,6 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     defaultTokens: [
       {
         address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        name: "USD Coin",
-        symbol: "USDC",
-        decimals: 6,
-      },
-    ],
-  },
-  84532: {
-    chainId: 84532,
-    name: "Base Sepolia",
-    displayName: "Base Sepolia Testnet",
-    nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
-    nativeTokenAddress: zeroAddress,
-    factoryAddresses: [
-      "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
-    ],
-    rpcUrls: ["https://sepolia.base.org"],
-    blockExplorerUrls: ["https://sepolia.basescan.org"],
-    isTestnet: true,
-    defaultTokens: [
-      {
-        address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        name: "USD Coin",
-        symbol: "USDC",
-        decimals: 6,
-      },
-    ],
-  },
-  137: {
-    chainId: 137,
-    name: "Polygon",
-    displayName: "Polygon Mainnet",
-    nativeCurrency: { name: "Polygon", symbol: "MATIC", decimals: 18 },
-    nativeTokenAddress: "0x0000000000000000000000000000000000001010",
-    factoryAddresses: [
-      "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
-      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-    ],
-    rpcUrls: ["https://polygon-rpc.com"],
-    blockExplorerUrls: ["https://polygonscan.com"],
-    defaultTokens: [
-      {
-        address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
         name: "USD Coin",
         symbol: "USDC",
         decimals: 6,

@@ -240,10 +240,7 @@ export function UserClaimsChart() {
             <p className="text-2xl font-bold">{totalClaims}</p>
             <p className="text-sm text-muted-foreground">Total Claims</p>
           </div>
-          <div>
-            <p className="text-2xl font-bold">{uniqueUsers}</p>
-            <p className="text-sm text-muted-foreground">Unique Users</p>
-          </div>
+          
         </div>
 
         <div className="flex items-center gap-2">

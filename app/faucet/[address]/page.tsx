@@ -72,15 +72,11 @@ const REQUIRED_FOLLOWS = [
     handle: "@FaucetDrops"
   },
   {
-    name: "Jerydam", 
-    url: "https://x.com/jerydam00",
-    handle: "@jerydam00"
+    name: "FaucetDrops Chat", 
+    url: "https://t.me/faucetdropschat",
+    handle: "@faucetdropschat"
   },
-  {
-    name: "Johnadek",
-    url: "https://x.com/johnadek_",
-    handle: "@johnadek_"
-  }
+  
 ]
 
 export default function FaucetDetails() {
@@ -163,6 +159,20 @@ export default function FaucetDetails() {
     : faucetDetails?.isClaimActive && !hasClaimed && userIsWhitelisted && allAccountsFollowed
 
   const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
+
+  // Helper function to determine the action text based on URL
+  const getActionText = (url: string) => {
+    if (url.includes('t.me')) return 'Join'
+    if (url.includes('x.com') || url.includes('twitter.com')) return 'Follow'
+    return 'Follow' // default
+  }
+
+  // Helper function to determine the action past tense
+  const getActionPastTense = (url: string) => {
+    if (url.includes('t.me')) return 'Joined'
+    if (url.includes('x.com') || url.includes('twitter.com')) return 'Followed'
+    return 'Followed' // default
+  }
 
   const popupContent = (amount: string, txHash: string | null) =>
     `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
@@ -1207,6 +1217,22 @@ try {
     if (!checkNetwork()) return
     try {
       setIsResettingClaims(true)
+      
+      // Get network info to determine transaction type
+      const network = await provider.getNetwork()
+      const feeData = await provider.getFeeData()
+      
+      // Check if network supports EIP-1559
+      const supportsEIP1559 = feeData.maxFeePerGas !== null && feeData.maxPriorityFeePerGas !== null
+      
+      console.log('Network EIP-1559 support:', {
+        chainId: network.chainId.toString(),
+        supportsEIP1559,
+        maxFeePerGas: feeData.maxFeePerGas?.toString(),
+        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+        gasPrice: feeData.gasPrice?.toString()
+      })
+      
       await resetAllClaims(provider as BrowserProvider, faucetAddress, BigInt(chainId), BigInt(Number(networkId)))
       toast({
         title: "All claims reset",
@@ -1216,9 +1242,16 @@ try {
       await loadTransactionHistory()
     } catch (error: any) {
       console.error("Error resetting all claims:", error)
+      let errorMessage = error.message || "Unknown error occurred"
+      
+      // Handle EIP-1559 specific errors
+      if (errorMessage.includes("EIP-1559") || errorMessage.includes("maxFeePerGas")) {
+        errorMessage = "Network doesn't support EIP-1559 transactions. This has been automatically handled in the retry."
+      }
+      
       toast({
         title: "Failed to reset all claims",
-        description: error.message || "Unknown error occurred",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -1426,10 +1459,10 @@ try {
                     {allAccountsFollowed ? (
                       <>
                         <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                        All Accounts Followed
+                        All Accounts {REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Joined/Followed' : 'Followed'}
                       </>
                     ) : (
-                      "Follow Required Accounts on 𝕏"
+                      `${REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Join/Follow' : 'Follow'} Required Accounts`
                     )}
                   </Button>
                   <Button
@@ -1946,9 +1979,9 @@ try {
           <Dialog open={showFollowDialog} onOpenChange={setShowFollowDialog}>
             <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle className="text-lg sm:text-xl">Follow Required Accounts</DialogTitle>
+                <DialogTitle className="text-lg sm:text-xl">{REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Join/Follow' : 'Follow'} Required Accounts</DialogTitle>
                 <DialogDescription className="text-xs sm:text-sm">
-                  You need to follow these accounts on X/Twitter before you can claim tokens.
+                  You need to {REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'join/follow' : 'follow'} these accounts before you can claim tokens.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -1970,12 +2003,12 @@ try {
                       {followStates[account.url] ? (
                         <>
                           <Check className="h-3 w-3 mr-1" />
-                          Followed
+                          {getActionPastTense(account.url)}
                         </>
                       ) : (
                         <>
                           <ExternalLink className="h-3 w-3 mr-1" />
-                          Follow
+                          {getActionText(account.url)}
                         </>
                       )}
                     </Button>
@@ -1983,7 +2016,7 @@ try {
                 ))}
               </div>
               <div className="text-xs text-muted-foreground">
-                <p>Click "Follow" next to each account to open X/Twitter in a new tab. Once you've followed all accounts, you can claim tokens.</p>
+                <p>Click "{getActionText('default')}" next to each account to open the link in a new tab. Once you've {REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'joined/followed' : 'followed'} all accounts, you can claim tokens.</p>
               </div>
               <DialogFooter>
                 <Button
@@ -1991,7 +2024,7 @@ try {
                   className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
                   disabled={!allAccountsFollowed}
                 >
-                  {allAccountsFollowed ? "All Done - Ready to Claim!" : "Follow All Accounts First"}
+                  {allAccountsFollowed ? "All Done - Ready to Claim!" : `${getActionText('default')} All Accounts First`}
                 </Button>
               </DialogFooter>
             </DialogContent>

@@ -2034,7 +2034,7 @@ try {
               <DialogHeader>
                 <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
                 <DialogDescription className="text-xs sm:text-sm">
-                  You have successfully dropped{" "}
+                  You have successfully received a drop of{" "}
                   {faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}.
                 </DialogDescription>
               </DialogHeader>

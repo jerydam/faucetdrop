@@ -8,10 +8,59 @@ import { NewUsersChart } from "./charts/new-users-chart"
 import { UserClaimsChart } from "./charts/user-claims-chart"
 import { BarChart3, PieChart, TrendingUp, Users, Loader2 } from "lucide-react"
 import { useState, useEffect, createContext, useContext } from "react"
-import { ethers } from "ethers"
+import { ethers, Contract, JsonRpcProvider, isAddress } from "ethers"
 import { useNetwork } from "@/hooks/use-network"
 import { STORAGE_ABI, FACTORY_ABI } from "@/lib/abis"
-import { getFaucetsForNetwork } from "@/lib/faucet"
+import { getFaucetsForNetwork, getAllClaimsForAllNetworks } from "@/lib/faucet"
+
+// Factory ABI for fetching factory claims
+const FACTORY_ABI_LOCAL = [
+  {
+    "inputs": [],
+    "name": "getAllTransactions",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "faucetAddress",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "transactionType",
+            "type": "string"
+          },
+          {
+            "internalType": "address",
+            "name": "initiator",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "isEther",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timestamp",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct TransactionLibrary.Transaction[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+];
 
 // Define network configurations for storage contracts
 const STORAGE_NETWORKS = {
@@ -41,6 +90,7 @@ interface DashboardData {
   uniqueUsers: number
   totalFaucets: number
   totalTransactions: number
+  unifiedClaims: any[] // Store the unified claims data
   monthlyChange: {
     claims: string
     users: string
@@ -66,6 +116,122 @@ const DashboardContext = createContext<DashboardContextType>({
 
 export const useDashboardContext = () => useContext(DashboardContext)
 
+// Function to get all claims from factories
+async function getAllClaimsFromAllFactories(networks: any[]): Promise<{
+  faucetAddress: string
+  transactionType: string
+  initiator: string
+  amount: bigint
+  isEther: boolean
+  timestamp: number
+  networkName: string
+  chainId: number
+}[]> {
+  const allClaims: any[] = [];
+
+  for (const network of networks) {
+    try {
+      console.log(`Fetching claims from factories on ${network.name}...`);
+      
+      const provider = new JsonRpcProvider(network.rpcUrl);
+      const { transactions } = await getAllClaimsFromFactories(provider, network);
+      
+      const networkClaims = transactions.map(claim => ({
+        ...claim,
+        networkName: network.name,
+        chainId: network.chainId
+      }));
+      
+      allClaims.push(...networkClaims);
+      console.log(`Added ${networkClaims.length} claims from ${network.name}`);
+    } catch (error) {
+      console.error(`Error fetching claims from ${network.name}:`, error);
+    }
+  }
+
+  allClaims.sort((a, b) => b.timestamp - a.timestamp);
+  return allClaims;
+}
+
+// Helper function to get claims from factories for a single network
+async function getAllClaimsFromFactories(
+  provider: JsonRpcProvider,
+  network: any,
+): Promise<{
+  transactions: {
+    faucetAddress: string
+    transactionType: string
+    initiator: string
+    amount: bigint
+    isEther: boolean
+    timestamp: number
+  }[]
+  totalClaims: number
+  claimsByFaucet: Record<string, number>
+}> {
+  try {
+    let allClaims: any[] = [];
+
+    if (network.factoryAddresses) {
+      for (const factoryAddress of network.factoryAddresses) {
+        if (!isAddress(factoryAddress)) {
+          console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`);
+          continue;
+        }
+
+        const factoryContract = new Contract(factoryAddress, FACTORY_ABI_LOCAL, provider);
+
+        const code = await provider.getCode(factoryAddress);
+        if (code === "0x") {
+          console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`);
+          continue;
+        }
+
+        try {
+          console.log(`Fetching transactions from factory ${factoryAddress}...`);
+          const allTransactions = await factoryContract.getAllTransactions();
+          
+          const claimTransactions = allTransactions.filter((tx: any) => 
+            tx.transactionType.toLowerCase().includes('claim')
+          );
+          
+          console.log(`Found ${claimTransactions.length} claim transactions from factory ${factoryAddress}`);
+          allClaims.push(...claimTransactions);
+        } catch (error) {
+          console.warn(`Error fetching transactions from factory ${factoryAddress}:`, error);
+        }
+      }
+    }
+
+    const mappedClaims = allClaims.map((tx: any) => ({
+      faucetAddress: tx.faucetAddress as string,
+      transactionType: tx.transactionType as string,
+      initiator: tx.initiator as string,
+      amount: BigInt(tx.amount),
+      isEther: tx.isEther as boolean,
+      timestamp: Number(tx.timestamp),
+    }));
+
+    const claimsByFaucet: Record<string, number> = {};
+    mappedClaims.forEach(claim => {
+      const faucetAddress = claim.faucetAddress.toLowerCase();
+      claimsByFaucet[faucetAddress] = (claimsByFaucet[faucetAddress] || 0) + 1;
+    });
+
+    const result = {
+      transactions: mappedClaims,
+      totalClaims: mappedClaims.length,
+      claimsByFaucet
+    };
+
+    console.log(`Total claims fetched from ${network.name} factories: ${result.totalClaims}`);
+    return result;
+  } catch (error: any) {
+    console.error(`Error fetching claims from factories on ${network.name}:`, error);
+    throw new Error(error.message || "Failed to fetch claims from factories");
+  }
+}
+
 // Helper function to calculate percentage change
 function calculateChange(current: number, previous: number): string {
   if (previous === 0) return current > 0 ? "+∞%" : "+0.0%"
@@ -84,7 +250,9 @@ function getLastMonthData(claims: any[]): { claimsLastMonth: number, usersLastMo
     return claimDate >= lastMonthStart && claimDate <= lastMonthEnd
   })
   
-  const uniqueUsersLastMonth = new Set(lastMonthClaims.map(claim => claim.claimer.toLowerCase())).size
+  const uniqueUsersLastMonth = new Set(lastMonthClaims.map(claim => 
+    claim.claimer ? claim.claimer.toLowerCase() : claim.initiator.toLowerCase()
+  )).size
   
   return {
     claimsLastMonth: lastMonthClaims.length,
@@ -92,9 +260,9 @@ function getLastMonthData(claims: any[]): { claimsLastMonth: number, usersLastMo
   }
 }
 
-// Hook to fetch unified dashboard data
+// Hook to fetch unified dashboard data using same logic as chart components
 function useDashboardData() {
-  const { networks } = useNetwork() // Use networks instead of network to get all networks
+  const { networks } = useNetwork()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -104,37 +272,62 @@ function useDashboardData() {
     setError(null)
     
     try {
-      let totalClaims = 0
-      let totalFaucets = 0
-      let totalTransactions = 0
-      const uniqueUsers = new Set<string>()
-      let allClaims: any[] = []
+      console.log("Fetching unified claims data from both storage and factory sources...");
       
-      // Fetch from storage contracts (for claims and users data)
-      for (const [chainId, config] of Object.entries(STORAGE_NETWORKS)) {
-        try {
-          const provider = new ethers.JsonRpcProvider(config.rpcUrl)
-          const storageContract = new ethers.Contract(config.contractAddress, STORAGE_ABI, provider)
-          
-          const claims = await storageContract.getAllClaims()
-          console.log(`Fetched ${claims.length} claims from ${config.name}`)
-          
-          totalClaims += claims.length
-          allClaims = [...allClaims, ...claims]
-          
-          for (const claim of claims) {
-            uniqueUsers.add(claim.claimer.toLowerCase())
-          }
-        } catch (err) {
-          console.error(`Error fetching from storage contract on ${config.name}:`, err)
-        }
-      }
+      // Fetch claims from storage (existing method)
+      const storageClaims = await getAllClaimsForAllNetworks(networks);
+      console.log("Fetched storage claims:", storageClaims.length);
       
-      // Fetch faucets data using the same method as FaucetsCreatedChart and NetworkGrid
+      // Fetch claims from factories (new method)
+      const factoryClaims = await getAllClaimsFromAllFactories(networks);
+      console.log("Fetched factory claims:", factoryClaims.length);
+
+      // Convert all claims to unified format
+      const allClaimsUnified = [
+        // Storage claims
+        ...storageClaims.map(claim => ({
+          claimer: claim.claimer,
+          faucet: claim.faucet,
+          amount: claim.amount,
+          networkName: claim.networkName,
+          chainId: typeof claim.chainId === 'bigint' ? Number(claim.chainId) : claim.chainId,
+          tokenSymbol: claim.tokenSymbol,
+          tokenDecimals: claim.tokenDecimals,
+          isEther: claim.isEther,
+          timestamp: claim.timestamp,
+          source: 'storage'
+        })),
+        // Factory claims
+        ...factoryClaims.map(claim => ({
+          claimer: claim.initiator,
+          faucet: claim.faucetAddress,
+          amount: claim.amount,
+          networkName: claim.networkName,
+          chainId: claim.chainId,
+          tokenSymbol: claim.isEther ? 'ETH' : 'TOKEN',
+          tokenDecimals: claim.isEther ? 18 : 18,
+          isEther: claim.isEther,
+          timestamp: claim.timestamp,
+          source: 'factory'
+        }))
+      ];
+
+      console.log(`Total unified claims: ${allClaimsUnified.length}`);
+
+      // Calculate total claims and unique users from unified data
+      const totalClaims = allClaimsUnified.length;
+      const uniqueUsers = new Set(
+        allClaimsUnified
+          .filter(claim => claim.claimer && typeof claim.claimer === 'string' && claim.claimer.startsWith('0x'))
+          .map(claim => claim.claimer.toLowerCase())
+      );
+      const totalUniqueUsers = uniqueUsers.size;
+
+      // Fetch faucets data using the same method as FaucetsCreatedChart
+      let totalFaucets = 0;
       await Promise.all(
         networks.map(async (network) => {
           try {
-            // Use the same fetching method as other components
             const faucets = await getFaucetsForNetwork(network)
             totalFaucets += faucets.length
             console.log(`Fetched ${faucets.length} faucets from ${network.name}`)
@@ -144,7 +337,8 @@ function useDashboardData() {
         })
       )
       
-      // Fetch transactions from factory contracts (keeping this separate as it's different data)
+      // Fetch transactions from factory contracts
+      let totalTransactions = 0;
       for (const network of networks) {
         if (network?.factoryAddresses) {
           const provider = new ethers.JsonRpcProvider(network.rpcUrl)
@@ -162,32 +356,33 @@ function useDashboardData() {
         }
       }
       
-      // Calculate monthly changes
-      const { claimsLastMonth, usersLastMonth } = getLastMonthData(allClaims)
+      // Calculate monthly changes using unified data
+      const { claimsLastMonth, usersLastMonth } = getLastMonthData(allClaimsUnified)
       
-      // For faucets and transactions, we'll use a simple estimation
-      // In a real scenario, you'd want to track creation dates
-      const currentMonthClaims = allClaims.filter(claim => {
+      // For current month calculations
+      const currentMonthClaims = allClaimsUnified.filter(claim => {
         const claimDate = new Date(Number(claim.timestamp) * 1000)
         const now = new Date()
         return claimDate.getMonth() === now.getMonth() && claimDate.getFullYear() === now.getFullYear()
       }).length
       
       const currentMonthUsers = new Set(
-        allClaims
+        allClaimsUnified
           .filter(claim => {
             const claimDate = new Date(Number(claim.timestamp) * 1000)
             const now = new Date()
             return claimDate.getMonth() === now.getMonth() && claimDate.getFullYear() === now.getFullYear()
           })
+          .filter(claim => claim.claimer && typeof claim.claimer === 'string' && claim.claimer.startsWith('0x'))
           .map(claim => claim.claimer.toLowerCase())
       ).size
       
       const dashboardData: DashboardData = {
         totalClaims,
-        uniqueUsers: uniqueUsers.size,
+        uniqueUsers: totalUniqueUsers,
         totalFaucets,
         totalTransactions,
+        unifiedClaims: allClaimsUnified, // Store unified claims for chart components
         monthlyChange: {
           claims: calculateChange(currentMonthClaims, claimsLastMonth),
           users: calculateChange(currentMonthUsers, usersLastMonth),
@@ -196,7 +391,12 @@ function useDashboardData() {
         }
       }
       
-      console.log("Dashboard data:", dashboardData)
+      console.log("Unified dashboard data:", {
+        totalClaims,
+        uniqueUsers: totalUniqueUsers,
+        totalFaucets,
+        totalTransactions
+      });
       setData(dashboardData)
       
     } catch (err) {
@@ -209,6 +409,7 @@ function useDashboardData() {
         uniqueUsers: 0,
         totalFaucets: 0,
         totalTransactions: 0,
+        unifiedClaims: [],
         monthlyChange: {
           claims: "+0.0%",
           users: "+0.0%",

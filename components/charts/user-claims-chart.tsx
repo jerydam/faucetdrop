@@ -8,37 +8,171 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ethers } from "ethers"
-import { STORAGE_ABI } from "@/lib/abis"
+import { JsonRpcProvider, Contract, isAddress, formatUnits } from "ethers"
 import { useNetwork } from "@/hooks/use-network"
+import { getAllClaimsForAllNetworks } from "@/lib/faucet"
 
-// Define the structure for network config
-interface NetworkConfig {
-  contractAddress: string
-  rpcUrl: string
-  name: string
+// Factory ABI for fetching factory claims
+const FACTORY_ABI = [
+  {
+    "inputs": [],
+    "name": "getAllTransactions",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "faucetAddress",
+            "type": "address"
+          },
+          {
+            "internalType": "string",
+            "name": "transactionType",
+            "type": "string"
+          },
+          {
+            "internalType": "address",
+            "name": "initiator",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "isEther",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timestamp",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct TransactionLibrary.Transaction[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+];
+
+// Function to get all claims from factories
+async function getAllClaimsFromAllFactories(networks: any[]): Promise<{
+  faucetAddress: string
+  transactionType: string
+  initiator: string
+  amount: bigint
+  isEther: boolean
+  timestamp: number
+  networkName: string
+  chainId: number
+}[]> {
+  const allClaims: any[] = [];
+
+  for (const network of networks) {
+    try {
+      console.log(`Fetching claims from factories on ${network.name}...`);
+      
+      const provider = new JsonRpcProvider(network.rpcUrl);
+      const { transactions } = await getAllClaimsFromFactories(provider, network);
+      
+      const networkClaims = transactions.map(claim => ({
+        ...claim,
+        networkName: network.name,
+        chainId: network.chainId
+      }));
+      
+      allClaims.push(...networkClaims);
+      console.log(`Added ${networkClaims.length} claims from ${network.name}`);
+    } catch (error) {
+      console.error(`Error fetching claims from ${network.name}:`, error);
+    }
+  }
+
+  allClaims.sort((a, b) => b.timestamp - a.timestamp);
+  return allClaims;
 }
 
-// Define NETWORK_CONFIG with storage contract addresses
-const NETWORK_CONFIG: { [key: number]: NetworkConfig } = {
-  42220: {
-    // Celo Mainnet
-    contractAddress: "0x3fC5162779F545Bb4ea7980471b823577825dc8A",
-    rpcUrl: "https://forno.celo.org",
-    name: "Celo"
-  },
-  1135: {
-    // Custom chain or testnet
-    contractAddress: "0xc5f8c2A85520c0A3595C29e004b2f5D9e7CE3b0B",    
-    rpcUrl: "https://mainnet.base.org/", // Replace with actual RPC URL
-    name: "Custom Chain"
-  },
-  42161: {
-    // Arbitrum One
-    contractAddress: "0x6087810cFc24310E85736Cbd500e4c1d5a45E196", 
-    rpcUrl: "https://arb1.arbitrum.io/rpc",
-    name: "Arbitrum"
-  },
+// Helper function to get claims from factories for a single network
+async function getAllClaimsFromFactories(
+  provider: JsonRpcProvider,
+  network: any,
+): Promise<{
+  transactions: {
+    faucetAddress: string
+    transactionType: string
+    initiator: string
+    amount: bigint
+    isEther: boolean
+    timestamp: number
+  }[]
+  totalClaims: number
+  claimsByFaucet: Record<string, number>
+}> {
+  try {
+    let allClaims: any[] = [];
+
+    for (const factoryAddress of network.factoryAddresses) {
+      if (!isAddress(factoryAddress)) {
+        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`);
+        continue;
+      }
+
+      const factoryContract = new Contract(factoryAddress, FACTORY_ABI, provider);
+
+      const code = await provider.getCode(factoryAddress);
+      if (code === "0x") {
+        console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`);
+        continue;
+      }
+
+      try {
+        console.log(`Fetching transactions from factory ${factoryAddress}...`);
+        const allTransactions = await factoryContract.getAllTransactions();
+        
+        const claimTransactions = allTransactions.filter((tx: any) => 
+          tx.transactionType.toLowerCase().includes('claim')
+        );
+        
+        console.log(`Found ${claimTransactions.length} claim transactions from factory ${factoryAddress}`);
+        allClaims.push(...claimTransactions);
+      } catch (error) {
+        console.warn(`Error fetching transactions from factory ${factoryAddress}:`, error);
+      }
+    }
+
+    const mappedClaims = allClaims.map((tx: any) => ({
+      faucetAddress: tx.faucetAddress as string,
+      transactionType: tx.transactionType as string,
+      initiator: tx.initiator as string,
+      amount: BigInt(tx.amount),
+      isEther: tx.isEther as boolean,
+      timestamp: Number(tx.timestamp),
+    }));
+
+    const claimsByFaucet: Record<string, number> = {};
+    mappedClaims.forEach(claim => {
+      const faucetAddress = claim.faucetAddress.toLowerCase();
+      claimsByFaucet[faucetAddress] = (claimsByFaucet[faucetAddress] || 0) + 1;
+    });
+
+    const result = {
+      transactions: mappedClaims,
+      totalClaims: mappedClaims.length,
+      claimsByFaucet
+    };
+
+    console.log(`Total claims fetched from ${network.name} factories: ${result.totalClaims}`);
+    return result;
+  } catch (error: any) {
+    console.error(`Error fetching claims from factories on ${network.name}:`, error);
+    throw new Error(error.message || "Failed to fetch claims from factories");
+  }
 }
 
 interface ClaimData {
@@ -54,10 +188,11 @@ interface FaucetLeaderboard {
   claims: number
   network: string
   percentage: number
+  totalAmount: string
 }
 
 export function UserClaimsChart() {
-  const { network } = useNetwork()
+  const { networks } = useNetwork()
   const [data, setData] = useState<ClaimData[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedFaucet, setSelectedFaucet] = useState<string>("all")
@@ -72,53 +207,82 @@ export function UserClaimsChart() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      let allClaims: any[] = []
-      const claimsByFaucet: { [key: string]: { claims: number, network: string } } = {}
-      const faucetSet = new Set<string>()
-      const uniqueClaimers = new Set<string>()
-      let totalClaimsCount = 0
+      console.log("Fetching claims from both storage and factory sources...");
+      
+      // Fetch claims from storage (existing method)
+      const storageClaims = await getAllClaimsForAllNetworks(networks);
+      console.log("Fetched storage claims:", storageClaims.length);
+      
+      // Fetch claims from factories (new method)
+      const factoryClaims = await getAllClaimsFromAllFactories(networks);
+      console.log("Fetched factory claims:", factoryClaims.length);
 
-      // Fetch from all networks if "all" is selected, otherwise just current network
-      const networksToFetch = selectedFaucet === "all" 
-        ? Object.entries(NETWORK_CONFIG)
-        : network?.chainId 
-          ? [[network.chainId.toString(), NETWORK_CONFIG[network.chainId]]]
-          : Object.entries(NETWORK_CONFIG)
+      // Convert all claims to unified format
+      const allClaimsUnified = [
+        // Storage claims
+        ...storageClaims.map(claim => ({
+          claimer: claim.claimer,
+          faucet: claim.faucet,
+          amount: claim.amount,
+          networkName: claim.networkName,
+          chainId: typeof claim.chainId === 'bigint' ? Number(claim.chainId) : claim.chainId,
+          tokenSymbol: claim.tokenSymbol,
+          tokenDecimals: claim.tokenDecimals,
+          isEther: claim.isEther,
+          timestamp: claim.timestamp
+        })),
+        // Factory claims
+        ...factoryClaims.map(claim => ({
+          claimer: claim.initiator,
+          faucet: claim.faucetAddress,
+          amount: claim.amount,
+          networkName: claim.networkName,
+          chainId: claim.chainId,
+          tokenSymbol: claim.isEther ? 'ETH' : 'TOKEN',
+          tokenDecimals: claim.isEther ? 18 : 18,
+          isEther: claim.isEther,
+          timestamp: claim.timestamp
+        }))
+      ];
 
-      for (const [chainId, config] of networksToFetch) {
-        if (!config) continue
+      console.log(`Total unified claims: ${allClaimsUnified.length}`);
 
-        try {
-          const provider = new ethers.JsonRpcProvider(config.rpcUrl)
-          const contract = new ethers.Contract(config.contractAddress, STORAGE_ABI, provider)
+      const claimsByFaucet: { [key: string]: { 
+        claims: number, 
+        network: string, 
+        totalAmount: bigint,
+        tokenSymbol: string,
+        tokenDecimals: number 
+      } } = {};
+      const faucetSet = new Set<string>();
+      const uniqueClaimers = new Set<string>();
+      let totalClaimsCount = allClaimsUnified.length;
 
-          const claims = await contract.getAllClaims()
-          console.log(`Fetched ${claims.length} claims from ${config.name}`)
-          
-          allClaims = [...allClaims, ...claims]
-          totalClaimsCount += claims.length
-
-          for (const claim of claims) {
-            // Add to unique claimers
-            uniqueClaimers.add(claim.claimer.toLowerCase())
-            
-            // Group by faucet with network info
-            const faucetKey = claim.faucet.toLowerCase()
-            faucetSet.add(faucetKey)
-            
-            if (!claimsByFaucet[faucetKey]) {
-              claimsByFaucet[faucetKey] = { claims: 0, network: config.name }
-            }
-            claimsByFaucet[faucetKey].claims += 1
-          }
-        } catch (error) {
-          console.error(`Error fetching from ${config.name}:`, error)
+      // Process all unified claims
+      for (const claim of allClaimsUnified) {
+        // Add to unique claimers
+        uniqueClaimers.add(claim.claimer.toLowerCase());
+        
+        // Group by faucet with network info
+        const faucetKey = claim.faucet.toLowerCase();
+        faucetSet.add(faucetKey);
+        
+        if (!claimsByFaucet[faucetKey]) {
+          claimsByFaucet[faucetKey] = { 
+            claims: 0, 
+            network: claim.networkName,
+            totalAmount: BigInt(0),
+            tokenSymbol: claim.tokenSymbol,
+            tokenDecimals: claim.tokenDecimals
+          };
         }
+        claimsByFaucet[faucetKey].claims += 1;
+        claimsByFaucet[faucetKey].totalAmount += claim.amount;
       }
 
-      setTotalClaims(totalClaimsCount)
-      setUniqueUsers(uniqueClaimers.size)
-      setAvailableFaucets(Array.from(faucetSet))
+      setTotalClaims(totalClaimsCount);
+      setUniqueUsers(uniqueClaimers.size);
+      setAvailableFaucets(Array.from(faucetSet));
 
       // Create leaderboard data - show ALL faucets
       const leaderboardData: FaucetLeaderboard[] = Object.entries(claimsByFaucet)
@@ -128,19 +292,20 @@ export function UserClaimsChart() {
           faucetAddress: faucet,
           claims: data.claims,
           network: data.network,
-          percentage: (data.claims / totalClaimsCount) * 100
-        }))
+          percentage: (data.claims / totalClaimsCount) * 100,
+          totalAmount: `${Number(formatUnits(data.totalAmount, data.tokenDecimals)).toFixed(4)} ${data.tokenSymbol}`
+        }));
 
-      setLeaderboard(leaderboardData)
+      setLeaderboard(leaderboardData);
 
       // Convert to chart data format
-      const chartData: ClaimData[] = []
+      const chartData: ClaimData[] = [];
 
       if (selectedFaucet === "all") {
         // Show top 10 faucets by claims
         const sortedFaucets = Object.entries(claimsByFaucet)
           .sort(([, a], [, b]) => b.claims - a.claims)
-          .slice(0, 10)
+          .slice(0, 10);
 
         sortedFaucets.forEach(([faucet, data], index) => {
           chartData.push({
@@ -148,36 +313,38 @@ export function UserClaimsChart() {
             value: data.claims,
             color: COLORS[index % COLORS.length],
             faucetAddress: faucet
-          })
-        })
+          });
+        });
       } else {
         // Show specific faucet
-        const faucetData = claimsByFaucet[selectedFaucet.toLowerCase()]
+        const faucetData = claimsByFaucet[selectedFaucet.toLowerCase()];
         if (faucetData) {
           chartData.push({
             name: "Selected Faucet",
             value: faucetData.claims,
             color: COLORS[0],
             faucetAddress: selectedFaucet
-          })
+          });
         }
       }
 
-      console.log("Claims chart data:", chartData)
-      console.log("Total claims:", totalClaimsCount)
-      console.log("Unique users:", uniqueClaimers.size)
-      console.log("Leaderboard:", leaderboardData)
-      setData(chartData)
+      console.log("Claims chart data:", chartData);
+      console.log("Total claims:", totalClaimsCount);
+      console.log("Unique users:", uniqueClaimers.size);
+      console.log("Leaderboard:", leaderboardData);
+      setData(chartData);
     } catch (error) {
-      console.error("Error fetching claim data:", error)
+      console.error("Error fetching claim data:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchData()
-  }, [selectedFaucet, network])
+    if (networks.length > 0) {
+      fetchData();
+    }
+  }, [selectedFaucet, networks]);
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -198,8 +365,12 @@ export function UserClaimsChart() {
         return 'bg-green-100 text-green-800'
       case 'arbitrum':
         return 'bg-blue-100 text-blue-800'
-      case 'custom chain':
+      case 'base':
+        return 'bg-blue-100 text-blue-800'
+      case 'polygon':
         return 'bg-purple-100 text-purple-800'
+      case 'ethereum':
+        return 'bg-gray-100 text-gray-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -237,7 +408,7 @@ export function UserClaimsChart() {
       <div className="flex items-center justify-between">
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
-            <p className="text-2xl font-bold">{totalClaims}</p>
+            <p className="text-2xl font-bold">{totalClaims.toLocaleString()}</p>
             <p className="text-sm text-muted-foreground">Total Claims</p>
           </div>
           
@@ -318,6 +489,7 @@ export function UserClaimsChart() {
                     <TableHead>Faucet</TableHead>
                     <TableHead>Network</TableHead>
                     <TableHead className="text-right">Claims</TableHead>
+                    <TableHead className="text-right">Total Amount</TableHead>
                     <TableHead className="text-right">%</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -339,6 +511,9 @@ export function UserClaimsChart() {
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {item.claims.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right text-xs font-mono">
+                        {item.totalAmount}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {item.percentage.toFixed(1)}%

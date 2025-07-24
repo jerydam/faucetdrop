@@ -1,6 +1,6 @@
 "use client"
 
-import { FaucetList } from "@/components/faucet-list"
+// import { FaucetList } from "@/components/faucet-list"
 import { NetworkSelector } from "@/components/network-selector"
 import { WalletConnect } from "@/components/wallet-connect"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"

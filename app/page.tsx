@@ -132,9 +132,9 @@ export default function Home() {
               <AnalyticsDashboard /> 
             </div>
             
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+            {/* <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
               <FaucetList />
-            </div>
+            </div> */}
           </div>
         </div>
       </div>

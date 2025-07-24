@@ -395,7 +395,7 @@ export function UserClaimsChart() {
             Address: {data.faucetAddress.slice(0, 6)}...{data.faucetAddress.slice(-4)}
           </p>
           <p className="text-sm">
-            Claims: <span className="font-medium">{data.value.toLocaleString()}</span>
+            Drops: <span className="font-medium">{data.value.toLocaleString()}</span>
           </p>
         </div>
       )
@@ -409,7 +409,7 @@ export function UserClaimsChart() {
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
             <p className="text-2xl font-bold">{totalClaims.toLocaleString()}</p>
-            <p className="text-sm text-muted-foreground">Total Claims</p>
+            <p className="text-sm text-muted-foreground">Total Drops</p>
           </div>
           
         </div>
@@ -439,7 +439,7 @@ export function UserClaimsChart() {
         {/* Pie Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Claims Distribution</CardTitle>
+            <CardTitle>Drop Distribution</CardTitle>
             <CardDescription>
               {selectedFaucet === "all" ? "Top 10 faucets by claims" : "Selected faucet claims"}
             </CardDescription>
@@ -466,7 +466,7 @@ export function UserClaimsChart() {
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-64 text-muted-foreground">
-                No claim data available
+                No drop data available
               </div>
             )}
           </CardContent>
@@ -488,7 +488,7 @@ export function UserClaimsChart() {
                     <TableHead className="w-16">Rank</TableHead>
                     <TableHead>Faucet</TableHead>
                     <TableHead>Network</TableHead>
-                    <TableHead className="text-right">Claims</TableHead>
+                    <TableHead className="text-right">Drops</TableHead>
                     <TableHead className="text-right">Total Amount</TableHead>
                     <TableHead className="text-right">%</TableHead>
                   </TableRow>

@@ -2106,7 +2106,7 @@ try {
                     ? "All Tasks Verified - Ready to Claim!" 
                     : allUsernamesProvided
                     ? "Verify All Tasks"
-                    : "Enter All Usernames to Continue"
+                    : "VERIFY"
                   }
                 </Button>
               </DialogFooter>

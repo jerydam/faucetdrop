@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Contract, JsonRpcProvider, isAddress } from "ethers"
 import { useNetwork } from "@/hooks/use-network"
 import { FACTORY_ABI } from "@/lib/abis"
-import { Loader2, Activity, RefreshCw } from "lucide-react"
+import { Loader2, Activity, RefreshCw, History, Download, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface NetworkStats {
@@ -25,6 +25,22 @@ interface TransactionData {
   timestamp: number
   networkName: string
   chainId: number
+  txHash?: string
+  blockNumber?: number
+}
+
+interface StoredTransactionHistory {
+  timestamp: number
+  networkStats: NetworkStats[]
+  totalTransactions: number
+  allTransactions: TransactionData[]
+  fetchedAt: string
+}
+
+interface TransactionStorage {
+  history: StoredTransactionHistory[]
+  lastUpdated: number
+  version: string
 }
 
 // Network colors for consistent theming
@@ -50,7 +66,6 @@ async function getAllTransactionsFromNetwork(
   try {
     let allTransactions: any[] = [];
 
-    // Iterate through all factory addresses for this network
     if (network.factoryAddresses && network.factoryAddresses.length > 0) {
       for (const factoryAddress of network.factoryAddresses) {
         if (!isAddress(factoryAddress)) {
@@ -58,7 +73,6 @@ async function getAllTransactionsFromNetwork(
           continue;
         }
 
-        // Check if contract exists at this address
         const code = await provider.getCode(factoryAddress);
         if (code === "0x") {
           console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`);
@@ -70,23 +84,20 @@ async function getAllTransactionsFromNetwork(
         try {
           console.log(`Fetching transactions from factory ${factoryAddress} on ${network.name}...`);
           
-          // Try different methods to get transactions
           let transactions;
           try {
             transactions = await factoryContract.getAllTransactions();
           } catch (error) {
-            // Fallback: try getTotalTransactions if getAllTransactions doesn't exist
             try {
               const totalCount = await factoryContract.getTotalTransactions();
               console.log(`Factory ${factoryAddress} has ${totalCount} total transactions (count only)`);
-              // Create placeholder transactions for count
               transactions = Array(Number(totalCount)).fill(null).map((_, index) => ({
                 faucetAddress: factoryAddress,
                 transactionType: "unknown",
                 initiator: "0x0000000000000000000000000000000000000000",
                 amount: BigInt(0),
                 isEther: false,
-                timestamp: Math.floor(Date.now() / 1000) - index * 60 // Spread over time
+                timestamp: Math.floor(Date.now() / 1000) - index * 60
               }));
             } catch (fallbackError) {
               console.warn(`No transaction methods available for factory ${factoryAddress}:`, fallbackError);
@@ -104,7 +115,6 @@ async function getAllTransactionsFromNetwork(
       console.log(`No factory addresses configured for ${network.name}`);
     }
 
-    // Map transactions to the expected format
     const mappedTransactions: TransactionData[] = allTransactions.map((tx: any) => ({
       faucetAddress: tx.faucetAddress || "unknown",
       transactionType: tx.transactionType || "unknown",
@@ -113,7 +123,9 @@ async function getAllTransactionsFromNetwork(
       isEther: tx.isEther || false,
       timestamp: Number(tx.timestamp) || Math.floor(Date.now() / 1000),
       networkName: network.name,
-      chainId: network.chainId
+      chainId: network.chainId,
+      txHash: tx.txHash,
+      blockNumber: tx.blockNumber
     }));
 
     const result = {
@@ -132,7 +144,6 @@ async function getAllTransactionsFromNetwork(
   }
 }
 
-// Function to get all transactions from all networks
 async function getAllTransactionsFromAllNetworks(networks: any[]): Promise<{
   allTransactions: TransactionData[]
   networkStats: NetworkStats[]
@@ -165,7 +176,6 @@ async function getAllTransactionsFromAllNetworks(networks: any[]): Promise<{
     } catch (error) {
       console.error(`Error processing ${network.name}:`, error);
       
-      // Add network with zero transactions even if there was an error
       networkStats.push({
         name: network.name,
         chainId: network.chainId,
@@ -177,7 +187,6 @@ async function getAllTransactionsFromAllNetworks(networks: any[]): Promise<{
     }
   }
 
-  // Sort by transaction count (highest first)
   networkStats.sort((a, b) => b.totalTransactions - a.totalTransactions);
 
   return {
@@ -194,6 +203,93 @@ export function TransactionsPerDayChart() {
   const [refreshing, setRefreshing] = useState(false)
   const [totalTransactions, setTotalTransactions] = useState(0)
   const [allTransactions, setAllTransactions] = useState<TransactionData[]>([])
+  
+  // Storage state
+  const [transactionStorage, setTransactionStorage] = useState<TransactionStorage>({
+    history: [],
+    lastUpdated: 0,
+    version: "1.0.0"
+  })
+  const [showHistory, setShowHistory] = useState(false)
+
+  // Storage functions
+  const saveToStorage = useCallback((
+    networkStats: NetworkStats[], 
+    totalTransactions: number, 
+    allTransactions: TransactionData[]
+  ) => {
+    const newEntry: StoredTransactionHistory = {
+      timestamp: Date.now(),
+      networkStats,
+      totalTransactions,
+      allTransactions,
+      fetchedAt: new Date().toISOString()
+    }
+
+    setTransactionStorage(prev => {
+      const newHistory = [...prev.history, newEntry]
+      // Keep only last 50 entries to prevent memory issues
+      const trimmedHistory = newHistory.slice(-50)
+      
+      return {
+        ...prev,
+        history: trimmedHistory,
+        lastUpdated: Date.now()
+      }
+    })
+  }, [])
+
+  const loadFromHistory = useCallback((entry: StoredTransactionHistory) => {
+    setNetworkStats(entry.networkStats)
+    setTotalTransactions(entry.totalTransactions)
+    setAllTransactions(entry.allTransactions)
+  }, [])
+
+  const exportData = useCallback(() => {
+    const dataStr = JSON.stringify(transactionStorage, (key, value) => {
+      // Convert BigInt to string for JSON serialization
+      if (typeof value === 'bigint') {
+        return value.toString()
+      }
+      return value
+    }, 2)
+    
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `transaction-history-${new Date().toISOString().split('T')[0]}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [transactionStorage])
+
+  const importData = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target?.result as string)
+        // Convert string amounts back to BigInt
+        const processedData = {
+          ...importedData,
+          history: importedData.history.map((entry: any) => ({
+            ...entry,
+            allTransactions: entry.allTransactions.map((tx: any) => ({
+              ...tx,
+              amount: BigInt(tx.amount)
+            }))
+          }))
+        }
+        setTransactionStorage(processedData)
+        console.log('Transaction history imported successfully')
+      } catch (error) {
+        console.error('Error importing transaction history:', error)
+      }
+    }
+    reader.readAsText(file)
+  }, [])
 
   const fetchTransactions = async (isRefresh = false) => {
     if (isRefresh) {
@@ -214,6 +310,9 @@ export function TransactionsPerDayChart() {
       setAllTransactions(fetchedTransactions);
       setNetworkStats(fetchedStats);
       setTotalTransactions(total);
+      
+      // Save to storage
+      saveToStorage(fetchedStats, total, fetchedTransactions);
       
       console.log(`Total transactions across all networks: ${total}`);
       console.log("Network breakdown:", fetchedStats.map(s => `${s.name}: ${s.totalTransactions}`).join(", "));
@@ -249,7 +348,7 @@ export function TransactionsPerDayChart() {
 
   return (
     <div className="space-y-6">
-      {/* Header with total and refresh */}
+      {/* Header with total and controls */}
       <div className="flex items-center justify-between">
         <div className="text-center flex-1">
           <p className="text-4xl font-bold text-primary">{totalTransactions.toLocaleString()}</p>
@@ -257,17 +356,91 @@ export function TransactionsPerDayChart() {
             Total transactions across all networks
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={loading || refreshing}
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex items-center gap-2"
+          >
+            <History className="h-4 w-4" />
+            History ({transactionStorage.history.length})
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportData}
+            className="flex items-center gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => document.getElementById('import-file')?.click()}
+            className="flex items-center gap-2"
+          >
+            <Upload className="h-4 w-4" />
+            Import
+          </Button>
+          <input
+            id="import-file"
+            type="file"
+            accept=".json"
+            onChange={importData}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={loading || refreshing}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {/* History panel */}
+      {showHistory && (
+        <div className="border rounded-lg p-4 bg-card">
+          <h3 className="text-lg font-semibold mb-4">Transaction History</h3>
+          {transactionStorage.history.length === 0 ? (
+            <p className="text-muted-foreground">No historical data available</p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {transactionStorage.history.slice().reverse().map((entry, index) => (
+                <div
+                  key={entry.timestamp}
+                  className="flex items-center justify-between p-3 border rounded cursor-pointer hover:bg-muted/50"
+                  onClick={() => loadFromHistory(entry)}
+                >
+                  <div>
+                    <p className="font-medium">{entry.totalTransactions.toLocaleString()} transactions</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(entry.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {entry.networkStats.filter(s => s.totalTransactions > 0).length} networks active
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Storage info */}
+      {transactionStorage.history.length > 0 && (
+        <div className="text-sm text-muted-foreground">
+          Last updated: {new Date(transactionStorage.lastUpdated).toLocaleString()} • 
+          {transactionStorage.history.length} snapshots stored
+        </div>
+      )}
 
       {/* Network breakdown */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -293,7 +466,6 @@ export function TransactionsPerDayChart() {
               </div>
             </div>
 
-            {/* Progress bar */}
             <div className="mt-3">
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                 <div
@@ -316,8 +488,6 @@ export function TransactionsPerDayChart() {
           </div>
         ))}
       </div>
-
-     
 
       {/* Empty state */}
       {totalTransactions === 0 && !loading && (

@@ -477,7 +477,7 @@ export function UserClaimsChart() {
           <CardHeader>
             <CardTitle>Faucet Leaderboard</CardTitle>
             <CardDescription>
-              All faucets across networks ({leaderboard.length} total)
+              All faucets across networks ({leaderboard.length} total with deleted faucets)
             </CardDescription>
           </CardHeader>
           <CardContent>

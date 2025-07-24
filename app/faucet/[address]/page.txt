@@ -118,6 +118,7 @@ export default function FaucetDetails() {
   const [hasClaimed, setHasClaimed] = useState(false)
   
   // Verification system states
+  const [followStates, setFollowStates] = useState<Record<string, boolean>>({})
   const [usernames, setUsernames] = useState<Record<string, string>>({})
   const [verificationStates, setVerificationStates] = useState<Record<string, boolean>>({})
   const [isVerifying, setIsVerifying] = useState(false)
@@ -162,11 +163,6 @@ export default function FaucetDetails() {
   
   // Check if all required accounts are verified
   const allAccountsVerified = REQUIRED_FOLLOWS.every(account => verificationStates[account.id])
-
-  // Check if all usernames are provided (for button state)
-  const allUsernamesProvided = REQUIRED_FOLLOWS.every(account => 
-    usernames[account.id] && usernames[account.id].trim().length > 0
-  )
 
   const canClaim = backendMode
     ? faucetDetails?.isClaimActive && !hasClaimed && isSecretCodeValid && allAccountsVerified
@@ -216,49 +212,48 @@ export default function FaucetDetails() {
 
   const handleFollowAccount = (accountId: string, accountUrl: string) => {
     window.open(accountUrl, "_blank")
-    // Remove the followStates update since we're showing inputs constantly
+    setFollowStates(prev => ({
+      ...prev,
+      [accountId]: true
+    }))
   }
 
-  // New simplified verification handler
-  const handleVerifyAllTasks = async () => {
-    // Check if all usernames are provided
-    const missingUsernames = REQUIRED_FOLLOWS.filter(account => 
-      !usernames[account.id] || usernames[account.id].trim().length === 0
-    )
-    
-    if (missingUsernames.length > 0) {
+  const handleVerifyAccount = async (accountId: string) => {
+    const username = usernames[accountId]
+    if (!username || username.trim().length === 0) {
       toast({
-        title: "Missing Information",
-        description: "Please enter usernames for all required tasks.",
+        title: "Username Required",
+        description: "Please enter your username to verify the task.",
         variant: "destructive",
       })
       return
     }
 
+    setCurrentVerification(accountId)
     setIsVerifying(true)
     setShowVerificationDialog(true)
 
-    // Simulate verification process (3 seconds delay)
+    // Simulate verification process (dummy verification)
     setTimeout(() => {
-      // Mark all tasks as verified
-      const newVerificationStates = {}
-      REQUIRED_FOLLOWS.forEach(account => {
-        newVerificationStates[account.id] = true
-      })
-      setVerificationStates(newVerificationStates)
+      // Dummy verification - always pass if username is provided
+      setVerificationStates(prev => ({
+        ...prev,
+        [accountId]: true
+      }))
       
       setIsVerifying(false)
       
+      const account = REQUIRED_FOLLOWS.find(acc => acc.id === accountId)
       toast({
-        title: "All Tasks Verified",
-        description: "All required tasks have been verified successfully!",
+        title: "Verification Successful",
+        description: `${account?.name} task has been verified successfully!`,
       })
       
       setTimeout(() => {
         setShowVerificationDialog(false)
-        setShowFollowDialog(false)
+        setCurrentVerification(null)
       }, 2000)
-    }, 3000)
+    }, 3000) // 3 second delay for dummy verification
   }
 
   const handleFollowAll = () => {
@@ -1466,6 +1461,7 @@ try {
                         {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {tokenSymbol}
                       </span>
                     </div>
+                    
                   </div>
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
@@ -2025,13 +2021,13 @@ try {
             </div>
           </div>
           
-          {/* Task Verification Dialog - Simplified Version */}
+          {/* Task Verification Dialog */}
           <Dialog open={showFollowDialog} onOpenChange={setShowFollowDialog}>
             <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle className="text-lg sm:text-xl">Complete Required Tasks</DialogTitle>
                 <DialogDescription className="text-xs sm:text-sm">
-                  Complete these tasks and provide your usernames to unlock token claims.
+                  Complete these tasks and verify your participation to unlock token claims.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -2043,15 +2039,6 @@ try {
                         <div>
                           <p className="font-medium text-sm">{account.name}</p>
                           <p className="text-xs text-muted-foreground">{account.handle}</p>
-                          <a 
-                            href={account.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            Visit {account.platform === 'x' ? 'X (Twitter)' : 'Telegram'}
-                          </a>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -2060,35 +2047,54 @@ try {
                             <Check className="h-3 w-3 mr-1" />
                             Verified
                           </Badge>
-                        ) : (
+                        ) : followStates[account.id] ? (
                           <Badge variant="outline" className="text-xs">
-                            <AlertCircle className="h-3 w-3 mr-1" />
-                            Pending
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            {getActionPastTense(account.platform)}
                           </Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => handleFollowAccount(account.id, account.url)}
+                            className="text-xs hover:bg-accent hover:text-accent-foreground"
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            {getActionText(account.platform)}
+                          </Button>
                         )}
                       </div>
                     </div>
                     
-                    {!verificationStates[account.id] && (
+                    {followStates[account.id] && !verificationStates[account.id] && (
                       <div className="space-y-2">
                         <Label htmlFor={`username-${account.id}`} className="text-xs">
-                          Enter your {account.platform === 'x' ? 'X (Twitter)' : 'Telegram'} username:
+                          Enter your {account.platform === 'x' ? 'X (Twitter)' : 'Telegram'} username for verification:
                         </Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id={`username-${account.id}`}
-                            placeholder={account.platform === 'x' ? 'username (without @)' : 'username (without @)'}
-                            value={usernames[account.id] || ''}
-                            onChange={(e) => setUsernames(prev => ({
-                              ...prev,
-                              [account.id]: e.target.value
-                            }))}
-                            className="text-xs pl-10"
-                          />
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id={`username-${account.id}`}
+                              placeholder={account.platform === 'x' ? '@username (without @)' : 'username (without @)'}
+                              value={usernames[account.id] || ''}
+                              onChange={(e) => setUsernames(prev => ({
+                                ...prev,
+                                [account.id]: e.target.value
+                              }))}
+                              className="text-xs pl-10"
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleVerifyAccount(account.id)}
+                            disabled={!usernames[account.id] || usernames[account.id].trim().length === 0}
+                            className="text-xs hover:bg-accent hover:text-accent-foreground"
+                          >
+                            Verify
+                          </Button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Visit the link above to {getActionText(account.platform).toLowerCase()} the account, then enter your username here.
+                          We'll verify that you've {getActionPastTense(account.platform).toLowerCase()} the account using your username.
                         </p>
                       </div>
                     )}
@@ -2098,16 +2104,11 @@ try {
              
               <DialogFooter>
                 <Button
-                  onClick={handleVerifyAllTasks}
+                  onClick={() => setShowFollowDialog(false)}
                   className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
-                  disabled={!allUsernamesProvided || allAccountsVerified}
+                  disabled={!allAccountsVerified}
                 >
-                  {allAccountsVerified 
-                    ? "All Tasks Verified - Ready to Claim!" 
-                    : allUsernamesProvided
-                    ? "Verify All Tasks"
-                    : "Enter All Usernames to Continue"
-                  }
+                  {allAccountsVerified ? "All Tasks Verified - Ready to Claim!" : "Complete All Tasks to Continue"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -2117,26 +2118,28 @@ try {
           <Dialog open={showVerificationDialog} onOpenChange={() => {}}>
             <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
               <DialogHeader>
-                <DialogTitle className="text-lg sm:text-xl">Verifying Tasks</DialogTitle>
+                <DialogTitle className="text-lg sm:text-xl">Verifying Task</DialogTitle>
                 <DialogDescription className="text-xs sm:text-sm">
-                  {isVerifying ? "Please wait while we verify all your tasks..." : "All tasks verified successfully!"}
+                  {isVerifying ? "Please wait while we verify your task completion..." : "Task verified successfully!"}
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 {isVerifying ? (
                   <>
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                    <p className="text-sm text-muted-foreground">Verifying your usernames...</p>
-                    <p className="text-xs text-center text-muted-foreground">
-                      Checking all required accounts
-                    </p>
+                    <p className="text-sm text-muted-foreground">Verifying your username...</p>
+                    {currentVerification && (
+                      <p className="text-xs text-center">
+                        Checking {REQUIRED_FOLLOWS.find(acc => acc.id === currentVerification)?.name}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <>
                     <div className="rounded-full h-12 w-12 bg-green-500 flex items-center justify-center">
                       <Check className="h-6 w-6 text-white" />
                     </div>
-                    <p className="text-sm text-green-600 font-medium">All Tasks Verified!</p>
+                    <p className="text-sm text-green-600 font-medium">Verification Complete!</p>
                   </>
                 )}
               </div>

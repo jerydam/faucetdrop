@@ -82,20 +82,20 @@ const networks: Network[] = [
       decimals: 18,
     },
   },
-  {
-    chainId: 8453,
-    name: "Base Mainnet",
-    rpcUrl: "https://base-mainnet.infura.io/v3/4233dd5f7d8642e69f835323532525b7", // Replace with your Alchemy API key
-    blockExplorer: "https://basescan.org",
-    factoryAddresses: ["0x9D6f441b31FBa22700bb3217229eb89b13FB49de"],
-    color: "#0052FF",
-    tokenAddress: ZeroAddress,
-    nativeCurrency: {
-      name: "Ethereum",
-      symbol: "ETH",
-      decimals: 18,
-    },
-  },
+  // {
+  //   chainId: 8453,
+  //   name: "Base",
+  //   rpcUrl: "https://base-mainnet.infura.io/v3/4233dd5f7d8642e69f835323532525b7", // Replace with your Alchemy API key
+  //   blockExplorer: "https://basescan.org",
+  //   factoryAddresses: ["0x9D6f441b31FBa22700bb3217229eb89b13FB49de"],
+  //   color: "#0052FF",
+  //   tokenAddress: ZeroAddress,
+  //   nativeCurrency: {
+  //     name: "Ethereum",
+  //     symbol: "ETH",
+  //     decimals: 18,
+  //   },
+  // },
 ];
 
 const NetworkContext = createContext<NetworkContextType>({

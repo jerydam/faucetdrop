@@ -1597,27 +1597,28 @@ export async function resetAllClaims(
   networkId: bigint,
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) {
-    throw new Error("Switch to the network to perform operation")
+    throw new Error("Switch to the network to perform operation");
   }
 
   try {
-    const signer = await provider.getSigner()
-    const signerAddress = await signer.getAddress()
-    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer)
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+    const faucetContract = new Contract(faucetAddress, FAUCET_ABI, signer);
 
-    const data = faucetContract.interface.encodeFunctionData("resetAllClaims", [])
-    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`)
+    // Use the correct function name: resetAllClaimed
+    const data = faucetContract.interface.encodeFunctionData("resetAllClaimed", []);
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
 
     // Estimate gas
     const gasEstimate = await provider.estimateGas({
       to: faucetAddress,
       data: dataWithReferral,
       from: signerAddress,
-    })
+    });
 
     // Get fee data and detect EIP-1559 support
-    const feeData = await provider.getFeeData()
-    const supportsEIP1559 = feeData.maxFeePerGas !== null && feeData.maxPriorityFeePerGas !== null
+    const feeData = await provider.getFeeData();
+    const supportsEIP1559 = feeData.maxFeePerGas !== null && feeData.maxPriorityFeePerGas !== null;
 
     console.log("Reset all claims params:", {
       faucetAddress,
@@ -1629,7 +1630,7 @@ export async function resetAllClaims(
       maxFeePerGas: feeData.maxFeePerGas?.toString(),
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
       gasPrice: feeData.gasPrice?.toString(),
-    })
+    });
 
     let tx;
     if (supportsEIP1559) {
@@ -1640,7 +1641,7 @@ export async function resetAllClaims(
         gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
         maxFeePerGas: feeData.maxFeePerGas!,
         maxPriorityFeePerGas: feeData.maxPriorityFeePerGas!,
-      })
+      });
     } else {
       // Use legacy transaction
       tx = await signer.sendTransaction({
@@ -1648,24 +1649,24 @@ export async function resetAllClaims(
         data: dataWithReferral,
         gasLimit: (gasEstimate * BigInt(12)) / BigInt(10), // 20% buffer
         gasPrice: feeData.gasPrice || undefined,
-      })
+      });
     }
 
-    console.log("Reset all claims transaction hash:", tx.hash)
-    const receipt = await tx.wait()
+    console.log("Reset all claims transaction hash:", tx.hash);
+    const receipt = await tx.wait();
     if (!receipt) {
-      throw new Error("Reset all claims transaction receipt is null")
+      throw new Error("Reset all claims transaction receipt is null");
     }
-    console.log("Reset all claims transaction confirmed:", receipt.hash)
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
+    console.log("Reset all claims transaction confirmed:", receipt.hash);
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
 
-    return tx.hash
+    return tx.hash;
   } catch (error: any) {
-    console.error("Error resetting all claims:", error)
+    console.error("Error resetting all claims:", error);
     if (error.message?.includes("network changed")) {
-      throw new Error("Network changed during transaction. Please try again with a stable network connection.")
+      throw new Error("Network changed during transaction. Please try again with a stable network connection.");
     }
-    throw new Error(error.reason || error.message || "Failed to reset all claims")
+    throw new Error(error.reason || error.message || "Failed to reset all claims");
   }
 }
 

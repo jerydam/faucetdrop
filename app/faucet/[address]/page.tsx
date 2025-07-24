@@ -1462,7 +1462,7 @@ try {
                         All Accounts {REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Joined/Followed' : 'Followed'}
                       </>
                     ) : (
-                      `${REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Complete Activities' : 'Complete Activities'} to Receive Drops`
+                      `${REQUIRED_FOLLOWS.some(acc => acc.url.includes('t.me')) ? 'Complete Activities' : 'Complete Activities'} to receive drops`
                     )}
                   </Button>
                   <Button

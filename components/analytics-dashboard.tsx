@@ -585,6 +585,7 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
           )}
         </div>
 
+
         {/* Charts Section */}
         <Tabs defaultValue="faucets" className="w-full">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">

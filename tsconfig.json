@@ -22,6 +22,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "app/verify/page.jsx", "app/api/very/route.js", "app/api/very/status/route.js", "hooks/use-verification.js"],
   "exclude": ["node_modules"]
 }

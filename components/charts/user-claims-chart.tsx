@@ -757,9 +757,9 @@ export function UserClaimsChart() {
         {/* Faucet Rankings Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Faucet Rankings</CardTitle>
+            <CardTitle>Available Faucet</CardTitle>
             <CardDescription>
-              Ranked by latest activity ({faucetRankings.length} faucets total)
+              Ranked by latest activity ({faucetRankings.length} faucets total with deleted faucets)
             </CardDescription>
           </CardHeader>
           <CardContent>

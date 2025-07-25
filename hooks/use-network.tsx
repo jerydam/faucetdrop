@@ -1,4 +1,3 @@
-
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
@@ -57,7 +56,8 @@ const networks: Network[] = [
     blockExplorer: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
-    factoryAddresses: ["0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
+    factoryAddresses: [
+      "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
       "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2"
     ],
     tokenAddress: ZeroAddress,
@@ -82,20 +82,6 @@ const networks: Network[] = [
       decimals: 18,
     },
   },
-  // {
-  //   chainId: 8453,
-  //   name: "Base",
-  //   rpcUrl: "https://base-mainnet.infura.io/v3/4233dd5f7d8642e69f835323532525b7", // Replace with your Alchemy API key
-  //   blockExplorer: "https://basescan.org",
-  //   factoryAddresses: ["0x9D6f441b31FBa22700bb3217229eb89b13FB49de"],
-  //   color: "#0052FF",
-  //   tokenAddress: ZeroAddress,
-  //   nativeCurrency: {
-  //     name: "Ethereum",
-  //     symbol: "ETH",
-  //     decimals: 18,
-  //   },
-  // },
 ];
 
 const NetworkContext = createContext<NetworkContextType>({
@@ -108,7 +94,7 @@ const NetworkContext = createContext<NetworkContextType>({
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast()
-  const [network, setNetwork] = useState<Network | null>(networks[0])
+  const [network, setNetwork] = useState<Network | null>(null) // Initialize as null
   const [currentChainId, setCurrentChainId] = useState<number | null>(null)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
 
@@ -125,11 +111,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         const chainIdHex = await window.ethereum.request({ method: "eth_chainId" })
         const chainId = Number.parseInt(chainIdHex, 16)
         setCurrentChainId(chainId)
-
-        const detectedNetwork = networks.find((n) => n.chainId === chainId)
-        if (detectedNetwork) {
-          setNetwork(detectedNetwork)
-        }
+        // Do not automatically set network here to respect the "no default" requirement
       } catch (error) {
         console.error("Error detecting chain:", error)
       }
@@ -144,9 +126,12 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
           console.log(`Chain changed to: ${chainId}`)
           setCurrentChainId(chainId)
 
-          const detectedNetwork = networks.find((n) => n.chainId === chainId)
-          if (detectedNetwork) {
-            setNetwork(detectedNetwork)
+          // Only update network if it matches a user-selected network
+          if (network && network.chainId === chainId) {
+            console.log(`Network remains ${network.name}`)
+          } else {
+            // Reset to null if the chain changes to an unrecognized one
+            setNetwork(null)
           }
           window.location.reload()
         } catch (error) {
@@ -162,7 +147,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [])
+  }, [network])
 
   const switchNetwork = async (chainId: number) => {
     if (typeof window === "undefined" || !window.ethereum) {

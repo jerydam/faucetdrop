@@ -57,6 +57,59 @@ const FACTORY_ABI = [
   }
 ];
 
+// Cache keys for unique users data
+const UNIQUE_USERS_STORAGE_KEYS = {
+  USERS_DATA: 'unique_users_data',
+  CHART_DATA: 'users_chart_data',
+  LAST_UPDATED: 'users_last_updated',
+  TOTAL_USERS: 'total_unique_users',
+  TOTAL_CLAIMS: 'total_claims_count'
+};
+
+// Cache duration (5 minutes)
+const CACHE_DURATION = 5 * 60 * 1000;
+
+// Helper functions for localStorage
+function saveToLocalStorage(key: string, data: any) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(data, (k, v) => 
+        typeof v === 'bigint' ? v.toString() : v
+      ));
+    }
+  } catch (error) {
+    console.warn('Failed to save to localStorage:', error);
+  }
+}
+
+function loadFromLocalStorage<T>(key: string): T | null {
+  try {
+    if (typeof window !== 'undefined') {
+      const data = localStorage.getItem(key);
+      if (!data) return null;
+      
+      return JSON.parse(data, (k, v) => {
+        // Convert amount back to bigint if needed
+        if (k === 'amount' && typeof v === 'string' && /^\d+$/.test(v)) {
+          return BigInt(v);
+        }
+        return v;
+      });
+    }
+    return null;
+  } catch (error) {
+    console.warn('Failed to load from localStorage:', error);
+    return null;
+  }
+}
+
+function isCacheValid(): boolean {
+  const lastUpdated = loadFromLocalStorage<number>(UNIQUE_USERS_STORAGE_KEYS.LAST_UPDATED);
+  if (!lastUpdated) return false;
+  
+  return Date.now() - lastUpdated < CACHE_DURATION;
+}
+
 // Function to get all claims from factories
 async function getAllClaimsFromAllFactories(networks: any[]): Promise<{
   faucetAddress: string
@@ -177,6 +230,111 @@ interface UserData {
   cumulativeUsers: number
 }
 
+// Function to process and cache unique users data
+function processAndCacheUsersData(allClaimsUnified: any[]): {
+  chartData: UserData[]
+  totalUniqueUsers: number
+  totalClaims: number
+} {
+  console.log(`Processing ${allClaimsUnified.length} unified claims for users data...`);
+
+  const uniqueClaimers = new Set<string>();
+  const userFirstClaimDate: { [user: string]: string } = {};
+  const newUsersByDate: { [date: string]: Set<string> } = {};
+  const allClaimsCount = allClaimsUnified.length;
+
+  // Process all unified claims to find first claim date for each user
+  for (const claim of allClaimsUnified) {
+    const claimer = claim.claimer || claim.initiator;
+    if (claimer && typeof claimer === 'string' && claimer.startsWith('0x')) {
+      const claimerLower = claimer.toLowerCase();
+      uniqueClaimers.add(claimerLower);
+      
+      // Convert timestamp to date
+      const date = new Date(Number(claim.timestamp) * 1000).toISOString().split('T')[0];
+      
+      // Track the first date this user made a claim
+      if (!userFirstClaimDate[claimerLower] || date < userFirstClaimDate[claimerLower]) {
+        userFirstClaimDate[claimerLower] = date;
+      }
+    }
+  }
+
+  // Group users by their first claim date
+  for (const [user, firstDate] of Object.entries(userFirstClaimDate)) {
+    if (!newUsersByDate[firstDate]) {
+      newUsersByDate[firstDate] = new Set();
+    }
+    newUsersByDate[firstDate].add(user);
+  }
+
+  // Convert to chart data format and sort by date
+  const sortedDates = Object.keys(newUsersByDate).sort((a, b) => 
+    new Date(a).getTime() - new Date(b).getTime()
+  );
+
+  let cumulativeUsers = 0;
+  const chartData: UserData[] = sortedDates.map(date => {
+    const newUsersCount = newUsersByDate[date].size;
+    cumulativeUsers += newUsersCount;
+    
+    return {
+      date,
+      newUsers: newUsersCount,
+      cumulativeUsers: cumulativeUsers
+    };
+  });
+
+  const totalUniqueUsers = uniqueClaimers.size;
+
+  // Cache all the processed data
+  saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.CHART_DATA, chartData);
+  saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.TOTAL_USERS, totalUniqueUsers);
+  saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.TOTAL_CLAIMS, allClaimsCount);
+  saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.USERS_DATA, Array.from(uniqueClaimers));
+  saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.LAST_UPDATED, Date.now());
+
+  console.log("Cached users data:", {
+    totalClaims: allClaimsCount,
+    totalUniqueUsers: totalUniqueUsers,
+    chartDataPoints: chartData.length
+  });
+
+  return {
+    chartData,
+    totalUniqueUsers,
+    totalClaims: allClaimsCount
+  };
+}
+
+// Export function to get cached unique users data (for dashboard)
+export function getCachedUniqueUsersData(): {
+  totalUniqueUsers: number
+  totalClaims: number
+  chartData: UserData[]
+  isValid: boolean
+} {
+  if (!isCacheValid()) {
+    return {
+      totalUniqueUsers: 0,
+      totalClaims: 0,
+      chartData: [],
+      isValid: false
+    };
+  }
+
+  const totalUniqueUsers = loadFromLocalStorage<number>(UNIQUE_USERS_STORAGE_KEYS.TOTAL_USERS) || 0;
+  const totalClaims = loadFromLocalStorage<number>(UNIQUE_USERS_STORAGE_KEYS.TOTAL_CLAIMS) || 0;
+  const chartData = loadFromLocalStorage<UserData[]>(UNIQUE_USERS_STORAGE_KEYS.CHART_DATA) || [];
+
+  return {
+    totalUniqueUsers,
+    totalClaims,
+    chartData,
+    isValid: true
+  };
+}
+
 export function NewUsersChart() {
   const { networks } = useNetwork()
   const [data, setData] = useState<UserData[]>([])
@@ -184,10 +342,23 @@ export function NewUsersChart() {
   const [totalNewUsers, setTotalNewUsers] = useState(0)
   const [totalClaims, setTotalClaims] = useState(0)
 
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     setLoading(true)
     try {
-      console.log("Fetching claims from both storage and factory sources...");
+      // Check if we have valid cached data and not forcing refresh
+      if (!forceRefresh && isCacheValid()) {
+        const cachedData = getCachedUniqueUsersData();
+        if (cachedData.isValid && cachedData.chartData.length > 0) {
+          console.log('Using cached unique users data');
+          setData(cachedData.chartData);
+          setTotalNewUsers(cachedData.totalUniqueUsers);
+          setTotalClaims(cachedData.totalClaims);
+          setLoading(false);
+          return;
+        }
+      }
+
+      console.log("Fetching fresh claims data for users analysis...");
       
       // Fetch claims from storage (existing method)
       const storageClaims = await getAllClaimsForAllNetworks(networks);
@@ -215,76 +386,58 @@ export function NewUsersChart() {
 
       console.log(`Total unified claims: ${allClaimsUnified.length}`);
 
-      const uniqueClaimers = new Set<string>();
-      const userFirstClaimDate: { [user: string]: string } = {};
-      const newUsersByDate: { [date: string]: Set<string> } = {};
-      let allClaimsCount = allClaimsUnified.length;
+      // Process and cache the data
+      const { chartData, totalUniqueUsers, totalClaims: totalClaimsCount } = processAndCacheUsersData(allClaimsUnified);
 
-      // Process all unified claims to find first claim date for each user
-      for (const claim of allClaimsUnified) {
-        const claimer = claim.claimer;
-        if (claimer && typeof claimer === 'string' && claimer.startsWith('0x')) {
-          const claimerLower = claimer.toLowerCase();
-          uniqueClaimers.add(claimerLower);
-          
-          // Convert timestamp to date
-          const date = new Date(Number(claim.timestamp) * 1000).toISOString().split('T')[0];
-          
-          // Track the first date this user made a claim
-          if (!userFirstClaimDate[claimerLower] || date < userFirstClaimDate[claimerLower]) {
-            userFirstClaimDate[claimerLower] = date;
-          }
-        }
-      }
-
-      // Group users by their first claim date
-      for (const [user, firstDate] of Object.entries(userFirstClaimDate)) {
-        if (!newUsersByDate[firstDate]) {
-          newUsersByDate[firstDate] = new Set();
-        }
-        newUsersByDate[firstDate].add(user);
-      }
-
-      // Convert to chart data format and sort by date
-      const sortedDates = Object.keys(newUsersByDate).sort((a, b) => 
-        new Date(a).getTime() - new Date(b).getTime()
-      );
-
-      let cumulativeUsers = 0;
-      const chartData: UserData[] = sortedDates.map(date => {
-        const newUsersCount = newUsersByDate[date].size;
-        cumulativeUsers += newUsersCount;
-        
-        return {
-          date,
-          newUsers: newUsersCount,
-          cumulativeUsers: cumulativeUsers
-        };
+      console.log("Users analysis complete:", {
+        totalClaims: totalClaimsCount,
+        totalUniqueUsers: totalUniqueUsers,
+        chartDataPoints: chartData.length
       });
-
-      const totalUnique = uniqueClaimers.size;
-
-      console.log("Total claims across all networks:", allClaimsCount);
-      console.log("Total unique users:", totalUnique);
-      console.log("New users chart data:", chartData);
       
       setData(chartData);
-      setTotalNewUsers(totalUnique);
-      setTotalClaims(allClaimsCount);
+      setTotalNewUsers(totalUniqueUsers);
+      setTotalClaims(totalClaimsCount);
+
     } catch (error) {
       console.error("Error fetching claimer data:", error);
+      
+      // Try to load cached data as fallback
+      const cachedData = getCachedUniqueUsersData();
+      if (cachedData.chartData.length > 0) {
+        console.log('Using cached data as fallback');
+        setData(cachedData.chartData);
+        setTotalNewUsers(cachedData.totalUniqueUsers);
+        setTotalClaims(cachedData.totalClaims);
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  // Load cached data immediately on mount
+  useEffect(() => {
+    const cachedData = getCachedUniqueUsersData();
+    if (cachedData.isValid && cachedData.chartData.length > 0) {
+      console.log('Loading cached users data on mount');
+      setData(cachedData.chartData);
+      setTotalNewUsers(cachedData.totalUniqueUsers);
+      setTotalClaims(cachedData.totalClaims);
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (networks.length > 0) {
-      fetchData();
+      // Only fetch if we don't have valid cached data
+      const cachedData = getCachedUniqueUsersData();
+      if (!cachedData.isValid || cachedData.chartData.length === 0) {
+        fetchData();
+      }
     }
   }, [networks]);
 
-  if (loading) {
+  if (loading && data.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -315,15 +468,13 @@ export function NewUsersChart() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="grid grid-cols-3 gap-4 text-center">
-         
           <div>
             <p className="text-2xl font-bold">{totalNewUsers.toLocaleString()}</p>
             <p className="text-sm text-muted-foreground">Unique Users</p>
           </div>
-         
         </div>
-        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-          <RefreshCw className="h-4 w-4 mr-2" />
+        <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>

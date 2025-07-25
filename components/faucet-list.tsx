@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNetwork } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Coins, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { formatUnits, Contract, JsonRpcProvider, isAddress, zeroAddress } from "ethers";
 import { Network } from "@/hooks/use-network";
-import { FACTORY_ABI, FAUCET_ABI } from "@/lib/abis";
+import { FACTORY_ABI } from "@/lib/abis";
 
 // ERC20 ABI for symbol and decimals
 const ERC20_ABI = [
@@ -26,6 +26,45 @@ const ERC20_ABI = [
     "inputs": [],
     "name": "decimals",
     "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+];
+
+// Faucet ABI for getting faucet names and token addresses
+const FAUCET_ABI = [
+  {
+    "inputs": [],
+    "name": "name",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getName",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "faucetName",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "token",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "tokenAddress",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
     "stateMutability": "view",
     "type": "function"
   }
@@ -154,6 +193,29 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   },
 }
 
+// Local storage keys
+const STORAGE_KEYS = {
+  CLAIMS_DATA: 'faucet_claims_data',
+  FAUCET_NAMES: 'faucet_names_cache',
+  LAST_UPDATED: 'claims_last_updated'
+};
+
+// Cache duration (5 minutes)
+const CACHE_DURATION = 5 * 60 * 1000;
+
+// Claim type definition
+type ClaimType = {
+  claimer: string;
+  faucet: string;
+  amount: bigint;
+  networkName: string;
+  timestamp: number;
+  chainId: number;
+  tokenSymbol: string;
+  tokenDecimals: number;
+  isEther: boolean;
+};
+
 // Helper function to get token information
 async function getTokenInfo(
   tokenAddress: string,
@@ -164,7 +226,6 @@ async function getTokenInfo(
   const chainConfig = CHAIN_CONFIGS[chainId];
   
   if (isEther) {
-    // Return native currency info
     return {
       symbol: chainConfig?.nativeCurrency.symbol || "ETH",
       decimals: chainConfig?.nativeCurrency.decimals || 18
@@ -205,191 +266,12 @@ async function getTokenInfo(
   }
 }
 
-// Enhanced function to get transaction hash with multiple strategies and retry logic
-async function getTransactionHashFromFaucet(
+
+
+// Function to get claims from factories for a single network
+async function getAllClaimsFromFactories(
   provider: JsonRpcProvider,
-  claim: any,
-  network: Network
-): Promise<string | null> {
-  try {
-    console.log(`Getting tx hash for claim from faucet ${claim.faucetAddress}...`);
-    
-    // Strategy 1: Check if factory provides transaction hashes directly
-    try {
-      const chainConfig = CHAIN_CONFIGS[network.chainId];
-      if (chainConfig?.factoryAddresses) {
-        for (const factoryAddress of chainConfig.factoryAddresses) {
-          try {
-            const factoryContract = new Contract(factoryAddress, FACTORY_ABI, provider);
-            const allTransactions = await factoryContract.getAllTransactions();
-            
-            // Find matching transaction with txHash
-            const matchingTx = allTransactions.find((tx: any) => 
-              tx.faucetAddress?.toLowerCase() === claim.faucetAddress.toLowerCase() &&
-              tx.initiator?.toLowerCase() === claim.initiator.toLowerCase() &&
-              BigInt(tx.amount || 0) === claim.amount &&
-              Number(tx.timestamp || 0) === claim.timestamp &&
-              tx.transactionType === claim.transactionType &&
-              tx.txHash // Must have txHash
-            );
-            
-            if (matchingTx && matchingTx.txHash && matchingTx.txHash !== "0x0000000000000000000000000000000000000000000000000000000000000000") {
-              console.log(`Found tx hash from factory: ${matchingTx.txHash}`);
-              return matchingTx.txHash;
-            }
-          } catch (error) {
-            console.log(`Factory ${factoryAddress} doesn't have enhanced transaction data`);
-            continue;
-          }
-        }
-      }
-    } catch (error) {
-      console.log("Factory-based tx hash lookup failed, trying other methods...");
-    }
-
-    // Strategy 2: Get transaction hash from faucet contract directly
-    try {
-      const faucetContract = new Contract(claim.faucetAddress, FAUCET_ABI, provider);
-      
-      // Check if faucet has a method to get transaction hashes
-      const transactions = await faucetContract.getAllTransactions();
-      
-      // Find the matching transaction by comparing claim data
-      const matchingTx = transactions.find((tx: any) => 
-        tx.initiator?.toLowerCase() === claim.initiator.toLowerCase() &&
-        BigInt(tx.amount || 0) === claim.amount &&
-        Number(tx.timestamp || 0) === claim.timestamp &&
-        tx.transactionType === claim.transactionType
-      );
-      
-      if (matchingTx && matchingTx.txHash && matchingTx.txHash !== "0x0000000000000000000000000000000000000000000000000000000000000000") {
-        console.log(`Found tx hash from faucet: ${matchingTx.txHash}`);
-        return matchingTx.txHash;
-      }
-    } catch (error) {
-      console.log(`Faucet ${claim.faucetAddress} doesn't have getAllTransactions method or txHash field`);
-    }
-    
-    // Strategy 3: Query events/logs with expanded search and multiple event types
-    try {
-      const currentBlock = await provider.getBlockNumber();
-      const searchBlocks = 50000; // Increased search range
-      const fromBlock = Math.max(0, currentBlock - searchBlocks);
-      
-      console.log(`Searching logs from block ${fromBlock} to ${currentBlock}...`);
-      
-      // Get all logs for this faucet address with expanded search
-      const logs = await provider.getLogs({
-        address: claim.faucetAddress,
-        fromBlock,
-        toBlock: 'latest'
-      });
-      
-      console.log(`Found ${logs.length} logs for faucet ${claim.faucetAddress}`);
-      
-      // Enhanced matching with timestamp and amount correlation
-      const targetTime = claim.timestamp;
-      const timeRange = 600; // 10 minutes tolerance
-      const amountTolerance = 0.01; // 1% tolerance for amount matching
-      
-      // Sort logs by block number for efficiency
-      logs.sort((a, b) => a.blockNumber - b.blockNumber);
-      
-      for (const log of logs) {
-        try {
-          const block = await provider.getBlock(log.blockNumber);
-          if (!block) continue;
-          
-          const timeDiff = Math.abs(block.timestamp - targetTime);
-          if (timeDiff <= timeRange) {
-            // Get transaction details to verify amount if possible
-            const tx = await provider.getTransaction(log.transactionHash);
-            if (tx && tx.to?.toLowerCase() === claim.faucetAddress.toLowerCase()) {
-              console.log(`Found potential tx hash from logs: ${log.transactionHash}`);
-              return log.transactionHash;
-            }
-          }
-        } catch (blockError) {
-          console.warn(`Error checking block ${log.blockNumber}:`, blockError);
-          continue;
-        }
-      }
-    } catch (error) {
-      console.warn(`Error querying logs for faucet ${claim.faucetAddress}:`, error);
-    }
-    
-    // Strategy 4: Enhanced block search with transaction filtering
-    try {
-      const currentBlock = await provider.getBlockNumber();
-      const blocksToSearch = Math.min(1000, Math.ceil(3600 / 12)); // Search ~1 hour of blocks
-      
-      console.log(`Searching recent blocks for transactions...`);
-      
-      // Create batched requests for efficiency
-      const blockPromises = [];
-      for (let i = 0; i < blocksToSearch; i += 10) {
-        const batchPromises = [];
-        for (let j = 0; j < 10 && (i + j) < blocksToSearch; j++) {
-          const blockNumber = currentBlock - (i + j);
-          batchPromises.push(
-            provider.getBlock(blockNumber, true).catch(() => null)
-          );
-        }
-        blockPromises.push(Promise.all(batchPromises));
-      }
-      
-      const blockBatches = await Promise.all(blockPromises);
-      const blocks = blockBatches.flat().filter(Boolean);
-      
-      for (const block of blocks) {
-        if (!block || !block.transactions) continue;
-        
-        // Check block timestamp first to avoid unnecessary processing
-        const timeDiff = Math.abs(block.timestamp - claim.timestamp);
-        if (timeDiff > 600) continue; // Skip blocks too far from claim time
-        
-        for (const tx of block.transactions) {
-          if (typeof tx === 'string') continue;
-          
-          // Enhanced matching criteria
-          if (tx.to?.toLowerCase() === claim.faucetAddress.toLowerCase()) {
-            // Additional verification using transaction receipt for more accuracy
-            try {
-              const receipt = await provider.getTransactionReceipt(tx.hash);
-              if (receipt && receipt.status === 1) { // Successful transaction
-                console.log(`Found tx hash from block search: ${tx.hash}`);
-                return tx.hash;
-              }
-            } catch (receiptError) {
-              // If we can't get receipt, still return the hash as it matches criteria
-              console.log(`Found potential tx hash (no receipt verification): ${tx.hash}`);
-              return tx.hash;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.warn(`Error searching blocks for faucet transaction:`, error);
-    }
-    
-    // Strategy 5: Fallback - check if the claim has any identifying hash in its data
-    if (claim.txHash && claim.txHash !== "0x0000000000000000000000000000000000000000000000000000000000000000") {
-      console.log(`Using existing tx hash from claim data: ${claim.txHash}`);
-      return claim.txHash;
-    }
-    
-    console.log(`No transaction hash found for claim from faucet ${claim.faucetAddress} after all strategies`);
-    return null;
-    
-  } catch (error) {
-    console.warn(`Error getting transaction hash for claim:`, error);
-    return null;
-  }
-}
-
-// Function to get claims from all networks factories with enhanced transaction hash retrieval
-export async function getAllClaimsFromAllFactories(
-  networks: Network[]
+  network: Network,
 ): Promise<{
   faucetAddress: string
   transactionType: string
@@ -399,129 +281,16 @@ export async function getAllClaimsFromAllFactories(
   timestamp: number
   networkName: string
   chainId: number
-  txHash: string | null
   tokenSymbol: string
   tokenDecimals: number
-  tokenAddress?: string
 }[]> {
-  const allClaims: any[] = [];
-
-  for (const network of networks) {
-    try {
-      console.log(`Fetching claims from factories on ${network.name}...`);
-      
-      // Create provider for this network
-      const provider = new JsonRpcProvider(network.rpcUrl);
-      
-      const { transactions } = await getAllClaimsFromFactories(provider, network);
-      
-      // Add network info and fetch transaction hashes + token info with enhanced parallel processing
-      console.log(`Processing ${transactions.length} transactions for ${network.name}...`);
-      
-      // Process in batches to avoid overwhelming the RPC
-      const batchSize = 5;
-      const networkClaims = [];
-      
-      for (let i = 0; i < transactions.length; i += batchSize) {
-        const batch = transactions.slice(i, i + batchSize);
-        
-        const batchResults = await Promise.all(
-          batch.map(async (claim) => {
-            // Get transaction hash with enhanced retrieval
-            const txHashPromise = getTransactionHashFromFaucet(provider, claim, network);
-            
-            // Get token information
-            let tokenInfoPromise;
-            if (claim.isEther) {
-              tokenInfoPromise = getTokenInfo("", provider, network.chainId, true);
-            } else {
-              // For ERC20 tokens, get the token address from the faucet contract
-              tokenInfoPromise = (async () => {
-                try {
-                  const faucetContract = new Contract(claim.faucetAddress, FAUCET_ABI, provider);
-                  let tokenAddress;
-                  
-                  // Try different methods to get token address
-                  try {
-                    tokenAddress = await faucetContract.token();
-                  } catch {
-                    try {
-                      tokenAddress = await faucetContract.tokenAddress();
-                    } catch {
-                      // Fallback - use chain's native token address or zero address
-                      const chainConfig = CHAIN_CONFIGS[network.chainId];
-                      tokenAddress = chainConfig?.nativeTokenAddress || zeroAddress;
-                    }
-                  }
-                  
-                  return await getTokenInfo(tokenAddress, provider, network.chainId, false);
-                } catch (error) {
-                  console.warn(`Error getting token info for faucet ${claim.faucetAddress}:`, error);
-                  return { symbol: "TOKEN", decimals: 18 };
-                }
-              })();
-            }
-            
-            // Wait for both promises
-            const [txHash, tokenInfo] = await Promise.all([txHashPromise, tokenInfoPromise]);
-            
-            return {
-              ...claim,
-              networkName: network.name,
-              chainId: network.chainId,
-              txHash,
-              tokenSymbol: tokenInfo.symbol,
-              tokenDecimals: tokenInfo.decimals
-            };
-          })
-        );
-        
-        networkClaims.push(...batchResults);
-        
-        // Small delay between batches to be respectful to RPC
-        if (i + batchSize < transactions.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-      
-      allClaims.push(...networkClaims);
-      console.log(`Added ${networkClaims.length} claims from ${network.name} (${networkClaims.filter(c => c.txHash).length} with tx hashes)`);
-    } catch (error) {
-      console.error(`Error fetching claims from ${network.name}:`, error);
-    }
-  }
-
-  // Sort by timestamp (newest first)
-  allClaims.sort((a, b) => b.timestamp - a.timestamp);
-
-  const totalWithHashes = allClaims.filter(claim => claim.txHash).length;
-  console.log(`Total claims from all factory networks: ${allClaims.length} (${totalWithHashes} with tx hashes)`);
-  return allClaims;
-}
-
-// Helper function to get claims from factories for a single network
-async function getAllClaimsFromFactories(
-  provider: JsonRpcProvider,
-  network: Network,
-): Promise<{
-  transactions: {
-    faucetAddress: string
-    transactionType: string
-    initiator: string
-    amount: bigint
-    isEther: boolean
-    timestamp: number
-  }[]
-  totalClaims: number
-  claimsByFaucet: Record<string, number>
-}> {
   try {
     let allClaims: any[] = [];
 
-    // Iterate through all factory addresses to collect transactions
+    // Iterate through all factory addresses
     for (const factoryAddress of network.factoryAddresses) {
       if (!isAddress(factoryAddress)) {
-        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`);
+        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}`);
         continue;
       }
 
@@ -534,9 +303,8 @@ async function getAllClaimsFromFactories(
         continue;
       }
 
-      // Use getAllTransactions from the ABI
       try {
-        console.log(`Fetching transactions from factory ${factoryAddress}...`);
+        console.log(`Fetching transactions from factory ${factoryAddress} on ${network.name}...`);
         const allTransactions = await factoryContract.getAllTransactions();
         
         // Filter for claim transactions only
@@ -551,55 +319,140 @@ async function getAllClaimsFromFactories(
       }
     }
 
-    // Map transactions to the expected format
-    const mappedClaims = allClaims.map((tx: any) => ({
-      faucetAddress: tx.faucetAddress as string,
-      transactionType: tx.transactionType as string,
-      initiator: tx.initiator as string,
-      amount: BigInt(tx.amount),
-      isEther: tx.isEther as boolean,
-      timestamp: Number(tx.timestamp),
-    }));
+    // Process claims and get additional information
+    const processedClaims = await Promise.all(
+      allClaims.map(async (claim) => {
+        // Get token information
+        let tokenInfo;
+        if (claim.isEther) {
+          tokenInfo = await getTokenInfo("", provider, network.chainId, true);
+        } else {
+          try {
+            const faucetContract = new Contract(claim.faucetAddress, FAUCET_ABI, provider);
+            let tokenAddress;
+            
+            try {
+              tokenAddress = await faucetContract.token();
+            } catch {
+              try {
+                tokenAddress = await faucetContract.tokenAddress();
+              } catch {
+                const chainConfig = CHAIN_CONFIGS[network.chainId];
+                tokenAddress = chainConfig?.nativeTokenAddress || zeroAddress;
+              }
+            }
+            
+            tokenInfo = await getTokenInfo(tokenAddress, provider, network.chainId, false);
+          } catch (error) {
+            console.warn(`Error getting token info for faucet ${claim.faucetAddress}:`, error);
+            tokenInfo = { symbol: "TOKEN", decimals: 18 };
+          }
+        }
 
-    // Calculate claims by faucet
-    const claimsByFaucet: Record<string, number> = {};
-    mappedClaims.forEach(claim => {
-      const faucetAddress = claim.faucetAddress.toLowerCase();
-      claimsByFaucet[faucetAddress] = (claimsByFaucet[faucetAddress] || 0) + 1;
-    });
+        return {
+          faucetAddress: claim.faucetAddress,
+          transactionType: claim.transactionType,
+          initiator: claim.initiator,
+          amount: BigInt(claim.amount),
+          isEther: claim.isEther,
+          timestamp: Number(claim.timestamp),
+          networkName: network.name,
+          chainId: network.chainId,
+          tokenSymbol: tokenInfo.symbol,
+          tokenDecimals: tokenInfo.decimals
+        };
+      })
+    );
 
-    const result = {
-      transactions: mappedClaims,
-      totalClaims: mappedClaims.length,
-      claimsByFaucet
-    };
-
-    console.log(`Total claims fetched from ${network.name} factories: ${result.totalClaims}`);
-    return result;
+    return processedClaims;
   } catch (error: any) {
     console.error(`Error fetching claims from factories on ${network.name}:`, error);
     throw new Error(error.message || "Failed to fetch claims from factories");
   }
 }
 
+// Function to get all claims from all networks
+async function getAllClaimsFromAllNetworks(
+  networks: Network[]
+): Promise<ClaimType[]> {
+  const allClaims: ClaimType[] = [];
+
+  for (const network of networks) {
+    try {
+      console.log(`Fetching claims from ${network.name}...`);
+      
+      const provider = new JsonRpcProvider(network.rpcUrl);
+      const networkClaims = await getAllClaimsFromFactories(provider, network);
+      
+      // Convert to ClaimType format
+      const convertedClaims: ClaimType[] = networkClaims.map(claim => ({
+        claimer: claim.initiator,
+        faucet: claim.faucetAddress,
+        amount: claim.amount,
+        networkName: claim.networkName,
+        timestamp: claim.timestamp,
+        chainId: claim.chainId,
+        tokenSymbol: claim.tokenSymbol,
+        tokenDecimals: claim.tokenDecimals,
+        isEther: claim.isEther,
+      }));
+      
+      allClaims.push(...convertedClaims);
+      console.log(`Added ${convertedClaims.length} claims from ${network.name}`);
+    } catch (error) {
+      console.error(`Error fetching claims from ${network.name}:`, error);
+    }
+  }
+
+  // Sort by timestamp (newest first)
+  allClaims.sort((a, b) => b.timestamp - a.timestamp);
+
+  console.log(`Total claims from all networks: ${allClaims.length}`);
+  return allClaims;
+}
+
+// Function to save data to localStorage
+function saveToLocalStorage(key: string, data: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data, (k, v) => 
+      typeof v === 'bigint' ? v.toString() : v
+    ));
+  } catch (error) {
+    console.warn('Failed to save to localStorage:', error);
+  }
+}
+
+// Function to load data from localStorage
+function loadFromLocalStorage<T>(key: string): T | null {
+  try {
+    const data = localStorage.getItem(key);
+    if (!data) return null;
+    
+    return JSON.parse(data, (k, v) => {
+      // Convert amount back to bigint
+      if (k === 'amount' && typeof v === 'string') {
+        return BigInt(v);
+      }
+      return v;
+    });
+  } catch (error) {
+    console.warn('Failed to load from localStorage:', error);
+    return null;
+  }
+}
+
+// Function to check if cache is valid
+function isCacheValid(): boolean {
+  const lastUpdated = loadFromLocalStorage<number>(STORAGE_KEYS.LAST_UPDATED);
+  if (!lastUpdated) return false;
+  
+  return Date.now() - lastUpdated < CACHE_DURATION;
+}
+
 export function FaucetList() {
   const { networks } = useNetwork();
   const { toast } = useToast();
   
-  // Define the claim type based on what getAllClaimsFromAllFactories returns
-  type ClaimType = {
-    claimer: string;
-    faucet: string;
-    amount: bigint;
-    txHash: `0x${string}` | null;
-    networkName: string;
-    timestamp: number;
-    chainId: number | bigint; // Handle both types
-    tokenSymbol: string;
-    tokenDecimals: number;
-    isEther: boolean;
-  };
-
   const [claims, setClaims] = useState<ClaimType[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -612,9 +465,8 @@ export function FaucetList() {
   const claimsPerPage = isMobile ? 5 : 10;
 
   useEffect(() => {
-    // Check if screen is mobile size
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 640); // sm breakpoint in Tailwind
+      setIsMobile(window.innerWidth < 640);
     };
     
     checkMobile();
@@ -623,101 +475,40 @@ export function FaucetList() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const loadClaims = async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoadingClaims(true);
-    }
-    
-    try {
-      console.log("Loading claims from factory contracts only...");
-      
-      // Fetch claims from factories only (removed storage method)
-      const factoryClaims = await getAllClaimsFromAllFactories(networks);
-      console.log("Fetched factory claims:", factoryClaims.length);
-      
-      // Convert factory claims to match ClaimType format
-      const convertedFactoryClaims: ClaimType[] = factoryClaims.map(claim => ({
-        claimer: claim.initiator,
-        faucet: claim.faucetAddress,
-        amount: claim.amount,
-        txHash: claim.txHash as `0x${string}` | null,
-        networkName: claim.networkName,
-        timestamp: claim.timestamp,
-        chainId: claim.chainId,
-        tokenSymbol: claim.tokenSymbol,
-        tokenDecimals: claim.tokenDecimals,
-        isEther: claim.isEther,
-      }));
-      
-      // Sort by timestamp (newest first)
-      convertedFactoryClaims.sort((a, b) => b.timestamp - a.timestamp);
-      
-      setClaims(convertedFactoryClaims);
-      setPage(1);
-      
-      // Fetch faucet names for all unique faucet addresses
-      await fetchFaucetNames(convertedFactoryClaims);
-      
-      console.log("Total pages:", Math.ceil(convertedFactoryClaims.length / claimsPerPage));
-      console.log(`Total claims from factories: ${convertedFactoryClaims.length}`);
-      
-      const totalWithHashes = convertedFactoryClaims.filter(claim => claim.txHash).length;
-      
-      if (isRefresh) {
-        toast({
-          title: "Drops refreshed",
-          description: `Loaded ${convertedFactoryClaims.length} drops from factory contracts (${totalWithHashes} with tx hashes)`,
-        });
-      }
-    } catch (error) {
-      console.error("Error loading drops:", error);
-      toast({
-        title: "Failed to load drops",
-        description: error instanceof Error ? error.message : "Please try again later.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingClaims(false);
-      setRefreshing(false);
-    }
-  };
+  // Function to fetch faucet names
+  const fetchFaucetNames = useCallback(async (claimsData: ClaimType[]) => {
+    // Load cached names first
+    const cachedNames = loadFromLocalStorage<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES) || {};
+    setFaucetNames(cachedNames);
 
-  const fetchFaucetNames = async (claimsData: ClaimType[]) => {
     const faucetAddresses = [...new Set(claimsData.map(claim => claim.faucet))];
-    console.log(`Fetching names for ${faucetAddresses.length} unique faucets...`);
+    const uncachedAddresses = faucetAddresses.filter(addr => !cachedNames[addr]);
     
-    const namePromises = faucetAddresses.map(async (faucetAddress) => {
+    if (uncachedAddresses.length === 0) return;
+
+    console.log(`Fetching names for ${uncachedAddresses.length} uncached faucets...`);
+    
+    const namePromises = uncachedAddresses.map(async (faucetAddress) => {
       try {
-        // Find the network for this faucet from the claims
         const claim = claimsData.find(c => c.faucet === faucetAddress);
         if (!claim) return null;
         
-        // Convert chainId to number for comparison
-        const chainId = typeof claim.chainId === 'bigint' ? Number(claim.chainId) : claim.chainId;
-        const network = networks.find(n => n.chainId === chainId);
+        const network = networks.find(n => n.chainId === claim.chainId);
         if (!network) return null;
         
-        // Create provider using JsonRpcProvider
         const provider = new JsonRpcProvider(network.rpcUrl);
-        
-        // Create contract instance for the FAUCET itself, not the factory
         const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider);
         
-        // Try different common name methods
         let faucetName: string;
         try {
-          // Try the most common method first
           faucetName = await faucetContract.name();
-        } catch (error) {
+        } catch {
           try {
             faucetName = await faucetContract.getName();
-          } catch (error2) {
+          } catch {
             try {
               faucetName = await faucetContract.faucetName();
-            } catch (error3) {
-              console.log(`No name method found for faucet ${faucetAddress} on ${network.name}`);
+            } catch {
               return null;
             }
           }
@@ -731,27 +522,130 @@ export function FaucetList() {
     });
     
     const results = await Promise.all(namePromises);
-    const nameMap: Record<string, string> = {};
+    const newNames: Record<string, string> = { ...cachedNames };
     
     results.forEach(result => {
       if (result && result.name) {
-        nameMap[result.address] = result.name;
+        newNames[result.address] = result.name;
       }
     });
     
-    setFaucetNames(nameMap);
-    console.log(`Successfully fetched ${Object.keys(nameMap).length} faucet names`);
-  };
+    setFaucetNames(newNames);
+    saveToLocalStorage(STORAGE_KEYS.FAUCET_NAMES, newNames);
+  }, [networks]);
 
+  // Function to load claims
+  const loadClaims = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoadingClaims(true);
+    }
+    
+    try {
+      let claimsData: ClaimType[];
+      
+      // Check if we should use cached data
+      if (!forceRefresh && isCacheValid()) {
+        const cachedClaims = loadFromLocalStorage<ClaimType[]>(STORAGE_KEYS.CLAIMS_DATA);
+        if (cachedClaims && cachedClaims.length > 0) {
+          console.log('Using cached claims data');
+          claimsData = cachedClaims;
+          setClaims(claimsData);
+          setPage(1);
+          
+          // Fetch faucet names for cached data
+          await fetchFaucetNames(claimsData);
+          
+          if (!forceRefresh) {
+            setLoadingClaims(false);
+          }
+        } else {
+          // Fetch fresh data if no valid cache
+          claimsData = await getAllClaimsFromAllNetworks(networks);
+        }
+      } else {
+        // Fetch fresh data
+        console.log('Fetching fresh claims data...');
+        claimsData = await getAllClaimsFromAllNetworks(networks);
+      }
+
+      // If we fetched fresh data, update state and cache
+      if (forceRefresh || !isCacheValid()) {
+        setClaims(claimsData);
+        setPage(1);
+        
+        // Save to cache
+        saveToLocalStorage(STORAGE_KEYS.CLAIMS_DATA, claimsData);
+        saveToLocalStorage(STORAGE_KEYS.LAST_UPDATED, Date.now());
+        
+        // Fetch faucet names
+        await fetchFaucetNames(claimsData);
+        
+        if (forceRefresh) {
+          toast({
+            title: "Drops refreshed",
+            description: `Loaded ${claimsData.length} total drops`,
+          });
+        }
+      }
+      
+    } catch (error) {
+      console.error("Error loading drops:", error);
+      toast({
+        title: "Failed to load drops",
+        description: error instanceof Error ? error.message : "Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingClaims(false);
+      setRefreshing(false);
+    }
+  }, [networks, toast, fetchFaucetNames]);
+
+  // Background refresh function
+  const backgroundRefresh = useCallback(async () => {
+    if (networks.length === 0) return;
+    
+    try {
+      const freshClaims = await getAllClaimsFromAllNetworks(networks);
+      
+      // Only update if we got new data
+      if (freshClaims.length > 0) {
+        setClaims(freshClaims);
+        saveToLocalStorage(STORAGE_KEYS.CLAIMS_DATA, freshClaims);
+        saveToLocalStorage(STORAGE_KEYS.LAST_UPDATED, Date.now());
+        
+        // Update faucet names in background
+        fetchFaucetNames(freshClaims);
+      }
+    } catch (error) {
+      console.warn("Background refresh failed:", error);
+    }
+  }, [networks, fetchFaucetNames]);
+
+  // Initial load effect
   useEffect(() => {
     if (networks.length > 0) {
       loadClaims();
     }
-  }, [networks, toast]);
+  }, [networks, loadClaims]);
 
-  // Recalculate pagination when mobile state changes
+  // Background refresh effect
   useEffect(() => {
-    setPage(1); // Reset to first page when switching between mobile/desktop
+    if (networks.length === 0) return;
+
+    // Set up periodic background refresh
+    const interval = setInterval(() => {
+      backgroundRefresh();
+    }, CACHE_DURATION);
+
+    return () => clearInterval(interval);
+  }, [networks, backgroundRefresh]);
+
+  // Reset pagination when mobile state changes
+  useEffect(() => {
+    setPage(1);
   }, [isMobile]);
 
   const handleRefresh = () => {
@@ -801,7 +695,11 @@ export function FaucetList() {
         </div>
         {isExpanded && claims.length > 0 && (
           <div className="text-sm text-muted-foreground">
-            Total: {claims.length} drops ({claims.filter(claim => claim.txHash).length} with tx hashes)
+            Total: {claims.length} drops • Last updated: {
+              loadFromLocalStorage<number>(STORAGE_KEYS.LAST_UPDATED) 
+                ? new Date(loadFromLocalStorage<number>(STORAGE_KEYS.LAST_UPDATED)!).toLocaleTimeString()
+                : 'Never'
+            }
           </div>
         )}
       </CardHeader>
@@ -820,7 +718,7 @@ export function FaucetList() {
               <Coins className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mx-auto mb-3 sm:mb-4" />
               <h3 className="text-lg sm:text-xl font-medium mb-2">No Drops Found</h3>
               <p className="text-xs sm:text-sm text-muted-foreground">
-                No drops have been recorded in factory contracts across any network yet.
+                No drops have been recorded across any network yet.
               </p>
             </div>
           ) : (
@@ -828,11 +726,10 @@ export function FaucetList() {
               {/* Mobile View */}
               <div className="block sm:hidden space-y-3">
                 {paginatedClaims.map((claim, index) => {
-                  const chainId = typeof claim.chainId === 'bigint' ? Number(claim.chainId) : claim.chainId;
-                  const network = networks.find((n) => n.chainId === chainId);
+                  const network = networks.find((n) => n.chainId === claim.chainId);
                   const displayName = faucetNames[claim.faucet] || `Faucet ${claim.faucet.slice(0, 6)}...${claim.faucet.slice(-4)}`;
                   return (
-                    <Card key={`${claim.txHash || claim.faucet}-${index}`} className="p-3">
+                    <Card key={`${claim.faucet}-${index}`} className="p-3">
                       <div className="space-y-2 text-xs">
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Dropee:</span>
@@ -844,7 +741,7 @@ export function FaucetList() {
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Faucet:</span>
                           <Link
-                            href={`/faucet/${claim.faucet}?networkId=${chainId}`}
+                            href={`/faucet/${claim.faucet}?networkId=${claim.chainId}`}
                             className="text-blue-600 hover:underline text-right max-w-[150px] truncate"
                           >
                             {displayName}
@@ -856,24 +753,6 @@ export function FaucetList() {
                           <span className="font-medium">
                             {Number(formatUnits(claim.amount, claim.tokenDecimals)).toFixed(4)} {claim.tokenSymbol}
                           </span>
-                        </div>
-                        
-                        <div className="flex justify-between items-start">
-                          <span className="text-muted-foreground">Tx:</span>
-                          {claim.txHash ? (
-                            <a
-                              href={`${network?.blockExplorer || "#"}/tx/${claim.txHash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline font-mono"
-                            >
-                              {claim.txHash.slice(0, 6)}...{claim.txHash.slice(-4)}
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground font-mono text-xs">
-                              <i>not found</i>
-                            </span>
-                          )}
                         </div>
                         
                         <div className="flex justify-between items-center">
@@ -903,18 +782,16 @@ export function FaucetList() {
                       <TableHead className="text-xs sm:text-sm">Dropee</TableHead>
                       <TableHead className="text-xs sm:text-sm">Faucet</TableHead>
                       <TableHead className="text-xs sm:text-sm">Amount</TableHead>
-                      <TableHead className="text-xs sm:text-sm">Tx Hash</TableHead>
                       <TableHead className="text-xs sm:text-sm">Network</TableHead>
                       <TableHead className="text-xs sm:text-sm">Timestamp</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedClaims.map((claim, index) => {
-                      const chainId = typeof claim.chainId === 'bigint' ? Number(claim.chainId) : claim.chainId;
-                      const network = networks.find((n) => n.chainId === chainId);
+                      const network = networks.find((n) => n.chainId === claim.chainId);
                       const displayName = faucetNames[claim.faucet] || `Faucet ${claim.faucet.slice(0, 6)}...${claim.faucet.slice(-4)}`;
                       return (
-                        <TableRow key={`${claim.txHash || claim.faucet}-${index}`}>
+                        <TableRow key={`${claim.faucet}-${index}`}>
                           <TableCell className="text-xs sm:text-sm font-mono">
                             <div className="max-w-[120px] truncate" title={claim.claimer}>
                               {claim.claimer}
@@ -922,7 +799,7 @@ export function FaucetList() {
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm">
                             <Link
-                              href={`/faucet/${claim.faucet}?networkId=${chainId}`}
+                              href={`/faucet/${claim.faucet}?networkId=${claim.chainId}`}
                               className="text-blue-600 hover:underline max-w-[120px] truncate block"
                               title={displayName}
                             >
@@ -931,21 +808,6 @@ export function FaucetList() {
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm">
                             {Number(formatUnits(claim.amount, claim.tokenDecimals)).toFixed(4)} {claim.tokenSymbol}
-                          </TableCell>
-                          <TableCell className="text-xs sm:text-sm font-mono">
-                            {claim.txHash ? (
-                              <a
-                                href={`${network?.blockExplorer || "#"}/tx/${claim.txHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline"
-                                title={claim.txHash}
-                              >
-                                {claim.txHash.slice(0, 6)}...{claim.txHash.slice(-4)}
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground"><i>not found</i></span>
-                            )}
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm">
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-800">

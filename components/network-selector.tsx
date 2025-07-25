@@ -3,7 +3,7 @@
 import { useNetwork, type Network } from "@/hooks/use-network"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Network as NetworkIcon } from "lucide-react"
 
 export function NetworkSelector() {
   const { network, networks, setNetwork } = useNetwork()
@@ -12,8 +12,8 @@ export function NetworkSelector() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: network?.color || "#28A0F0" }} />
-          {network?.name || "Select Network"}
+          <NetworkIcon className="h-4 w-4" />
+          {network ? network.name : "Select Network"}
           <ChevronDown className="h-4 w-4 ml-1" />
         </Button>
       </DropdownMenuTrigger>

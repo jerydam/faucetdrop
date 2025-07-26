@@ -6,14 +6,29 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ChevronDown, Network as NetworkIcon } from "lucide-react"
 
 export function NetworkSelector() {
-  const { network, networks, setNetwork } = useNetwork()
+  const { network, networks, setNetwork, isSwitchingNetwork, currentChainId } = useNetwork()
+  const isWalletAvailable = typeof window !== "undefined" && window.ethereum
+
+  // Find the network name for the current chain ID, if available
+  const currentNetwork = networks.find((net) => net.chainId === currentChainId)
+  const displayText = isSwitchingNetwork
+    ? "Switching..."
+    : network
+    ? network.name
+    : isWalletAvailable
+    ? currentNetwork
+      ? currentNetwork.name
+      : currentChainId
+      ? `Unknown Chain (ID: ${currentChainId})`
+      : "Select Network"
+    : "No Wallet Detected"
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="flex items-center gap-2">
+        <Button variant="outline" className="flex items-center gap-2" disabled={!isWalletAvailable || isSwitchingNetwork}>
           <NetworkIcon className="h-4 w-4" />
-          {network ? network.name : "Select Network"}
+          {displayText}
           <ChevronDown className="h-4 w-4 ml-1" />
         </Button>
       </DropdownMenuTrigger>
@@ -23,6 +38,7 @@ export function NetworkSelector() {
             key={net.chainId}
             onClick={() => setNetwork(net)}
             className="flex items-center gap-2 cursor-pointer"
+            disabled={!isWalletAvailable || isSwitchingNetwork}
           >
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: net.color }} />
             {net.name}

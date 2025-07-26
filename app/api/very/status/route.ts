@@ -1,14 +1,27 @@
+// app/api/verify/status/[userId]/route.ts
+
 import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import type { VerificationStatusResponse } from '@/types/verification';
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_KEY!
 );
 
-export async function GET(request, { params }) {
+interface RouteParams {
+  params: {
+    userId: string;
+  };
+}
+
+export async function GET(
+  request: NextRequest, 
+  { params }: RouteParams
+): Promise<NextResponse<VerificationStatusResponse>> {
   try {
     const { userId } = params;
+    
     console.log('Checking verification status for user:', userId);
 
     if (!userId) {
@@ -59,7 +72,6 @@ export async function GET(request, { params }) {
           verified: false,
           reason: 'Database query error',
           error_code: 'DATABASE_ERROR',
-          details: process.env.NODE_ENV === 'development' ? error.message : 'Database error occurred'
         }, { status: 500 });
       }
     }
@@ -105,12 +117,12 @@ export async function GET(request, { params }) {
       verified: false,
       reason: 'Internal server error',
       error_code: 'INTERNAL_ERROR',
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Internal error occurred'
+      message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Internal error occurred'
     }, { status: 500 });
   }
 }
 
-export async function OPTIONS() {
+export async function OPTIONS(): Promise<NextResponse> {
   return new NextResponse(null, {
     status: 200,
     headers: {

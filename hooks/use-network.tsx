@@ -26,16 +26,16 @@ interface NetworkContextType {
   setNetwork: (network: Network) => void
   switchNetwork: (chainId: number) => Promise<void>
   getLatestFactoryAddress: (network?: Network) => string | null
+  isSwitchingNetwork: boolean
+  currentChainId: number | null
 }
 
-// Define networks for all major EVM chains
 const networks: Network[] = [
   {
     name: "Celo",
     chainId: 42220,
     rpcUrl: "https://forno.celo.org",
     blockExplorer: "https://celoscan.io",
-    explorerUrl: "https://celoscan.io",
     color: "#35D07F",
     factoryAddresses: [
       "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
@@ -90,11 +90,13 @@ const NetworkContext = createContext<NetworkContextType>({
   setNetwork: () => {},
   switchNetwork: async () => {},
   getLatestFactoryAddress: () => null,
+  isSwitchingNetwork: false,
+  currentChainId: null,
 })
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast()
-  const [network, setNetwork] = useState<Network | null>(null) // Initialize as null
+  const [network, setNetwork] = useState<Network | null>(null)
   const [currentChainId, setCurrentChainId] = useState<number | null>(null)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
 
@@ -111,7 +113,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         const chainIdHex = await window.ethereum.request({ method: "eth_chainId" })
         const chainId = Number.parseInt(chainIdHex, 16)
         setCurrentChainId(chainId)
-        // Do not automatically set network here to respect the "no default" requirement
       } catch (error) {
         console.error("Error detecting chain:", error)
       }
@@ -126,14 +127,17 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
           console.log(`Chain changed to: ${chainId}`)
           setCurrentChainId(chainId)
 
-          // Only update network if it matches a user-selected network
           if (network && network.chainId === chainId) {
             console.log(`Network remains ${network.name}`)
           } else {
-            // Reset to null if the chain changes to an unrecognized one
             setNetwork(null)
+            const currentNetwork = networks.find((n) => n.chainId === chainId)
+            toast({
+              title: "Network Mismatch",
+              description: `Your wallet is on ${currentNetwork ? currentNetwork.name : `an unsupported chain (ID: ${chainId})`}. Please select a network.`,
+              variant: "destructive",
+            })
           }
-          window.location.reload()
         } catch (error) {
           console.error("Error handling chain change:", error)
         }
@@ -147,7 +151,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [network])
+  }, [network, toast])
 
   const switchNetwork = async (chainId: number) => {
     if (typeof window === "undefined" || !window.ethereum) {
@@ -186,7 +190,11 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       console.log(`Successfully switched to ${targetNetwork.name}`)
       setNetwork(targetNetwork)
       setCurrentChainId(chainId)
-      window.location.reload()
+      toast({
+        title: "Network Switched",
+        description: `Successfully switched to ${targetNetwork.name}`,
+        variant: "default",
+      })
     } catch (error: any) {
       console.warn(`Error switching to ${targetNetwork.name}:`, error)
 
@@ -216,7 +224,11 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
           setNetwork(targetNetwork)
           setCurrentChainId(chainId)
-          window.location.reload()
+          toast({
+            title: "Network Switched",
+            description: `Successfully switched to ${targetNetwork.name}`,
+            variant: "default",
+          })
         } catch (addError: any) {
           console.error(`Error adding network ${targetNetwork.name}:`, addError)
           toast({
@@ -251,6 +263,8 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         setNetwork: handleSetNetwork,
         switchNetwork,
         getLatestFactoryAddress,
+        isSwitchingNetwork,
+        currentChainId,
       }}
     >
       {children}

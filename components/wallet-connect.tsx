@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useWallet } from "@/hooks/use-wallet"
 import { Button } from "@/components/ui/button"
-import { Wallet, LogOut, Copy, ExternalLink, ChevronDown } from "lucide-react"
+import { Wallet, LogOut, Copy, ExternalLink, ChevronDown, Smartphone } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,25 +29,43 @@ interface WalletInfo {
   provider: any
 }
 
-// Common wallet configurations for fallback
-const COMMON_WALLETS = [
+interface MobileWallet {
+  name: string
+  icon: string
+  downloadUrl: string
+  deepLink: string
+  scheme: string
+}
+
+// Mobile wallet configurations with simplified deep links
+const MOBILE_WALLETS: MobileWallet[] = [
   {
     name: "MetaMask",
     icon: "https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg",
     downloadUrl: "https://metamask.io/download/",
-    mobileDeepLink: "https://metamask.app.link/dapp/",
+    deepLink: "metamask://",
+    scheme: "metamask",
   },
   {
     name: "Trust Wallet",
-    icon: "https://trustwallet.com/assets/images/media/assets/trust_platform.svg",
+    icon: "https://trustwallet.com/assets/images/media/assets/trust_platform.svg", 
     downloadUrl: "https://trustwallet.com/download",
-    mobileDeepLink: "https://link.trustwallet.com/open_url?coin_id=60&url=",
+    deepLink: "trust://",
+    scheme: "trust",
   },
   {
     name: "Coinbase Wallet",
     icon: "https://avatars.githubusercontent.com/u/18060234?s=280&v=4",
     downloadUrl: "https://www.coinbase.com/wallet/downloads",
-    mobileDeepLink: "https://go.cb-w.com/dapp?cb_url=",
+    deepLink: "cbwallet://",
+    scheme: "cbwallet",
+  },
+  {
+    name: "Rainbow",
+    icon: "https://avatars.githubusercontent.com/u/48327834?s=200&v=4",
+    downloadUrl: "https://rainbow.me/download",
+    deepLink: "rainbow://",
+    scheme: "rainbow",
   },
 ]
 
@@ -64,7 +82,8 @@ export function WalletConnect() {
   // Detect if user is on mobile
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      setIsMobile(isMobileDevice)
     }
     checkMobile()
     window.addEventListener('resize', checkMobile)
@@ -83,8 +102,8 @@ export function WalletConnect() {
         walletName = "Coinbase Wallet"
       } else if (window.ethereum.isRabby) {
         walletName = "Rabby"
-      } else if (window.ethereum.isOkxWallet) {
-        walletName = "OKX Wallet"
+      } else if (window.ethereum.isRainbow) {
+        walletName = "Rainbow"
       }
       setSelectedWalletName(walletName)
     } else {
@@ -97,7 +116,6 @@ export function WalletConnect() {
     const detectWallets = () => {
       const wallets: WalletInfo[] = []
 
-      // Check for EIP-6963 providers (modern standard)
       if (typeof window !== 'undefined') {
         const announceProvider = (event: any) => {
           const { info, provider } = event.detail
@@ -112,10 +130,8 @@ export function WalletConnect() {
         window.addEventListener('eip6963:announceProvider', announceProvider)
         window.dispatchEvent(new Event('eip6963:requestProvider'))
 
-        // Fallback: Check for legacy window.ethereum
         setTimeout(() => {
           if (window.ethereum && wallets.length === 0) {
-            // Try to identify the wallet
             let walletName = "Unknown Wallet"
             let walletIcon = "https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg"
             
@@ -154,15 +170,12 @@ export function WalletConnect() {
     setShowWalletModal(false)
     
     try {
-      // Set the provider for connection
       if (typeof window !== 'undefined') {
         window.ethereum = walletInfo.provider
       }
       
-      // Request account access directly
       await walletInfo.provider.request({ method: "eth_requestAccounts" })
       
-      // Wait a moment for the provider to be set, then call your existing connect
       setTimeout(async () => {
         try {
           await connect()
@@ -178,7 +191,7 @@ export function WalletConnect() {
       
     } catch (error: any) {
       console.error("Error connecting wallet:", error)
-      if (error.code !== 4001) { // 4001 is user rejected request
+      if (error.code !== 4001) {
         toast({
           title: "Connection failed",
           description: `Failed to connect to ${walletInfo.name}: ${error.message}`,
@@ -189,28 +202,51 @@ export function WalletConnect() {
     }
   }
 
-  const openWalletApp = (walletName: string) => {
-    const wallet = COMMON_WALLETS.find(w => w.name === walletName)
-    if (!wallet) return
+  const openMobileWallet = (wallet: MobileWallet) => {
+    if (!isMobile) {
+      window.open(wallet.downloadUrl, '_blank')
+      return
+    }
 
-    if (isMobile) {
-      // Try to open the wallet app with current URL
-      const currentUrl = window.location.href
-      const deepLink = `${wallet.mobileDeepLink}${encodeURIComponent(currentUrl)}`
-      window.open(deepLink, '_blank')
+    // For mobile, try to open the wallet app directly
+    const currentDomain = window.location.hostname
+    const currentPath = window.location.pathname
+    
+    try {
+      // Simple deep link that just opens the wallet
+      window.location.href = wallet.deepLink
       
-      // Fallback to app store after a delay
+      // Fallback to download if the app doesn't open within 2 seconds
       setTimeout(() => {
-        window.open(wallet.downloadUrl, '_blank')
+        const userAgent = navigator.userAgent.toLowerCase()
+        
+        if (userAgent.includes('android')) {
+          // Android - try Google Play Store
+          window.open(`https://play.google.com/store/search?q=${wallet.name}&c=apps`, '_blank')
+        } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
+          // iOS - try App Store
+          window.open(`https://apps.apple.com/search?term=${wallet.name}`, '_blank')
+        } else {
+          // Generic fallback
+          window.open(wallet.downloadUrl, '_blank')
+        }
       }, 2000)
-    } else {
+      
+    } catch (error) {
+      console.error('Error opening wallet:', error)
       window.open(wallet.downloadUrl, '_blank')
     }
   }
 
   const handleConnect = async () => {
+    if (isMobile && availableWallets.length === 0) {
+      // On mobile with no injected wallets, show mobile wallet options
+      setShowWalletModal(true)
+      return
+    }
+    
     if (availableWallets.length === 0) {
-      // No wallets detected, show installation options
+      // Desktop with no wallets
       setShowWalletModal(true)
       return
     } else if (availableWallets.length === 1) {
@@ -252,19 +288,22 @@ export function WalletConnect() {
         >
           <Wallet className="h-4 w-4" />
           {isConnecting ? "Connecting..." : "Connect Wallet"}
-          {availableWallets.length > 1 && <ChevronDown className="h-4 w-4" />}
+          {(availableWallets.length > 1 || (isMobile && availableWallets.length === 0)) && <ChevronDown className="h-4 w-4" />}
         </Button>
 
         <Dialog open={showWalletModal} onOpenChange={setShowWalletModal}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>
-                {availableWallets.length > 0 ? "Choose a Wallet" : "Install a Wallet"}
+              <DialogTitle className="flex items-center gap-2">
+                {isMobile && <Smartphone className="h-5 w-5" />}
+                {availableWallets.length > 0 ? "Choose a Wallet" : (isMobile ? "Connect Mobile Wallet" : "Install a Wallet")}
               </DialogTitle>
               <DialogDescription>
                 {availableWallets.length > 0 
                   ? "Select a wallet to connect to this application"
-                  : "You need a wallet to connect. Install one of the following:"
+                  : isMobile 
+                    ? "Choose a mobile wallet to connect with"
+                    : "You need a wallet to connect. Install one of the following:"
                 }
               </DialogDescription>
             </DialogHeader>
@@ -292,13 +331,13 @@ export function WalletConnect() {
                   </Button>
                 ))
               ) : (
-                // Show installation options
-                COMMON_WALLETS.map((wallet) => (
+                // Show wallet options (mobile-optimized for mobile, desktop for desktop)
+                MOBILE_WALLETS.map((wallet) => (
                   <Button
                     key={wallet.name}
                     variant="outline"
                     className="flex items-center gap-3 h-12 justify-start"
-                    onClick={() => openWalletApp(wallet.name)}
+                    onClick={() => openMobileWallet(wallet)}
                   >
                     <img 
                       src={wallet.icon} 
@@ -311,7 +350,7 @@ export function WalletConnect() {
                     <div className="flex flex-col items-start">
                       <span className="font-medium">{wallet.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {isMobile ? "Open app or install" : "Install extension"}
+                        {isMobile ? "Open or install app" : "Install extension"}
                       </span>
                     </div>
                   </Button>
@@ -323,18 +362,20 @@ export function WalletConnect() {
               <div className="text-center pt-4 border-t">
                 <p className="text-sm text-muted-foreground mb-2">
                   {isMobile 
-                    ? "After installing a wallet app, return to this page to connect" 
+                    ? "After installing or opening a wallet app, return here and tap 'Connect Wallet' again" 
                     : "After installing a wallet extension, refresh this page to connect"
                   }
                 </p>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => window.location.reload()}
-                  className="mt-2"
-                >
-                  Refresh Page
-                </Button>
+                {!isMobile && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => window.location.reload()}
+                    className="mt-2"
+                  >
+                    Refresh Page
+                  </Button>
+                )}
               </div>
             )}
           </DialogContent>

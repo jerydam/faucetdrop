@@ -735,11 +735,10 @@ export function UserClaimsChart() {
   const getRankIcon = (rank: number) => {
     switch (rank) {
       case 1:
-        return <Trophy className="h-4 w-4 text-yellow-500" />
+        
       case 2:
-        return <Medal className="h-4 w-4 text-gray-400" />
       case 3:
-        return <Award className="h-4 w-4 text-amber-600" />
+        
       default:
         return <span className="text-sm font-medium text-muted-foreground">#{rank}</span>
     }
@@ -895,9 +894,7 @@ export function UserClaimsChart() {
                               <p className="font-medium truncate text-sm" title={item.faucetName}>
                                 {item.faucetName}
                               </p>
-                              <p className="text-xs text-muted-foreground">
-                                {item.faucetAddress.slice(0, 8)}...{item.faucetAddress.slice(-6)}
-                              </p>
+                              
                             </div>
                           </div>
                           <Badge variant="secondary" className={`${getNetworkColor(item.network)} text-xs`}>

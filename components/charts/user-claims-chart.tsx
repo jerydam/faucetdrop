@@ -340,9 +340,11 @@ async function getAllClaimsFromFactories(
         const allTransactions = await factoryContract.getAllTransactions()
         
         // Filter for claim transactions only
-        const claimTransactions = allTransactions.filter((tx: any) => 
-          tx.transactionType.toLowerCase().includes('claim')
-        )
+        const claimTransactions = allTransactions.filter((tx: any) => {
+  const transactionType = tx.transactionType.toLowerCase();
+  return transactionType === 'claim' || 
+         (transactionType.includes('claim') && !transactionType.includes('setclaimparameters'));
+});
         
         console.log(`Found ${claimTransactions.length} claim transactions from factory ${factoryAddress}`)
         allClaims.push(...claimTransactions)

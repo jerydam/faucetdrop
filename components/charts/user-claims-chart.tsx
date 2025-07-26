@@ -212,8 +212,7 @@ type ClaimType = {
 // Helper function to save data to localStorage
 function saveToLocalStorage(key: string, data: any) {
   try {
-    // Use global localStorage instead of window.localStorage for better compatibility
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && window.localStorage) {
       localStorage.setItem(key, JSON.stringify(data));
     }
   } catch (error) {
@@ -224,7 +223,7 @@ function saveToLocalStorage(key: string, data: any) {
 // Helper function to load data from localStorage
 function loadFromLocalStorage<T>(key: string): T | null {
   try {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && window.localStorage) {
       const data = localStorage.getItem(key);
       if (!data) return null;
       return JSON.parse(data);
@@ -660,7 +659,8 @@ export function UserClaimsChart() {
         return 'bg-gray-100 text-gray-800'
     }
   }
-  localStorage.setItem('totalclaim', JSON.stringify(totalClaims));
+  saveToLocalStorage('totalclaim', totalClaims);
+  
   if (loading) {
     return (
       <Card>

@@ -576,7 +576,13 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
               />
               <StatCard
                 title="Total Drops"
-                value={localStorage.getItem('totalclaim') ? JSON.parse(localStorage.getItem('totalclaim') || '0') : finalData?.totalClaims}
+                value={(() => {
+                  if (typeof window !== 'undefined') {
+                    const stored = localStorage.getItem('totalclaim');
+                    return stored ? JSON.parse(stored) : finalData?.totalClaims;
+                  }
+                  return finalData?.totalClaims;
+                })()}
                 change={finalData?.monthlyChange.claims}
                 icon={BarChart3}
                 loading={finalLoading}

@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Coins, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
-import { formatUnits, Contract, JsonRpcProvider, isAddress, zeroAddress } from "ethers";
+import { formatUnits, Contract, JsonRpcProvider, isAddress, ZeroAddress } from "ethers";
 import { Network } from "@/hooks/use-network";
 import { FACTORY_ABI } from "@/lib/abis";
 
@@ -134,7 +134,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     name: "Arbitrum",
     displayName: "Arbitrum",
     nativeCurrency: { name: "ETHER", symbol: "ETH", decimals: 18 },
-    nativeTokenAddress: zeroAddress,
+    nativeTokenAddress: ZeroAddress,
     factoryAddresses: [
       "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
     ],
@@ -155,7 +155,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     name: "Lisk",
     displayName: "Lisk Mainnet",
     nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
-    nativeTokenAddress: zeroAddress,
+    nativeTokenAddress: ZeroAddress,
     factoryAddresses: [
       "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
     ],
@@ -175,7 +175,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     name: "Base",
     displayName: "Base Mainnet",
     nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
-    nativeTokenAddress: zeroAddress,
+    nativeTokenAddress: ZeroAddress,
     factoryAddresses: [
       "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
@@ -338,7 +338,7 @@ async function getAllClaimsFromFactories(
                 tokenAddress = await faucetContract.tokenAddress();
               } catch {
                 const chainConfig = CHAIN_CONFIGS[network.chainId];
-                tokenAddress = chainConfig?.nativeTokenAddress || zeroAddress;
+                tokenAddress = chainConfig?.nativeTokenAddress || ZeroAddress;
               }
             }
             

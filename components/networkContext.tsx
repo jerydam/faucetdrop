@@ -8,7 +8,7 @@ export interface Network {
   name: string
   chainId: bigint // Changed from number to bigint
   rpcUrl: string
-  blockExplorer: string
+  blockExplorerUrls: string
   explorerUrl?: string
   color: string
   factoryAddress: string
@@ -33,7 +33,7 @@ const networks: Network[] = [
     name: "Celo",
     chainId: BigInt(42220), // Convert to bigint
     rpcUrl: "https://forno.celo.org",
-    blockExplorer: "https://celoscan.io",
+    blockExplorerUrls: "https://celoscan.io",
     explorerUrl: "https://celoscan.io",
     color: "#35D07F",
     factoryAddress: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
@@ -48,7 +48,7 @@ const networks: Network[] = [
     name: "Lisk",
     chainId: BigInt(1135),
     rpcUrl: "https://rpc.api.lisk.com",
-    blockExplorer: "https://blockscout.lisk.com",
+    blockExplorerUrls: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
     factoryAddress: "0xc5f8c2A85520c0A3595C29e004b2f5D9e7CE3b0B",
@@ -63,7 +63,7 @@ const networks: Network[] = [
     name: "Arbitrum",
     chainId: BigInt(42161),
     rpcUrl: "https://arb1.arbitrum.io/rpc",
-    blockExplorer: "https://arbiscan.io",
+    blockExplorerUrls: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
     factoryAddress: "0x6087810cFc24310E85736Cbd500e4c1d5a45E196",
@@ -78,7 +78,7 @@ const networks: Network[] = [
     chainId: BigInt(8453),
     name: "Base Mainnet",
     rpcUrl: "https://mainnet.base.org",
-    blockExplorer: "https://basescan.org",
+    blockExplorerUrls: "https://basescan.org",
     factoryAddress: "0xYourFactoryAddressForBase", // Replace with actual address
     color: "#0052FF",
     tokenAddress: ZeroAddress, // ETH (native)
@@ -203,7 +203,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
                 chainName: targetNetwork.name,
                 nativeCurrency: targetNetwork.nativeCurrency,
                 rpcUrls: [targetNetwork.rpcUrl],
-                blockExplorerUrls: [targetNetwork.blockExplorer],
+                blockExplorerUrlsUrls: [targetNetwork.blockExplorerUrls],
               },
             ],
           })

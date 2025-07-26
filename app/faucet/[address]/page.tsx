@@ -191,7 +191,7 @@ export default function FaucetDetails() {
   const popupContent = (amount: string, txHash: string | null) =>
     `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
       txHash
-        ? `${selectedNetwork?.blockExplorer || "https://explorer.unknown"}/tx/0x${txHash.slice(2)}`
+        ? `${selectedNetwork?.blockExplorerUrls || "https://explorer.unknown"}/tx/0x${txHash.slice(2)}`
         : "Transaction not available"
     }`
 

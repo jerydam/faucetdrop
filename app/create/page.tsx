@@ -1,11 +1,10 @@
-"use client"
-
+'use client'
 import { Alert } from "@/components/ui/alert"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useWallet } from "@/hooks/use-wallet"
 import { useNetwork } from "@/hooks/use-network"
 import { useToast } from "@/hooks/use-toast"
-import { createFaucet } from "@/lib/faucet"
+import { createFaucet, checkFaucetNameExists } from "@/lib/faucet"
 import {
   Card,
   CardContent,
@@ -30,6 +29,8 @@ import {
   Shield,
   Key,
   Coins,
+  AlertTriangle,
+  Check,
 } from "lucide-react"
 import { Header } from "@/components/header"
 import {
@@ -62,11 +63,11 @@ interface ChainConfig {
   factoryAddresses: string[]
   defaultTokens: Token[]
   rpcUrls: string[]
-  blockExplorerUrls: string[]
+  blockExplorerUrlsUrls: string[]
   isTestnet?: boolean
 }
 
-// Define CHAIN_CONFIGS to fix ReferenceError
+// Define CHAIN_CONFIGS 
 const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   42220: {
     chainId: 42220,
@@ -79,7 +80,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
     ],
     rpcUrls: ["https://forno.celo.org"],
-    blockExplorerUrls: ["https://explorer.celo.org"],
+    blockExplorerUrlsUrls: ["https://explorer.celo.org"],
     defaultTokens: [
       {
         address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
@@ -107,7 +108,6 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       },
     ],
   },
- 
   42161: {
     chainId: 42161,
     name: "Arbitrum",
@@ -118,7 +118,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
     ],
     rpcUrls: ["https://arb1.arbitrum.io/rpc"],
-    blockExplorerUrls: ["https://arbiscan.io"],
+    blockExplorerUrlsUrls: ["https://arbiscan.io"],
     isTestnet: true,
     defaultTokens: [
       {
@@ -139,7 +139,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
     ],
     rpcUrls: ["https://rpc.api.lisk.com"],
-    blockExplorerUrls: ["https://blockscout.lisk.com"],
+    blockExplorerUrlsUrls: ["https://blockscout.lisk.com"],
     defaultTokens: [
       {
         address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
@@ -160,7 +160,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
     ],
     rpcUrls: ["https://mainnet.base.org"],
-    blockExplorerUrls: ["https://basescan.org"],
+    blockExplorerUrlsUrls: ["https://basescan.org"],
     defaultTokens: [
       {
         address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -219,7 +219,7 @@ export default function CreateFaucetWizard() {
   const { network } = useNetwork()
   const { toast } = useToast()
 
-  // Wizard state - Updated to 3 steps
+  // Wizard state
   const [currentStep, setCurrentStep] = useState(1)
   const [faucetType, setFaucetType] = useState<string>('')
 
@@ -227,6 +227,18 @@ export default function CreateFaucetWizard() {
   const [name, setName] = useState("")
   const [selectedToken, setSelectedToken] = useState<string>("")
   const [requireDropCode, setRequireDropCode] = useState(true)
+
+  // Name validation state
+  const [nameValidation, setNameValidation] = useState<{
+    isChecking: boolean
+    isValid: boolean
+    error: string | null
+    existingFaucet?: { address: string; name: string; owner: string }
+  }>({
+    isChecking: false,
+    isValid: false,
+    error: null,
+  })
 
   // Loading and error states
   const [isCreating, setIsCreating] = useState(false)
@@ -242,7 +254,6 @@ export default function CreateFaucetWizard() {
   const fetchAvailableTokens = async (chainConfig: ChainConfig): Promise<Token[]> => {
     const tokens: Token[] = []
     
-    // Add native token
     tokens.push({
       address: chainConfig.nativeTokenAddress,
       name: chainConfig.nativeCurrency.name,
@@ -251,11 +262,81 @@ export default function CreateFaucetWizard() {
       isNative: true,
     })
     
-    // Add default tokens for this chain
     tokens.push(...chainConfig.defaultTokens)
     
     return tokens
   }
+
+  // Debounced name validation
+  const validateFaucetName = useCallback(async (nameToCheck: string) => {
+    if (!nameToCheck.trim()) {
+      setNameValidation({
+        isChecking: false,
+        isValid: false,
+        error: null,
+      })
+      return
+    }
+
+    if (!provider || !chainId) {
+      setNameValidation({
+        isChecking: false,
+        isValid: false,
+        error: "Please connect your wallet",
+      })
+      return
+    }
+
+    const chainConfig = getCurrentChainConfig()
+    if (!chainConfig) {
+      setNameValidation({
+        isChecking: false,
+        isValid: false,
+        error: "Unsupported network",
+      })
+      return
+    }
+
+    setNameValidation(prev => ({ ...prev, isChecking: true, error: null }))
+
+    try {
+      const factoryAddress = chainConfig.factoryAddresses[0]
+      const result = await checkFaucetNameExists(provider, factoryAddress, nameToCheck)
+      
+      if (result.exists) {
+        setNameValidation({
+          isChecking: false,
+          isValid: false,
+          error: `Name "${result.existingFaucet?.name}" already exists`,
+          existingFaucet: result.existingFaucet,
+        })
+      } else {
+        setNameValidation({
+          isChecking: false,
+          isValid: true,
+          error: null,
+        })
+      }
+    } catch (error: any) {
+      console.error("Name validation error:", error)
+      setNameValidation({
+        isChecking: false,
+        isValid: false,
+        error: "Failed to validate name",
+      })
+    }
+  }, [provider, chainId])
+
+  // Debounce name validation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (name.trim() && name.length >= 3) {
+        validateFaucetName(name)
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [name, validateFaucetName])
 
   // Load tokens when chain changes
   useEffect(() => {
@@ -316,111 +397,111 @@ export default function CreateFaucetWizard() {
       setCurrentStep(currentStep - 1)
     }
   }
-// Key changes for the CreateFaucetWizard component:
 
-// 1. Update the handleCreate function to handle user address properly
-const handleCreate = async () => {
-  if (!name.trim()) {
-    setError("Please enter a faucet name")
-    return
-  }
-  if (!selectedToken) {
-    setError("Please select a token")
-    return
-  }
-  if (!chainId) {
-    setError("Please connect your wallet to a supported network")
-    return
-  }
-
-  const chainConfig = getCurrentChainConfig()
-  if (!chainConfig) {
-    setError("Current network is not supported")
-    return
-  }
-
-  setError(null)
-
-  if (!isConnected) {
-    try {
-      await connect()
-    } catch (error) {
-      console.error("Failed to connect wallet:", error)
-      setError("Failed to connect wallet. Please try again.")
+  const handleCreate = async () => {
+    if (!name.trim()) {
+      setError("Please enter a faucet name")
       return
     }
-  }
-
-  if (!provider) {
-    setError("Wallet not connected")
-    return
-  }
-
-  // Ensure we have the user's address for Divvi v2
-  if (!address) {
-    setError("Unable to get wallet address")
-    return
-  }
-
-  setIsCreating(true)
-  try {
-    const factoryAddress = chainConfig.factoryAddresses[0]
-    if (!factoryAddress) {
-      throw new Error("No factory address available for this network")
+    if (!nameValidation.isValid) {
+      setError("Please choose a valid faucet name")
+      return
+    }
+    if (!selectedToken) {
+      setError("Please select a token")
+      return
+    }
+    if (!chainId) {
+      setError("Please connect your wallet to a supported network")
+      return
     }
 
-    const useBackend = faucetType === FAUCET_TYPES.OPEN && requireDropCode
-    const tokenAddress = selectedToken
-
-    console.log("Creating faucet with params:", {
-      factoryAddress,
-      name,
-      tokenAddress,
-      chainId: chainId.toString(),
-      useBackend,
-      faucetType,
-      requireDropCode,
-      chainConfig: chainConfig.displayName,
-      userAddress: address, // Log user address for debugging
-    })
-
-    // The createFaucet function will now automatically use the user's address
-    // from the provider.getSigner() call inside the function
-    const faucetAddress = await createFaucet(
-      provider,
-      factoryAddress,
-      name,
-      tokenAddress,
-      BigInt(chainId),
-      BigInt(chainId),
-      useBackend
-    )
-
-    if (!faucetAddress) {
-      throw new Error("Failed to get created faucet address")
+    const chainConfig = getCurrentChainConfig()
+    if (!chainConfig) {
+      setError("Current network is not supported")
+      return
     }
 
-    const selectedTokenInfo = getSelectedTokenInfo()
-    toast({
-      title: "Faucet Created Successfully! 🎉",
-      description: `Your ${selectedTokenInfo?.symbol || "token"} faucet has been created at ${faucetAddress}`,
-    })
+    setError(null)
 
-    window.location.href = `/faucet/${faucetAddress}?networkId=${chainId}`
-  } catch (error: any) {
-    console.error("Error creating faucet:", error)
-    let errorMessage = error.message || "Failed to create faucet"
-    
-    toast({
-      title: "Failed to create faucet",
-      description: errorMessage,
-      variant: "destructive",
-    })
-    setError(errorMessage)
-  } finally {
-    setIsCreating(false)
+    if (!isConnected) {
+      try {
+        await connect()
+      } catch (error) {
+        console.error("Failed to connect wallet:", error)
+        setError("Failed to connect wallet. Please try again.")
+        return
+      }
+    }
+
+    if (!provider) {
+      setError("Wallet not connected")
+      return
+    }
+
+    if (!address) {
+      setError("Unable to get wallet address")
+      return
+    }
+
+    setIsCreating(true)
+    try {
+      const factoryAddress = chainConfig.factoryAddresses[0]
+      if (!factoryAddress) {
+        throw new Error("No factory address available for this network")
+      }
+
+      const useBackend = faucetType === FAUCET_TYPES.OPEN && requireDropCode
+      const tokenAddress = selectedToken
+
+      console.log("Creating faucet with params:", {
+        factoryAddress,
+        name,
+        tokenAddress,
+        chainId: chainId.toString(),
+        useBackend,
+        faucetType,
+        requireDropCode,
+        chainConfig: chainConfig.displayName,
+        userAddress: address,
+      })
+
+      const faucetAddress = await createFaucet(
+        provider,
+        factoryAddress,
+        name,
+        tokenAddress,
+        BigInt(chainId),
+        BigInt(chainId),
+        useBackend
+      )
+
+      if (!faucetAddress) {
+        throw new Error("Failed to get created faucet address")
+      }
+
+      const selectedTokenInfo = getSelectedTokenInfo()
+      toast({
+        title: "Faucet Created Successfully! 🎉",
+        description: `Your ${selectedTokenInfo?.symbol || "token"} faucet has been created at ${faucetAddress}`,
+      })
+
+      window.location.href = `/faucet/${faucetAddress}?networkId=${chainId}`
+    } catch (error: any) {
+      console.error("Error creating faucet:", error)
+      let errorMessage = error.message || "Failed to create faucet"
+      
+      toast({
+        title: "Failed to create faucet",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      setError(errorMessage)
+    } finally {
+      setIsCreating(false)
+    }
   }
-}
+
   const getStepTitle = (step: number) => {
     switch (step) {
       case 1:
@@ -531,12 +612,61 @@ const handleCreate = async () => {
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="name">Faucet Name</Label>
-          <Input
-            id="name"
-            placeholder="Enter a name for your faucet (e.g., Community Airdrop)"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+          <div className="relative">
+            <Input
+              id="name"
+              placeholder="Enter a unique name for your faucet (e.g., Community Airdrop)"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={
+                name.length >= 3 && nameValidation.error
+                  ? "border-red-500 focus:border-red-500"
+                  : name.length >= 3 && nameValidation.isValid
+                  ? "border-green-500 focus:border-green-500"
+                  : ""
+              }
+            />
+            {name.length >= 3 && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                {nameValidation.isChecking ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                ) : nameValidation.isValid ? (
+                  <Check className="h-4 w-4 text-green-500" />
+                ) : nameValidation.error ? (
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                ) : null}
+              </div>
+            )}
+          </div>
+          
+          {name.length >= 3 && nameValidation.error && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                {nameValidation.error}
+                {nameValidation.existingFaucet && (
+                  <div className="mt-2 text-sm">
+                    Existing faucet: {nameValidation.existingFaucet.address}
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {name.length >= 3 && nameValidation.isValid && (
+            <Alert className="border-green-500 bg-green-50 dark:bg-green-900/20">
+              <Check className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-700 dark:text-green-300">
+                Great! This name is available on the current network.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {name.length > 0 && name.length < 3 && (
+            <p className="text-sm text-gray-500">
+              Name must be at least 3 characters long
+            </p>
+          )}
         </div>
         
         <div className="space-y-2">
@@ -626,7 +756,12 @@ const handleCreate = async () => {
               
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Faucet Name</Label>
-                <p>{name}</p>
+                <p className="flex items-center space-x-2">
+                  <span>{name}</span>
+                  {nameValidation.isValid && (
+                    <Check className="h-4 w-4 text-green-500" />
+                  )}
+                </p>
               </div>
               
               <div className="space-y-2">
@@ -701,7 +836,7 @@ const handleCreate = async () => {
       case 1:
         return faucetType !== ''
       case 2:
-        return name.trim() !== '' && selectedToken !== ''
+        return name.trim() !== '' && nameValidation.isValid && selectedToken !== ''
       case 3:
         return true
       default:
@@ -716,7 +851,6 @@ const handleCreate = async () => {
       <div className="container mx-auto px-4 py-8">
         <Header pageTitle="Create Faucet" />
         
-        {/* Progress Bar - Updated for 3 steps */}
         <div className="max-w-4xl mx-auto mb-8">
           <div className="flex items-center justify-between mb-4">
             {[1, 2, 3].map((step) => (

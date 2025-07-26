@@ -67,18 +67,7 @@ export default function Home() {
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full lg:w-auto lg:flex-shrink-0">
                 <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-                  <Link href="/verify" className="flex-1 xs:flex-none">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="w-full sm:w-auto flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap"
-                    >
-                      <Users className="h-4 w-4 flex-shrink-0" />
-                      <span className="hidden xs:inline">verify</span>
-                      <span className="xs:hidden">verify</span>
-                    </Button>
-                  </Link>
-                  
+               
                   <Link href="/create" className="flex-1 xs:flex-none">
                     <Button 
                       size="sm"
@@ -127,7 +116,19 @@ export default function Home() {
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
               <NetworkGrid />
             </div>
-            
+            <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+                  <Link href="/verify" className="flex-1 xs:flex-none">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors whitespace-nowrap"
+                    >
+                      <Users className="h-4 w-4 flex-shrink-0" />
+                      <span className="hidden xs:inline">verify</span>
+                      <span className="xs:hidden">verify</span>
+                    </Button>
+                  </Link>
+            </div>
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
               <AnalyticsDashboard /> 
             </div>

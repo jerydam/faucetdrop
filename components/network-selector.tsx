@@ -27,7 +27,7 @@ export function NetworkSelector() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className="flex items-center gap-2" disabled={!isWalletAvailable || isSwitchingNetwork}>
-          <NetworkIcon className="h-4 w-4" />
+          
           {displayText}
           <ChevronDown className="h-4 w-4 ml-1" />
         </Button>

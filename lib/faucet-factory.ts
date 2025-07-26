@@ -274,7 +274,7 @@ export async function getFaucetsFromNetwork(network: Network, userProvider?: Bro
                   chainId: network.chainId,
                   name: network.name,
                   color: network.color,
-                  blockExplorer: network.blockExplorer,
+                  blockExplorerUrls: network.blockExplorerUrls,
                 },
               }
             } catch (error) {
@@ -388,7 +388,7 @@ async function getLiskFaucets(network: Network) {
             chainId: network.chainId,
             name: network.name,
             color: network.color,
-            blockExplorer: network.blockExplorer,
+            blockExplorerUrls: network.blockExplorerUrls,
           },
         })
       } catch (error) {

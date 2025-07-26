@@ -63,7 +63,7 @@ const UNIQUE_USERS_STORAGE_KEYS = {
   CHART_DATA: 'users_chart_data',
   LAST_UPDATED: 'users_last_updated',
   TOTAL_USERS: 'total_unique_users',
-  TOTAL_CLAIMS: 'total_claims_count'
+  
 };
 
 // Cache duration (5 minutes)
@@ -290,7 +290,7 @@ function processAndCacheUsersData(allClaimsUnified: any[]): {
   // Cache all the processed data
   saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.CHART_DATA, chartData);
   saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.TOTAL_USERS, totalUniqueUsers);
-  saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.TOTAL_CLAIMS, allClaimsCount);
+  saveToLocalStorage("total_claim", allClaimsCount);
   saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.USERS_DATA, Array.from(uniqueClaimers));
   saveToLocalStorage(UNIQUE_USERS_STORAGE_KEYS.LAST_UPDATED, Date.now());
 
@@ -310,26 +310,24 @@ function processAndCacheUsersData(allClaimsUnified: any[]): {
 // Export function to get cached unique users data (for dashboard)
 export function getCachedUniqueUsersData(): {
   totalUniqueUsers: number
-  totalClaims: number
+  
   chartData: UserData[]
   isValid: boolean
 } {
   if (!isCacheValid()) {
     return {
       totalUniqueUsers: 0,
-      totalClaims: 0,
+      
       chartData: [],
       isValid: false
     };
   }
 
   const totalUniqueUsers = loadFromLocalStorage<number>(UNIQUE_USERS_STORAGE_KEYS.TOTAL_USERS) || 0;
-  const totalClaims = loadFromLocalStorage<number>(UNIQUE_USERS_STORAGE_KEYS.TOTAL_CLAIMS) || 0;
   const chartData = loadFromLocalStorage<UserData[]>(UNIQUE_USERS_STORAGE_KEYS.CHART_DATA) || [];
 
   return {
     totalUniqueUsers,
-    totalClaims,
     chartData,
     isValid: true
   };
@@ -340,7 +338,7 @@ export function NewUsersChart() {
   const [data, setData] = useState<UserData[]>([])
   const [loading, setLoading] = useState(true)
   const [totalNewUsers, setTotalNewUsers] = useState(0)
-  const [totalClaims, setTotalClaims] = useState(0)
+ 
 
   const fetchData = async (forceRefresh = false) => {
     setLoading(true)
@@ -352,7 +350,7 @@ export function NewUsersChart() {
           console.log('Using cached unique users data');
           setData(cachedData.chartData);
           setTotalNewUsers(cachedData.totalUniqueUsers);
-          setTotalClaims(cachedData.totalClaims);
+          
           setLoading(false);
           return;
         }
@@ -397,7 +395,7 @@ export function NewUsersChart() {
       
       setData(chartData);
       setTotalNewUsers(totalUniqueUsers);
-      setTotalClaims(totalClaimsCount);
+     
 
     } catch (error) {
       console.error("Error fetching claimer data:", error);
@@ -408,7 +406,7 @@ export function NewUsersChart() {
         console.log('Using cached data as fallback');
         setData(cachedData.chartData);
         setTotalNewUsers(cachedData.totalUniqueUsers);
-        setTotalClaims(cachedData.totalClaims);
+        
       }
     } finally {
       setLoading(false);
@@ -422,7 +420,7 @@ export function NewUsersChart() {
       console.log('Loading cached users data on mount');
       setData(cachedData.chartData);
       setTotalNewUsers(cachedData.totalUniqueUsers);
-      setTotalClaims(cachedData.totalClaims);
+      
       setLoading(false);
     }
   }, []);

@@ -19,7 +19,30 @@ const NATIVE_TOKEN_MAP: Record<string, string> = {
   Lisk: "LISK",
   Arbitrum: "ETH",
 }
+// Interfaces
+interface FaucetDetails {
+  faucetAddress: string;
+  owner: string;
+  name: string;
+  claimAmount: bigint;
+  tokenAddress: string;
+  startTime: bigint;
+  endTime: bigint;
+  isClaimActive: boolean;
+  balance: bigint;
+  isEther: boolean;
+  useBackend: boolean;
+}
 
+interface NameValidationResult {
+  exists: boolean;
+  existingFaucet?: { 
+    address: string; 
+    name: string; 
+    owner: string 
+  };
+  warning?: string;
+}
 // Load backend address from .env
 const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 
@@ -333,10 +356,175 @@ export async function fetchStorageData(): Promise<
   }
 }
 
+export async function checkFaucetNameExists(
+  provider: BrowserProvider,
+  factoryAddress: string,
+  proposedName: string
+): Promise<NameValidationResult> {
+  try {
+    if (!proposedName.trim()) {
+      throw new Error("Faucet name cannot be empty");
+    }
+    
+    if (!isAddress(factoryAddress)) {
+      throw new Error(`Invalid factory address: ${factoryAddress}`);
+    }
+
+    const factoryContract = new Contract(factoryAddress, FACTORY_ABI, provider);
+    const normalizedProposedName = proposedName.trim().toLowerCase();
+
+    console.log("Starting name validation for:", proposedName);
+
+    // Method 1: Try getAllFaucetDetails first (preferred method)
+    try {
+      console.log("Attempting getAllFaucetDetails...");
+      const allFaucetDetails: FaucetDetails[] = await factoryContract.getAllFaucetDetails();
+      
+      const existingFaucet = allFaucetDetails.find(faucet => 
+        faucet.name.toLowerCase() === normalizedProposedName
+      );
+      
+      if (existingFaucet) {
+        return {
+          exists: true,
+          existingFaucet: {
+            address: existingFaucet.faucetAddress,
+            name: existingFaucet.name,
+            owner: existingFaucet.owner
+          }
+        };
+      }
+      
+      console.log("Name check completed successfully via getAllFaucetDetails");
+      return { exists: false };
+      
+    } catch (getAllError) {
+      console.warn("getAllFaucetDetails failed, trying fallback method:", getAllError.message);
+      
+      // Method 2: Fallback - Get all faucet addresses and check each individually
+      try {
+        console.log("Attempting getAllFaucets fallback...");
+        const faucetAddresses: string[] = await factoryContract.getAllFaucets();
+        
+        console.log(`Found ${faucetAddresses.length} faucets to check`);
+        
+        // Check each faucet individually (with batching for performance)
+        const batchSize = 5; // Smaller batch size to avoid overwhelming RPC
+        
+        for (let i = 0; i < faucetAddresses.length; i += batchSize) {
+          const batch = faucetAddresses.slice(i, i + batchSize);
+          
+          // Process batch in parallel
+          const batchPromises = batch.map(async (faucetAddress) => {
+            try {
+              const faucetDetails = await factoryContract.getFaucetDetails(faucetAddress);
+              return {
+                address: faucetAddress,
+                name: faucetDetails.name,
+                owner: faucetDetails.owner
+              };
+            } catch (error: any) {
+              console.warn(`Failed to get details for faucet ${faucetAddress}:`, error.message);
+              return null;
+            }
+          });
+          
+          const batchResults = await Promise.allSettled(batchPromises);
+          
+          // Check this batch for name conflicts
+          for (const result of batchResults) {
+            if (result.status === 'fulfilled' && result.value) {
+              const faucet = result.value;
+              if (faucet.name.toLowerCase() === normalizedProposedName) {
+                return {
+                  exists: true,
+                  existingFaucet: faucet
+                };
+              }
+            }
+          }
+          
+          // Add delay between batches to be nice to the RPC
+          if (i + batchSize < faucetAddresses.length) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        }
+        
+        console.log("Name check completed successfully via fallback method");
+        return { exists: false };
+        
+      } catch (fallbackError) {
+        console.warn("Fallback method also failed:", fallbackError.message);
+        
+        // Method 3: Last resort - try to get total count and sample some faucets
+        try {
+          console.log("Attempting limited sampling method...");
+          const totalFaucets = await factoryContract.getTotalFaucets();
+          console.log(`Total faucets in factory: ${totalFaucets}`);
+          
+          // If there are too many faucets, we'll warn the user and allow the name
+          if (totalFaucets > 50) {
+            console.warn(`Too many faucets (${totalFaucets}) to check efficiently. Skipping validation.`);
+            return { 
+              exists: false,
+              warning: `Unable to verify name uniqueness (${totalFaucets} existing faucets). Please ensure your name is unique.`
+            };
+          }
+          
+          // For smaller numbers, try the fallback method again with smaller batches
+          const faucetAddresses: string[] = await factoryContract.getAllFaucets();
+          const maxCheck = Math.min(20, faucetAddresses.length);
+          
+          for (let i = 0; i < maxCheck; i++) {
+            try {
+              const faucetDetails = await factoryContract.getFaucetDetails(faucetAddresses[i]);
+              if (faucetDetails.name.toLowerCase() === normalizedProposedName) {
+                return {
+                  exists: true,
+                  existingFaucet: {
+                    address: faucetAddresses[i],
+                    name: faucetDetails.name,
+                    owner: faucetDetails.owner
+                  }
+                };
+              }
+            } catch (detailError) {
+              console.warn(`Failed to get details for sampled faucet ${faucetAddresses[i]}`);
+              continue;
+            }
+          }
+          
+          console.log("Name check completed via sampling method");
+          return { 
+            exists: false,
+            warning: maxCheck < faucetAddresses.length ? 
+              `Partial validation completed (checked ${maxCheck}/${faucetAddresses.length} faucets)` : 
+              undefined
+          };
+          
+        } catch (samplingError) {
+          console.error("All validation methods failed:", samplingError.message);
+          return { 
+            exists: false, 
+            warning: "Unable to validate name due to network issues. Please ensure your name is unique."
+          };
+        }
+      }
+    }
+    
+  } catch (error: any) {
+    console.error("Error in checkFaucetNameExists:", error);
+    // Don't throw, return graceful degradation
+    return { 
+      exists: false, 
+      warning: "Name validation unavailable due to network issues. Please ensure your name is unique."
+    };
+  }
+}
 // Create a faucet with backend toggle support
 export async function createFaucet(
   provider: BrowserProvider,
-  factoryAddress: string, // Changed to single address
+  factoryAddress: string,
   name: string,
   tokenAddress: string,
   chainId: bigint,
@@ -352,6 +540,35 @@ export async function createFaucet(
     }
     if (!isAddress(factoryAddress)) {
       throw new Error(`Invalid factory address: ${factoryAddress}`);
+    }
+
+    // Enhanced name validation with better error handling
+    console.log("Validating faucet name before creation...");
+    try {
+      const nameCheck = await checkFaucetNameExists(provider, factoryAddress, name);
+      
+      if (nameCheck.exists && nameCheck.existingFaucet) {
+        throw new Error(
+          `A faucet with the name "${nameCheck.existingFaucet.name}" already exists on this network. ` +
+          `Existing faucet address: ${nameCheck.existingFaucet.address}. ` +
+          `Please choose a different name.`
+        );
+      }
+      
+      if (nameCheck.warning) {
+        console.warn("Name validation warning:", nameCheck.warning);
+        // Continue with creation but log the warning
+      }
+      
+      console.log("Name validation passed");
+    } catch (validationError: any) {
+      if (validationError.message.includes("already exists")) {
+        // Re-throw name conflict errors
+        throw validationError;
+      } else {
+        // Log validation errors but don't block creation
+        console.warn("Name validation failed, proceeding with creation:", validationError.message);
+      }
     }
 
     const signer = await provider.getSigner();
@@ -439,6 +656,39 @@ export async function createFaucet(
       throw new Error(decodeRevertError(error.data));
     }
     throw new Error(error.reason || error.message || "Failed to create faucet");
+  }
+}
+
+/**
+ * Utility function to safely make contract calls with fallbacks
+ */
+export async function safeContractCall<T>(
+  contract: Contract,
+  methodName: string,
+  args: any[] = [],
+  fallbackValue: T
+): Promise<T> {
+  try {
+    const result = await contract[methodName](...args);
+    return result;
+  } catch (error: any) {
+    console.warn(`Contract call ${methodName} failed:`, error.message);
+    return fallbackValue;
+  }
+}
+
+/**
+ * Check if a contract method exists
+ */
+export async function checkContractMethod(
+  contract: Contract,
+  methodName: string
+): Promise<boolean> {
+  try {
+    const fragment = contract.interface.getFunction(methodName);
+    return fragment !== null;
+  } catch {
+    return false;
   }
 }
 

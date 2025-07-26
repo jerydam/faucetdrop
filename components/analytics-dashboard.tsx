@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { FaucetsCreatedChart } from "./charts/faucet-created-chart"
 import { TransactionsPerDayChart } from "./charts/transactions-per-day"
 import { NewUsersChart } from "./charts/new-users-chart"
@@ -13,7 +13,53 @@ import { useNetwork } from "@/hooks/use-network"
 import { STORAGE_ABI, FACTORY_ABI } from "@/lib/abis"
 import { getFaucetsForNetwork, getAllClaimsForAllNetworks } from "@/lib/faucet"
 
-// Factory ABI for fetching factory claims
+// Cache keys for dashboard data
+const DASHBOARD_STORAGE_KEYS = {
+  DASHBOARD_DATA: 'dashboard_data',
+  LAST_UPDATED: 'dashboard_last_updated'
+};
+
+// Cache duration (5 minutes)
+const CACHE_DURATION = 5 * 60 * 1000;
+
+// Helper functions for localStorage
+function saveToLocalStorage(key: string, data: any) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(data, (k, v) => 
+        typeof v === 'bigint' ? v.toString() : v
+      ));
+    }
+  } catch (error) {
+    console.warn('Failed to save to localStorage:', error);
+  }
+}
+
+function loadFromLocalStorage<T>(key: string): T | null {
+  try {
+    if (typeof window !== 'undefined') {
+      const data = localStorage.getItem(key);
+      if (!data) return null;
+      
+      return JSON.parse(data, (k, v) => {
+        if (k === 'amount' && typeof v === 'string' && /^\d+$/.test(v)) {
+          return BigInt(v);
+        }
+        return v;
+      });
+    }
+    return null;
+  } catch (error) {
+    console.warn('Failed to load from localStorage:', error);
+    return null;
+  }
+}
+
+function isCacheValid(): boolean {
+  const lastUpdated = loadFromLocalStorage<number>(DASHBOARD_STORAGE_KEYS.LAST_UPDATED);
+  return lastUpdated ? Date.now() - lastUpdated < CACHE_DURATION : false;
+}
+
 const FACTORY_ABI_LOCAL = [
   {
     "inputs": [],
@@ -62,35 +108,30 @@ const FACTORY_ABI_LOCAL = [
   }
 ];
 
-// Define network configurations for storage contracts
 const STORAGE_NETWORKS = {
   42220: {
-    // Celo Mainnet
     contractAddress: "0x3fC5162779F545Bb4ea7980471b823577825dc8A",
     rpcUrl: "https://forno.celo.org",
     name: "Celo"
   },
   1135: {
-    // Custom chain
     contractAddress: "0xc5f8c2A85520c0A3595C29e004b2f5D9e7CE3b0B",
     rpcUrl: "https://mainnet.base.org/",
     name: "Custom"
   },
   42161: {
-    // Arbitrum One
     contractAddress: "0x6087810cFc24310E85736Cbd500e4c1d5a45E196",
     rpcUrl: "https://arb1.arbitrum.io/rpc",
     name: "Arbitrum"
   },
 }
 
-// Types for our data
 interface DashboardData {
   totalClaims: number
   uniqueUsers: number
   totalFaucets: number
   totalTransactions: number
-  unifiedClaims: any[] // Store the unified drops data
+  unifiedClaims: any[]
   monthlyChange: {
     claims: string
     users: string
@@ -99,7 +140,6 @@ interface DashboardData {
   }
 }
 
-// Context for sharing dashboard data
 interface DashboardContextType {
   data: DashboardData | null
   loading: boolean
@@ -116,7 +156,6 @@ const DashboardContext = createContext<DashboardContextType>({
 
 export const useDashboardContext = () => useContext(DashboardContext)
 
-// Function to get all drops from factories
 async function getAllClaimsFromAllFactories(networks: any[]): Promise<{
   faucetAddress: string
   transactionType: string
@@ -153,7 +192,6 @@ async function getAllClaimsFromAllFactories(networks: any[]): Promise<{
   return allClaims;
 }
 
-// Helper function to get drops from factories for a single network
 async function getAllClaimsFromFactories(
   provider: JsonRpcProvider,
   network: any,
@@ -232,14 +270,12 @@ async function getAllClaimsFromFactories(
   }
 }
 
-// Helper function to calculate percentage change
 function calculateChange(current: number, previous: number): string {
   if (previous === 0) return current > 0 ? "+∞%" : "+0.0%"
   const change = ((current - previous) / previous) * 100
   return `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
 }
 
-// Helper function to get last month's data for comparison
 function getLastMonthData(claims: any[]): { claimsLastMonth: number, usersLastMonth: number } {
   const now = new Date()
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
@@ -260,7 +296,6 @@ function getLastMonthData(claims: any[]): { claimsLastMonth: number, usersLastMo
   }
 }
 
-// Hook to fetch unified dashboard data using same logic as chart components
 function useDashboardData() {
   const { networks } = useNetwork()
   const [data, setData] = useState<DashboardData | null>(null)
@@ -272,19 +307,25 @@ function useDashboardData() {
     setError(null)
     
     try {
+      if (isCacheValid()) {
+        const cachedData = loadFromLocalStorage<DashboardData>(DASHBOARD_STORAGE_KEYS.DASHBOARD_DATA)
+        if (cachedData) {
+          console.log('Using cached dashboard data')
+          setData(cachedData)
+          setLoading(false)
+          return
+        }
+      }
+
       console.log("Fetching unified drops data from both storage and factory sources...");
       
-      // Fetch claims from storage (existing method)
       const storageClaims = await getAllClaimsForAllNetworks(networks);
       console.log("Fetched storage drops:", storageClaims.length);
       
-      // Fetch claims from factories (new method)
       const factoryClaims = await getAllClaimsFromAllFactories(networks);
       console.log("Fetched factory drops:", factoryClaims.length);
 
-      // Convert all claims to unified format
       const allClaimsUnified = [
-        // Storage claims
         ...storageClaims.map(claim => ({
           claimer: claim.claimer,
           faucet: claim.faucet,
@@ -297,7 +338,6 @@ function useDashboardData() {
           timestamp: claim.timestamp,
           source: 'storage'
         })),
-        // Factory claims
         ...factoryClaims.map(claim => ({
           claimer: claim.initiator,
           faucet: claim.faucetAddress,
@@ -314,7 +354,6 @@ function useDashboardData() {
 
       console.log(`Total unified claims: ${allClaimsUnified.length}`);
 
-      // Calculate total claims and unique users from unified data
       const totalClaims = allClaimsUnified.length;
       const uniqueUsers = new Set(
         allClaimsUnified
@@ -323,7 +362,6 @@ function useDashboardData() {
       );
       const totalUniqueUsers = uniqueUsers.size;
 
-      // Fetch faucets data using the same method as FaucetsCreatedChart
       let totalFaucets = 0;
       await Promise.all(
         networks.map(async (network) => {
@@ -337,7 +375,6 @@ function useDashboardData() {
         })
       )
       
-      // Fetch transactions from factory contracts
       let totalTransactions = 0;
       for (const network of networks) {
         if (network?.factoryAddresses) {
@@ -356,10 +393,8 @@ function useDashboardData() {
         }
       }
       
-      // Calculate monthly changes using unified data
       const { claimsLastMonth, usersLastMonth } = getLastMonthData(allClaimsUnified)
       
-      // For current month calculations
       const currentMonthClaims = allClaimsUnified.filter(claim => {
         const claimDate = new Date(Number(claim.timestamp) * 1000)
         const now = new Date()
@@ -382,12 +417,12 @@ function useDashboardData() {
         uniqueUsers: totalUniqueUsers,
         totalFaucets,
         totalTransactions,
-        unifiedClaims: allClaimsUnified, // Store unified drops for chart components
+        unifiedClaims: allClaimsUnified,
         monthlyChange: {
           claims: calculateChange(currentMonthClaims, claimsLastMonth),
           users: calculateChange(currentMonthUsers, usersLastMonth),
-          faucets: calculateChange(Math.ceil(totalFaucets * 0.1), Math.ceil(totalFaucets * 0.08)), // Estimated
-          transactions: calculateChange(Math.ceil(totalTransactions * 0.15), Math.ceil(totalTransactions * 0.12)) // Estimated
+          faucets: calculateChange(Math.ceil(totalFaucets * 0.1), Math.ceil(totalFaucets * 0.08)),
+          transactions: calculateChange(Math.ceil(totalTransactions * 0.15), Math.ceil(totalTransactions * 0.12))
         }
       }
       
@@ -397,41 +432,60 @@ function useDashboardData() {
         totalFaucets,
         totalTransactions
       });
+
+      saveToLocalStorage(DASHBOARD_STORAGE_KEYS.DASHBOARD_DATA, dashboardData)
+      saveToLocalStorage(DASHBOARD_STORAGE_KEYS.LAST_UPDATED, Date.now())
+      
       setData(dashboardData)
       
     } catch (err) {
       console.error("Error fetching dashboard data:", err)
       setError("Failed to fetch dashboard data")
       
-      // Fallback data
-      setData({
-        totalClaims: 0,
-        uniqueUsers: 0,
-        totalFaucets: 0,
-        totalTransactions: 0,
-        unifiedClaims: [],
-        monthlyChange: {
-          claims: "+0.0%",
-          users: "+0.0%",
-          faucets: "+0.0%",
-          transactions: "+0.0%"
-        }
-      })
+      const cachedData = loadFromLocalStorage<DashboardData>(DASHBOARD_STORAGE_KEYS.DASHBOARD_DATA)
+      if (cachedData) {
+        console.log('Using cached dashboard data as fallback')
+        setData(cachedData)
+      } else {
+        setData({
+          totalClaims: 0,
+          uniqueUsers: 0,
+          totalFaucets: 0,
+          totalTransactions: 0,
+          unifiedClaims: [],
+          monthlyChange: {
+            claims: "+0.0%",
+            users: "+0.0%",
+            faucets: "+0.0%",
+            transactions: "+0.0%"
+          }
+        })
+      }
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
+    const cachedData = loadFromLocalStorage<DashboardData>(DASHBOARD_STORAGE_KEYS.DASHBOARD_DATA)
+    if (cachedData && isCacheValid()) {
+      console.log('Loading cached dashboard data on mount')
+      setData(cachedData)
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
     if (networks.length > 0) {
-      fetchData()
+      if (!isCacheValid()) {
+        fetchData()
+      }
     }
   }, [networks])
 
   return { data, loading, error, refetch: fetchData }
 }
 
-// Loading skeleton component
 function StatCardSkeleton() {
   return (
     <Card>
@@ -459,7 +513,6 @@ function ErrorCard({ message }: { message: string }) {
   )
 }
 
-// Stat card component with color-coded change
 function StatCard({ 
   title, 
   value, 
@@ -491,13 +544,11 @@ function StatCard({
         <div className="text-2xl font-bold">
           {value?.toLocaleString() ?? 0}
         </div>
-       
       </CardContent>
     </Card>
   )
 }
 
-// Provider component
 function DashboardProvider({ children }: { children: React.ReactNode }) {
   const dashboardData = useDashboardData()
   
@@ -518,15 +569,31 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
   const { data, loading, error, refetch } = useDashboardContext()
   const { networks } = useNetwork()
   
-  // Use context data unless props are provided
   const finalData = propData ?? data
   const finalLoading = propLoading ?? loading
   const finalError = propError ?? error
 
+  // Get totalClaims from UserClaimsChart's localStorage or fallback to dashboard data
+  const getTotalClaims = () => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('totalclaim');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (typeof parsed === 'number') {
+            return parsed;
+          }
+        } catch (e) {
+          console.warn('Error parsing totalclaim from localStorage:', e);
+        }
+      }
+    }
+    return finalData?.totalClaims ?? 272;
+  };
+
   return (
     <div className="w-full min-h-screen bg-background p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
         <div className="text-center md:text-left">
           <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight">
             Analytics Dashboard
@@ -542,7 +609,6 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
           )}
         </div>
 
-        {/* Stats Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           {finalError ? (
             <>
@@ -576,13 +642,7 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
               />
               <StatCard
                 title="Total Drops"
-                value={(() => {
-                  if (typeof window !== 'undefined') {
-                    const stored = localStorage.getItem('totalclaim');
-                    return stored ? JSON.parse(stored) : finalData?.totalClaims;
-                  }
-                  return finalData?.totalClaims;
-                })()}
+                value={getTotalClaims()}
                 change={finalData?.monthlyChange.claims}
                 icon={BarChart3}
                 loading={finalLoading}
@@ -591,8 +651,6 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
           )}
         </div>
 
-
-        {/* Charts Section */}
         <Tabs defaultValue="faucets" className="w-full">
           <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
             <TabsTrigger 

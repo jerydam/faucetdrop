@@ -8,7 +8,7 @@ export interface Network {
   name: string
   chainId: number
   rpcUrl: string
-  blockExplorer: string
+  blockExplorerUrls: string
   explorerUrl?: string
   color: string
   factoryAddresses: string[]
@@ -35,7 +35,7 @@ const networks: Network[] = [
     name: "Celo",
     chainId: 42220,
     rpcUrl: "https://forno.celo.org",
-    blockExplorer: "https://celoscan.io",
+    blockExplorerUrls: "https://celoscan.io",
     color: "#35D07F",
     factoryAddresses: [
       "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
@@ -53,7 +53,7 @@ const networks: Network[] = [
     name: "Lisk",
     chainId: 1135,
     rpcUrl: "https://rpc.api.lisk.com",
-    blockExplorer: "https://blockscout.lisk.com",
+    blockExplorerUrls: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
     factoryAddresses: [
@@ -71,7 +71,7 @@ const networks: Network[] = [
     name: "Arbitrum",
     chainId: 42161,
     rpcUrl: "https://arb1.arbitrum.io/rpc",
-    blockExplorer: "https://arbiscan.io",
+    blockExplorerUrls: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
     factoryAddresses: ["0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36"],
@@ -210,7 +210,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
                 chainName: targetNetwork.name,
                 nativeCurrency: targetNetwork.nativeCurrency,
                 rpcUrls: [targetNetwork.rpcUrl],
-                blockExplorerUrls: [targetNetwork.blockExplorer],
+                blockExplorerUrls: [targetNetwork.blockExplorerUrls],
               },
             ],
           })

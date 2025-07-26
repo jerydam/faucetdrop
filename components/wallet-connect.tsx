@@ -48,8 +48,8 @@ export function WalletConnect() {
   }
 
   const handleViewOnExplorer = () => {
-    if (address && network?.blockExplorer) {
-      window.open(`${network.blockExplorer}/address/${address}`, "_blank")
+    if (address && network?.blockExplorerUrls) {
+      window.open(`${network.blockExplorerUrls}/address/${address}`, "_blank")
     }
   }
 

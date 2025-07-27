@@ -1,4 +1,4 @@
-// app/verify/page.tsx - Standalone verification page
+// app/verify/page.tsx - Standalone verification page with dark theme
 
 "use client";
 
@@ -43,7 +43,7 @@ interface VerificationData {
 
 type VerificationStatus = 'idle' | 'waiting' | 'verified' | 'failed';
 
-// Simple UI components
+// Simple UI components with dark theme
 const Button = ({ children, onClick, variant = "default", size = "default", className = "", disabled = false }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -55,8 +55,8 @@ const Button = ({ children, onClick, variant = "default", size = "default", clas
   const baseClasses = "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
   const variantClasses = {
     default: "bg-blue-600 text-white hover:bg-blue-700",
-    outline: "border border-gray-300 bg-transparent hover:bg-[#020817]  text-gray-900",
-    ghost: "hover:bg-gray-100 text-gray-900"
+    outline: "border border-gray-600 bg-transparent hover:bg-gray-700 text-gray-200",
+    ghost: "hover:bg-gray-700 text-gray-200"
   };
   const sizeClasses = {
     default: "h-10 py-2 px-4",
@@ -76,7 +76,7 @@ const Button = ({ children, onClick, variant = "default", size = "default", clas
 };
 
 const Card = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <div className={`rounded-lg border bg-white shadow-sm ${className}`}>
+  <div className={`rounded-lg border border-gray-700 bg-[#020817] shadow-sm ${className}`}>
     {children}
   </div>
 );
@@ -88,7 +88,7 @@ const CardHeader = ({ children }: { children: React.ReactNode }) => (
 );
 
 const CardTitle = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <h3 className={`text-2xl font-semibold leading-none tracking-tight ${className}`}>
+  <h3 className={`text-2xl font-semibold leading-none tracking-tight text-gray-100 ${className}`}>
     {children}
   </h3>
 );
@@ -105,8 +105,8 @@ const Badge = ({ children, variant = "default", className = "" }: {
   className?: string;
 }) => {
   const variantClasses = {
-    default: "bg-blue-100 text-[#020817]",
-    secondary: "bg-gray-100 text-gray-800"
+    default: "bg-blue-900 text-blue-200",
+    secondary: "bg-gray-700 text-gray-200"
   };
   
   return (
@@ -305,7 +305,7 @@ export default function VerificationPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#020817] flex items-center justify-center">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 text-gray-200">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
           <span>Loading...</span>
         </div>
@@ -315,7 +315,7 @@ export default function VerificationPage() {
 
   if (!account) {
     return (
-      <div className="min-h-screen bg-[#020817]  flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#020817] flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="flex items-center justify-center gap-2">
@@ -324,7 +324,7 @@ export default function VerificationPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="text-center space-y-4">
-            <p className="text-gray-50">
+            <p className="text-gray-300">
               Connect your wallet to start the identity verification process with FauceDrop.
             </p>
             <Button 
@@ -345,7 +345,7 @@ export default function VerificationPage() {
                 </>
               )}
             </Button>
-            <p className="text-xs text-gray-50">
+            <p className="text-xs text-gray-400">
               Make sure you have MetaMask or another Web3 wallet installed
             </p>
           </CardContent>
@@ -355,33 +355,33 @@ export default function VerificationPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#020817]  py-12">
+    <div className="min-h-screen bg-[#020817] py-12">
       <div className="container mx-auto px-4 max-w-4xl space-y-6">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-50 mb-2">Identity Verification</h1>
-          <p className="text-gray-50">
+          <h1 className="text-3xl font-bold text-gray-100 mb-2">Identity Verification</h1>
+          <p className="text-gray-300">
             Connected as {formatAddress(account)}
           </p>
         </div>
 
         {/* Main Verification Card */}
-        <Card className="bg-[#020817]  shadow-lg">
+        <Card className="shadow-lg">
           <CardHeader>
-            <div className="flex  items-center justify-between">
+            <div className="flex items-center justify-between">
               <CardTitle className="text-lg md:text-xl flex items-center gap-2">
                 <Shield className="h-5 w-5" />
                 Self Protocol Verification
               </CardTitle>
               {isVerified && (
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                <Badge variant="secondary" className="bg-green-900 text-green-200">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Verified
                 </Badge>
               )}
             </div>
             {verificationStatus === "waiting" && (
-              <div className="flex items-center gap-2 text-sm text-blue-600">
+              <div className="flex items-center gap-2 text-sm text-blue-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Processing verification...
               </div>
@@ -391,16 +391,16 @@ export default function VerificationPage() {
             {isVerified ? (
               <div className="space-y-6">
                 {/* Verification Success */}
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    <h3 className="font-medium text-green-800">Identity Verified Successfully</h3>
+                    <CheckCircle className="h-5 w-5 text-green-400" />
+                    <h3 className="font-medium text-green-200">Identity Verified Successfully</h3>
                   </div>
-                  <p className="text-sm text-green-700">
+                  <p className="text-sm text-green-300">
                     Your identity has been verified and you can now use FauceDrop services.
                   </p>
                   {verificationData?.timestamp && (
-                    <p className="text-xs text-green-600 mt-1">
+                    <p className="text-xs text-green-400 mt-1">
                       Verified on {formatDate(verificationData.timestamp)}
                     </p>
                   )}
@@ -408,36 +408,36 @@ export default function VerificationPage() {
 
                 {/* Verification Details */}
                 {verificationData?.disclosures && (
-                  <div className="bg-[#020817]  rounded-lg p-4">
-                    <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                    <h4 className="font-medium mb-3 flex items-center gap-2 text-gray-200">
                       <User className="h-4 w-4" />
                       Verification Details
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                       <div className="flex items-center gap-2">
                         <User className="h-3 w-3 text-gray-500" />
-                        <span className="text-gray-50">Name:</span>
-                        <span>{verificationData.disclosures.name}</span>
+                        <span className="text-gray-400">Name:</span>
+                        <span className="text-gray-200">{verificationData.disclosures.name}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="h-3 w-3 text-gray-500" />
-                        <span className="text-gray-50">Nationality:</span>
-                        <span>{verificationData.disclosures.nationality}</span>
+                        <span className="text-gray-400">Nationality:</span>
+                        <span className="text-gray-200">{verificationData.disclosures.nationality}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Calendar className="h-3 w-3 text-gray-500" />
-                        <span className="text-gray-50">Age Verified:</span>
-                        <span>15+ years</span>
+                        <span className="text-gray-400">Age Verified:</span>
+                        <span className="text-gray-200">15+ years</span>
                       </div>
                       {verificationData.disclosures.gender && (
                         <div className="flex items-center gap-2">
                           <User className="h-3 w-3 text-gray-500" />
-                          <span className="text-gray-50">Gender:</span>
-                          <span>{verificationData.disclosures.gender}</span>
+                          <span className="text-gray-400">Gender:</span>
+                          <span className="text-gray-200">{verificationData.disclosures.gender}</span>
                         </div>
                       )}
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="mt-3 pt-3 border-t border-gray-700">
                       <p className="text-xs text-gray-500">
                         Wallet: {formatAddress(account)} • 
                         Verified using Self Protocol • 
@@ -448,7 +448,7 @@ export default function VerificationPage() {
                 )}
 
                 {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-3 bg-[#020817]  justify-center">
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button size="lg">
                     <Link href="/">Return to FauceDrop</Link>
                   </Button>
@@ -456,7 +456,7 @@ export default function VerificationPage() {
                     variant="ghost" 
                     size="sm" 
                     onClick={clearVerification}
-                    className="text-gray-500 hover:text-gray-700"
+                    className="text-gray-400 hover:text-gray-200"
                   >
                     Reset Verification
                   </Button>
@@ -466,20 +466,20 @@ export default function VerificationPage() {
               <div className="space-y-6">
                 {/* Information */}
                 <div className="space-y-3">
-                  <p className="text-sm md:text-base">
+                  <p className="text-sm md:text-base text-gray-300">
                     Verify your identity using Self Protocol to access enhanced FauceDrop features.
                   </p>
-                  <div className="bg-[#020817]  border border-blue-200 rounded-lg p-3">
-                    <h4 className="font-medium text-blue-50 mb-1">What we verify:</h4>
-                    <ul className="text-xs text-blue-50 space-y-1">
+                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
+                    <h4 className="font-medium text-blue-200 mb-1">What we verify:</h4>
+                    <ul className="text-xs text-blue-300 space-y-1">
                       <li>• Minimum age of 15 years</li>
                       <li>• Valid government-issued document</li>
                       <li>• No sanctions list matching</li>
                     </ul>
                   </div>
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                    <h4 className="font-medium text-amber-800 mb-1">Privacy notice:</h4>
-                    <p className="text-xs text-amber-700">
+                  <div className="bg-amber-900/20 border border-amber-700 rounded-lg p-3">
+                    <h4 className="font-medium text-amber-200 mb-1">Privacy notice:</h4>
+                    <p className="text-xs text-amber-300">
                       Your personal data is processed using zero-knowledge proofs. 
                       Only verification status is stored locally in your browser.
                     </p>
@@ -493,11 +493,11 @@ export default function VerificationPage() {
                     <div className="hidden sm:block">
                       <div className="text-center space-y-3">
                         <div className="flex items-center gap-2 justify-center">
-                          <QrCode className="h-4 w-4" />
-                          <span className="text-sm font-medium">Scan with Self App</span>
+                          <QrCode className="h-4 w-4 text-gray-300" />
+                          <span className="text-sm font-medium text-gray-300">Scan with Self App</span>
                         </div>
                         <div className="flex justify-center">
-                          <div className="bg-white p-6 rounded-lg border shadow-sm">
+                          <div className="bg-white p-6 rounded-lg border border-gray-600 shadow-sm">
                             <SelfQRcodeWrapper
                               selfApp={selfApp}
                               onSuccess={handleVerificationSuccess}
@@ -506,13 +506,13 @@ export default function VerificationPage() {
                             />
                           </div>
                         </div>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-400">
                           Don't have the Self app? 
                           <a 
                             href="https://selfprotocol.xyz" 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline ml-1"
+                            className="text-blue-400 hover:underline ml-1"
                           >
                             Download here
                           </a>
@@ -527,7 +527,7 @@ export default function VerificationPage() {
                           <Smartphone className="mr-2 h-4 w-4" />
                           Open Self App
                         </Button>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-400">
                           This will open the Self app directly for verification
                         </p>
                       </div>
@@ -535,9 +535,9 @@ export default function VerificationPage() {
 
                     {/* Alternative option for mobile on larger screens */}
                     <div className="hidden sm:block">
-                      <div className="pt-4 border-t text-center">
-                        <p className="text-xs text-gray-50 mb-2">On mobile?</p>
-                        <Button className="bg-slate-50" variant="outline" onClick={openSelfApp} size="sm">
+                      <div className="pt-4 border-t border-gray-700 text-center">
+                        <p className="text-xs text-gray-400 mb-2">On mobile?</p>
+                        <Button variant="outline" onClick={openSelfApp} size="sm">
                           <Smartphone className="mr-2 h-3 w-3" />
                           Open Self App Directly
                         </Button>
@@ -548,22 +548,22 @@ export default function VerificationPage() {
                   <div className="flex justify-center py-8">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-                      <span className="text-sm">Initializing verification...</span>
+                      <span className="text-sm text-gray-300">Initializing verification...</span>
                     </div>
                   </div>
                 )}
 
                 {/* Error State */}
                 {verificationStatus === "failed" && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <AlertCircle className="h-4 w-4 text-red-600" />
-                      <h4 className="font-medium text-red-800">Verification Failed</h4>
+                      <AlertCircle className="h-4 w-4 text-red-400" />
+                      <h4 className="font-medium text-red-200">Verification Failed</h4>
                     </div>
-                    <p className="text-sm text-red-700 mb-3">
+                    <p className="text-sm text-red-300 mb-3">
                       The verification process failed. This could be due to:
                     </p>
-                    <ul className="text-xs text-red-600 space-y-1 mb-3">
+                    <ul className="text-xs text-red-400 space-y-1 mb-3">
                       <li>• Age requirement not met (minimum 15 years)</li>
                       <li>• Invalid or expired document</li>
                       <li>• Network connectivity issues</li>
@@ -586,32 +586,32 @@ export default function VerificationPage() {
         </Card>
 
         {/* How It Works Card */}
-        <Card className="bg-[#020817]  shadow-lg">
+        <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-base">How Self Protocol Verification Works</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div className="space-y-2">
-                <div className="bg-blue-100 text-[#020817] w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                <div className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
                   1
                 </div>
-                <h4 className="font-medium">Scan QR Code</h4>
-                <p className="text-gray-50">Use the Self mobile app to scan the QR code and start verification.</p>
+                <h4 className="font-medium text-gray-200">Scan QR Code</h4>
+                <p className="text-gray-400">Use the Self mobile app to scan the QR code and start verification.</p>
               </div>
               <div className="space-y-2">
-                <div className="bg-blue-100 text-[#020817] w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                <div className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
                   2
                 </div>
-                <h4 className="font-medium">Verify Document</h4>
-                <p className="text-gray-50">Take a photo of your passport or ID card using the app's guided process.</p>
+                <h4 className="font-medium text-gray-200">Verify Document</h4>
+                <p className="text-gray-400">Take a photo of your passport or ID card using the app's guided process.</p>
               </div>
               <div className="space-y-2">
-                <div className="bg-blue-100 text-[#020817] w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
+                <div className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
                   3
                 </div>
-                <h4 className="font-medium">Zero-Knowledge Proof</h4>
-                <p className="text-gray-50">Generate a privacy-preserving proof that confirms your eligibility.</p>
+                <h4 className="font-medium text-gray-200">Zero-Knowledge Proof</h4>
+                <p className="text-gray-400">Generate a privacy-preserving proof that confirms your eligibility.</p>
               </div>
             </div>
           </CardContent>

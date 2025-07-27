@@ -189,7 +189,7 @@ export function WalletConnect() {
         }, {} as Record<number, string>)
         
         // Add Ethereum mainnet as fallback
-        rpcConfig[1] = `https://mainnet.infura.io/v3/ ${process.env.INFURA_KEY}`
+        rpcConfig[1] = `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`
         
         const provider = new WalletConnectProvider({
           rpc: rpcConfig,
@@ -517,7 +517,7 @@ export function WalletConnect() {
               </DialogDescription>
             </DialogHeader>
             
-            <div className="grid gap-3">
+            <div className="grid gap-3 bg-[#020817] p-4 rounded-lg">
               {/* Show WalletConnect option for mobile */}
               {isMobile && availableWallets.length === 0 && (
                 <Button
@@ -549,14 +549,7 @@ export function WalletConnect() {
                     onClick={() => connectToWallet(wallet)}
                     disabled={isConnecting}
                   >
-                    <img 
-                      src={wallet.icon} 
-                      alt={wallet.name}
-                      className="w-6 h-6 rounded"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg"
-                      }}
-                    />
+                   
                     <span>{wallet.name}</span>
                   </Button>
                 ))
@@ -570,14 +563,7 @@ export function WalletConnect() {
                     onClick={() => openMobileWallet(wallet)}
                     disabled={isWaitingForConnection}
                   >
-                    <img 
-                      src={wallet.icon} 
-                      alt={wallet.name}
-                      className="w-6 h-6 rounded"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg"
-                      }}
-                    />
+                    
                     <div className="flex flex-col items-start">
                       <span className="font-medium">{wallet.name}</span>
                       <span className="text-xs text-gray-400">

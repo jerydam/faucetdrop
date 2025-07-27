@@ -42,6 +42,8 @@
     "@selfxyz/qrcode": "1.0.10-beta.1",
     "@supabase/supabase-js": "^2.50.0",
     "@tanstack/react-query": "latest",
+    "@walletconnect/client": "^1.8.0",
+    "@walletconnect/web3-provider": "^1.8.0",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

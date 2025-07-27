@@ -1511,7 +1511,7 @@ try {
                     ) : (
                       <>
                         <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
-                        Complete Tasks to Unlock Claims
+                        Complete Tasks to Unlock Drops
                       </>
                     )}
                   </Button>

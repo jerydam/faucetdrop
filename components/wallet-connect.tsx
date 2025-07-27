@@ -152,6 +152,9 @@ const MOBILE_WALLETS: MobileWallet[] = [
   },
 ]
 
+// WalletConnect v2 configuration
+const WALLET_CONNECT_PROJECT_ID = "74741d9e8bc67b41af442f267e9514b1"
+
 export function WalletConnect() {
   const { address, isConnected, connect, disconnect } = useWallet()
   const { toast } = useToast()
@@ -164,6 +167,7 @@ export function WalletConnect() {
   const [connectionUri, setConnectionUri] = useState<string>("")
   const [isWaitingForConnection, setIsWaitingForConnection] = useState(false)
   const [walletConnectClient, setWalletConnectClient] = useState<any>(null)
+  const [showQrCode, setShowQrCode] = useState(false)
 
   // Detect if user is on mobile
   useEffect(() => {
@@ -176,39 +180,78 @@ export function WalletConnect() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // Initialize WalletConnect with your specific chains
+  // Initialize WalletConnect v2
   useEffect(() => {
     const initWalletConnect = async () => {
       try {
-        const WalletConnectProvider = (await import('@walletconnect/web3-provider')).default;
+        // Import WalletConnect v2 packages
+        const { createWeb3Modal, defaultConfig } = await import('@web3modal/ethers')
         
-        // Build RPC configuration from networks array
-        const rpcConfig = networks.reduce((acc, network) => {
-          acc[network.chainId] = network.rpcUrl
-          return acc
-        }, {} as Record<number, string>)
-        
-        // Add Ethereum mainnet as fallback
-        rpcConfig[1] = `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`
-        
-        const provider = new WalletConnectProvider({
-          rpc: rpcConfig,
-          chainId: 42220, // Default to Celo
-          qrcode: true,
-          qrcodeModalOptions: {
-            mobileLinks: MOBILE_WALLETS.map(w => w.scheme)
-          }
-        });
-        setWalletConnectClient(provider);
+        // Configure chains
+        const chains = networks.map(network => ({
+          chainId: network.chainId,
+          name: network.name,
+          currency: network.nativeCurrency.symbol,
+          explorerUrl: network.blockExplorerUrls,
+          rpcUrl: network.rpcUrl
+        }))
+
+        // Create Web3Modal configuration
+        const ethersConfig = defaultConfig({
+          metadata: {
+            name: 'Your App Name',
+            description: 'Your App Description',
+            url: window.location.origin,
+            icons: ['https://avatars.githubusercontent.com/u/37784886']
+          },
+          defaultChainId: 42220, // Celo
+          rpcUrl: 'https://cloudflare-eth.com'
+        })
+
+        // Create Web3Modal instance
+        const modal = createWeb3Modal({
+          ethersConfig,
+          chains,
+          projectId: WALLET_CONNECT_PROJECT_ID,
+          enableAnalytics: false,
+          featuredWalletIds: [
+            'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+            '4622a2b2d6af1c9844944291e5e7351a6aa24cd7b23099efac1b2fd875da31a0', // Trust Wallet
+            'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase
+          ]
+        })
+
+        setWalletConnectClient(modal)
       } catch (error) {
         console.error('Failed to initialize WalletConnect:', error)
+        
+        // Fallback to older WalletConnect if new version fails
+        try {
+          const { default: WalletConnectProvider } = await import('@walletconnect/web3-provider')
+          
+          const rpcConfig = networks.reduce((acc, network) => {
+            acc[network.chainId] = network.rpcUrl
+            return acc
+          }, {} as Record<number, string>)
+          
+          const provider = new WalletConnectProvider({
+            rpc: rpcConfig,
+            chainId: 42220,
+            qrcode: true,
+            qrcodeModalOptions: {
+              mobileLinks: MOBILE_WALLETS.map(w => w.scheme)
+            }
+          })
+          
+          setWalletConnectClient(provider)
+        } catch (fallbackError) {
+          console.error('Fallback WalletConnect initialization failed:', fallbackError)
+        }
       }
     }
 
-    if (isMobile) {
-      initWalletConnect()
-    }
-  }, [isMobile])
+    initWalletConnect()
+  }, [])
 
   // Detect connected wallet name
   useEffect(() => {
@@ -285,7 +328,7 @@ export function WalletConnect() {
     detectWallets()
   }, [])
 
-  // Fixed: Proper WalletConnect connection for mobile
+  // Fixed WalletConnect connection for mobile
   const connectWithWalletConnect = async () => {
     if (!walletConnectClient) {
       toast({
@@ -297,30 +340,51 @@ export function WalletConnect() {
     }
 
     setIsWaitingForConnection(true)
+    setShowQrCode(true)
     
     try {
-      // Enable WalletConnect
-      await walletConnectClient.enable()
-      
-      // Set up provider
-      if (typeof window !== 'undefined') {
-        window.ethereum = walletConnectClient
+      // For Web3Modal (WalletConnect v2)
+      if (walletConnectClient.open) {
+        await walletConnectClient.open()
+        
+        // Listen for connection
+        walletConnectClient.subscribeProvider((newState: any) => {
+          if (newState.isConnected) {
+            setIsWaitingForConnection(false)
+            setShowWalletModal(false)
+            setShowQrCode(false)
+            
+            toast({
+              title: "Wallet Connected",
+              description: "Successfully connected via WalletConnect",
+            })
+          }
+        })
+      } 
+      // For legacy WalletConnect
+      else if (walletConnectClient.enable) {
+        await walletConnectClient.enable()
+        
+        if (typeof window !== 'undefined') {
+          window.ethereum = walletConnectClient
+        }
+        
+        await connect()
+        
+        setIsWaitingForConnection(false)
+        setShowWalletModal(false)
+        setShowQrCode(false)
+        
+        toast({
+          title: "Wallet Connected",
+          description: "Successfully connected via WalletConnect",
+        })
       }
-      
-      // Connect using your existing hook
-      await connect()
-      
-      setIsWaitingForConnection(false)
-      setShowWalletModal(false)
-      
-      toast({
-        title: "Wallet Connected",
-        description: "Successfully connected via WalletConnect",
-      })
       
     } catch (error: any) {
       console.error("WalletConnect error:", error)
       setIsWaitingForConnection(false)
+      setShowQrCode(false)
       
       if (error.code !== 4001) { // User rejected
         toast({
@@ -385,65 +449,40 @@ export function WalletConnect() {
     }
   }
 
-  // Fixed: Mobile wallet connection with proper deep linking
+  // Improved mobile wallet connection with proper WalletConnect flow
   const openMobileWallet = async (wallet: MobileWallet) => {
     if (!isMobile) {
       window.open(wallet.downloadUrl, '_blank')
       return
     }
 
-    // For mobile, we should use WalletConnect instead of just opening the app
-    if (wallet.supportsWalletConnect) {
+    // Always use WalletConnect for mobile connections
+    if (wallet.supportsWalletConnect && walletConnectClient) {
       await connectWithWalletConnect()
       return
     }
 
-    // Fallback: try to open the wallet app and show instructions
-    setIsWaitingForConnection(true)
+    // Fallback: Show instructions to download wallet
+    toast({
+      title: `Install ${wallet.name}`,
+      description: `Please install ${wallet.name} from your app store and return to connect.`,
+      variant: "default",
+    })
     
-    try {
-      // Try to open the wallet app
-      window.location.href = wallet.deepLink
-      
-      toast({
-        title: "Opening Wallet",
-        description: `Opening ${wallet.name}. Please return to this browser and refresh if the connection doesn't complete automatically.`,
-      })
-
-      // Set a timer to check for connection
-      setTimeout(() => {
-        setIsWaitingForConnection(false)
-        
-        // Check if we're still not connected
-        if (!isConnected) {
-          toast({
-            title: "Manual Connection Required",
-            description: `Please open ${wallet.name} manually and connect to this site, or try using WalletConnect.`,
-            variant: "default",
-          })
-        }
-      }, 5000)
-      
-    } catch (error) {
-      console.error('Error opening wallet:', error)
-      setIsWaitingForConnection(false)
-      
-      // Fallback to app store
-      const userAgent = navigator.userAgent.toLowerCase()
-      if (userAgent.includes('android')) {
-        window.open(`https://play.google.com/store/search?q=${wallet.name}&c=apps`, '_blank')
-      } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
-        window.open(`https://apps.apple.com/search?term=${wallet.name}`, '_blank')
-      } else {
-        window.open(wallet.downloadUrl, '_blank')
-      }
+    // Open app store
+    const userAgent = navigator.userAgent.toLowerCase()
+    if (userAgent.includes('android')) {
+      window.open(`https://play.google.com/store/search?q=${wallet.name}&c=apps`, '_blank')
+    } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
+      window.open(`https://apps.apple.com/search?term=${wallet.name}`, '_blank')
+    } else {
+      window.open(wallet.downloadUrl, '_blank')
     }
   }
 
-  // Fixed: Better connection handling
   const handleConnect = async () => {
-    // On mobile with no detected wallets, show WalletConnect option
-    if (isMobile && availableWallets.length === 0) {
+    // On mobile, show WalletConnect option first
+    if (isMobile) {
       setShowWalletModal(true)
       return
     }
@@ -497,7 +536,7 @@ export function WalletConnect() {
             <Wallet className="h-4 w-4" />
           )}
           {isConnecting ? "Connecting..." : isWaitingForConnection ? "Waiting..." : "Connect Wallet"}
-          {(availableWallets.length > 1 || (isMobile && availableWallets.length === 0)) && !isWaitingForConnection && <ChevronDown className="h-4 w-4" />}
+          {!isWaitingForConnection && <ChevronDown className="h-4 w-4" />}
         </Button>
 
         <Dialog open={showWalletModal} onOpenChange={setShowWalletModal}>
@@ -505,21 +544,21 @@ export function WalletConnect() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-gray-100">
                 {isMobile && <Smartphone className="h-5 w-5" />}
-                {availableWallets.length > 0 ? "Choose a Wallet" : (isMobile ? "Connect Mobile Wallet" : "Install a Wallet")}
+                {isMobile ? "Connect Mobile Wallet" : "Choose a Wallet"}
               </DialogTitle>
               <DialogDescription className="text-gray-300">
-                {availableWallets.length > 0 
-                  ? "Select a wallet to connect to this application"
-                  : isMobile 
-                    ? "Connect using WalletConnect or install a mobile wallet app."
+                {isMobile 
+                  ? "Connect using WalletConnect or install a mobile wallet app."
+                  : availableWallets.length > 0 
+                    ? "Select a wallet to connect to this application"
                     : "You need a wallet to connect. Install one of the following:"
                 }
               </DialogDescription>
             </DialogHeader>
             
             <div className="grid gap-3 bg-[#020817] p-4 rounded-lg">
-              {/* Show WalletConnect option for mobile */}
-              {isMobile && availableWallets.length === 0 && (
+              {/* Show WalletConnect option first for mobile */}
+              {isMobile && (
                 <Button
                   variant="outline"
                   className="flex items-center gap-3 h-12 justify-start border-blue-600 bg-blue-900/20 hover:bg-blue-800/30 text-gray-200"
@@ -530,12 +569,12 @@ export function WalletConnect() {
                   <div className="flex flex-col items-start">
                     <span className="font-medium text-blue-200">WalletConnect</span>
                     <span className="text-xs text-blue-300">
-                      Universal connection method
+                      Connect any mobile wallet
                     </span>
                   </div>
-                  <div className="ml-auto">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  </div>
+                  {isWaitingForConnection && (
+                    <RefreshCw className="ml-auto w-4 h-4 animate-spin text-blue-400" />
+                  )}
                 </Button>
               )}
 
@@ -549,7 +588,6 @@ export function WalletConnect() {
                     onClick={() => connectToWallet(wallet)}
                     disabled={isConnecting}
                   >
-                   
                     <span>{wallet.name}</span>
                   </Button>
                 ))
@@ -563,7 +601,6 @@ export function WalletConnect() {
                     onClick={() => openMobileWallet(wallet)}
                     disabled={isWaitingForConnection}
                   >
-                    
                     <div className="flex flex-col items-start">
                       <span className="font-medium">{wallet.name}</span>
                       <span className="text-xs text-gray-400">
@@ -576,26 +613,24 @@ export function WalletConnect() {
             </div>
             
             {/* Instructions */}
-            {availableWallets.length === 0 && (
-              <div className="text-center pt-4 border-t border-gray-700">
-                <p className="text-sm text-gray-400 mb-2">
-                  {isMobile 
-                    ? "For best results, use WalletConnect above or install a wallet app and return to this page." 
-                    : "After installing a wallet extension, refresh this page to connect"
-                  }
-                </p>
-                {!isMobile && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => window.location.reload()}
-                    className="mt-2 text-gray-300 hover:text-gray-100 hover:bg-gray-700"
-                  >
-                    Refresh Page
-                  </Button>
-                )}
-              </div>
-            )}
+            <div className="text-center pt-4 border-t border-gray-700">
+              <p className="text-sm text-gray-400 mb-2">
+                {isMobile 
+                  ? "Tap WalletConnect above to connect with any mobile wallet app." 
+                  : "After installing a wallet extension, refresh this page to connect"
+                }
+              </p>
+              {!isMobile && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => window.location.reload()}
+                  className="mt-2 text-gray-300 hover:text-gray-100 hover:bg-gray-700"
+                >
+                  Refresh Page
+                </Button>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </>

@@ -152,6 +152,38 @@ const MOBILE_WALLETS: MobileWallet[] = [
   },
 ]
 
+// Dark theme Button component
+const DarkButton = ({ children, onClick, variant = "default", size = "default", className = "", disabled = false }: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  variant?: "default" | "outline" | "ghost";
+  size?: "default" | "sm" | "lg";
+  className?: string;
+  disabled?: boolean;
+}) => {
+  const baseClasses = "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  const variantClasses = {
+    default: "bg-blue-600 text-white hover:bg-blue-700",
+    outline: "border border-gray-600 bg-transparent hover:bg-gray-700 text-gray-200 hover:text-white",
+    ghost: "hover:bg-gray-700 text-gray-200"
+  };
+  const sizeClasses = {
+    default: "h-10 py-2 px-4",
+    sm: "h-9 px-3 text-sm",
+    lg: "h-11 px-8"
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
+
 export function WalletConnect() {
   const { address, isConnected, connect, disconnect } = useWallet()
   const { toast } = useToast()
@@ -486,7 +518,7 @@ export function WalletConnect() {
   if (!isConnected) {
     return (
       <>
-        <Button 
+        <DarkButton 
           onClick={handleConnect} 
           disabled={isConnecting || isWaitingForConnection} 
           className="flex items-center gap-2"
@@ -498,16 +530,16 @@ export function WalletConnect() {
           )}
           {isConnecting ? "Connecting..." : isWaitingForConnection ? "Waiting..." : "Connect Wallet"}
           {(availableWallets.length > 1 || (isMobile && availableWallets.length === 0)) && !isWaitingForConnection && <ChevronDown className="h-4 w-4" />}
-        </Button>
+        </DarkButton>
 
         <Dialog open={showWalletModal} onOpenChange={setShowWalletModal}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md bg-[#020817] border-gray-700 text-gray-100">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
+              <DialogTitle className="flex items-center gap-2 text-gray-100">
                 {isMobile && <Smartphone className="h-5 w-5" />}
                 {availableWallets.length > 0 ? "Choose a Wallet" : (isMobile ? "Connect Mobile Wallet" : "Install a Wallet")}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-gray-300">
                 {availableWallets.length > 0 
                   ? "Select a wallet to connect to this application"
                   : isMobile 
@@ -520,29 +552,29 @@ export function WalletConnect() {
             <div className="grid gap-3">
               {/* Show WalletConnect option for mobile */}
               {isMobile && availableWallets.length === 0 && (
-                <Button
+                <DarkButton
                   variant="outline"
-                  className="flex items-center gap-3 h-12 justify-start border-blue-200 bg-blue-50 hover:bg-blue-100"
+                  className="flex items-center gap-3 h-12 justify-start border-blue-600 bg-blue-900/20 hover:bg-blue-800/30 text-blue-200"
                   onClick={connectWithWalletConnect}
                   disabled={isWaitingForConnection}
                 >
-                  <QrCode className="w-6 h-6 text-blue-600" />
+                  <QrCode className="w-6 h-6 text-blue-400" />
                   <div className="flex flex-col items-start">
-                    <span className="font-medium text-blue-900">WalletConnect</span>
-                    <span className="text-xs text-blue-600">
+                    <span className="font-medium text-blue-200">WalletConnect</span>
+                    <span className="text-xs text-blue-300">
                       Universal connection method
                     </span>
                   </div>
                   <div className="ml-auto">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
                   </div>
-                </Button>
+                </DarkButton>
               )}
 
               {availableWallets.length > 0 ? (
                 // Show detected wallets
                 availableWallets.map((wallet) => (
-                  <Button
+                  <DarkButton
                     key={wallet.uuid}
                     variant="outline"
                     className="flex items-center gap-3 h-12 justify-start"
@@ -557,13 +589,13 @@ export function WalletConnect() {
                         e.currentTarget.src = "https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg"
                       }}
                     />
-                    <span>{wallet.name}</span>
-                  </Button>
+                    <span className="text-gray-200">{wallet.name}</span>
+                  </DarkButton>
                 ))
               ) : (
                 // Show wallet installation options
                 MOBILE_WALLETS.map((wallet) => (
-                  <Button
+                  <DarkButton
                     key={wallet.name}
                     variant="outline"
                     className="flex items-center gap-3 h-12 justify-start"
@@ -579,34 +611,34 @@ export function WalletConnect() {
                       }}
                     />
                     <div className="flex flex-col items-start">
-                      <span className="font-medium">{wallet.name}</span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="font-medium text-gray-200">{wallet.name}</span>
+                      <span className="text-xs text-gray-400">
                         {isMobile ? "Install and connect" : "Install extension"}
                       </span>
                     </div>
-                  </Button>
+                  </DarkButton>
                 ))
               )}
             </div>
             
             {/* Instructions */}
             {availableWallets.length === 0 && (
-              <div className="text-center pt-4 border-t">
-                <p className="text-sm text-muted-foreground mb-2">
+              <div className="text-center pt-4 border-t border-gray-700">
+                <p className="text-sm text-gray-400 mb-2">
                   {isMobile 
                     ? "For best results, use WalletConnect above or install a wallet app and return to this page." 
                     : "After installing a wallet extension, refresh this page to connect"
                   }
                 </p>
                 {!isMobile && (
-                  <Button 
+                  <DarkButton 
                     variant="ghost" 
                     size="sm" 
                     onClick={() => window.location.reload()}
                     className="mt-2"
                   >
                     Refresh Page
-                  </Button>
+                  </DarkButton>
                 )}
               </div>
             )}
@@ -619,45 +651,45 @@ export function WalletConnect() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="flex items-center gap-2 min-w-[160px]">
+        <DarkButton variant="outline" className="flex items-center gap-2 min-w-[160px]">
           <Wallet className="h-4 w-4" />
           <div className="flex flex-col items-start">
-            <span className="text-sm font-medium">
+            <span className="text-sm font-medium text-gray-200">
               {address ? truncateAddress(address) : "Connected"}
             </span>
             {selectedWalletName && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-gray-400">
                 {selectedWalletName}
               </span>
             )}
           </div>
-        </Button>
+        </DarkButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="flex flex-col">
+      <DropdownMenuContent align="end" className="w-64 bg-[#020817] border-gray-700 text-gray-100">
+        <DropdownMenuLabel className="flex flex-col text-gray-100">
           <span>Wallet Connected</span>
           {selectedWalletName && (
-            <span className="text-sm font-normal text-blue-600 mb-1">
+            <span className="text-sm font-normal text-blue-400 mb-1">
               {selectedWalletName}
             </span>
           )}
           {address && (
-            <span className="text-xs font-mono font-normal text-muted-foreground break-all bg-muted p-2 rounded">
+            <span className="text-xs font-mono font-normal text-gray-400 break-all bg-gray-800 p-2 rounded">
               {address}
             </span>
           )}
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleCopyAddress}>
+        <DropdownMenuSeparator className="bg-gray-700" />
+        <DropdownMenuItem onClick={handleCopyAddress} className="text-gray-200 hover:bg-gray-700 focus:bg-gray-700">
           <Copy className="mr-2 h-4 w-4" />
           Copy Address
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleViewOnExplorer}>
+        <DropdownMenuItem onClick={handleViewOnExplorer} className="text-gray-200 hover:bg-gray-700 focus:bg-gray-700">
           <ExternalLink className="mr-2 h-4 w-4" />
           View on Explorer
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={disconnect}>
+        <DropdownMenuSeparator className="bg-gray-700" />
+        <DropdownMenuItem onClick={disconnect} className="text-gray-200 hover:bg-gray-700 focus:bg-gray-700">
           <LogOut className="mr-2 h-4 w-4" />
           Disconnect
         </DropdownMenuItem>

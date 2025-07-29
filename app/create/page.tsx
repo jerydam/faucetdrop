@@ -63,7 +63,7 @@ interface ChainConfig {
   factoryAddresses: string[]
   defaultTokens: Token[]
   rpcUrls: string[]
-  blockExplorerUrlsUrls: string[]
+  blockExplorerUrls: string[]
   isTestnet?: boolean
 }
 
@@ -80,7 +80,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
     ],
     rpcUrls: ["https://forno.celo.org"],
-    blockExplorerUrlsUrls: ["https://explorer.celo.org"],
+    blockExplorerUrls: ["https://explorer.celo.org"],
     defaultTokens: [
       {
         address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
@@ -118,7 +118,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
     ],
     rpcUrls: ["https://arb1.arbitrum.io/rpc"],
-    blockExplorerUrlsUrls: ["https://arbiscan.io"],
+    blockExplorerUrls: ["https://arbiscan.io"],
     isTestnet: true,
     defaultTokens: [
       {
@@ -139,7 +139,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
     ],
     rpcUrls: ["https://rpc.api.lisk.com"],
-    blockExplorerUrlsUrls: ["https://blockscout.lisk.com"],
+    blockExplorerUrls: ["https://blockscout.lisk.com"],
     defaultTokens: [
       {
         address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
@@ -160,7 +160,7 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
     ],
     rpcUrls: ["https://mainnet.base.org"],
-    blockExplorerUrlsUrls: ["https://basescan.org"],
+    blockExplorerUrls: ["https://basescan.org"],
     defaultTokens: [
       {
         address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",

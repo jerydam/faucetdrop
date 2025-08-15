@@ -6,12 +6,12 @@ import { useToast } from "@/hooks/use-toast"
 
 export interface Network {
   name: string
-  chainId: number
+  chainId: bigint // Changed from number to bigint
   rpcUrl: string
   blockExplorerUrls: string
   explorerUrl?: string
   color: string
-  factoryAddresses: string[]
+  factoryAddress: string
   tokenAddress: string
   nativeCurrency: {
     name: string
@@ -25,24 +25,19 @@ interface NetworkContextType {
   networks: Network[]
   setNetwork: (network: Network) => void
   switchNetwork: (chainId: number) => Promise<void>
-  getLatestFactoryAddress: (network?: Network) => string | null
-  isSwitchingNetwork: boolean
-  currentChainId: number | null
 }
 
+// Define networks for all major EVM chains
 const networks: Network[] = [
   {
     name: "Celo",
-    chainId: 42220,
+    chainId: BigInt(42220), // Convert to bigint
     rpcUrl: "https://forno.celo.org",
     blockExplorerUrls: "https://celoscan.io",
+    explorerUrl: "https://celoscan.io",
     color: "#35D07F",
-    factoryAddresses: [
-      "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
-      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-      "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f"
-    ],
-    tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
+    factoryAddress: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
+    tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", // Wrapped CELO
     nativeCurrency: {
       name: "Celo",
       symbol: "CELO",
@@ -51,16 +46,13 @@ const networks: Network[] = [
   },
   {
     name: "Lisk",
-    chainId: 1135,
+    chainId: BigInt(1135),
     rpcUrl: "https://rpc.api.lisk.com",
     blockExplorerUrls: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
-    factoryAddresses: [
-      "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
-      "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2"
-    ],
-    tokenAddress: ZeroAddress,
+    factoryAddress: "0xc5f8c2A85520c0A3595C29e004b2f5D9e7CE3b0B",
+    tokenAddress: ZeroAddress, // LISK (native)
     nativeCurrency: {
       name: "Lisk",
       symbol: "LISK",
@@ -69,13 +61,27 @@ const networks: Network[] = [
   },
   {
     name: "Arbitrum",
-    chainId: 42161,
+    chainId: BigInt(42161),
     rpcUrl: "https://arb1.arbitrum.io/rpc",
     blockExplorerUrls: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
-    factoryAddresses: ["0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36"],
-    tokenAddress: ZeroAddress,
+    factoryAddress: "0x6087810cFc24310E85736Cbd500e4c1d5a45E196",
+    tokenAddress: ZeroAddress, // ETH (native)
+    nativeCurrency: {
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
+    },
+  },
+  {
+    chainId: BigInt(8453),
+    name: "Base Mainnet",
+    rpcUrl: "https://mainnet.base.org",
+    blockExplorerUrls: "https://basescan.org",
+    factoryAddress: "0xYourFactoryAddressForBase", // Replace with actual address
+    color: "#0052FF",
+    tokenAddress: ZeroAddress, // ETH (native)
     nativeCurrency: {
       name: "Ethereum",
       symbol: "ETH",
@@ -89,21 +95,13 @@ const NetworkContext = createContext<NetworkContextType>({
   networks: networks,
   setNetwork: () => {},
   switchNetwork: async () => {},
-  getLatestFactoryAddress: () => null,
-  isSwitchingNetwork: false,
-  currentChainId: null,
 })
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast()
-  const [network, setNetwork] = useState<Network | null>(null)
-  const [currentChainId, setCurrentChainId] = useState<number | null>(null)
+  const [network, setNetwork] = useState<Network | null>(networks[0])
+  const [currentChainId, setCurrentChainId] = useState<bigint | null>(null)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
-
-  const getLatestFactoryAddress = (targetNetwork?: Network) => {
-    const selectedNetwork = targetNetwork || network
-    return selectedNetwork?.factoryAddresses[selectedNetwork.factoryAddresses.length - 1] || null
-  }
 
   useEffect(() => {
     const detectCurrentChain = async () => {
@@ -111,8 +109,13 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
       try {
         const chainIdHex = await window.ethereum.request({ method: "eth_chainId" })
-        const chainId = Number.parseInt(chainIdHex, 16)
+        const chainId = BigInt(chainIdHex)
         setCurrentChainId(chainId)
+
+        const detectedNetwork = networks.find((n) => n.chainId === chainId)
+        if (detectedNetwork) {
+          setNetwork(detectedNetwork)
+        }
       } catch (error) {
         console.error("Error detecting chain:", error)
       }
@@ -123,21 +126,15 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     if (window.ethereum) {
       const handleChainChanged = (chainIdHex: string) => {
         try {
-          const chainId = Number.parseInt(chainIdHex, 16)
+          const chainId = BigInt(chainIdHex)
           console.log(`Chain changed to: ${chainId}`)
           setCurrentChainId(chainId)
 
-          if (network && network.chainId === chainId) {
-            console.log(`Network remains ${network.name}`)
-          } else {
-            setNetwork(null)
-            const currentNetwork = networks.find((n) => n.chainId === chainId)
-            toast({
-              title: "Network Mismatch",
-              description: `Your wallet is on ${currentNetwork ? currentNetwork.name : `an unsupported chain (ID: ${chainId})`}. Please select a network.`,
-              variant: "destructive",
-            })
+          const detectedNetwork = networks.find((n) => n.chainId === chainId)
+          if (detectedNetwork) {
+            setNetwork(detectedNetwork)
           }
+          window.location.reload()
         } catch (error) {
           console.error("Error handling chain change:", error)
         }
@@ -151,7 +148,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [network, toast])
+  }, [])
 
   const switchNetwork = async (chainId: number) => {
     if (typeof window === "undefined" || !window.ethereum) {
@@ -168,7 +165,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const targetNetwork = networks.find((n) => n.chainId === chainId)
+    const targetNetwork = networks.find((n) => n.chainId === BigInt(chainId))
     if (!targetNetwork) {
       toast({
         title: "Network Not Supported",
@@ -189,12 +186,8 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
       console.log(`Successfully switched to ${targetNetwork.name}`)
       setNetwork(targetNetwork)
-      setCurrentChainId(chainId)
-      toast({
-        title: "Network Switched",
-        description: `Successfully switched to ${targetNetwork.name}`,
-        variant: "default",
-      })
+      setCurrentChainId(BigInt(chainId))
+      window.location.reload()
     } catch (error: any) {
       console.warn(`Error switching to ${targetNetwork.name}:`, error)
 
@@ -210,7 +203,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
                 chainName: targetNetwork.name,
                 nativeCurrency: targetNetwork.nativeCurrency,
                 rpcUrls: [targetNetwork.rpcUrl],
-                blockExplorerUrls: [targetNetwork.blockExplorerUrls],
+                blockExplorerUrlsUrls: [targetNetwork.blockExplorerUrls],
               },
             ],
           })
@@ -223,12 +216,8 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
           })
 
           setNetwork(targetNetwork)
-          setCurrentChainId(chainId)
-          toast({
-            title: "Network Switched",
-            description: `Successfully switched to ${targetNetwork.name}`,
-            variant: "default",
-          })
+          setCurrentChainId(BigInt(chainId))
+          window.location.reload()
         } catch (addError: any) {
           console.error(`Error adding network ${targetNetwork.name}:`, addError)
           toast({
@@ -252,7 +241,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
 
   const handleSetNetwork = (newNetwork: Network) => {
     setNetwork(newNetwork)
-    switchNetwork(newNetwork.chainId)
+    switchNetwork(Number(newNetwork.chainId))
   }
 
   return (
@@ -262,9 +251,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         networks,
         setNetwork: handleSetNetwork,
         switchNetwork,
-        getLatestFactoryAddress,
-        isSwitchingNetwork,
-        currentChainId,
       }}
     >
       {children}

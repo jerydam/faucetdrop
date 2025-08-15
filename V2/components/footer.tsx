@@ -42,25 +42,25 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
     },
     {
       name: "YouTube",
-      href: "https://youtube.com/@faucetdrops", // Replace with your actual channel
+      href: "https://www.youtube.com/@Faucet_Drops", // Replace with your actual channel
       icon: Youtube,
       hoverColor: "hover:text-red-500"
     },
     {
       name: "Telegram",
-      href: "https://t.me/faucetdrops", // Replace with your actual channel
+      href: "https://t.me/faucetdropschat", // Replace with your actual channel
       icon: TelegramIcon,
       hoverColor: "hover:text-blue-500"
     },
     {
       name: "GitHub",
-      href: "https://github.com/faucetdrops", // Replace with your actual repo
+      href: "https://github.com/Priveedores-de-soluciones/Faucet_drops", // Replace with your actual repo
       icon: Github,
       hoverColor: "hover:text-gray-600 dark:hover:text-gray-300"
     },
     {
       name: "Email",
-      href: "mailto:contact@faucetdrops.com", // Replace with your actual email
+      href: "mailto:drops.faucet@gmail.com", // Replace with your actual email
       icon: Mail,
       hoverColor: "hover:text-green-500"
     }
@@ -87,10 +87,27 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
               FaucetDrops
             </h3>
             <span className="hidden sm:inline text-xs text-slate-500 dark:text-slate-400 ml-1">
-              💧 Token Drops Made Easy
+              Token Drops Made Easy 💧
             </span>
           </div>
-
+             {/* Copyright and Links */}
+          <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-3 text-xs text-slate-500 dark:text-slate-400">
+            <span className="whitespace-nowrap">© 2025 FaucetDrops</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <a 
+                href="/privacy" 
+                className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap"
+              >
+                Privacy
+              </a>
+              <a 
+                href="/terms" 
+                className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap"
+              >
+                Terms
+              </a>
+            </div>
+          </div>
           {/* Social Links */}
           <div className="flex items-center gap-1 sm:gap-2">
             {socialLinks.map((link) => {
@@ -117,24 +134,7 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
             })}
           </div>
 
-          {/* Copyright and Links */}
-          <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-3 text-xs text-slate-500 dark:text-slate-400">
-            <span className="whitespace-nowrap">© 2025 FaucetDrops</span>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <a 
-                href="/privacy" 
-                className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap"
-              >
-                Privacy
-              </a>
-              <a 
-                href="/terms" 
-                className="hover:text-slate-700 dark:hover:text-slate-300 transition-colors whitespace-nowrap"
-              >
-                Terms
-              </a>
-            </div>
-          </div>
+         
         </div>
       </div>
     </footer>

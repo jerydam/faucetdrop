@@ -6,13 +6,13 @@ import { WalletProvider } from "@/components/wallet-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { NetworkProvider } from "@/hooks/use-network"
+import { Footer } from "@/components/footer" // Add this import
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "FaucetDrops",
   description: "Token Drops Made Easy 💧",
-    
 }
 
 export default function RootLayout({
@@ -27,7 +27,12 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <NetworkProvider>
             <WalletProvider>
-              {children}
+              <div className="min-h-screen flex flex-col">
+                <main className="flex-1">
+                  {children}
+                </main>
+                <Footer />
+              </div>
               <Toaster />
             </WalletProvider>
           </NetworkProvider>

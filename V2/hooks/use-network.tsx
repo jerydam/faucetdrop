@@ -108,31 +108,31 @@ const networks: Network[] = [
     },
     isTestnet: false,
   },
-{
-  name: "Base",
-  chainId: 8453,
-  rpcUrl: "https://base.publicnode.com", 
-  blockExplorerUrls: "https://basescan.org",
-  explorerUrl: "https://basescan.org",
-  color: "#0052FF",
-  factoryAddresses: [
-    "0x945431302922b69D500671201CEE62900624C6d5",
-    "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
-    "0x587b840140321DD8002111282748acAdaa8fA206"
-  ],
-  factories: {
-    droplist: "0x945431302922b69D500671201CEE62900624C6d5",
-    dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
-    custom: "0x587b840140321DD8002111282748acAdaa8fA206"
-  },
-  tokenAddress: ZeroAddress,
-  nativeCurrency: {
-    name: "Ethereum",
-    symbol: "ETH",
-    decimals: 18,
-  },
-  isTestnet: false,
-}
+// {
+//   name: "Base",
+//   chainId: 8453,
+//   rpcUrl: "https://base.publicnode.com", 
+//   blockExplorerUrls: "https://basescan.org",
+//   explorerUrl: "https://basescan.org",
+//   color: "#0052FF",
+//   factoryAddresses: [
+//     "0x945431302922b69D500671201CEE62900624C6d5",
+//     "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
+//     "0x587b840140321DD8002111282748acAdaa8fA206"
+//   ],
+//   factories: {
+//     droplist: "0x945431302922b69D500671201CEE62900624C6d5",
+//     dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
+//     custom: "0x587b840140321DD8002111282748acAdaa8fA206"
+//   },
+//   tokenAddress: ZeroAddress,
+//   nativeCurrency: {
+//     name: "Ethereum",
+//     symbol: "ETH",
+//     decimals: 18,
+//   },
+//   isTestnet: false,
+// }
   
   // // Testnet Networks
   // {

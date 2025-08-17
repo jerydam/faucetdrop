@@ -291,7 +291,7 @@ const handleStartTimeChange = (e) => {
       setIsLoadingSocialLinks(true)
       console.log(`🔍 Loading social media links for faucet: ${faucetAddress}`)
       
-      const response = await fetch(`https://fauctdrop-backend.onrender.com/social-media-links/${faucetAddress}`)
+      const response = await fetch(`http://0.0.0.0:10000/social-media-links/${faucetAddress}`)
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -855,7 +855,7 @@ const handleStartTimeChange = (e) => {
   // ✅ Helper functions for admin popup preferences
   const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {
     try {
-      const response = await fetch("https://fauctdrop-backend.onrender.com/admin-popup-preference", {
+      const response = await fetch("http://0.0.0.0:10000/admin-popup-preference", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1139,7 +1139,7 @@ const handleStartTimeChange = (e) => {
   const getAdminPopupPreference = async (userAddr: string, faucetAddr: string): Promise<boolean> => {
     try {
       const response = await fetch(
-        `https://fauctdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+        `http://0.0.0.0:10000/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
       )
       
       if (!response.ok) {
@@ -1454,7 +1454,7 @@ const handleStartTimeChange = (e) => {
       
       // ✅ FIXED: Only generate secret code for dropcode faucets in backend mode
       if (faucetType === 'dropcode' && backendMode) {
-        const response = await fetch("https://fauctdrop-backend.onrender.com/set-claim-parameters", {
+        const response = await fetch("http://0.0.0.0:10000/set-claim-parameters", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1480,7 +1480,7 @@ const handleStartTimeChange = (e) => {
         console.log(`✅ Social media links stored: ${result.socialMediaLinksStored || 0}`)
       } else if (socialLinksToSend.length > 0) {
         // ✅ NEW: For non-dropcode faucets, save social media links separately
-        const response = await fetch("https://fauctdrop-backend.onrender.com/update-social-media-links", {
+        const response = await fetch("http://0.0.0.0:10000/update-social-media-links", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

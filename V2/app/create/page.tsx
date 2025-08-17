@@ -148,16 +148,24 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       isNative: true,
     },
     {
+      address: "0xE2702Bd97ee33c88c8f6f92DA3B733608aa76F71",
+      name: "Celo Nigerian Naira",
+      symbol: "cNGN",
+      decimals: 18,
+      isNative: true,
+    },
+    
+    {
       address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
       name: "Celo Dollar",
       symbol: "cUSD",
       decimals: 18,
     },
     {
-      address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
-      name: "Celo Euro",
-      symbol: "cEUR",
-      decimals: 18,
+      address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e",
+      name: "Tether",
+      symbol: "USDT",
+      decimals: 6,
     },
     {
       address: "0x639A647fbe20b6c8ac19E48E2de44ea792c62c5C",
@@ -171,81 +179,68 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "cKES",
       decimals: 18,
     },
+    {
+        address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+        name: "Dollar Coin",
+        symbol: "USDC",
+        decimals: 6,
+      },
+      {
+        address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
+        name: "Celo Euro",
+        symbol: "cEUR",
+        decimals: 18,
+      },
+      {
+        address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+        name: "Glo Dollar",
+        symbol: "USDGLO",
+        decimals: 18,
+      },
+      {
+        address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
+        name: "Good dollar",
+        symbol: "G$",
+        decimals: 18,
+      },
+      
   ],
   
-  // Celo Alfajores Testnet (44787)
-  44787: [
-    {
-      address: zeroAddress,
-      name: "Celo",
-      symbol: "CELO",
-      decimals: 18,
-      isNative: true,
-    },
-    {
-      address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
-      name: "Celo Dollar",
-      symbol: "cUSD",
-      decimals: 18,
-    },
-    {
-      address: "0x10c892A6EC43a53E45D0B916B4b7D383B1b78C0F",
-      name: "Celo Euro",
-      symbol: "cEUR",
-      decimals: 18,
-    },
-  ],
 
-  // Lisk Sepolia (4202)
-  4202: [
+  1135: [
     {
       address: zeroAddress,
-      name: "Lisk",
-      symbol: "LSK",
+      name: "Ether",
+      symbol: "ETH",
       decimals: 18,
       isNative: true,
     },
      {
-      address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
-      name: "Celo Dollar",
-      symbol: "cUSD",
+      address: "0xac485391EB2d7D88253a7F1eF18C37f4242D1A24",
+      name: "Lisk",
+      symbol: "LSK",
       decimals: 18,
     },
     {
-      address: "0x10c892A6EC43a53E45D0B916B4b7D383B1b78C0F",
-      name: "Celo Euro",
-      symbol: "cEUR",
-      decimals: 18,
+      address: "0x05D032ac25d322df992303dCa074EE7392C117b9",
+      name: "Tether USD",
+      symbol: "USDT",
+      decimals: 6,
     },
-  ],
-
-  // Arbitrum Sepolia (421614)
-  421614: [
     {
-      address: zeroAddress,
-      name: "Ethereum",
-      symbol: "ETH",
-      decimals: 18,
-      isNative: true,
+      address: "0xF242275d3a6527d877f2c927a82D9b057609cc71",
+      name: "Bridge USDC",
+      symbol: "USDC.e",
+      decimals: 6,
     },
   ],
 
-  // Base Sepolia (84532)
-  84532: [
-    {
-      address: zeroAddress,
-      name: "Ethereum",
-      symbol: "ETH",
-      decimals: 18,
-      isNative: true,
-    },
-  ],
-
+ 
   // Arbitrum One (42161) - Commented out in original but adding tokens for reference
   42161: [
     {
       address: zeroAddress,
-      name: "Ethereum",
+      name: "Ether",
       symbol: "ETH",
       decimals: 18,
       isNative: true,
@@ -285,6 +280,13 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "USDC",
       decimals: 6,
     },
+    {
+      address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+      name: "Bridge USDT",
+      symbol: "USDT",
+      decimals: 6,
+    },
+    
     {
       address: "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed",
       name: "Degen",
@@ -1126,7 +1128,7 @@ export default function CreateFaucetWizard() {
           </Card>
 
           {/* Custom Drop Faucet Card */}
-          <Card
+          {/* <Card
             className={`cursor-pointer border-2 transition-all ${
               !isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) 
                 ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed' 
@@ -1156,7 +1158,7 @@ export default function CreateFaucetWizard() {
                 <p className="text-xs text-red-600 mt-2">Not available on this network</p>
               )}
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
         
         {wizardState.selectedFaucetType && (

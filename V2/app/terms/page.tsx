@@ -43,7 +43,7 @@ export default function TermsPage() {
                 
                 <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-3">2.1 Eligibility</h3>
                 <p className="text-slate-700 dark:text-slate-300 mb-4">
-                  You must be at least 18 years old and have the legal capacity to enter into contracts to use our Service. By using FaucetDrops, you represent that you meet these requirements.
+                  You must be at least 15 years old and have the legal capacity to enter into contracts to use our Service. By using FaucetDrops, you represent that you meet these requirements.
                 </p>
 
                 <h3 className="text-lg font-medium text-slate-900 dark:text-slate-100 mb-3">2.2 Permitted Use</h3>
@@ -107,7 +107,7 @@ export default function TermsPage() {
               <section className="mb-8">
                 <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-4">7. Governing Law</h2>
                 <p className="text-slate-700 dark:text-slate-300">
-                  These Terms are governed by the laws of [Insert Jurisdiction, e.g., Delaware, USA]. Any disputes arising from these Terms will be resolved in the courts of [Insert Jurisdiction].
+                  These Terms are governed by the laws of Nigeria. Any disputes arising from these Terms will be resolved in the courts of Lagos, Nigeria.
                 </p>
               </section>
 

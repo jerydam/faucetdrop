@@ -60,7 +60,7 @@ import {
 import { zeroAddress } from "viem"
 import { isAddress } from "ethers"
 
-// Enhanced type definitions with better naming
+// Enhanced type definitions with better naming and symbol support
 interface TokenConfiguration {
   address: string
   name: string
@@ -69,6 +69,7 @@ interface TokenConfiguration {
   isNative?: boolean
   isCustom?: boolean
   logoUrl?: string
+  description?: string // Added description for better UX
 }
 
 interface FaucetNameConflict {
@@ -136,7 +137,7 @@ const FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING: Record<FaucetType, FactoryType> = {
   [FAUCET_TYPES.CUSTOM]: 'custom',    // ✅ Custom faucets use custom factory
 }
 
-// Enhanced token configurations for different networks
+// Enhanced token configurations for different networks with symbols and descriptions
 const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
   // Celo Mainnet (42220)
   42220: [
@@ -146,126 +147,140 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "CELO",
       decimals: 18,
       isNative: true,
+      description: "Native Celo token for governance and staking",
     },
     {
       address: "0xE2702Bd97ee33c88c8f6f92DA3B733608aa76F71",
       name: "Celo Nigerian Naira",
       symbol: "cNGN",
       decimals: 18,
-      isNative: true,
+      description: "Naira-pegged stablecoin on Celo",
     },
-    
     {
       address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
       name: "Celo Dollar",
       symbol: "cUSD",
       decimals: 18,
+      description: "USD-pegged stablecoin on Celo",
     },
     {
       address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e",
       name: "Tether",
       symbol: "USDT",
       decimals: 6,
+      description: "Tether USD stablecoin",
     },
     {
       address: "0x639A647fbe20b6c8ac19E48E2de44ea792c62c5C",
       name: "Celo Brazilian Real",
       symbol: "cREAL",
       decimals: 18,
+      description: "Brazilian Real-pegged stablecoin on Celo",
     },
     {
       address: "0x32A9FE697a32135BFd313a6Ac28792DaE4D9979d",
       name: "Celo Kenyan Shilling",
       symbol: "cKES",
       decimals: 18,
+      description: "Kenyan Shilling-pegged stablecoin on Celo",
     },
     {
-        address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
-        name: "Dollar Coin",
-        symbol: "USDC",
-        decimals: 6,
-      },
-      {
-        address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
-        name: "Celo Euro",
-        symbol: "cEUR",
-        decimals: 18,
-      },
-      {
-        address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
-        name: "Glo Dollar",
-        symbol: "USDGLO",
-        decimals: 18,
-      },
-      {
-        address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
-        name: "Good dollar",
-        symbol: "G$",
-        decimals: 18,
-      },
-      
+      address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      description: "USD Coin stablecoin",
+    },
+    {
+      address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
+      name: "Celo Euro",
+      symbol: "cEUR",
+      decimals: 18,
+      description: "Euro-pegged stablecoin on Celo",
+    },
+    {
+      address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+      name: "Glo Dollar",
+      symbol: "USDGLO",
+      decimals: 18,
+      description: "Philanthropic dollar that funds global poverty relief",
+    },
+    {
+      address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
+      name: "GoodDollar",
+      symbol: "G$",
+      decimals: 18,
+      description: "Universal basic income token",
+    },
   ],
-  
 
+  // Lisk Mainnet (1135)
   1135: [
     {
       address: zeroAddress,
-      name: "Ether",
+      name: "Ethereum",
       symbol: "ETH",
       decimals: 18,
       isNative: true,
+      description: "Native Ethereum for transaction fees",
     },
-     {
+    {
       address: "0xac485391EB2d7D88253a7F1eF18C37f4242D1A24",
       name: "Lisk",
       symbol: "LSK",
       decimals: 18,
+      description: "Lisk native token",
     },
     {
       address: "0x05D032ac25d322df992303dCa074EE7392C117b9",
       name: "Tether USD",
       symbol: "USDT",
       decimals: 6,
+      description: "Tether USD stablecoin",
     },
     {
       address: "0xF242275d3a6527d877f2c927a82D9b057609cc71",
-      name: "Bridge USDC",
+      name: "Bridged USDC",
       symbol: "USDC.e",
       decimals: 6,
+      description: "Bridged USD Coin from Ethereum",
     },
   ],
 
- 
-  // Arbitrum One (42161) - Commented out in original but adding tokens for reference
+  // Arbitrum One (42161)
   42161: [
     {
       address: zeroAddress,
-      name: "Ether",
+      name: "Ethereum",
       symbol: "ETH",
       decimals: 18,
       isNative: true,
+      description: "Native Ethereum for transaction fees",
     },
     {
       address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
+      description: "Native USD Coin on Arbitrum",
     },
     {
       address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
       name: "Tether USD",
       symbol: "USDT",
       decimals: 6,
+      description: "Tether USD stablecoin",
     },
     {
       address: "0x912CE59144191C1204E64559FE8253a0e49E6548",
       name: "Arbitrum",
       symbol: "ARB",
       decimals: 18,
+      description: "Arbitrum governance token",
     },
   ],
 
-  // Base Mainnet (8453) - Commented out in original but adding tokens for reference
+  // Base Mainnet (8453)
   8453: [
     {
       address: zeroAddress,
@@ -273,25 +288,28 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
+      description: "Native Ethereum for transaction fees",
     },
     {
       address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
+      description: "Native USD Coin on Base",
     },
     {
       address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
-      name: "Bridge USDT",
+      name: "Bridged Tether USD",
       symbol: "USDT",
       decimals: 6,
+      description: "Bridged Tether USD from Ethereum",
     },
-    
     {
       address: "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed",
       name: "Degen",
       symbol: "DEGEN",
       decimals: 18,
+      description: "Degen community token",
     },
   ],
 }
@@ -412,6 +430,7 @@ export default function CreateFaucetWizard() {
         symbol: network.nativeCurrency.symbol,
         decimals: network.nativeCurrency.decimals,
         isNative: true,
+        description: `Native ${network.symbol} token for transaction fees`,
       })
     }
     
@@ -476,6 +495,7 @@ export default function CreateFaucetWizard() {
         symbol,
         decimals,
         isCustom: true,
+        description: "Custom ERC-20 token",
       }
 
       setCustomTokenValidation({
@@ -1026,6 +1046,121 @@ export default function CreateFaucetWizard() {
     )
   }
 
+  // Enhanced Token Selection Component with Symbol Support
+  const EnhancedTokenSelector = () => (
+    <Select 
+      value={wizardState.formData.showCustomTokenInput ? "custom" : wizardState.formData.selectedTokenAddress} 
+      onValueChange={handleTokenSelectionChange}
+    >
+      <SelectTrigger id="token-selector">
+        <SelectValue placeholder={isTokensLoading ? "Loading tokens..." : "Select a token"}>
+          {(() => {
+            if (wizardState.formData.showCustomTokenInput && customTokenValidation.tokenInfo) {
+              const token = customTokenValidation.tokenInfo
+              return (
+                <div className="flex items-center space-x-2">
+                  <div className="w-5 h-5 bg-purple-100 rounded-full flex items-center justify-center">
+                    <span className="text-xs font-bold text-purple-600">
+                      {token.symbol.slice(0, 2)}
+                    </span>
+                  </div>
+                  <span className="font-bold text-purple-600">{token.symbol}</span>
+                  <span className="text-gray-500">({token.name})</span>
+                  <span className="text-xs bg-purple-100 text-purple-800 px-1 rounded">Custom</span>
+                </div>
+              )
+            }
+            
+            const selectedToken = availableTokens.find(t => t.address === wizardState.formData.selectedTokenAddress)
+            if (selectedToken) {
+              return (
+                <div className="flex items-center space-x-2">
+                  <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-xs font-bold text-blue-600">
+                      {selectedToken.symbol.slice(0, 2)}
+                    </span>
+                  </div>
+                  <span className="font-bold text-blue-600">{selectedToken.symbol}</span>
+                  <span className="text-gray-500">({selectedToken.name})</span>
+                  {selectedToken.isNative && (
+                    <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Native</span>
+                  )}
+                </div>
+              )
+            }
+            
+            return "Select a token"
+          })()}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {/* Native tokens first */}
+        {availableTokens.filter(token => token.isNative).map((token) => (
+          <SelectItem key={token.address} value={token.address}>
+            <div className="flex items-start space-x-2 py-1">
+              <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-blue-600">
+                  {token.symbol.slice(0, 2)}
+                </span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold text-blue-600">{token.symbol}</span>
+                  <span className="text-gray-500">({token.name})</span>
+                  <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Native</span>
+                </div>
+                {token.description && (
+                  <span className="text-xs text-gray-400 mt-1 truncate">{token.description}</span>
+                )}
+              </div>
+            </div>
+          </SelectItem>
+        ))}
+        
+        {/* Divider */}
+        {availableTokens.some(t => t.isNative) && availableTokens.some(t => !t.isNative) && (
+          <SelectItem disabled value="_divider_native" className="border-t border-gray-200 mt-1 pt-1">
+            <span className="text-gray-400 text-xs">━━━ Other Tokens ━━━</span>
+          </SelectItem>
+        )}
+        
+        {/* Other tokens */}
+        {availableTokens.filter(token => !token.isNative).map((token) => (
+          <SelectItem key={token.address} value={token.address}>
+            <div className="flex items-start space-x-2 py-1">
+              <div className="w-5 h-5 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-gray-600">
+                  {token.symbol.slice(0, 2)}
+                </span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold">{token.symbol}</span>
+                  <span className="text-gray-500">({token.name})</span>
+                  <span className="text-xs text-gray-500">{token.decimals} decimals</span>
+                </div>
+                {token.description && (
+                  <span className="text-xs text-gray-400 mt-1 truncate">{token.description}</span>
+                )}
+              </div>
+            </div>
+          </SelectItem>
+        ))}
+        
+        {/* Custom token option */}
+        <SelectItem disabled value="_divider_custom" className="border-t border-gray-200 mt-1 pt-1">
+          <span className="text-gray-400 text-xs">━━━━━━━━━━━━━━━━━━━━</span>
+        </SelectItem>
+        <SelectItem value="custom">
+          <div className="flex items-center space-x-2">
+            <Plus className="h-4 w-4 text-purple-600" />
+            <span className="font-medium text-purple-600">Add Custom Token</span>
+          </div>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  )
+
   // Step 1: Faucet Type Selection
   const renderFaucetTypeSelection = () => {
     const unavailableTypes = getUnavailableFaucetTypesForNetwork()
@@ -1047,7 +1182,7 @@ export default function CreateFaucetWizard() {
             <AlertTriangle className="h-4 w-4 text-orange-600" />
             <AlertTitle className="text-orange-700 dark:text-orange-300">Limited Factory Support</AlertTitle>
             <AlertDescription className="text-orange-700 dark:text-orange-300">
-              Some faucet types are not yet available on {network.name}:
+              Some faucet types are not yet available on {network.name} ({network.symbol}):
               <div className="mt-2 space-y-1">
                 {unavailableTypes.map((type) => (
                   <div key={type} className="flex items-center space-x-2">
@@ -1060,7 +1195,7 @@ export default function CreateFaucetWizard() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Open Drop Faucet Card */}
           <Card
             className={`cursor-pointer border-2 transition-all ${
@@ -1089,7 +1224,7 @@ export default function CreateFaucetWizard() {
                 Open faucet for wide distribution with drop code protection.
               </p>
               {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.OPEN) && (
-                <p className="text-xs text-red-600 mt-2">Not available on this network</p>
+                <p className="text-xs text-red-600 mt-2">Not available on {network?.symbol || 'this network'}</p>
               )}
             </CardContent>
           </Card>
@@ -1122,43 +1257,10 @@ export default function CreateFaucetWizard() {
                 Restricted faucet for specific wallet addresses only.
               </p>
               {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.GATED) && (
-                <p className="text-xs text-red-600 mt-2">Not available on this network</p>
+                <p className="text-xs text-red-600 mt-2">Not available on {network?.symbol || 'this network'}</p>
               )}
             </CardContent>
           </Card>
-
-          {/* Custom Drop Faucet Card */}
-          {/* <Card
-            className={`cursor-pointer border-2 transition-all ${
-              !isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) 
-                ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed' 
-                : wizardState.selectedFaucetType === FAUCET_TYPES.CUSTOM 
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                  : 'border-gray-200 hover:border-gray-300'
-            }`}
-            onClick={() => isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) && selectFaucetType(FAUCET_TYPES.CUSTOM)}
-          >
-            <CardHeader>
-              <div className="flex items-center space-x-2">
-                <Settings className={`h-5 w-5 ${isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) ? 'text-purple-600' : 'text-gray-400'}`} />
-                <CardTitle className="text-lg flex items-center space-x-2">
-                  <span>Custom Drop</span>
-                  {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) && (
-                    <XCircle className="h-4 w-4 text-red-500" />
-                  )}
-                </CardTitle>
-              </div>
-              <CardDescription>Advanced Configuration</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600">
-                Fully customizable faucet with advanced features and API integration.
-              </p>
-              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) && (
-                <p className="text-xs text-red-600 mt-2">Not available on this network</p>
-              )}
-            </CardContent>
-          </Card> */}
         </div>
         
         {wizardState.selectedFaucetType && (
@@ -1296,7 +1398,7 @@ export default function CreateFaucetWizard() {
             <Alert className="border-green-500 bg-green-50 dark:bg-green-900/20">
               <Check className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-700 dark:text-green-300">
-                Great! This name is available across all factory types on {network?.name}.
+                Great! This name is available across all factory types on {network?.name} ({network?.symbol}).
                 {nameValidation.validationWarning && (
                   <div className="mt-1 text-xs text-yellow-700">
                     Note: {nameValidation.validationWarning}
@@ -1313,49 +1415,12 @@ export default function CreateFaucetWizard() {
           )}
         </div>
         
-        {/* Enhanced Token Selection with Multiple Options */}
+        {/* Enhanced Token Selection with Symbol Support */}
         <div className="space-y-2">
           <Label htmlFor="token-selector">Select Token</Label>
           
-          {/* Token Selection Dropdown */}
-          <Select 
-            value={wizardState.formData.showCustomTokenInput ? "custom" : wizardState.formData.selectedTokenAddress} 
-            onValueChange={handleTokenSelectionChange}
-          >
-            <SelectTrigger id="token-selector">
-              <SelectValue placeholder={isTokensLoading ? "Loading tokens..." : "Select a token"} />
-            </SelectTrigger>
-            <SelectContent>
-              {/* Predefined Tokens */}
-              {availableTokens.map((token) => (
-                <SelectItem key={token.address} value={token.address}>
-                  <div className="flex items-center space-x-2">
-                    <Coins className="h-4 w-4 text-gray-400" />
-                    <span className="font-medium">{token.symbol}</span>
-                    <span className="text-gray-500">({token.name})</span>
-                    {token.isNative && (
-                      <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Native</span>
-                    )}
-                  </div>
-                </SelectItem>
-              ))}
-              
-              {/* Divider */}
-              {availableTokens.length > 0 && (
-                <SelectItem disabled value="_divider" className="border-t border-gray-200 mt-1 pt-1">
-                  <span className="text-gray-400 text-xs">━━━━━━━━━━━━━━━━━━━━</span>
-                </SelectItem>
-              )}
-              
-              {/* Custom Token Option */}
-              <SelectItem value="custom">
-                <div className="flex items-center space-x-2">
-                  <Plus className="h-4 w-4 text-purple-600" />
-                  <span className="font-medium text-purple-600">Add Custom Token</span>
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Enhanced Token Selection Component */}
+          <EnhancedTokenSelector />
 
           {/* Custom Token Input */}
           {wizardState.formData.showCustomTokenInput && (
@@ -1428,7 +1493,7 @@ export default function CreateFaucetWizard() {
                     <div className="space-y-1">
                       <div className="font-medium">Token Found:</div>
                       <div className="flex items-center space-x-2 text-sm">
-                        <span>{customTokenValidation.tokenInfo.symbol}</span>
+                        <span className="font-bold">{customTokenValidation.tokenInfo.symbol}</span>
                         <span>({customTokenValidation.tokenInfo.name})</span>
                         <span className="text-xs bg-green-100 text-green-800 px-1 rounded">
                           {customTokenValidation.tokenInfo.decimals} decimals
@@ -1452,13 +1517,25 @@ export default function CreateFaucetWizard() {
               {(() => {
                 const selectedToken = availableTokens.find(t => t.address === wizardState.formData.selectedTokenAddress)
                 return selectedToken ? (
-                  <div className="flex items-center space-x-2 p-2 bg-gray-50 dark:bg-gray-800 rounded">
-                    <Coins className="h-4 w-4" />
-                    <span>{selectedToken.symbol} - {selectedToken.name}</span>
-                    <span className="text-xs text-gray-500">({selectedToken.decimals} decimals)</span>
-                    {selectedToken.isNative && (
-                      <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Native</span>
-                    )}
+                  <div className="flex items-center space-x-2 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-bold text-blue-600">
+                        {selectedToken.symbol.slice(0, 2)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold">{selectedToken.symbol}</span>
+                        <span className="text-gray-500">({selectedToken.name})</span>
+                        <span className="text-xs text-gray-500">{selectedToken.decimals} decimals</span>
+                        {selectedToken.isNative && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Native</span>
+                        )}
+                      </div>
+                      {selectedToken.description && (
+                        <span className="text-xs text-gray-400 mt-1">{selectedToken.description}</span>
+                      )}
+                    </div>
                   </div>
                 ) : null
               })()}
@@ -1521,8 +1598,11 @@ export default function CreateFaucetWizard() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Network</Label>
                 <p className="flex items-center space-x-2">
-                  <Coins className="h-4 w-4 text-blue-600" />
-                  <span>{network?.name || "Unknown Network"}</span>
+                  <div 
+                    className="w-3 h-3 rounded-full" 
+                    style={{ backgroundColor: network?.color }} 
+                  />
+                  <span>{network?.name || "Unknown Network"} ({network?.symbol})</span>
                   {network?.isTestnet && (
                     <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
                       Testnet
@@ -1573,8 +1653,13 @@ export default function CreateFaucetWizard() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Token</Label>
                 <p className="flex items-center space-x-2">
-                  <Coins className="h-4 w-4 text-gray-500" />
-                  <span>{selectedTokenConfig?.symbol} ({selectedTokenConfig?.name})</span>
+                  <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-xs font-bold text-blue-600">
+                      {selectedTokenConfig?.symbol.slice(0, 2)}
+                    </span>
+                  </div>
+                  <span className="font-bold">{selectedTokenConfig?.symbol}</span>
+                  <span className="text-gray-500">({selectedTokenConfig?.name})</span>
                   {selectedTokenConfig?.isNative && (
                     <span className="text-xs bg-blue-100 text-blue-800 px-1 rounded">Native</span>
                   )}
@@ -1649,7 +1734,7 @@ export default function CreateFaucetWizard() {
             <XCircle className="h-4 w-4" />
             <AlertTitle>Factory Not Available</AlertTitle>
             <AlertDescription>
-              {wizardState.selectedFaucetType} faucets are not available on {network?.name}. Please select a different faucet type or switch networks.
+              {wizardState.selectedFaucetType} faucets are not available on {network?.name} ({network?.symbol}). Please select a different faucet type or switch networks.
             </AlertDescription>
           </Alert>
         )}

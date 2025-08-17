@@ -284,46 +284,87 @@ const handleStartTimeChange = (e) => {
     }
   }
 
-  const loadSocialMediaLinks = async (): Promise<void> => {
-    if (!faucetAddress) return
+ // ✅ UPDATED: Load social media tasks for ALL faucet types
+const loadSocialMediaLinks = async (): Promise<void> => {
+  if (!faucetAddress) return
+  
+  try {
+    setIsLoadingSocialLinks(true)
+    console.log(`🔍 Loading social media tasks for ${faucetType || 'unknown'} faucet: ${faucetAddress}`)
     
-    try {
-      setIsLoadingSocialLinks(true)
-      console.log(`🔍 Loading social media links for faucet: ${faucetAddress}`)
-      
-      const response = await fetch(`https://fauctdrop-backend.onrender.com/social-media-links/${faucetAddress}`)
-      
-      if (!response.ok) {
-        if (response.status === 404) {
-          console.log('📝 No social media links found for this faucet')
-          setDynamicTasks([])
-          return
-        }
-        throw new Error(`Failed to load social media links: ${response.status}`)
-      }
-      
-      const result = await response.json()
-      
-      if (result.success && result.socialMediaLinks) {
-        setDynamicTasks(result.socialMediaLinks)
-        console.log(`✅ Loaded ${result.socialMediaLinks.length} social media links`)
-      } else {
+    const response = await fetch(`http://0.0.0.0:10000/faucet-tasks/${faucetAddress}`)
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log(`📝 No social media tasks found for ${faucetType || 'unknown'} faucet`)
         setDynamicTasks([])
+        return
       }
-      
-    } catch (error) {
-      console.error('❌ Error loading social media links:', error)
-      setDynamicTasks([])
-      toast({
-        title: "Warning",
-        description: "Could not load social media tasks. Using default verification.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoadingSocialLinks(false)
+      throw new Error(`Failed to load social media tasks: ${response.status}`)
     }
+    
+    const result = await response.json()
+    
+    if (result.success && result.tasks) {
+      // ✅ Convert backend tasks to frontend social media format for ALL faucet types
+      const socialLinks = result.tasks.map(task => {
+        // Check if task has social media info stored (new format)
+        if (task.platform && task.handle && task.action) {
+          return {
+            platform: task.platform,
+            url: task.url,
+            handle: task.handle,
+            action: task.action
+          }
+        } else {
+          // Extract from title/description for backwards compatibility
+          const content = (task.title + ' ' + task.description).toLowerCase()
+          let platform = 'twitter' // default
+          if (content.includes('telegram')) platform = 'telegram'
+          else if (content.includes('discord')) platform = 'discord'
+          else if (content.includes('youtube')) platform = 'youtube'
+          else if (content.includes('instagram')) platform = 'instagram'
+          else if (content.includes('tiktok')) platform = 'tiktok'
+          else if (content.includes('facebook')) platform = 'facebook'
+          
+          // Extract handle from title/description  
+          const handleMatch = (task.title + ' ' + task.description).match(/@([a-zA-Z0-9_]+)/)
+          const handle = handleMatch ? `@${handleMatch[1]}` : ''
+          
+          // Extract action from title
+          let action = 'follow' // default
+          if (task.title.toLowerCase().includes('subscribe')) action = 'subscribe'
+          else if (task.title.toLowerCase().includes('join')) action = 'join'
+          else if (task.title.toLowerCase().includes('like')) action = 'like'
+          else if (task.title.toLowerCase().includes('retweet')) action = 'retweet'
+          
+          return {
+            platform,
+            url: task.url,
+            handle,
+            action
+          }
+        }
+      })
+      
+      setDynamicTasks(socialLinks)
+      console.log(`✅ Loaded ${socialLinks.length} social media tasks for ${faucetType || 'unknown'} faucet`)
+    } else {
+      setDynamicTasks([])
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading social media tasks:', error)
+    setDynamicTasks([])
+    toast({
+      title: "Warning",
+      description: "Could not load social media tasks. Using default verification.",
+      variant: "destructive",
+    })
+  } finally {
+    setIsLoadingSocialLinks(false)
   }
-
+}
   const addNewSocialLink = (): void => {
     setNewSocialLinks([...newSocialLinks, {
       platform: 'twitter',
@@ -855,7 +896,7 @@ const handleStartTimeChange = (e) => {
   // ✅ Helper functions for admin popup preferences
   const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {
     try {
-      const response = await fetch("https://fauctdrop-backend.onrender.com/admin-popup-preference", {
+      const response = await fetch("http://0.0.0.0:10000/admin-popup-preference", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1139,7 +1180,7 @@ const handleStartTimeChange = (e) => {
   const getAdminPopupPreference = async (userAddr: string, faucetAddr: string): Promise<boolean> => {
     try {
       const response = await fetch(
-        `https://fauctdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+        `http://0.0.0.0:10000/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
       )
       
       if (!response.ok) {
@@ -1402,150 +1443,175 @@ const handleStartTimeChange = (e) => {
     }
   }
 
-  // ✅ UPDATED: Enhanced handleUpdateClaimParameters with social media links integration
-  const handleUpdateClaimParameters = async (): Promise<void> => {
-    if (!isConnected || !provider || !chainId) {
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet and ensure a network is selected",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    // ✅ FIXED: For custom faucets, claimAmount is not required
-    if (faucetType !== 'custom' && !claimAmount) {
-      toast({
-        title: "Invalid Input",
-        description: "Please fill in the drop amount",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!startTime || !endTime) {
-      toast({
-        title: "Invalid Input",
-        description: "Please fill in the start and end times",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!checkNetwork()) return
-
-    try {
-      setIsUpdatingParameters(true)
-      // ✅ For custom faucets, use 0 as claim amount since individual amounts are set separately
-      const claimAmountBN = faucetType === 'custom' ? BigInt(0) : parseUnits(claimAmount, tokenDecimals)
-      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
-      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
-      
-      let secretCodeFromBackend = ""
-      
-      // ✅ NEW: Prepare social media links data from newSocialLinks
-      const socialLinksToSend = newSocialLinks.filter(link => 
-        link.url.trim() && link.handle.trim()
-      ).map(link => ({
-        platform: link.platform,
-        url: link.url.trim(),
-        handle: link.handle.trim(),
-        action: link.action
-      }))
-      
-      // ✅ FIXED: Only generate secret code for dropcode faucets in backend mode
-      if (faucetType === 'dropcode' && backendMode) {
-        const response = await fetch("https://fauctdrop-backend.onrender.com/set-claim-parameters", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            faucetAddress,
-            claimAmount: claimAmountBN.toString(),
-            startTime: startTimestamp,
-            endTime: endTimestamp,
-            chainId: Number(chainId),
-            socialMediaLinks: socialLinksToSend
-          }),
-        })
-        
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.detail || "Failed to set drop parameters")
-        }
-        
-        const result = await response.json()
-        secretCodeFromBackend = result.secretCode
-        
-        console.log(`✅ Social media links stored: ${result.socialMediaLinksStored || 0}`)
-      } else if (socialLinksToSend.length > 0) {
-        // ✅ NEW: For non-dropcode faucets, save social media links separately
-        const response = await fetch("https://fauctdrop-backend.onrender.com/update-social-media-links", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            faucetAddress,
-            socialMediaLinks: socialLinksToSend
-          }),
-        })
-        
-        if (response.ok) {
-          const result = await response.json()
-          console.log(`✅ Social media links updated: ${result.linksCount || 0}`)
-        }
-      }
-
-      await setClaimParameters(
-        provider as BrowserProvider,
-        faucetAddress,
-        claimAmountBN,
-        startTimestamp,
-        endTimestamp,
-        BigInt(chainId),
-        BigInt(Number(networkId)),
-        faucetType || undefined,
-      )
-
-      // ✅ FIXED: Only handle secret code for dropcode faucets
-      if (faucetType === 'dropcode' && backendMode && secretCodeFromBackend) {
-        saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend)
-        setGeneratedSecretCode(secretCodeFromBackend)
-        setShowSecretCodeDialog(true)
-      }
-
-      toast({
-        title: "Drop parameters updated",
-        description: `Parameters updated successfully. ${
-          socialLinksToSend.length > 0 ? `${socialLinksToSend.length} social media links saved. ` : ""
-        }${
-          faucetType === 'dropcode' && backendMode ? "Drop code generated and stored." : ""
-        }`,
-      })
-      
-      // Clear the new social links after successful save
-      setNewSocialLinks([])
-      
-      await loadFaucetDetails()
-      await loadSocialMediaLinks() // Reload social links
-      await loadTransactionHistory()
-      
-    } catch (error: any) {
-      console.error("Error updating drop parameters:", error)
-      if (error.message === "Switch to the network to perform operation") {
-        checkNetwork()
-      } else {
-        toast({
-          title: "Failed to update drop parameters",
-          description: error.message || "Unknown error occurred",
-          variant: "destructive",
-        })
-      }
-    } finally {
-      setIsUpdatingParameters(false)
-    }
+// ✅ UPDATED: handleUpdateClaimParameters for ALL faucet types
+const handleUpdateClaimParameters = async (): Promise<void> => {
+  if (!isConnected || !provider || !chainId) {
+    toast({
+      title: "Wallet not connected",
+      description: "Please connect your wallet and ensure a network is selected",
+      variant: "destructive",
+    })
+    return
   }
+  
+  // ✅ UPDATED: For custom faucets, claimAmount is not required, but for others it is
+  if (faucetType !== 'custom' && !claimAmount) {
+    toast({
+      title: "Invalid Input",
+      description: "Please fill in the drop amount",
+      variant: "destructive",
+    })
+    return
+  }
+  
+  if (!startTime || !endTime) {
+    toast({
+      title: "Invalid Input",
+      description: "Please fill in the start and end times",
+      variant: "destructive",
+    })
+    return
+  }
+  if (!checkNetwork()) return
+
+  try {
+    setIsUpdatingParameters(true)
+    
+    // ✅ For custom faucets, use 0 as claim amount since individual amounts are set separately
+    const claimAmountBN = faucetType === 'custom' ? BigInt(0) : parseUnits(claimAmount, tokenDecimals)
+    const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
+    const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
+    
+    let secretCodeFromBackend = ""
+    
+    // ✅ NEW: Prepare social media tasks for ALL faucet types
+    const tasksToSend = newSocialLinks.filter(link => 
+      link.url.trim() && link.handle.trim()
+    ).map(link => ({
+      title: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} ${link.handle}`,
+      description: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} our ${link.platform} account: ${link.handle}`,
+      url: link.url.trim(),
+      required: true,
+      platform: link.platform,  // Store original platform info
+      handle: link.handle,      // Store original handle info  
+      action: link.action       // Store original action info
+    }))
+    
+    console.log(`📋 Preparing to send ${tasksToSend.length} social media tasks for ${faucetType} faucet`)
+    
+    // ✅ UPDATED: Handle backend communication for ALL faucet types
+    if (faucetType === 'dropcode' && backendMode) {
+      // Dropcode faucets in backend mode - generates secret code + stores tasks
+      console.log("🔐 Dropcode faucet - generating secret code and storing tasks")
+      
+      const response = await fetch("http://0.0.0.0:10000/set-claim-parameters", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          faucetAddress,
+          claimAmount: claimAmountBN.toString(),
+          startTime: startTimestamp,
+          endTime: endTimestamp,
+          chainId: Number(chainId),
+          tasks: tasksToSend  // ✅ Send tasks for dropcode faucets
+        }),
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || "Failed to set drop parameters")
+      }
+      
+      const result = await response.json()
+      secretCodeFromBackend = result.secretCode
+      
+      console.log(`✅ Dropcode: Secret code generated, ${result.tasksStored || 0} tasks stored`)
+      
+    } else {
+      // ✅ NEW: For ALL other faucet types (droplist, custom, dropcode in manual mode)
+      console.log(`📝 ${faucetType} faucet - storing tasks via add-faucet-tasks endpoint`)
+      
+      if (tasksToSend.length > 0) {
+        try {
+          const response = await fetch("http://0.0.0.0:10000/add-faucet-tasks", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              faucetAddress,
+              tasks: tasksToSend,
+              userAddress: address,
+              chainId: Number(chainId)
+            }),
+          })
+          
+          if (response.ok) {
+            const result = await response.json()
+            console.log(`✅ ${faucetType}: ${result.tasksAdded || 0} tasks stored successfully`)
+          } else {
+            const errorData = await response.json()
+            console.warn(`⚠️ Failed to store tasks for ${faucetType} faucet:`, errorData.detail)
+          }
+        } catch (taskError) {
+          console.warn(`⚠️ Task storage failed for ${faucetType} faucet:`, taskError.message)
+          // Don't fail the entire operation if task storage fails
+        }
+      }
+    }
+
+    // ✅ Continue with blockchain transaction for ALL faucet types
+    await setClaimParameters(
+      provider as BrowserProvider,
+      faucetAddress,
+      claimAmountBN,
+      startTimestamp,
+      endTimestamp,
+      BigInt(chainId),
+      BigInt(Number(networkId)),
+      faucetType || undefined,
+    )
+
+    // ✅ Handle secret code display only for dropcode faucets
+    if (faucetType === 'dropcode' && backendMode && secretCodeFromBackend) {
+      saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend)
+      setGeneratedSecretCode(secretCodeFromBackend)
+      setShowSecretCodeDialog(true)
+    }
+
+    // ✅ Success message for ALL faucet types
+    const taskMessage = tasksToSend.length > 0 ? `${tasksToSend.length} social media tasks saved. ` : ""
+    const secretMessage = faucetType === 'dropcode' && backendMode ? "Drop code generated and stored." : ""
+    
+    toast({
+      title: "Drop parameters updated",
+      description: `Parameters updated successfully. ${taskMessage}${secretMessage}`,
+    })
+    
+    // Clear the new social links after successful save
+    setNewSocialLinks([])
+    
+    await loadFaucetDetails()
+    await loadSocialMediaLinks() // Reload social links for ALL faucet types
+    await loadTransactionHistory()
+    
+  } catch (error: any) {
+    console.error("Error updating drop parameters:", error)
+    if (error.message === "Switch to the network to perform operation") {
+      checkNetwork()
+    } else {
+      toast({
+        title: "Failed to update drop parameters",
+        description: error.message || "Unknown error occurred",
+        variant: "destructive",
+      })
+    }
+  } finally {
+    setIsUpdatingParameters(false)
+  }
+}
 
   // Load social media links when component mounts
   useEffect(() => {
@@ -1968,9 +2034,9 @@ const handleStartTimeChange = (e) => {
   // ✅ Load faucet details when component mounts or dependencies change
   useEffect(() => {
   if (faucetAddress) {
-    loadSocialMediaTasks()
+    loadSocialMediaLinks();
   }
-}, [faucetAddress])
+}, [faucetAddress]);
   
   useEffect(() => {
     if (provider && faucetAddress && networkId) {
@@ -2464,104 +2530,122 @@ const handleStartTimeChange = (e) => {
 
     {/* ✅ NEW: Social Media Tasks Section */}
     <div className="space-y-4 border-t pt-4">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs sm:text-sm font-medium">
-          Social Media Tasks (Optional)
-        </Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addNewSocialLink}
-          className="text-xs hover:bg-accent hover:text-accent-foreground"
-        >
-          <ExternalLink className="h-3 w-3 mr-1" />
-          Add Task
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Add social media tasks that users must complete before claiming tokens. Leave empty for no verification requirements.
+  <div className="flex items-center justify-between">
+    <div>
+      <Label className="text-xs sm:text-sm font-medium">
+        Social Media Tasks (Optional)
+      </Label>
+      <p className="text-xs text-muted-foreground mt-1">
+        Add social media tasks for {faucetType === 'dropcode' ? 'Drop Code' : faucetType === 'droplist' ? 'Drop List' : 'Custom'} faucet verification
       </p>
-      
-      {newSocialLinks.length > 0 && (
-        <div className="space-y-3">
-          {newSocialLinks.map((link, index) => (
-            <div key={index} className="border rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Task {index + 1}</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeNewSocialLink(index)}
-                  className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Platform</Label>
-                  <Select
-                    value={link.platform}
-                    onValueChange={(value) => updateNewSocialLink(index, 'platform', value)}
-                  >
-                    <SelectTrigger className="text-xs">
-                      <SelectValue placeholder="Select platform" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="twitter">Twitter/X</SelectItem>
-                      <SelectItem value="telegram">Telegram</SelectItem>
-                      <SelectItem value="discord">Discord</SelectItem>
-                      <SelectItem value="youtube">YouTube</SelectItem>
-                      <SelectItem value="instagram">Instagram</SelectItem>
-                      <SelectItem value="tiktok">TikTok</SelectItem>
-                      <SelectItem value="facebook">Facebook</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Action</Label>
-                  <Select
-                    value={link.action}
-                    onValueChange={(value) => updateNewSocialLink(index, 'action', value)}
-                  >
-                    <SelectTrigger className="text-xs">
-                      <SelectValue placeholder="Select action" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="follow">Follow</SelectItem>
-                      <SelectItem value="subscribe">Subscribe</SelectItem>
-                      <SelectItem value="join">Join</SelectItem>
-                      <SelectItem value="like">Like</SelectItem>
-                      <SelectItem value="retweet">Retweet</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">URL</Label>
-                <Input
-                  placeholder="https://twitter.com/username"
-                  value={link.url}
-                  onChange={(e) => updateNewSocialLink(index, 'url', e.target.value)}
-                  className="text-xs"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Handle/Username</Label>
-                <Input
-                  placeholder="@username"
-                  value={link.handle}
-                  onChange={(e) => updateNewSocialLink(index, 'handle', e.target.value)}
-                  className="text-xs"
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={addNewSocialLink}
+      className="text-xs hover:bg-accent hover:text-accent-foreground"
+    >
+      <ExternalLink className="h-3 w-3 mr-1" />
+      Add Task
+    </Button>
+  </div>
+  
+  {/* ✅ Show current tasks for ALL faucet types */}
+  {dynamicTasks.length > 0 && (
+    <div className="space-y-2">
+      <Label className="text-xs font-medium">Current Tasks ({dynamicTasks.length})</Label>
+      <div className="space-y-1">
+        {dynamicTasks.map((task, index) => (
+          <div key={index} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
+            <span>{getPlatformIcon(task.platform)} {getActionText(task.platform)} {task.handle}</span>
+            <Badge variant="outline" className="text-xs">{task.platform}</Badge>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+  
+  {newSocialLinks.length > 0 && (
+    <div className="space-y-3">
+      <Label className="text-xs font-medium">New Tasks</Label>
+      {newSocialLinks.map((link, index) => (
+        <div key={index} className="border rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-medium">Task {index + 1}</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => removeNewSocialLink(index)}
+              className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Platform</Label>
+              <Select
+                value={link.platform}
+                onValueChange={(value) => updateNewSocialLink(index, 'platform', value)}
+              >
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Select platform" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="twitter">Twitter/X</SelectItem>
+                  <SelectItem value="telegram">Telegram</SelectItem>
+                  <SelectItem value="discord">Discord</SelectItem>
+                  <SelectItem value="youtube">YouTube</SelectItem>
+                  <SelectItem value="instagram">Instagram</SelectItem>
+                  <SelectItem value="tiktok">TikTok</SelectItem>
+                  <SelectItem value="facebook">Facebook</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Action</Label>
+              <Select
+                value={link.action}
+                onValueChange={(value) => updateNewSocialLink(index, 'action', value)}
+              >
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Select action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="follow">Follow</SelectItem>
+                  <SelectItem value="subscribe">Subscribe</SelectItem>
+                  <SelectItem value="join">Join</SelectItem>
+                  <SelectItem value="like">Like</SelectItem>
+                  <SelectItem value="retweet">Retweet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">URL</Label>
+            <Input
+              placeholder="https://x.com/username"
+              value={link.url}
+              onChange={(e) => updateNewSocialLink(index, 'url', e.target.value)}
+              className="text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Handle/Username</Label>
+            <Input
+              placeholder="@username"
+              value={link.handle}
+              onChange={(e) => updateNewSocialLink(index, 'handle', e.target.value)}
+              className="text-xs"
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
     <div className="flex flex-col sm:flex-row gap-2">
       <Button

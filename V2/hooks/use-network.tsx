@@ -1,4 +1,4 @@
-// Fixed NetworkContext with proper configurations
+// Enhanced NetworkContext with logo support
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
@@ -7,11 +7,14 @@ import { useToast } from "@/hooks/use-toast"
 
 export interface Network {
   name: string
+  symbol: string
   chainId: number
   rpcUrl: string
   blockExplorerUrls: string
   explorerUrl?: string
   color: string
+  logoUrl: string // Added logo URL
+  iconUrl?: string // Optional smaller icon
   factoryAddresses: string[]
   factories: {
     dropcode?: string
@@ -31,10 +34,13 @@ const networks: Network[] = [
   // Mainnet Networks
   {
     name: "Celo",
+    symbol: "CELO",
     chainId: 42220,
     rpcUrl: "https://forno.celo.org",
     blockExplorerUrls: "https://celoscan.io",
     color: "#35D07F",
+    logoUrl: "https://cryptologos.cc/logos/celo-celo-logo.png",
+    iconUrl: "https://cryptologos.cc/logos/celo-celo-logo.png",
     factoryAddresses: [
       "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
@@ -58,11 +64,14 @@ const networks: Network[] = [
   },
   {
     name: "Lisk",
+    symbol: "LSK",
     chainId: 1135,
     rpcUrl: "https://rpc.api.lisk.com",
     blockExplorerUrls: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
+    logoUrl: "https://cryptologos.cc/logos/lisk-lsk-logo.png",
+    iconUrl: "https://cryptologos.cc/logos/lisk-lsk-logo.png",
     factoryAddresses: [
       "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
       "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
@@ -85,11 +94,14 @@ const networks: Network[] = [
   },
   {
     name: "Arbitrum",
+    symbol: "ARB",
     chainId: 42161,
     rpcUrl: "https://arb1.arbitrum.io/rpc",
     blockExplorerUrls: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
+    logoUrl: "https://cryptologos.cc/logos/arbitrum-arb-logo.png",
+    iconUrl: "https://cryptologos.cc/logos/arbitrum-arb-logo.png",
     factoryAddresses: ["0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
       "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
@@ -108,134 +120,121 @@ const networks: Network[] = [
     },
     isTestnet: false,
   },
-// {
-//   name: "Base",
-//   chainId: 8453,
-//   rpcUrl: "https://base.publicnode.com", 
-//   blockExplorerUrls: "https://basescan.org",
-//   explorerUrl: "https://basescan.org",
-//   color: "#0052FF",
-//   factoryAddresses: [
-//     "0x945431302922b69D500671201CEE62900624C6d5",
-//     "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
-//     "0x587b840140321DD8002111282748acAdaa8fA206"
-//   ],
-//   factories: {
-//     droplist: "0x945431302922b69D500671201CEE62900624C6d5",
-//     dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
-//     custom: "0x587b840140321DD8002111282748acAdaa8fA206"
-//   },
-//   tokenAddress: ZeroAddress,
-//   nativeCurrency: {
-//     name: "Ethereum",
-//     symbol: "ETH",
-//     decimals: 18,
-//   },
-//   isTestnet: false,
-// }
+  {
+    name: "Base",
+    symbol: "BASE",
+    chainId: 8453,
+    rpcUrl: "https://base.publicnode.com", 
+    blockExplorerUrls: "https://basescan.org",
+    explorerUrl: "https://basescan.org",
+    color: "#0052FF",
+    logoUrl: "https://cryptologos.cc/logos/base-protocol-base-logo.png",
+    iconUrl: "https://cryptologos.cc/logos/base-protocol-base-logo.png",
+    factoryAddresses: [
+      "0x945431302922b69D500671201CEE62900624C6d5",
+      "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
+      "0x587b840140321DD8002111282748acAdaa8fA206"
+    ],
+    factories: {
+      droplist: "0x945431302922b69D500671201CEE62900624C6d5",
+      dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
+      custom: "0x587b840140321DD8002111282748acAdaa8fA206"
+    },
+    tokenAddress: ZeroAddress,
+    nativeCurrency: {
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
+    },
+    isTestnet: false,
+  }
   
-  // // Testnet Networks
-  // {
-  //   name: "Celo Alfajores",
-  //   chainId: 44787,
-  //   rpcUrl: "https://alfajores-forno.celo-testnet.org",
-  //   blockExplorerUrls: "https://alfajores.celoscan.io",
-  //   explorerUrl: "https://alfajores.celoscan.io",
-  //   color: "#5FE3A1",
-  //   factoryAddresses: [
-  //     "0x1234567890123456789012345678901234567890", // Example testnet addresses
-  //     "0x2345678901234567890123456789012345678901",
-  //     "0x3456789012345678901234567890123456789012"
-  //   ],
-  //   factories: {
-  //     droplist: "0x7614f4C71776B2944445138be09FA160BcE3F790",
-  //     dropcode: "0xF84614D384D01Aa13fe79aD5375CcED57504b586",
-  //     custom: "0xd9DBAC257e532ec690dca42265A93c811Eed835f"
-  //   },
-  //   tokenAddress: ZeroAddress,
-  //   nativeCurrency: {
-  //     name: "Celo",
-  //     symbol: "CELO",
-  //     decimals: 18,
-  //   },
-  //   isTestnet: true,
-  // },
-  // {
-  //   name: "Lisk Sepolia",
-  //   chainId: 4202,
-  //   rpcUrl: "https://rpc.sepolia-api.lisk.com",
-  //   blockExplorerUrls: "https://sepolia-blockscout.lisk.com",
-  //   explorerUrl: "https://sepolia-blockscout.lisk.com",
-  //   color: "#2B5E99",
-  //   factoryAddresses: [
-  //     "0x52D38daee8458E89C2c997ad16B2b3e61A2E090a",
-  //     "0xF8AFd6372aAF40A0694aAaf2848f6311b4f5D958",
-  //     "0xDfF67DCc75fACC05E5856BE695ebcc3A9D0Ec2d9"
-  //   ],
-  //   factories: {
-  //     droplist: "0x52D38daee8458E89C2c997ad16B2b3e61A2E090a",
-  //     dropcode: "0xF8AFd6372aAF40A0694aAaf2848f6311b4f5D958",
-  //     custom: "0xDfF67DCc75fACC05E5856BE695ebcc3A9D0Ec2d9"
-  //   },
-  //   tokenAddress: ZeroAddress,
-  //   nativeCurrency: {
-  //     name: "Lisk",
-  //     symbol: "LSK",
-  //     decimals: 18,
-  //   },
-  //   isTestnet: true,
-  // },
-  // {
-  //   name: "Arbitrum Sepolia",
-  //   chainId: 421614,
-  //   rpcUrl: "https://sepolia-rollup.arbitrum.io/rpc",
-  //   blockExplorerUrls: "https://sepolia.arbiscan.io",
-  //   explorerUrl: "https://sepolia.arbiscan.io",
-  //   color: "#5CBFFF",
-  //   factoryAddresses: [
-  //     "0x17B3d9499a56E9d6f143CB9A8Bec3A99A0C33264",
-  //     "0xd041701cC67944fEdc311d7f1825A52b93C4aBF1",
-  //     "0xcF97e3E1A25876a15be55F2576f4697A55A67DFC"
-  //   ],
-  //   factories: {
-  //     droplist: "0x17B3d9499a56E9d6f143CB9A8Bec3A99A0C33264",
-  //     dropcode: "0xd041701cC67944fEdc311d7f1825A52b93C4aBF1",
-  //     custom: "0xcF97e3E1A25876a15be55F2576f4697A55A67DFC"
-  //   },
-  //   tokenAddress: ZeroAddress,
-  //   nativeCurrency: {
-  //     name: "Ethereum",
-  //     symbol: "ETH",
-  //     decimals: 18,
-  //   },
-  //   isTestnet: true,
-  // },
-  // {
-  //   name: "Base Sepolia",
-  //   chainId: 84532,
-  //   rpcUrl: "https://sepolia.base.org",
-  //   blockExplorerUrls: "https://sepolia.basescan.org",
-  //   explorerUrl: "https://sepolia.basescan.org",
-  //   color: "#4F8AFF",
-  //   factoryAddresses: [
-  //     "0x3A4B3D060136462dD57d74792Af10e0669CF47a7",
-  //     "0xe60cbc95c882b16DC23C9E6A17eb7bb52344a0E1",
-  //     "0x9595D20040dB9E8DF4d1510e967455295EC723a8"
-  //   ],
-  //   factories: {
-  //     droplist: "0xe60cbc95c882b16DC23C9E6A17eb7bb52344a0E1",
-  //     dropcode: "0x9595D20040dB9E8DF4d1510e967455295EC723a8",
-  //     custom: "0x3A4B3D060136462dD57d74792Af10e0669CF47a7"
-  //   },
-  //   tokenAddress: ZeroAddress,
-  //   nativeCurrency: {
-  //     name: "Ethereum",
-  //     symbol: "ETH",
-  //     decimals: 18,
-  //   },
-  //   isTestnet: true,
-  // },
+  // Testnet Networks can be added with similar logo structure
 ];
+
+// Image component with fallback
+interface NetworkImageProps {
+  network: Network
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+  className?: string
+  showFallback?: boolean
+}
+
+export function NetworkImage({ 
+  network, 
+  size = 'md', 
+  className = '',
+  showFallback = true 
+}: NetworkImageProps) {
+  const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+
+  const sizeClasses = {
+    xs: 'w-4 h-4',
+    sm: 'w-6 h-6', 
+    md: 'w-8 h-8',
+    lg: 'w-12 h-12',
+    xl: 'w-16 h-16'
+  }
+
+  const fallbackSizes = {
+    xs: 'text-xs',
+    sm: 'text-sm',
+    md: 'text-base',
+    lg: 'text-lg', 
+    xl: 'text-xl'
+  }
+
+  const handleImageLoad = () => {
+    setImageLoading(false)
+    setImageError(false)
+  }
+
+  const handleImageError = () => {
+    setImageLoading(false)
+    setImageError(true)
+  }
+
+  // Use icon URL for smaller sizes, logo URL for larger
+  const imageUrl = (size === 'xs' || size === 'sm') && network.iconUrl 
+    ? network.iconUrl 
+    : network.logoUrl
+
+  if (imageError && showFallback) {
+    return (
+      <div 
+        className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white ${className}`}
+        style={{ backgroundColor: network.color }}
+      >
+        <span className={fallbackSizes[size]}>
+          {network.symbol.slice(0, 2)}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${sizeClasses[size]} ${className} relative`}>
+      {imageLoading && showFallback && (
+        <div 
+          className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white absolute inset-0 animate-pulse`}
+          style={{ backgroundColor: network.color }}
+        >
+          <span className={fallbackSizes[size]}>
+            {network.symbol.slice(0, 2)}
+          </span>
+        </div>
+      )}
+      <img
+        src={imageUrl}
+        alt={`${network.name} logo`}
+        className={`${sizeClasses[size]} rounded-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+      />
+    </div>
+  )
+}
 
 // Rest of the NetworkContext implementation remains the same...
 interface NetworkContextType {
@@ -278,7 +277,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     return selectedNetwork.factories[factoryType] || null
   }
 
-  // Rest of implementation stays the same...
   useEffect(() => {
     const detectCurrentChain = async () => {
       if (typeof window === "undefined" || !window.ethereum) return
@@ -288,7 +286,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         const chainId = Number.parseInt(chainIdHex, 16)
         setCurrentChainId(chainId)
         
-        // Auto-set network if it matches
         const currentNetwork = networks.find((n) => n.chainId === chainId)
         if (currentNetwork && !network) {
           setNetwork(currentNetwork)
@@ -396,6 +393,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
                 nativeCurrency: targetNetwork.nativeCurrency,
                 rpcUrls: [targetNetwork.rpcUrl],
                 blockExplorerUrls: [targetNetwork.blockExplorerUrls],
+                iconUrls: [targetNetwork.iconUrl || targetNetwork.logoUrl],
               },
             ],
           })

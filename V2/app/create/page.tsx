@@ -60,6 +60,155 @@ import {
 import { zeroAddress } from "viem"
 import { isAddress } from "ethers"
 
+// Network image component with fallback
+interface NetworkImageProps {
+  network: any
+  size?: 'xs' | 'sm' | 'md' | 'lg'
+  className?: string
+}
+
+function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProps) {
+  const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+
+  const sizeClasses = {
+    xs: 'w-4 h-4',
+    sm: 'w-6 h-6',
+    md: 'w-8 h-8',
+    lg: 'w-12 h-12'
+  }
+
+  const fallbackSizes = {
+    xs: 'text-xs',
+    sm: 'text-xs',
+    md: 'text-sm',
+    lg: 'text-base'
+  }
+
+  const handleImageLoad = () => {
+    setImageLoading(false)
+    setImageError(false)
+  }
+
+  const handleImageError = () => {
+    setImageLoading(false)
+    setImageError(true)
+  }
+
+  if (imageError || !network?.logoUrl) {
+    return (
+      <div 
+        className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white ${className}`}
+        style={{ backgroundColor: network?.color || '#6B7280' }}
+      >
+        <span className={fallbackSizes[size]}>
+          {network?.symbol?.slice(0, 2) || 'N/A'}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${sizeClasses[size]} ${className} relative`}>
+      {imageLoading && (
+        <div 
+          className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white absolute inset-0 animate-pulse`}
+          style={{ backgroundColor: network?.color || '#6B7280' }}
+        >
+          <span className={fallbackSizes[size]}>
+            {network?.symbol?.slice(0, 2) || 'N/A'}
+          </span>
+        </div>
+      )}
+      <img
+        src={network.logoUrl}
+        alt={`${network.name} logo`}
+        className={`${sizeClasses[size]} rounded-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+      />
+    </div>
+  )
+}
+
+// Token logo component with fallback
+interface TokenImageProps {
+  token: TokenConfiguration
+  size?: 'xs' | 'sm' | 'md' | 'lg'
+  className?: string
+}
+
+function TokenImage({ token, size = 'md', className = '' }: TokenImageProps) {
+  const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+
+  const sizeClasses = {
+    xs: 'w-4 h-4',
+    sm: 'w-5 h-5',
+    md: 'w-6 h-6',
+    lg: 'w-8 h-8'
+  }
+
+  const fallbackSizes = {
+    xs: 'text-xs',
+    sm: 'text-xs',
+    md: 'text-sm',
+    lg: 'text-base'
+  }
+
+  const handleImageLoad = () => {
+    setImageLoading(false)
+    setImageError(false)
+  }
+
+  const handleImageError = () => {
+    setImageLoading(false)
+    setImageError(true)
+  }
+
+  // Color scheme for different token types
+  const getTokenColor = () => {
+    if (token.isNative) return '#3B82F6' // Blue for native tokens
+    if (token.isCustom) return '#8B5CF6' // Purple for custom tokens
+    return '#6B7280' // Gray for other tokens
+  }
+
+  if (imageError || !token.logoUrl) {
+    return (
+      <div 
+        className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white ${className}`}
+        style={{ backgroundColor: getTokenColor() }}
+      >
+        <span className={fallbackSizes[size]}>
+          {token.symbol.slice(0, 2)}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${sizeClasses[size]} ${className} relative`}>
+      {imageLoading && (
+        <div 
+          className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white absolute inset-0 animate-pulse`}
+          style={{ backgroundColor: getTokenColor() }}
+        >
+          <span className={fallbackSizes[size]}>
+            {token.symbol.slice(0, 2)}
+          </span>
+        </div>
+      )}
+      <img
+        src={token.logoUrl}
+        alt={`${token.name} logo`}
+        className={`${sizeClasses[size]} rounded-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+      />
+    </div>
+  )
+}
+
 // Enhanced type definitions with better naming and symbol support
 interface TokenConfiguration {
   address: string
@@ -69,7 +218,7 @@ interface TokenConfiguration {
   isNative?: boolean
   isCustom?: boolean
   logoUrl?: string
-  description?: string // Added description for better UX
+  description?: string
 }
 
 interface FaucetNameConflict {
@@ -137,7 +286,7 @@ const FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING: Record<FaucetType, FactoryType> = {
   [FAUCET_TYPES.CUSTOM]: 'custom',    // ✅ Custom faucets use custom factory
 }
 
-// Enhanced token configurations for different networks with symbols and descriptions
+// Enhanced token configurations for different networks with local logos
 const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
   // Celo Mainnet (42220)
   42220: [
@@ -147,6 +296,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "CELO",
       decimals: 18,
       isNative: true,
+      logoUrl: "/celo.jpeg", // ✅ Local path
       description: "Native Celo token for governance and staking",
     },
     {
@@ -154,6 +304,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Nigerian Naira",
       symbol: "cNGN",
       decimals: 18,
+      logoUrl: "/cngn.png", // ✅ Local path
       description: "Naira-pegged stablecoin on Celo",
     },
     {
@@ -161,6 +312,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Dollar",
       symbol: "cUSD",
       decimals: 18,
+      logoUrl: "/cusd.png", // ✅ Local path
       description: "USD-pegged stablecoin on Celo",
     },
     {
@@ -168,6 +320,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether",
       symbol: "USDT",
       decimals: 6,
+      logoUrl: "/usdt.jpg", // ✅ Local path
       description: "Tether USD stablecoin",
     },
     {
@@ -175,6 +328,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Brazilian Real",
       symbol: "cREAL",
       decimals: 18,
+      logoUrl: "/creal.jpg", // ✅ Local path
       description: "Brazilian Real-pegged stablecoin on Celo",
     },
     {
@@ -182,6 +336,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Kenyan Shilling",
       symbol: "cKES",
       decimals: 18,
+      logoUrl: "/ckes.jpg", // ✅ Local path
       description: "Kenyan Shilling-pegged stablecoin on Celo",
     },
     {
@@ -189,6 +344,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
+      logoUrl: "/usdc.jpg", // ✅ Local path
       description: "USD Coin stablecoin",
     },
     {
@@ -196,6 +352,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Euro",
       symbol: "cEUR",
       decimals: 18,
+      logoUrl: "/ceur.png", // ✅ Local path
       description: "Euro-pegged stablecoin on Celo",
     },
     {
@@ -203,6 +360,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Glo Dollar",
       symbol: "USDGLO",
       decimals: 18,
+      logoUrl: "/glo.jpg", // ✅ Local path
       description: "Philanthropic dollar that funds global poverty relief",
     },
     {
@@ -210,6 +368,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "GoodDollar",
       symbol: "G$",
       decimals: 18,
+      logoUrl: "/gd.jpg", // ✅ Local path
       description: "Universal basic income token",
     },
   ],
@@ -222,6 +381,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
+      logoUrl: "/ether.jpeg", // ✅ Local path
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -229,6 +389,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Lisk",
       symbol: "LSK",
       decimals: 18,
+      logoUrl: "/lsk.png", // ✅ Local path
       description: "Lisk native token",
     },
     {
@@ -236,6 +397,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether USD",
       symbol: "USDT",
       decimals: 6,
+      logoUrl: "/usdt.jpg", // ✅ Local path
       description: "Tether USD stablecoin",
     },
     {
@@ -243,6 +405,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Bridged USDC",
       symbol: "USDC.e",
       decimals: 6,
+      logoUrl: "/usdc.jpg", // ✅ Local path
       description: "Bridged USD Coin from Ethereum",
     },
   ],
@@ -255,6 +418,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
+      logoUrl: "/ether.jpeg", // ✅ Local path
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -262,6 +426,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
+      logoUrl: "/usdc.jpg", // ✅ Local path
       description: "Native USD Coin on Arbitrum",
     },
     {
@@ -269,6 +434,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether USD",
       symbol: "USDT",
       decimals: 6,
+      logoUrl: "/usdt.jpg", // ✅ Local path
       description: "Tether USD stablecoin",
     },
     {
@@ -276,6 +442,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Arbitrum",
       symbol: "ARB",
       decimals: 18,
+      logoUrl: "/arb.jpeg", // ✅ Local path
       description: "Arbitrum governance token",
     },
   ],
@@ -288,6 +455,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
+      logoUrl: "/ether.jpeg", // ✅ Local path
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -295,6 +463,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
+      logoUrl: "/usdc.jpg", // ✅ Local path
       description: "Native USD Coin on Base",
     },
     {
@@ -302,6 +471,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Bridged Tether USD",
       symbol: "USDT",
       decimals: 6,
+      logoUrl: "/usdt.jpg", // ✅ Local path
       description: "Bridged Tether USD from Ethereum",
     },
     {
@@ -309,11 +479,11 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Degen",
       symbol: "DEGEN",
       decimals: 18,
+      logoUrl: "/degen.png", // ✅ Local path
       description: "Degen community token",
     },
   ],
 }
-
 // Enhanced template configurations with better structure
 const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{
   templateName: string
@@ -430,6 +600,7 @@ export default function CreateFaucetWizard() {
         symbol: network.nativeCurrency.symbol,
         decimals: network.nativeCurrency.decimals,
         isNative: true,
+        logoUrl: network.logoUrl,
         description: `Native ${network.symbol} token for transaction fees`,
       })
     }
@@ -761,6 +932,11 @@ export default function CreateFaucetWizard() {
     }
   }
 
+  // Navigate back to main page
+  const navigateToMainPage = () => {
+    window.location.href = '/'
+  }
+
   // ✅ FIXED: Enhanced type selection with validation
   const selectFaucetType = (type: FaucetType) => {
     if (!isFaucetTypeAvailableOnNetwork(type)) {
@@ -1046,7 +1222,7 @@ export default function CreateFaucetWizard() {
     )
   }
 
-  // Enhanced Token Selection Component with Symbol Support
+  // Enhanced Token Selection Component with Logos
   const EnhancedTokenSelector = () => (
     <Select 
       value={wizardState.formData.showCustomTokenInput ? "custom" : wizardState.formData.selectedTokenAddress} 
@@ -1059,11 +1235,7 @@ export default function CreateFaucetWizard() {
               const token = customTokenValidation.tokenInfo
               return (
                 <div className="flex items-center space-x-2">
-                  <div className="w-5 h-5 bg-purple-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-purple-600">
-                      {token.symbol.slice(0, 2)}
-                    </span>
-                  </div>
+                  <TokenImage token={token} size="sm" />
                   <span className="font-bold text-purple-600">{token.symbol}</span>
                   <span className="text-gray-500">({token.name})</span>
                   <span className="text-xs bg-purple-100 text-purple-800 px-1 rounded">Custom</span>
@@ -1075,11 +1247,7 @@ export default function CreateFaucetWizard() {
             if (selectedToken) {
               return (
                 <div className="flex items-center space-x-2">
-                  <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-blue-600">
-                      {selectedToken.symbol.slice(0, 2)}
-                    </span>
-                  </div>
+                  <TokenImage token={selectedToken} size="sm" />
                   <span className="font-bold text-blue-600">{selectedToken.symbol}</span>
                   <span className="text-gray-500">({selectedToken.name})</span>
                   {selectedToken.isNative && (
@@ -1098,11 +1266,7 @@ export default function CreateFaucetWizard() {
         {availableTokens.filter(token => token.isNative).map((token) => (
           <SelectItem key={token.address} value={token.address}>
             <div className="flex items-start space-x-2 py-1">
-              <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-xs font-bold text-blue-600">
-                  {token.symbol.slice(0, 2)}
-                </span>
-              </div>
+              <TokenImage token={token} size="sm" />
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center space-x-2">
                   <span className="font-bold text-blue-600">{token.symbol}</span>
@@ -1128,11 +1292,7 @@ export default function CreateFaucetWizard() {
         {availableTokens.filter(token => !token.isNative).map((token) => (
           <SelectItem key={token.address} value={token.address}>
             <div className="flex items-start space-x-2 py-1">
-              <div className="w-5 h-5 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-xs font-bold text-gray-600">
-                  {token.symbol.slice(0, 2)}
-                </span>
-              </div>
+              <TokenImage token={token} size="sm" />
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center space-x-2">
                   <span className="font-bold">{token.symbol}</span>
@@ -1182,7 +1342,11 @@ export default function CreateFaucetWizard() {
             <AlertTriangle className="h-4 w-4 text-orange-600" />
             <AlertTitle className="text-orange-700 dark:text-orange-300">Limited Factory Support</AlertTitle>
             <AlertDescription className="text-orange-700 dark:text-orange-300">
-              Some faucet types are not yet available on {network.name} ({network.symbol}):
+              Some faucet types are not yet available on:
+              <div className="flex items-center space-x-2 mt-2">
+                <NetworkImage network={network} size="xs" />
+                <span>{network.name}</span>
+              </div>
               <div className="mt-2 space-y-1">
                 {unavailableTypes.map((type) => (
                   <div key={type} className="flex items-center space-x-2">
@@ -1223,8 +1387,12 @@ export default function CreateFaucetWizard() {
               <p className="text-sm text-gray-600">
                 Open faucet for wide distribution with drop code protection.
               </p>
-              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.OPEN) && (
-                <p className="text-xs text-red-600 mt-2">Not available on {network?.symbol || 'this network'}</p>
+              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.OPEN) && network && (
+                <div className="flex items-center space-x-2 mt-2">
+                  <p className="text-xs text-red-600">Not available on</p>
+                  <NetworkImage network={network} size="xs" />
+                  <span className="text-xs text-red-600">{network.name}</span>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -1256,8 +1424,12 @@ export default function CreateFaucetWizard() {
               <p className="text-sm text-gray-600">
                 Restricted faucet for specific wallet addresses only.
               </p>
-              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.GATED) && (
-                <p className="text-xs text-red-600 mt-2">Not available on {network?.symbol || 'this network'}</p>
+              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.GATED) && network && (
+                <div className="flex items-center space-x-2 mt-2">
+                  <p className="text-xs text-red-600">Not available on</p>
+                  <NetworkImage network={network} size="xs" />
+                  <span className="text-xs text-red-600">{network.name}</span>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -1398,7 +1570,11 @@ export default function CreateFaucetWizard() {
             <Alert className="border-green-500 bg-green-50 dark:bg-green-900/20">
               <Check className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-700 dark:text-green-300">
-                Great! This name is available across all factory types on {network?.name} ({network?.symbol}).
+                <div className="flex items-center space-x-2">
+                  <span>Great! This name is available across all factory types on</span>
+                  {network && <NetworkImage network={network} size="xs" />}
+                  <span>{network?.name}</span>
+                </div>
                 {nameValidation.validationWarning && (
                   <div className="mt-1 text-xs text-yellow-700">
                     Note: {nameValidation.validationWarning}
@@ -1415,7 +1591,7 @@ export default function CreateFaucetWizard() {
           )}
         </div>
         
-        {/* Enhanced Token Selection with Symbol Support */}
+        {/* Enhanced Token Selection with Logos */}
         <div className="space-y-2">
           <Label htmlFor="token-selector">Select Token</Label>
           
@@ -1493,6 +1669,7 @@ export default function CreateFaucetWizard() {
                     <div className="space-y-1">
                       <div className="font-medium">Token Found:</div>
                       <div className="flex items-center space-x-2 text-sm">
+                        <TokenImage token={customTokenValidation.tokenInfo} size="xs" />
                         <span className="font-bold">{customTokenValidation.tokenInfo.symbol}</span>
                         <span>({customTokenValidation.tokenInfo.name})</span>
                         <span className="text-xs bg-green-100 text-green-800 px-1 rounded">
@@ -1518,11 +1695,7 @@ export default function CreateFaucetWizard() {
                 const selectedToken = availableTokens.find(t => t.address === wizardState.formData.selectedTokenAddress)
                 return selectedToken ? (
                   <div className="flex items-center space-x-2 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-xs font-bold text-blue-600">
-                        {selectedToken.symbol.slice(0, 2)}
-                      </span>
-                    </div>
+                    <TokenImage token={selectedToken} size="md" />
                     <div className="flex flex-col">
                       <div className="flex items-center space-x-2">
                         <span className="font-bold">{selectedToken.symbol}</span>
@@ -1597,18 +1770,15 @@ export default function CreateFaucetWizard() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Network</Label>
-                <p className="flex items-center space-x-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: network?.color }} 
-                  />
-                  <span>{network?.name || "Unknown Network"} ({network?.symbol})</span>
+                <div className="flex items-center space-x-2">
+                  {network && <NetworkImage network={network} size="sm" />}
+                  <span>{network?.name || "Unknown Network"}</span>
                   {network?.isTestnet && (
                     <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
                       Testnet
                     </span>
                   )}
-                </p>
+                </div>
               </div>
               
               <div className="space-y-2">
@@ -1652,12 +1822,8 @@ export default function CreateFaucetWizard() {
               
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Token</Label>
-                <p className="flex items-center space-x-2">
-                  <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-xs font-bold text-blue-600">
-                      {selectedTokenConfig?.symbol.slice(0, 2)}
-                    </span>
-                  </div>
+                <div className="flex items-center space-x-2">
+                  {selectedTokenConfig && <TokenImage token={selectedTokenConfig} size="sm" />}
                   <span className="font-bold">{selectedTokenConfig?.symbol}</span>
                   <span className="text-gray-500">({selectedTokenConfig?.name})</span>
                   {selectedTokenConfig?.isNative && (
@@ -1666,7 +1832,7 @@ export default function CreateFaucetWizard() {
                   {selectedTokenConfig?.isCustom && (
                     <span className="text-xs bg-purple-100 text-purple-800 px-1 rounded">Custom</span>
                   )}
-                </p>
+                </div>
                 <p className="text-xs text-gray-500 font-mono">
                   {finalTokenAddress.slice(0, 8)}...{finalTokenAddress.slice(-6)}
                 </p>
@@ -1734,7 +1900,11 @@ export default function CreateFaucetWizard() {
             <XCircle className="h-4 w-4" />
             <AlertTitle>Factory Not Available</AlertTitle>
             <AlertDescription>
-              {wizardState.selectedFaucetType} faucets are not available on {network?.name} ({network?.symbol}). Please select a different faucet type or switch networks.
+              <div className="flex items-center space-x-2">
+                <span>{wizardState.selectedFaucetType} faucets are not available on</span>
+                {network && <NetworkImage network={network} size="xs" />}
+                <span>{network?.name}. Please select a different faucet type or switch networks.</span>
+              </div>
             </AlertDescription>
           </Alert>
         )}
@@ -1800,7 +1970,26 @@ export default function CreateFaucetWizard() {
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="container mx-auto px-4 py-8">
-        <Header pageTitle="Create Faucet" />
+        {/* Header with Back Button */}
+        <div className="mb-8">
+          <div className="flex items-center space-x-4 mb-4">
+            <Button 
+              variant="outline" 
+              onClick={navigateToMainPage}
+              className="flex items-center space-x-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Home</span>
+            </Button>
+            {network && (
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <NetworkImage network={network} size="xs" />
+                <span>Creating on {network.name}</span>
+              </div>
+            )}
+          </div>
+          <Header pageTitle="Create Faucet" />
+        </div>
         
         {/* Wizard Progress Indicator */}
         <div className="max-w-4xl mx-auto mb-8">

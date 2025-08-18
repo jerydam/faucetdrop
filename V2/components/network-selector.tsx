@@ -1,13 +1,85 @@
 "use client"
 
-import { useNetwork, type Network, NetworkImage } from "@/hooks/use-network"
+import { useNetwork, type Network } from "@/hooks/use-network"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle } from "lucide-react"
+import { useState } from "react"
+
+// Network image component with fallback (duplicated from the wizard for standalone use)
+interface NetworkImageProps {
+  network: Network
+  size?: 'xs' | 'sm' | 'md' | 'lg'
+  className?: string
+}
+
+function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProps) {
+  const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+
+  const sizeClasses = {
+    xs: 'w-4 h-4',
+    sm: 'w-6 h-6',
+    md: 'w-8 h-8',
+    lg: 'w-12 h-12'
+  }
+
+  const fallbackSizes = {
+    xs: 'text-xs',
+    sm: 'text-xs',
+    md: 'text-sm',
+    lg: 'text-base'
+  }
+
+  const handleImageLoad = () => {
+    setImageLoading(false)
+    setImageError(false)
+  }
+
+  const handleImageError = () => {
+    setImageLoading(false)
+    setImageError(true)
+  }
+
+  if (imageError || !network?.logoUrl) {
+    return (
+      <div 
+        className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white ${className}`}
+        style={{ backgroundColor: network?.color || '#6B7280' }}
+      >
+        <span className={fallbackSizes[size]}>
+          {network?.symbol?.slice(0, 2) || 'N/A'}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${sizeClasses[size]} ${className} relative`}>
+      {imageLoading && (
+        <div 
+          className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white absolute inset-0 animate-pulse`}
+          style={{ backgroundColor: network?.color || '#6B7280' }}
+        >
+          <span className={fallbackSizes[size]}>
+            {network?.symbol?.slice(0, 2) || 'N/A'}
+          </span>
+        </div>
+      )}
+      <img
+        src={network.logoUrl}
+        alt={`${network.name} logo`}
+        className={`${sizeClasses[size]} rounded-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+      />
+    </div>
+  )
+}
 
 interface NetworkSelectorProps {
-  showSymbol?: boolean // Option to show/hide network symbols
-  displayMode?: 'name' | 'symbol' | 'both' // Different display modes
+  showName?: boolean // Option to show/hide network names
+  displayMode?: 'name' | 'logo' | 'both' // Different display modes
   compact?: boolean // Compact mode for smaller spaces
   showStatus?: boolean // Show connection status
   showLogos?: boolean // Show network logos
@@ -15,7 +87,7 @@ interface NetworkSelectorProps {
 }
 
 export function NetworkSelector({ 
-  showSymbol = true, 
+  showName = true, 
   displayMode = 'both',
   compact = false,
   showStatus = true,
@@ -29,17 +101,17 @@ export function NetworkSelector({
   const currentNetwork = networks.find((net) => net.chainId === currentChainId)
   
   // Function to format network display text
-  const formatNetworkDisplay = (net: Network | null, mode: 'name' | 'symbol' | 'both' = displayMode): string => {
+  const formatNetworkDisplay = (net: Network | null, mode: 'name' | 'logo' | 'both' = displayMode): string => {
     if (!net) return "Select Network"
     
     switch (mode) {
-      case 'symbol':
-        return net.symbol
+      case 'logo':
+        return '' // Will show only logo
       case 'name':
         return net.name
       case 'both':
       default:
-        return compact ? `${net.symbol}` : `${net.name} (${net.symbol})`
+        return compact ? net.name : net.name
     }
   }
 
@@ -66,9 +138,9 @@ export function NetworkSelector({
       case 'connected':
         return formatNetworkDisplay(network)
       case 'wrong-network':
-        return `Wrong Network (${currentNetwork?.symbol || currentChainId})`
+        return `Wrong Network`
       case 'unknown-network':
-        return `Unknown Chain (ID: ${currentChainId})`
+        return `Unknown Chain`
       default:
         return "Select Network"
     }
@@ -112,7 +184,11 @@ export function NetworkSelector({
             <NetworkIcon className="h-4 w-4" />
           )}
           
-          <span className={compact ? "text-sm" : ""}>{displayText()}</span>
+          {/* Display text only for non-logo-only modes */}
+          {displayMode !== 'logo' && (
+            <span className={compact ? "text-sm" : ""}>{displayText()}</span>
+          )}
+          
           <ChevronDown className="h-4 w-4 ml-1" />
         </Button>
       </DropdownMenuTrigger>
@@ -149,19 +225,12 @@ export function NetworkSelector({
               disabled={!isWalletAvailable || isSwitchingNetwork}
             >
               {/* Network Logo */}
-              {showLogos ? (
-                <NetworkImage network={net} size={compact ? "xs" : "sm"} />
-              ) : (
-                <span 
-                  className="h-2 w-2 rounded-full flex-shrink-0" 
-                  style={{ backgroundColor: net.color }} 
-                />
-              )}
+              <NetworkImage network={net} size={compact ? "xs" : "sm"} />
               
               <div className="flex flex-col flex-1 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className={`font-medium truncate ${compact ? 'text-sm' : ''}`}>
-                    {compact ? net.symbol : net.name}
+                    {net.name}
                   </span>
                   <div className="flex items-center space-x-1 ml-2">
                     {isActive && (
@@ -176,10 +245,10 @@ export function NetworkSelector({
                     )}
                   </div>
                 </div>
-                {!compact && showSymbol && (
+                {!compact && (
                   <div className="flex items-center space-x-2 mt-1">
                     <span className="text-xs text-gray-500 truncate">
-                      {net.symbol} • Chain ID: {net.chainId}
+                      Chain ID: {net.chainId}
                     </span>
                     {net.isTestnet && (
                       <span className="text-xs bg-orange-100 text-orange-600 px-1 rounded">
@@ -208,9 +277,9 @@ export function NetworkSelector({
 export function CompactNetworkSelector({ className }: { className?: string }) {
   return (
     <NetworkSelector 
-      displayMode="symbol" 
+      displayMode="logo" 
       compact={true} 
-      showSymbol={false}
+      showName={false}
       showStatus={false}
       showLogos={true}
       className={className}
@@ -218,12 +287,12 @@ export function CompactNetworkSelector({ className }: { className?: string }) {
   )
 }
 
-// Symbol-only version
-export function SymbolOnlyNetworkSelector({ className }: { className?: string }) {
+// Logo-only version
+export function LogoOnlyNetworkSelector({ className }: { className?: string }) {
   return (
     <NetworkSelector 
-      displayMode="symbol" 
-      showSymbol={false}
+      displayMode="logo" 
+      showName={false}
       showStatus={true}
       showLogos={true}
       className={className}
@@ -236,7 +305,7 @@ export function NetworkStatusSelector({ className }: { className?: string }) {
   return (
     <NetworkSelector 
       displayMode="both" 
-      showSymbol={true}
+      showName={true}
       showStatus={true}
       showLogos={true}
       compact={false}
@@ -265,8 +334,8 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
           <div className="flex items-center space-x-3">
             <NetworkImage network={net} size="sm" />
             <div className="text-left min-w-0">
-              <div className="font-medium text-sm truncate">{net.symbol}</div>
-              <div className="text-xs text-gray-500 truncate">{net.name}</div>
+              <div className="font-medium text-sm truncate">{net.name}</div>
+              <div className="text-xs text-gray-500 truncate">Chain {net.chainId}</div>
               {net.isTestnet && (
                 <div className="text-xs bg-orange-100 text-orange-600 px-1 rounded mt-1 inline-block">
                   Testnet
@@ -289,8 +358,7 @@ export function NetworkBreadcrumb({ className }: { className?: string }) {
   return (
     <div className={`flex items-center space-x-2 text-sm text-gray-500 ${className}`}>
       <NetworkImage network={network} size="xs" />
-      <span className="font-medium">{network.symbol}</span>
-      <span className="text-xs text-gray-400">({network.name})</span>
+      <span className="font-medium">{network.name}</span>
       {network.isTestnet && (
         <span className="text-xs bg-orange-100 text-orange-600 px-1 rounded">
           Testnet
@@ -329,8 +397,8 @@ export function NetworkStatusIndicator({ className }: { className?: string }) {
       <NetworkImage network={network} size="xs" />
       <span className="text-sm">
         {isCorrectNetwork 
-          ? `Connected to ${network.symbol}` 
-          : `Wrong network (expected ${network.symbol})`
+          ? `Connected to ${network.name}` 
+          : `Wrong network (expected ${network.name})`
         }
       </span>
     </div>
@@ -357,9 +425,6 @@ export function NetworkCard({ network: net, onClick, isActive }: {
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-2 mb-2">
             <h3 className="text-lg font-semibold">{net.name}</h3>
-            <span className="text-sm bg-gray-100 text-gray-700 px-2 py-1 rounded">
-              {net.symbol}
-            </span>
             {net.isTestnet && (
               <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">
                 Testnet
@@ -369,7 +434,7 @@ export function NetworkCard({ network: net, onClick, isActive }: {
           <p className="text-sm text-gray-600">Chain ID: {net.chainId}</p>
           <div className="flex items-center space-x-2 mt-2">
             <span className="text-xs text-gray-500">
-              {Object.keys(net.factories).length} factory types
+              {Object.keys(net.factories || {}).length} factory types
             </span>
             {isActive && (
               <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded">
@@ -401,3 +466,40 @@ export function NetworkGrid({ onNetworkSelect }: { onNetworkSelect?: (network: N
   )
 }
 
+// Horizontal network selector with logos only
+export function HorizontalNetworkSelector({ className }: { className?: string }) {
+  const { networks, network, setNetwork, isSwitchingNetwork } = useNetwork()
+  
+  return (
+    <div className={`flex items-center space-x-2 overflow-x-auto ${className}`}>
+      {networks.map((net) => (
+        <button
+          key={net.chainId}
+          onClick={() => setNetwork(net)}
+          disabled={isSwitchingNetwork}
+          className={`flex-shrink-0 p-2 rounded-lg border-2 transition-all ${
+            network?.chainId === net.chainId
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+              : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'
+          } ${isSwitchingNetwork ? 'opacity-50 cursor-not-allowed' : ''}`}
+          title={net.name}
+        >
+          <NetworkImage network={net} size="sm" />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Mini network indicator (just logo)
+export function MiniNetworkIndicator({ className }: { className?: string }) {
+  const { network } = useNetwork()
+  
+  if (!network) return null
+  
+  return (
+    <div className={`flex items-center ${className}`} title={network.name}>
+      <NetworkImage network={network} size="xs" />
+    </div>
+  )
+}

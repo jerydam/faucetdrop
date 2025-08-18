@@ -30,6 +30,7 @@ export interface Network {
   isTestnet?: boolean
 }
 
+
 const networks: Network[] = [
   // Mainnet Networks
   {
@@ -39,8 +40,8 @@ const networks: Network[] = [
     rpcUrl: "https://forno.celo.org",
     blockExplorerUrls: "https://celoscan.io",
     color: "#35D07F",
-    logoUrl: "https://cryptologos.cc/logos/celo-celo-logo.png",
-    iconUrl: "https://cryptologos.cc/logos/celo-celo-logo.png",
+    logoUrl: "/celo.png", // ✅ Local path
+    iconUrl: "/celo.png", // ✅ Local path
     factoryAddresses: [
       "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
@@ -70,8 +71,8 @@ const networks: Network[] = [
     blockExplorerUrls: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
-    logoUrl: "https://cryptologos.cc/logos/lisk-lsk-logo.png",
-    iconUrl: "https://cryptologos.cc/logos/lisk-lsk-logo.png",
+    logoUrl: "/lsk.png", // ✅ Local path
+    iconUrl: "/lsk.png", // ✅ Local path
     factoryAddresses: [
       "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
       "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
@@ -86,8 +87,8 @@ const networks: Network[] = [
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
-      name: "Lisk",
-      symbol: "LISK",
+      name: "Ether",
+      symbol: "ETH",
       decimals: 18,
     },
     isTestnet: false,
@@ -100,12 +101,12 @@ const networks: Network[] = [
     blockExplorerUrls: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
-    logoUrl: "https://cryptologos.cc/logos/arbitrum-arb-logo.png",
-    iconUrl: "https://cryptologos.cc/logos/arbitrum-arb-logo.png",
-    factoryAddresses: ["0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
+    logoUrl: "/arb.jpeg", // ✅ Local path
+    iconUrl: "/arb.jpeg", // ✅ Local path
+    factoryAddresses: [
+      "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
       "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
-
     ],
     factories: {
       droplist: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
@@ -114,7 +115,7 @@ const networks: Network[] = [
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
-      name: "Ethereum",
+      name: "Ether",
       symbol: "ETH",
       decimals: 18,
     },
@@ -128,8 +129,8 @@ const networks: Network[] = [
     blockExplorerUrls: "https://basescan.org",
     explorerUrl: "https://basescan.org",
     color: "#0052FF",
-    logoUrl: "https://cryptologos.cc/logos/base-protocol-base-logo.png",
-    iconUrl: "https://cryptologos.cc/logos/base-protocol-base-logo.png",
+    logoUrl: "/base.png", // ✅ Local path
+    iconUrl: "/base.png", // ✅ Local path
     factoryAddresses: [
       "0x945431302922b69D500671201CEE62900624C6d5",
       "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
@@ -142,14 +143,12 @@ const networks: Network[] = [
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
-      name: "Ethereum",
+      name: "Ether",
       symbol: "ETH",
       decimals: 18,
     },
     isTestnet: false,
   }
-  
-  // Testnet Networks can be added with similar logo structure
 ];
 
 // Image component with fallback

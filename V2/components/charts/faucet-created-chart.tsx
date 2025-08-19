@@ -119,10 +119,7 @@ export function FaucetsCreatedChart() {
         </div>
         
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-xs">
-            <Clock className="h-3 w-3 mr-1" />
-            {formatLastUpdated(data.lastUpdated)}
-          </Badge>
+
           
           <Button 
             variant="outline" 
@@ -184,7 +181,7 @@ export function FaucetsCreatedChart() {
 
       {/* Data source indicator */}
       <div className="text-xs text-muted-foreground text-center">
-        📊 Data served from backend cache • Updates automatically
+        📊 Data served from onchain • Updates automatically
       </div>
     </div>
   )

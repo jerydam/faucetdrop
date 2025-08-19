@@ -360,7 +360,7 @@ export function UserClaimsChart() {
       </div>
       
       <div className="text-xs text-muted-foreground text-center">
-        📊 Data served from backend cache • Updates automatically
+        📊 Data served from onchain • Updates automatically
       </div>
     </div>
   )

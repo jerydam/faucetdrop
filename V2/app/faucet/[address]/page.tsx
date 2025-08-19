@@ -62,6 +62,7 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import LoadingPage from "@/components/loading"
 
 // Faucet type definitions
 type FaucetType = 'dropcode' | 'droplist' | 'custom'
@@ -2045,14 +2046,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
   }, [provider, faucetAddress, networkId, address])
 
   if (loading) {
-    return (
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex justify-center items-center min-h-[50vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-sm sm:text-base">Loading faucet details...</p>
-        </div>
-      </div>
-    )
+    return <LoadingPage />
   }
 
   return (

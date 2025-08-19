@@ -175,10 +175,7 @@ export function UserClaimsChart() {
             <p className="text-lg md:text-2xl font-bold">{data.total.toLocaleString()}</p>
             <p className="text-xs md:text-sm text-muted-foreground">Total Drops</p>
           </div>
-          <div className="text-center p-3 bg-muted/50 rounded-lg">
-            <p className="text-lg md:text-2xl font-bold">{data.totalFaucets.toLocaleString()}</p>
-            <p className="text-xs md:text-sm text-muted-foreground">Active Faucets</p>
-          </div>
+          
         </div>
 
         <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="shrink-0">
@@ -232,7 +229,7 @@ export function UserClaimsChart() {
           <CardHeader className="pb-2">
             <CardTitle className="text-lg md:text-xl">All Available Faucets</CardTitle>
             <CardDescription className="text-sm">
-              Complete list ranked by latest activity from all active faucets
+              Complete list ranked by latest activity from all faucets
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">

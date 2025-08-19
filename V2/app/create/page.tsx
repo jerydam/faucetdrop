@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/dialog"
 import { zeroAddress } from "viem"
 import { isAddress } from "ethers"
+import LoadingPage from "@/components/loading"
 
 // Network image component with fallback
 interface NetworkImageProps {
@@ -583,7 +584,7 @@ export default function CreateFaucetWizard() {
   const [isFaucetCreating, setIsFaucetCreating] = useState(false)
   const [creationError, setCreationError] = useState<string | null>(null)
   const [showConflictDetails, setShowConflictDetails] = useState(false)
-
+  const [initialLoading, setInitialLoading] = useState(true)
   // Enhanced token fetching function with predefined tokens
   const fetchAvailableTokensForNetwork = async (): Promise<TokenConfiguration[]> => {
     if (!network) return []
@@ -1132,6 +1133,22 @@ export default function CreateFaucetWizard() {
     }
   }
 
+  useEffect(() => {
+    const initializeComponent = async () => {
+      try {
+        setInitialLoading(true)
+        // Add any initialization logic here if needed
+        await new Promise(resolve => setTimeout(resolve, 500)) // Simulate loading
+      } catch (error) {
+        console.error("Error initializing component:", error)
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+
+    initializeComponent()
+  }, [])
+
   const getWizardStepDescription = (step: number): string => {
     switch (step) {
       case 1: return "Select the type of faucet that fits your needs"
@@ -1145,6 +1162,11 @@ export default function CreateFaucetWizard() {
   const renderUseCaseTemplates = (faucetType: FaucetType) => {
     const templates = FAUCET_USE_CASE_TEMPLATES[faucetType]
     if (!templates) return null
+    
+     if (initialLoading) {
+    return <LoadingPage/>
+  }
+
 
     return (
       <div className="space-y-3">

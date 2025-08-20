@@ -125,20 +125,30 @@ export default function Home() {
           <header className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 sm:p-6">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
               {/* Logo and Title */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full lg:w-auto min-w-0">
-                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                  <div className="flex-shrink-0">
-                    <Image
-                      src="/logo.png"
-                      alt="FaucetDrops Logo"
-                      width={32}
-                      height={32}
-                      className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-md object-contain"
-                    />
+             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full lg:w-auto min-w-0">
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                    <div className="flex-shrink-0">
+                      <Image
+                        src="/logo.png"
+                        alt="FaucetDrops Logo"
+                        width={32}
+                        height={32}
+                        className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-md object-contain"
+                      />
+                    </div>
+                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-slate-100 truncate">
+                      FaucetDrops
+                    </h1>
                   </div>
-                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-slate-100 truncate">
-                    FaucetDrops
-                  </h1>
+                  <div className="flex flex-col sm:flex-row sm:gap-1">
+                    <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                      Free, Fast, Fair & Frictionless 
+                    </span>
+                    <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                      Token Distribution 💧
+                    </span> 
+                  </div>
                 </div>
                 <div className="ml-auto sm:ml-0 flex-shrink-0">
                   <NetworkSelector 

@@ -87,7 +87,7 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
               FaucetDrops
             </h3>
             <span className="hidden sm:inline text-xs text-slate-500 dark:text-slate-400 ml-1">
-              Token Drops Made Easy 💧
+              Free, Fast, Fair & Frictionless Token Distribution 💧
             </span>
           </div>
              {/* Copyright and Links */}

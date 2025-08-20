@@ -92,7 +92,7 @@ export function AnalyticsDashboard() {
       shortLabel: "Faucets",
       fullLabel: "Faucets Created",
       title: "Faucets Created",
-      description: "Number of new faucets created across all networks (cached data)",
+      description: "Number of new faucets created across all networks ",
       component: FaucetsCreatedChart
     },
     {
@@ -101,7 +101,7 @@ export function AnalyticsDashboard() {
       shortLabel: "Txns",
       fullLabel: "Transactions",
       title: "Transactions",
-      description: "Total number of transactions across all networks (cached data)",
+      description: "Total number of transactions across all networks ",
       component: TransactionsPerDayChart
     },
     {
@@ -110,16 +110,16 @@ export function AnalyticsDashboard() {
       shortLabel: "Users", 
       fullLabel: "New Users",
       title: "New Users",
-      description: "Number of unique users across all networks (cached data)",
+      description: "Number of unique users across all networks ",
       component: NewUsersChart
     },
     {
       value: "claims",
       icon: Zap,
       shortLabel: "Claims",
-      fullLabel: "User Claims", 
+      fullLabel: "User Drops", 
       title: "Claims",
-      description: "Number of claims made across all networks (cached data)",
+      description: "Number of drops made across all networks ",
       component: UserClaimsChart
     }
   ]
@@ -166,7 +166,7 @@ export function AnalyticsDashboard() {
               loading={loading}
             />
             <StatCard
-              title="Total Claims"
+              title="Total Drops"
               value={dashboardData?.totalClaims}
               icon={BarChart3}
               loading={loading}

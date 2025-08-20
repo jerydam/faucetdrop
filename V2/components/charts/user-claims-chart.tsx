@@ -49,7 +49,7 @@ export function UserClaimsChart() {
       const result = await response.json()
       
       if (!response.ok) {
-        throw new Error(result.message || 'Failed to fetch claims data')
+        throw new Error(result.message || 'Failed to fetch drops data')
       }
       
       if (result.success && result.data) {
@@ -61,11 +61,11 @@ export function UserClaimsChart() {
           lastUpdated: result.cachedAt
         })
       } else {
-        throw new Error(result.message || 'No claims data available')
+        throw new Error(result.message || 'No drops data available')
       }
       
     } catch (err) {
-      console.error('Error fetching claims data:', err)
+      console.error('Error fetching drops data:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch data')
     } finally {
       setLoading(false)
@@ -109,7 +109,7 @@ export function UserClaimsChart() {
         <CardContent className="flex items-center justify-center h-64">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-            <p className="text-sm md:text-base">Loading claims data...</p>
+            <p className="text-sm md:text-base">Loading drops data...</p>
           </div>
         </CardContent>
       </Card>

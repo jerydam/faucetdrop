@@ -6,10 +6,15 @@ import { FaucetsCreatedChart } from "./charts/faucet-created-chart"
 import { TransactionsPerDayChart } from "./charts/transactions-per-day"
 import { NewUsersChart } from "./charts/new-users-chart"
 import { UserClaimsChart } from "./charts/user-claims-chart"
-import { BarChart3, PieChart, TrendingUp, Users, Activity, UserPlus, Zap } from "lucide-react"
+import { BarChart3, PieChart, TrendingUp, Users, Activity, UserPlus, Zap, RefreshCw, Settings } from "lucide-react"
 import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { useWallet } from "@/hooks/use-wallet"
+import { WalletConnect } from "@/components/wallet-connect"
+import { useToast } from "@/hooks/use-toast"
 
 const API_BASE_URL = 'https://fauctdrop-backend.onrender.com'
+const ADMIN_WALLET = '0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785'
 
 interface DashboardData {
   totalClaims: number
@@ -53,6 +58,10 @@ export function AnalyticsDashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const { toast } = useToast()
+  // Use existing wallet context
+  const { address, isConnected } = useWallet()
 
   const fetchDashboardData = async () => {
     try {
@@ -80,9 +89,61 @@ export function AnalyticsDashboard() {
     }
   }
 
+  // Update analytics data function
+  const updateAnalyticsData = async () => {
+    if (!isConnected || address?.toLowerCase() !== ADMIN_WALLET.toLowerCase()) {
+      toast({
+        title: "Not Authorized",
+        description: "Only authorized wallet can update analytics data",
+        variant: "destructive",
+      })  
+      return
+    }
+
+    try {
+      setIsUpdating(true)
+      const response = await fetch(`${API_BASE_URL}/analytics/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to update analytics data')
+      }
+
+      if (result.success) {
+       toast({
+        title: "Analytics Updated",
+        description: "Analytics data updated successfully!",
+        variant: "destructive",
+      })
+        // Refresh dashboard data after update
+        await fetchDashboardData()
+      } else {
+        throw new Error(result.message || 'Update failed')
+      }
+    } catch (error) {
+      console.error('Error updating analytics:', error)
+     toast({
+        title: "Analytics Update Failed",
+        description: `Failed to update analytics: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   useEffect(() => {
     fetchDashboardData()
   }, [])
+
+  // Check if connected wallet is admin
+  const isAdminWallet = isConnected && address?.toLowerCase() === ADMIN_WALLET.toLowerCase()
 
   // Tab configuration with responsive labels
   const tabConfig = [
@@ -128,15 +189,47 @@ export function AnalyticsDashboard() {
     <div className="w-full min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
         <div className="space-y-4 sm:space-y-6">
-          {/* Header Section */}
-          <div className="text-center sm:text-left">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">
-              Analytics Dashboard
-            </h1>
-            <p className="text-sm sm:text-base text-muted-foreground mt-2">
-              Data served from all Chain
-            </p>
+          {/* Header Section with Wallet Connection */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="text-center sm:text-left">
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">
+                Analytics Dashboard
+              </h1>
+              <p className="text-sm sm:text-base text-muted-foreground mt-2">
+                Data served from all Chain
+              </p>
+            </div>
+
+            {/* Wallet Connection and Admin Controls */}
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+             
+              
+              {isAdminWallet && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={updateAnalyticsData}
+                  disabled={isUpdating}
+                  className="w-full sm:w-auto"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isUpdating ? 'animate-spin' : ''}`} />
+                  {isUpdating ? 'Updating...' : 'Update Analytics'}
+                </Button>
+              )}
+            </div>
           </div>
+
+          {/* Admin Notice */}
+          {isAdminWallet && (
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-blue-600" />
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  Admin wallet connected. You can update analytics data.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Error Display */}
           {error && (

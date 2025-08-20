@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useWallet } from "@/hooks/use-wallet"
 import { Button } from "@/components/ui/button"
-import { Wallet, LogOut, Copy, ExternalLink } from "lucide-react"
+import { Wallet, LogOut, Copy, ExternalLink, Users, Loader2 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +20,9 @@ export function WalletConnect() {
   const { address, isConnected, connect, disconnect } = useWallet()
   const { toast } = useToast()
   const { network } = useNetwork()
+  const router = useRouter()
   const [isConnecting, setIsConnecting] = useState(false)
+  const [isNavigatingToVerify, setIsNavigatingToVerify] = useState(false)
 
   const handleConnect = async () => {
     setIsConnecting(true)
@@ -47,6 +50,20 @@ export function WalletConnect() {
     }
   }
 
+  const handleVerifyClick = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsNavigatingToVerify(true)
+    
+    try {
+      // Add any pre-navigation logic here if needed
+      await new Promise(resolve => setTimeout(resolve, 100)) // Small delay for UX
+      router.push('/verify')
+    } catch (error) {
+      console.error('Navigation error:', error)
+      setIsNavigatingToVerify(false)
+    }
+  }
+
   const handleViewOnExplorer = () => {
     if (address && network?.blockExplorerUrls) {
       window.open(`${network.blockExplorerUrls}/address/${address}`, "_blank")
@@ -56,6 +73,18 @@ export function WalletConnect() {
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
+
+  // Reset navigation loading states when component unmounts or navigation completes
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setIsNavigatingToVerify(false)
+    }
+
+    // Listen for route changes (if using Next.js router events)
+    return () => {
+      handleRouteChange()
+    }
+  }, [])
 
   if (!isConnected) {
     return (
@@ -80,6 +109,17 @@ export function WalletConnect() {
         <DropdownMenuItem onClick={handleCopyAddress}>
           <Copy className="mr-2 h-4 w-4" />
           Copy Address
+        </DropdownMenuItem>
+        <DropdownMenuItem 
+          onClick={handleVerifyClick}
+          disabled={isNavigatingToVerify}
+        >
+          {isNavigatingToVerify ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Users className="mr-2 h-4 w-4" />
+          )}
+          {isNavigatingToVerify ? "Loading..." : "Verify"}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={handleViewOnExplorer}>
           <ExternalLink className="mr-2 h-4 w-4" />

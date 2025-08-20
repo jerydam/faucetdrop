@@ -211,27 +211,7 @@ export default function Home() {
               <NetworkGrid />
             </div>
             
-            <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-              <Button 
-                onClick={handleVerifyClick}
-                disabled={isNavigatingToVerify}
-                variant="outline" 
-                size="sm"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors whitespace-nowrap"
-              >
-                {isNavigatingToVerify ? (
-                  <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
-                ) : (
-                  <Users className="h-4 w-4 flex-shrink-0" />
-                )}
-                <span className="hidden xs:inline">
-                  {isNavigatingToVerify ? "Loading..." : "Verify"}
-                </span>
-                <span className="xs:hidden">
-                  {isNavigatingToVerify ? "Loading..." : "Verify"}
-                </span>
-              </Button>
-            </div>
+            
             
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
               <AnalyticsDashboard /> 

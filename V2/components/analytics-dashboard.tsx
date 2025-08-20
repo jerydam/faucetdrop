@@ -118,7 +118,7 @@ export function AnalyticsDashboard() {
       icon: Zap,
       shortLabel: "Claims",
       fullLabel: "User Drops", 
-      title: "Claims",
+      title: "Drops",
       description: "Number of drops made across all networks ",
       component: UserClaimsChart
     }

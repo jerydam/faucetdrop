@@ -219,14 +219,14 @@ export default function VerificationPage() {
     try {
       const config = {
         version: 2,
-        appName: "FauceDrop",
-        scope: "faucedrop",
+        appName: "FaucetDrops",
+        scope: "faucedrops",
         endpoint: window.location.origin + "/api/verify",
         logoBase64: "/logo.png",
         userId: account.toLowerCase(),
         endpointType: "staging_https" as const,
         userIdType: "hex" as const,
-        userDefinedData: "FauceDrop Identity Verification",
+        userDefinedData: "FaucetDrops Identity Verification",
         disclosures: {
           minimumAge: 15,
           ofac: false,

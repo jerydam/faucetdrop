@@ -220,7 +220,7 @@ export default function VerificationPage() {
       const config = {
         version: 2,
         appName: "FaucetDrops",
-        scope: "faucedrop",
+        scope: "faucetdrop",
         endpoint: window.location.origin + "/api/verify",
         logoBase64: "/logo.png",
         userId: account.toLowerCase(),

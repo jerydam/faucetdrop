@@ -4,6 +4,7 @@ import { FaucetList } from "@/components/faucet-list"
 import { NetworkSelector } from "@/components/network-selector"
 import { WalletConnect } from "@/components/wallet-connect"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
+import { DroplistTasks } from "@/components/droplist"
 import { Button } from "@/components/ui/button"
 import { Plus, Users, Loader2 } from "lucide-react"
 import Link from "next/link"
@@ -45,6 +46,10 @@ export default function Home() {
   const [isNavigatingToVerify, setIsNavigatingToVerify] = useState(false)
   const [isNetworkSelectorLoading, setIsNetworkSelectorLoading] = useState(false)
   const [isWalletConnectLoading, setIsWalletConnectLoading] = useState(false)
+  
+  // New droplist states
+  const [isDroplistOpen, setIsDroplistOpen] = useState(false)
+  const [droplistNotification, setDroplistNotification] = useState<string | null>(null)
 
   // Handle navigation with loading
   const handleCreateFaucetClick = async (e: React.MouseEvent) => {
@@ -73,6 +78,16 @@ export default function Home() {
       console.error('Navigation error:', error)
       setIsNavigatingToVerify(false)
     }
+  }
+
+  // Handle droplist modal
+  const handleDroplistClick = () => {
+    setIsDroplistOpen(true)
+    setDroplistNotification(null)
+  }
+
+  const handleDroplistClose = () => {
+    setIsDroplistOpen(false)
   }
 
   // Handle network selector loading
@@ -117,9 +132,26 @@ export default function Home() {
     }
   }, [])
 
+  // Show notification when user joins droplist
+  useEffect(() => {
+    if (droplistNotification) {
+      const timer = setTimeout(() => {
+        setDroplistNotification(null)
+      }, 5000) // Hide after 5 seconds
+      return () => clearTimeout(timer)
+    }
+  }, [droplistNotification])
+
   return (
     <main className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
+        {/* Droplist Success Notification */}
+        {droplistNotification && (
+          <div className="mb-4 p-4 bg-green-100 border border-green-200 rounded-lg text-green-800 dark:bg-green-900 dark:border-green-800 dark:text-green-200">
+            {droplistNotification}
+          </div>
+        )}
+
         <div className="flex flex-col gap-4 sm:gap-6 lg:gap-8">
           {/* Header Section */}
           <header className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 sm:p-6">
@@ -179,6 +211,18 @@ export default function Home() {
                       {isNavigatingToCreate ? "Loading..." : "Create"}
                     </span>
                   </Button>
+
+                  {/* New Droplist Button */}
+                  <Button 
+                    onClick={handleDroplistClick}
+                    size="sm"
+                    variant="outline"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-900 transition-colors whitespace-nowrap"
+                  >
+                    <Users className="h-4 w-4 flex-shrink-0" />
+                    <span className="hidden xs:inline">Join Droplist</span>
+                    <span className="xs:hidden">Droplist</span>
+                  </Button> 
                 </div>
 
                 <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
@@ -221,8 +265,6 @@ export default function Home() {
               <NetworkGrid />
             </div>
             
-            
-            
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
               <AnalyticsDashboard /> 
             </div>
@@ -233,6 +275,14 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Droplist Tasks Modal */}
+      <DroplistTasks
+        isOpen={isDroplistOpen}
+        onClose={handleDroplistClose}
+        userAddress={userAddress}
+        isWalletConnected={isWalletConnected}
+      />
     </main>
   )
 }

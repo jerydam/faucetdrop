@@ -1,13 +1,221 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
-import { Loader2, RefreshCw, ExternalLink } from "lucide-react"
+import { Loader2, RefreshCw, Trophy, Medal, Award, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { JsonRpcProvider, Contract, isAddress, formatUnits, ZeroAddress } from "ethers"
+import { useNetwork } from "@/hooks/use-network"
+import { FACTORY_ABI } from "@/lib/abis"
+import { useToast } from "@/hooks/use-toast"
+import { useBackgroundSync } from "@/hooks/use-background-sync"
+import { 
+  saveToDatabase, 
+  loadFromDatabase, 
+  isCacheValid,
+  clearExpiredCache 
+} from "@/lib/database-helpers"
 
-const API_BASE_URL = 'https://fauctdrop-backend.onrender.com'
+// Database keys for caching
+const STORAGE_KEYS = {
+  FAUCET_NAMES: 'faucet_names_cache',
+  CLAIMS_DATA: 'faucet_claims_data',
+  TOTAL_CLAIMS: 'total_claims_count',
+  FAUCET_RANKINGS: 'faucet_rankings_data'
+}
+
+// ERC20 ABI for symbol and decimals
+const ERC20_ABI = [
+  {
+    "inputs": [],
+    "name": "symbol",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "decimals",
+    "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
+
+// Faucet ABI for getting faucet names and token addresses
+const FAUCET_ABI = [
+  {
+    "inputs": [],
+    "name": "name",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getName",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "faucetName",
+    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "token",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "tokenAddress",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
+
+interface ChainConfig {
+  chainId: number
+  name: string
+  displayName: string
+  nativeCurrency: { name: string; symbol: string; decimals: number }
+  nativeTokenAddress: string
+  factoryAddresses: string[]
+  rpcUrls: string[]
+  blockExplorerUrlsUrls: string[]
+  isTestnet?: boolean
+  defaultTokens: {
+    address: string
+    name: string
+    symbol: string
+    decimals: number
+  }[]
+}
+
+const CHAIN_CONFIGS: Record<number, ChainConfig> = {
+  42220: {
+    chainId: 42220,
+    name: "Celo",
+    displayName: "Celo Mainnet",
+    nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
+    nativeTokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
+    factoryAddresses: [
+      "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
+      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
+    ],
+    rpcUrls: ["https://forno.celo.org"],
+    blockExplorerUrlsUrls: ["https://celoscan.io/"],
+    defaultTokens: [
+      {
+        address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
+        name: "Celo Dollar",
+        symbol: "cUSD",
+        decimals: 18,
+      },
+      {
+        address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
+        name: "Celo Euro",
+        symbol: "cEUR",
+        decimals: 18,
+      },
+      {
+        address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+        name: "Glo Dollar",
+        symbol: "USDGLO",
+        decimals: 18,
+      },
+      {
+        address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
+        name: "Good dollar",
+        symbol: "G$",
+        decimals: 18,
+      },
+    ],
+  },
+  42161: {
+    chainId: 42161,
+    name: "Arbitrum",
+    displayName: "Arbitrum",
+    nativeCurrency: { name: "ETHER", symbol: "ETH", decimals: 18 },
+    nativeTokenAddress: ZeroAddress,
+    factoryAddresses: [
+      "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
+    ],
+    rpcUrls: ["https://arb1.arbitrum.io/rpc"],
+    blockExplorerUrlsUrls: ["https://arbiscan.io"],
+    isTestnet: true,
+    defaultTokens: [
+      {
+        address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+        name: "USD Coin",
+        symbol: "USDC",
+        decimals: 6,
+      },
+    ],
+  },
+  1135: {
+    chainId: 1135,
+    name: "Lisk",
+    displayName: "Lisk Mainnet",
+    nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
+    nativeTokenAddress: ZeroAddress,
+    factoryAddresses: [
+      "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
+    ],
+    rpcUrls: ["https://rpc.api.lisk.com"],
+    blockExplorerUrlsUrls: ["https://blockscout.lisk.com"],
+    defaultTokens: [
+      {
+        address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+        name: "USD Coin",
+        symbol: "USDC",
+        decimals: 6,
+      },
+    ],
+  },
+  8453: {
+    chainId: 8453,
+    name: "Base",
+    displayName: "Base Mainnet",
+    nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
+    nativeTokenAddress: ZeroAddress,
+    factoryAddresses: [
+      "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
+      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
+    ],
+    rpcUrls: ["https://mainnet.base.org"],
+    blockExplorerUrlsUrls: ["https://basescan.org"],
+    defaultTokens: [
+      {
+        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        name: "USD Coin",
+        symbol: "USDC",
+        decimals: 6,
+      },
+    ],
+  },
+}
+
+type ClaimType = {
+  claimer: string
+  faucet: string
+  amount: bigint
+  networkName: string
+  timestamp: number
+  chainId: number
+  tokenSymbol: string
+  tokenDecimals: number
+  isEther: boolean
+}
 
 interface ClaimData {
   name: string
@@ -27,54 +235,501 @@ interface FaucetRanking {
   totalAmount: string
 }
 
-interface ClaimsData {
-  total: number
-  totalFaucets: number
-  chartData: ClaimData[]
-  faucetRankings: FaucetRanking[]
-  lastUpdated: string
+async function getTokenInfo(
+  tokenAddress: string,
+  provider: JsonRpcProvider,
+  chainId: number,
+  isEther: boolean
+): Promise<{ symbol: string; decimals: number }> {
+  const chainConfig = CHAIN_CONFIGS[chainId]
+  
+  if (isEther) {
+    return {
+      symbol: chainConfig?.nativeCurrency.symbol || "ETH",
+      decimals: chainConfig?.nativeCurrency.decimals || 18
+    }
+  }
+
+  if (chainConfig?.defaultTokens) {
+    const knownToken = chainConfig.defaultTokens.find(
+      token => token.address.toLowerCase() === tokenAddress.toLowerCase()
+    )
+    if (knownToken) {
+      return {
+        symbol: knownToken.symbol,
+        decimals: knownToken.decimals
+      }
+    }
+  }
+
+  try {
+    const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider)
+    const [symbol, decimals] = await Promise.all([
+      tokenContract.symbol(),
+      tokenContract.decimals()
+    ])
+    
+    return {
+      symbol: symbol || "TOKEN",
+      decimals: Number(decimals) || 18
+    }
+  } catch (error) {
+    console.warn(`Error fetching token info for ${tokenAddress}:`, error)
+    return {
+      symbol: "TOKEN",
+      decimals: 18
+    }
+  }
+}
+
+async function getAllClaimsFromFactories(
+  provider: JsonRpcProvider,
+  network: any,
+): Promise<{
+  faucetAddress: string
+  transactionType: string
+  initiator: string
+  amount: bigint
+  isEther: boolean
+  timestamp: number
+  networkName: string
+  chainId: number
+  tokenSymbol: string
+  tokenDecimals: number
+}[]> {
+  try {
+    let allClaims: any[] = []
+
+    for (const factoryAddress of network.factoryAddresses) {
+      if (!isAddress(factoryAddress)) {
+        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}`)
+        continue
+      }
+
+      const factoryContract = new Contract(factoryAddress, FACTORY_ABI, provider)
+
+      const code = await provider.getCode(factoryAddress)
+      if (code === "0x") {
+        console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`)
+        continue
+      }
+
+      try {
+        console.log(`Fetching transactions from factory ${factoryAddress} on ${network.name}...`)
+        const allTransactions = await factoryContract.getAllTransactions()
+        
+        const claimTransactions = allTransactions.filter((tx: any) => {
+          const transactionType = tx.transactionType.toLowerCase();
+          return transactionType === 'claim' || 
+                 (transactionType.includes('claim') && !transactionType.includes('setclaimparameters'));
+        });
+        
+        console.log(`Found ${claimTransactions.length} claim transactions from factory ${factoryAddress}`)
+        allClaims.push(...claimTransactions)
+      } catch (error) {
+        console.warn(`Error fetching transactions from factory ${factoryAddress}:`, error)
+      }
+    }
+
+    const processedClaims = await Promise.all(
+      allClaims.map(async (claim) => {
+        let tokenInfo
+        if (claim.isEther) {
+          tokenInfo = await getTokenInfo("", provider, network.chainId, true)
+        } else {
+          try {
+            const faucetContract = new Contract(claim.faucetAddress, FAUCET_ABI, provider)
+            let tokenAddress
+            
+            try {
+              tokenAddress = await faucetContract.token()
+            } catch {
+              try {
+                tokenAddress = await faucetContract.tokenAddress()
+              } catch {
+                const chainConfig = CHAIN_CONFIGS[network.chainId]
+                tokenAddress = chainConfig?.nativeTokenAddress || ZeroAddress
+              }
+            }
+            
+            tokenInfo = await getTokenInfo(tokenAddress, provider, network.chainId, false)
+          } catch (error) {
+            console.warn(`Error getting token info for faucet ${claim.faucetAddress}:`, error)
+            tokenInfo = { symbol: "TOKEN", decimals: 18 }
+          }
+        }
+
+        return {
+          faucetAddress: claim.faucetAddress,
+          transactionType: claim.transactionType,
+          initiator: claim.initiator,
+          amount: BigInt(claim.amount),
+          isEther: claim.isEther,
+          timestamp: Number(claim.timestamp),
+          networkName: network.name,
+          chainId: network.chainId,
+          tokenSymbol: tokenInfo.symbol,
+          tokenDecimals: tokenInfo.decimals
+        }
+      })
+    )
+
+    return processedClaims
+  } catch (error: any) {
+    console.error(`Error fetching claims from factories on ${network.name}:`, error)
+    throw new Error(error.message || "Failed to fetch claims from factories")
+  }
+}
+
+async function getAllClaimsFromAllNetworks(
+  networks: any[]
+): Promise<ClaimType[]> {
+  const allClaims: ClaimType[] = []
+
+  for (const network of networks) {
+    try {
+      console.log(`Fetching claims from ${network.name}...`)
+      
+      const provider = new JsonRpcProvider(network.rpcUrl)
+      const networkClaims = await getAllClaimsFromFactories(provider, network)
+      
+      const convertedClaims: ClaimType[] = networkClaims.map(claim => ({
+        claimer: claim.initiator,
+        faucet: claim.faucetAddress,
+        amount: claim.amount,
+        networkName: claim.networkName,
+        timestamp: claim.timestamp,
+        chainId: claim.chainId,
+        tokenSymbol: claim.tokenSymbol,
+        tokenDecimals: claim.tokenDecimals,
+        isEther: claim.isEther,
+      }))
+      
+      allClaims.push(...convertedClaims)
+      console.log(`Added ${convertedClaims.length} claims from ${network.name}`)
+    } catch (error) {
+      console.error(`Error fetching claims from ${network.name}:`, error)
+    }
+  }
+
+  allClaims.sort((a, b) => b.timestamp - a.timestamp)
+  console.log(`Total claims from all networks: ${allClaims.length}`)
+  return allClaims
 }
 
 export function UserClaimsChart() {
-  const [data, setData] = useState<ClaimsData | null>(null)
+  const { networks } = useNetwork()
+  const { toast } = useToast()
+  const [data, setData] = useState<ClaimData[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [totalClaims, setTotalClaims] = useState(0)
+  const [totalFaucets, setTotalFaucets] = useState(0)
+  const [faucetNames, setFaucetNames] = useState<Record<string, string>>({})
+  const [faucetRankings, setFaucetRankings] = useState<FaucetRanking[]>([])
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  
+  // Background sync setup
+  const backgroundSync = useBackgroundSync({
+    syncKey: 'user_claims_data',
+    fetchFunction: fetchDataFromSources,
+    interval: 5 * 60 * 1000,
+    onSuccess: (data) => {
+      console.log('Background sync completed successfully')
+      setLastUpdated(new Date())
+    },
+    onError: (error) => {
+      console.error('Background sync failed:', error)
+      toast({
+        title: "Background sync failed",
+        description: "Data will be refreshed on next manual update",
+        variant: "destructive",
+      })
+    }
+  })
 
-  const fetchData = async () => {
+  // Load cached data immediately on mount
+  useEffect(() => {
+    loadCachedData()
+    clearExpiredCache()
+  }, [])
+
+  // Start background sync when networks are available
+  useEffect(() => {
+    if (networks.length > 0) {
+      loadDataIfNeeded()
+      backgroundSync.startSync()
+    }
+    
+    return () => {
+      backgroundSync.stopSync()
+    }
+  }, [networks, backgroundSync])
+
+  const loadCachedData = async () => {
     try {
-      setLoading(true)
-      setError(null)
-      
-      const response = await fetch(`${API_BASE_URL}/analytics/claims`)
-      const result = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(result.message || 'Failed to fetch drops data')
+      const [cachedClaims, cachedNames, cachedTotal, cachedRankings] = await Promise.all([
+        loadFromDatabase<ClaimType[]>(STORAGE_KEYS.CLAIMS_DATA),
+        loadFromDatabase<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES),
+        loadFromDatabase<number>(STORAGE_KEYS.TOTAL_CLAIMS),
+        loadFromDatabase<FaucetRanking[]>(STORAGE_KEYS.FAUCET_RANKINGS)
+      ])
+
+      if (cachedClaims && cachedNames && cachedTotal && cachedRankings) {
+        console.log('Loading cached data from database')
+        
+        const chartData = processClaimsForChart(cachedClaims, cachedNames)
+        
+        setData(chartData)
+        setFaucetNames(cachedNames)
+        setTotalClaims(cachedTotal)
+        setFaucetRankings(cachedRankings)
+        setTotalFaucets(Object.keys(cachedNames).length)
+        setLoading(false)
+        setLastUpdated(new Date())
+        
+        console.log(`Loaded ${cachedTotal} cached claims from database`)
       }
+    } catch (error) {
+      console.warn('Failed to load cached data:', error)
+    }
+  }
+
+  const loadDataIfNeeded = async () => {
+    const isValid = await isCacheValid(STORAGE_KEYS.CLAIMS_DATA)
+    if (!isValid) {
+      console.log('Cache invalid or expired, fetching fresh data')
+      await fetchDataFromSources()
+    }
+  }
+
+  async function fetchDataFromSources(): Promise<any> {
+    try {
+      console.log("Fetching claims from all sources...")
       
-      if (result.success && result.data) {
-        setData({
-          total: result.data.total || 0,
-          totalFaucets: result.data.totalFaucets || 0,
-          chartData: result.data.chartData || [],
-          faucetRankings: result.data.faucetRankings || [],
-          lastUpdated: result.cachedAt
-        })
-      } else {
-        throw new Error(result.message || 'No drops data available')
+      const allClaims = await getAllClaimsFromAllNetworks(networks)
+      console.log("Fetched claims:", allClaims.length)
+
+      const claimsByFaucet: { [key: string]: { 
+        claims: number, 
+        network: string,
+        chainId: number,
+        totalAmount: bigint,
+        tokenSymbol: string,
+        tokenDecimals: number,
+        latestTimestamp: number
+      } } = {}
+      let totalClaimsCount = allClaims.length
+
+      for (const claim of allClaims) {
+        const faucetKey = claim.faucet.toLowerCase()
+        
+        if (!claimsByFaucet[faucetKey]) {
+          claimsByFaucet[faucetKey] = { 
+            claims: 0, 
+            network: claim.networkName,
+            chainId: claim.chainId,
+            totalAmount: BigInt(0),
+            tokenSymbol: claim.tokenSymbol,
+            tokenDecimals: claim.tokenDecimals,
+            latestTimestamp: 0
+          }
+        }
+        claimsByFaucet[faucetKey].claims += 1
+        claimsByFaucet[faucetKey].totalAmount += claim.amount
+        
+        if (claim.timestamp > claimsByFaucet[faucetKey].latestTimestamp) {
+          claimsByFaucet[faucetKey].latestTimestamp = claim.timestamp
+        }
       }
+
+      const fetchedNames = await fetchFaucetNames(allClaims)
+
+      const rankingData: FaucetRanking[] = Object.entries(claimsByFaucet)
+        .sort(([, a], [, b]) => b.latestTimestamp - a.latestTimestamp)
+        .map(([faucet, data], index) => ({
+          rank: index + 1,
+          faucetAddress: faucet,
+          faucetName: fetchedNames[faucet] || `Faucet ${faucet.slice(0, 6)}...${faucet.slice(-4)}`,
+          network: data.network,
+          chainId: data.chainId,
+          totalClaims: data.claims,
+          latestClaimTime: data.latestTimestamp,
+          totalAmount: `${Number(formatUnits(data.totalAmount, data.tokenDecimals)).toFixed(4)} ${data.tokenSymbol}`
+        }))
+
+      // Save all data to database
+      await Promise.all([
+        saveToDatabase(STORAGE_KEYS.CLAIMS_DATA, allClaims),
+        saveToDatabase(STORAGE_KEYS.FAUCET_NAMES, fetchedNames),
+        saveToDatabase(STORAGE_KEYS.TOTAL_CLAIMS, totalClaimsCount),
+        saveToDatabase(STORAGE_KEYS.FAUCET_RANKINGS, rankingData)
+      ])
+
+      const chartData = processClaimsForChart(allClaims, fetchedNames)
+
+      setData(chartData)
+      setFaucetNames(fetchedNames)
+      setTotalClaims(totalClaimsCount)
+      setFaucetRankings(rankingData)
+      setTotalFaucets(Object.keys(claimsByFaucet).length)
+
+      console.log("Data cached to database successfully")
       
-    } catch (err) {
-      console.error('Error fetching drops data:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch data')
+      return { allClaims, fetchedNames, totalClaimsCount, rankingData }
+    } catch (error) {
+      console.error("Error fetching claims data:", error)
+      throw error
+    }
+  }
+
+  const processClaimsForChart = (claims: ClaimType[], names: Record<string, string>): ClaimData[] => {
+    const claimsByFaucet: { [key: string]: number } = {}
+    
+    for (const claim of claims) {
+      const faucetKey = claim.faucet.toLowerCase()
+      claimsByFaucet[faucetKey] = (claimsByFaucet[faucetKey] || 0) + 1
+    }
+
+    const sortedFaucets = Object.entries(claimsByFaucet)
+      .sort(([, a], [, b]) => b - a)
+
+    const top10Faucets = sortedFaucets.slice(0, 10)
+    const otherFaucets = sortedFaucets.slice(10)
+    const otherTotalClaims = otherFaucets.reduce((sum, [, claims]) => sum + claims, 0)
+    
+    const colors = generateColors(top10Faucets.length + (otherTotalClaims > 0 ? 1 : 0))
+    
+    const chartData: ClaimData[] = top10Faucets.map(([faucet, claims], index) => {
+      const faucetName = names[faucet] || `${faucet.slice(0, 6)}...${faucet.slice(-4)}`
+      return {
+        name: faucetName,
+        value: claims,
+        color: colors[index],
+        faucetAddress: faucet
+      }
+    })
+
+    if (otherTotalClaims > 0) {
+      chartData.push({
+        name: `Others (${otherFaucets.length} faucets)`,
+        value: otherTotalClaims,
+        color: colors[top10Faucets.length],
+        faucetAddress: 'others'
+      })
+    }
+
+    return chartData
+  }
+
+  const generateColors = (count: number) => {
+    const colors = []
+    for (let i = 0; i < count; i++) {
+      const hue = (i * 137.508) % 360
+      colors.push(`hsl(${hue}, 70%, 60%)`)
+    }
+    return colors
+  }
+
+  const fetchFaucetNames = useCallback(async (claimsData: ClaimType[]) => {
+    const cachedNames = await loadFromDatabase<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES) || {};
+    setFaucetNames(cachedNames);
+
+    const faucetAddresses = [...new Set(claimsData.map(claim => claim.faucet))];
+    const uncachedAddresses = faucetAddresses.filter(addr => !cachedNames[addr]);
+
+    if (uncachedAddresses.length === 0) {
+      console.log('All faucet names already cached');
+      return cachedNames;
+    }
+
+    console.log(`Fetching names for ${uncachedAddresses.length} uncached faucets...`);
+
+    const namePromises = uncachedAddresses.map(async (faucetAddress) => {
+      try {
+        const claim = claimsData.find(c => c.faucet === faucetAddress);
+        if (!claim) {
+          console.warn(`No claim found for faucet ${faucetAddress}`);
+          return null;
+        }
+
+        const network = networks.find(n => n.chainId === claim.chainId);
+        if (!network) {
+          console.warn(`No network found for chainId ${claim.chainId}`);
+          return null;
+        }
+
+        const provider = new JsonRpcProvider(network.rpcUrl);
+        const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider);
+
+        let faucetName: string;
+        try {
+          faucetName = await faucetContract.name();
+          if (!faucetName || faucetName.trim() === '') {
+            console.warn(`Empty name returned for faucet ${faucetAddress}`);
+            faucetName = `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`;
+          }
+        } catch (error) {
+          console.warn(`Error fetching name for faucet ${faucetAddress}:`, error);
+          faucetName = `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`;
+        }
+
+        return { address: faucetAddress, name: faucetName };
+      } catch (error) {
+        console.error(`Error processing faucet ${faucetAddress}:`, error);
+        return {
+          address: faucetAddress,
+          name: `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`,
+        };
+      }
+    });
+
+    const results = await Promise.all(namePromises);
+    const newNames: Record<string, string> = { ...cachedNames };
+
+    results.forEach(result => {
+      if (result && result.name) {
+        newNames[result.address] = result.name;
+      }
+    });
+
+    console.log(`Successfully fetched ${Object.keys(newNames).length - Object.keys(cachedNames).length} new faucet names`);
+    setFaucetNames(newNames);
+    await saveToDatabase(STORAGE_KEYS.FAUCET_NAMES, newNames);
+    return newNames;
+  }, [networks]);
+
+  const handleManualRefresh = async () => {
+    setLoading(true)
+    try {
+      await fetchDataFromSources()
+      setLastUpdated(new Date())
+      toast({
+        title: "Data refreshed",
+        description: `Updated ${totalClaims} total drops`,
+      })
+    } catch (error) {
+      toast({
+        title: "Failed to refresh data",
+        description: error instanceof Error ? error.message : "Please try again later.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    fetchData()
-  }, [])
+  const getRankIcon = (rank: number) => {
+    switch (rank) {
+      case 1:
+        return <Trophy className="h-5 w-5 text-yellow-500" />
+      case 2:
+        return <Medal className="h-5 w-5 text-gray-400" />
+      case 3:
+        return <Award className="h-5 w-5 text-orange-500" />
+      default:
+        return <span className="text-sm font-medium text-muted-foreground">#{rank}</span>
+    }
+  }
 
   const getNetworkColor = (network: string) => {
     switch (network.toLowerCase()) {
@@ -86,63 +741,36 @@ export function UserClaimsChart() {
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
       case 'lisk':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'polygon':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+      case 'ethereum':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
     }
   }
 
   const getExplorerUrl = (chainId: number, address: string) => {
-    const explorers: Record<number, string> = {
-      42220: "https://celoscan.io",
-      42161: "https://arbiscan.io", 
-      8453: "https://basescan.org",
-      1135: "https://blockscout.lisk.com"
+    const chainConfig = CHAIN_CONFIGS[chainId]
+    if (chainConfig?.blockExplorerUrlsUrls?.length > 0) {
+      return `${chainConfig.blockExplorerUrlsUrls[0]}/address/${address}`
     }
-    
-    const explorerUrl = explorers[chainId]
-    return explorerUrl ? `${explorerUrl}/address/${address}` : '#'
+    return '#'
   }
 
-  if (loading) {
+  if (loading && data.length === 0) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center h-64">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-            <p className="text-sm md:text-base">Loading drops data...</p>
+            <p className="text-sm md:text-base">Loading faucet data...</p>
           </div>
         </CardContent>
       </Card>
     )
   }
 
-  if (error) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <p className="text-sm text-destructive mb-4">{error}</p>
-            <Button variant="outline" onClick={fetchData}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!data) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center h-64">
-          <p className="text-sm text-muted-foreground">No data available</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  // Custom tooltip to show faucet details
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload
@@ -158,7 +786,7 @@ export function UserClaimsChart() {
             Drops: <span className="font-medium">{data.value.toLocaleString()}</span>
           </p>
           <p className="text-xs md:text-sm text-muted-foreground">
-            {((data.value / data.total) * 100).toFixed(1)}% of total drops
+            {((data.value / totalClaims) * 100).toFixed(1)}% of total drops
           </p>
         </div>
       )
@@ -168,24 +796,26 @@ export function UserClaimsChart() {
 
   return (
     <div className="space-y-4 md:space-y-6 p-2 md:p-4">
-      {/* Header Section with Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-grow">
           <div className="text-center p-3 bg-muted/50 rounded-lg">
-            <p className="text-lg md:text-2xl font-bold">{data.total.toLocaleString()}</p>
+            <p className="text-lg md:text-2xl font-bold">{totalClaims.toLocaleString()}</p>
             <p className="text-xs md:text-sm text-muted-foreground">Total Drops</p>
+            {lastUpdated && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Updated: {lastUpdated.toLocaleTimeString()}
+              </p>
+            )}
           </div>
-          
         </div>
 
-        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="shrink-0">
-          <RefreshCw className="h-4 w-4" />
+        <Button variant="outline" size="sm" onClick={handleManualRefresh} disabled={loading} className="shrink-0">
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           <span className="hidden sm:inline ml-2">Refresh</span>
         </Button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
-        {/* Pie Chart - Top 10 Only */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg md:text-xl">Top 10 Faucets by Drops</CardTitle>
@@ -194,18 +824,18 @@ export function UserClaimsChart() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {data.chartData.length > 0 ? (
+            {data.length > 0 ? (
               <ResponsiveContainer width="100%" height={300} className="md:h-96">
                 <PieChart>
                   <Pie
-                    data={data.chartData}
+                    data={data}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
                     outerRadius="80%"
                     dataKey="value"
                   >
-                    {data.chartData.map((entry, index) => (
+                    {data.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -224,25 +854,23 @@ export function UserClaimsChart() {
           </CardContent>
         </Card>
 
-        {/* All Available Faucets Table */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg md:text-xl">All Available Faucets</CardTitle>
             <CardDescription className="text-sm">
-              Complete list ranked by latest activity from all faucets
+              Complete list ranked by latest activity from all active faucets
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <div className="max-h-96 overflow-auto">
-              {/* Mobile Card View for small screens */}
               <div className="sm:hidden">
-                {data.faucetRankings.length > 0 ? (
+                {faucetRankings.length > 0 ? (
                   <div className="space-y-3 p-4">
-                    {data.faucetRankings.map((item) => (
+                    {faucetRankings.map((item) => (
                       <div key={item.faucetAddress} className="border rounded-lg p-3 space-y-2">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-muted-foreground">#{item.rank}</span>
+                            {getRankIcon(item.rank)}
                             <div className="min-w-0 flex-1">
                               <p className="font-medium truncate text-sm" title={item.faucetName}>
                                 {item.faucetName}
@@ -288,7 +916,6 @@ export function UserClaimsChart() {
                 )}
               </div>
 
-              {/* Table View for larger screens */}
               <div className="hidden sm:block">
                 <table className="w-full">
                   <thead className="border-b">
@@ -302,12 +929,12 @@ export function UserClaimsChart() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.faucetRankings.length > 0 ? (
-                      data.faucetRankings.map((item) => (
+                    {faucetRankings.length > 0 ? (
+                      faucetRankings.map((item) => (
                         <tr key={item.faucetAddress} className="border-b hover:bg-muted/50">
                           <td className="font-medium p-2 md:p-4">
                             <div className="flex items-center justify-center">
-                              <span className="text-sm font-medium text-muted-foreground">#{item.rank}</span>
+                              {getRankIcon(item.rank)}
                             </div>
                           </td>
                           <td className="p-2 md:p-4">
@@ -357,10 +984,6 @@ export function UserClaimsChart() {
             </div>
           </CardContent>
         </Card>
-      </div>
-      
-      <div className="text-xs text-muted-foreground text-center">
-        📊 Data served from onchain • Updates automatically
       </div>
     </div>
   )

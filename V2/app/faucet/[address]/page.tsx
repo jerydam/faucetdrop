@@ -209,7 +209,7 @@ const handleStartTimeChange = (e) => {
     switch(platform.toLowerCase()) {
       case 'telegram': return 'Join'
       case 'discord': return 'Join'
-      case 'twitter':
+      case '𝕏':
       case 'x': return 'Follow'
       case 'youtube': return 'Subscribe'
       case 'instagram': return 'Follow'
@@ -221,7 +221,7 @@ const handleStartTimeChange = (e) => {
     switch(platform.toLowerCase()) {
       case 'telegram': return '📱'
       case 'discord': return '💬'
-      case 'twitter':
+      case '𝕏':
       case 'x': return '𝕏'
       case 'youtube': return '📺'
       case 'instagram': return '📷'
@@ -320,7 +320,7 @@ const loadSocialMediaLinks = async (): Promise<void> => {
         } else {
           // Extract from title/description for backwards compatibility
           const content = (task.title + ' ' + task.description).toLowerCase()
-          let platform = 'twitter' // default
+          let platform = '𝕏' // default
           if (content.includes('telegram')) platform = 'telegram'
           else if (content.includes('discord')) platform = 'discord'
           else if (content.includes('youtube')) platform = 'youtube'
@@ -368,7 +368,7 @@ const loadSocialMediaLinks = async (): Promise<void> => {
 }
   const addNewSocialLink = (): void => {
     setNewSocialLinks([...newSocialLinks, {
-      platform: 'twitter',
+      platform: '𝕏',
       url: '',
       handle: '',
       action: 'follow'
@@ -1377,7 +1377,7 @@ const loadSocialMediaLinks = async (): Promise<void> => {
       )
       toast({
         title: "Faucet funded successfully",
-        description: `You have added ${formatUnits(amount, tokenDecimals)} ${tokenSymbol} to the faucet (after 3% platform fee)`,
+        description: `You have added ${formatUnits(amount, tokenDecimals)} ${tokenSymbol} to the faucet (minus 3% platform fee)`,
       })
       setFundAmount("")
       setAdjustedFundAmount("")
@@ -2588,7 +2588,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
                   <SelectValue placeholder="Select platform" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="twitter">Twitter/X</SelectItem>
+                  <SelectItem value="𝕏">Twitter/𝕏</SelectItem>
                   <SelectItem value="telegram">Telegram</SelectItem>
                   <SelectItem value="discord">Discord</SelectItem>
                   <SelectItem value="youtube">YouTube</SelectItem>

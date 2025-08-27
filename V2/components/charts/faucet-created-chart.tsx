@@ -2,187 +2,196 @@
 
 import { useEffect, useState } from "react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
-import { Loader2, RefreshCw, Clock } from "lucide-react"
+import { useNetwork } from "@/hooks/use-network"
+import { getFaucetsForNetwork } from "@/lib/faucet"
+import { Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useBackgroundSync } from "@/hooks/use-background-sync"
+import { 
+  saveToDatabase, 
+  loadFromDatabase, 
+  isCacheValid,
+  clearExpiredCache 
+} from "@/lib/database-helpers"
 
-const API_BASE_URL = 'https://fauctdrop-backend.onrender.com'
+// Database keys for faucet data
+const FAUCET_STORAGE_KEYS = {
+  CHART_DATA: 'faucet_chart_data',
+  TOTAL_FAUCETS: 'faucet_total_count'
+};
 
 interface ChartData {
   network: string
   faucets: number
 }
 
-interface FaucetsData {
-  total: number
-  chartData: ChartData[]
-  lastUpdated: string
-}
-
 export function FaucetsCreatedChart() {
-  const [data, setData] = useState<FaucetsData | null>(null)
+  const { networks } = useNetwork()
+  const [data, setData] = useState<ChartData[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [totalFaucets, setTotalFaucets] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  const fetchData = async () => {
+  // Background sync setup
+  const backgroundSync = useBackgroundSync({
+    syncKey: 'faucets_data',
+    fetchFunction: fetchFaucetData,
+    interval: 5 * 60 * 1000,
+    onSuccess: (data) => {
+      console.log('Faucets background sync completed')
+      setLastUpdated(new Date())
+    },
+    onError: (error) => {
+      console.error('Faucets background sync failed:', error)
+    }
+  })
+
+  // Load cached data immediately on mount
+  useEffect(() => {
+    loadCachedData()
+    clearExpiredCache()
+  }, [])
+
+  // Start background sync when networks are available
+  useEffect(() => {
+    if (networks.length > 0) {
+      loadDataIfNeeded()
+      backgroundSync.startSync()
+    }
+    
+    return () => {
+      backgroundSync.stopSync()
+    }
+  }, [networks, backgroundSync])
+
+  const loadCachedData = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      const [cachedData, cachedTotal] = await Promise.all([
+        loadFromDatabase<ChartData[]>(FAUCET_STORAGE_KEYS.CHART_DATA),
+        loadFromDatabase<number>(FAUCET_STORAGE_KEYS.TOTAL_FAUCETS)
+      ])
       
-      const response = await fetch(`${API_BASE_URL}/analytics/faucets`)
-      const result = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(result.message || 'Failed to fetch faucets data')
+      if (cachedData && cachedTotal !== null) {
+        console.log('Loading cached faucet data from database');
+        setData(cachedData);
+        setTotalFaucets(cachedTotal);
+        setLoading(false);
+        setLastUpdated(new Date())
       }
-      
-      if (result.success && result.data) {
-        setData({
-          total: result.data.total || 0,
-          chartData: result.data.chartData || [],
-          lastUpdated: result.cachedAt
+    } catch (error) {
+      console.warn('Failed to load cached faucet data:', error)
+    }
+  }
+
+  const loadDataIfNeeded = async () => {
+    const isValid = await isCacheValid(FAUCET_STORAGE_KEYS.CHART_DATA)
+    if (!isValid) {
+      console.log('Faucet cache invalid or expired, fetching fresh data')
+      await fetchFaucetData()
+    }
+  }
+
+  async function fetchFaucetData(): Promise<any> {
+    try {
+      const chartData: ChartData[] = []
+
+      await Promise.all(
+        networks.map(async (network) => {
+          try {
+            const faucets = await getFaucetsForNetwork(network)
+            const sortedFaucets = faucets.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+            
+            chartData.push({
+              network: network.name,
+              faucets: sortedFaucets.length,
+            })
+          } catch (error) {
+            console.error(`Error fetching faucets for ${network.name}:`, error)
+            chartData.push({
+              network: network.name,
+              faucets: 0,
+            })
+          }
         })
-      } else {
-        throw new Error(result.message || 'No faucets data available')
-      }
+      )
+
+      const total = chartData.reduce((sum, item) => sum + item.faucets, 0)
       
-    } catch (err) {
-      console.error('Error fetching faucets data:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch data')
+      // Save data to database
+      await Promise.all([
+        saveToDatabase(FAUCET_STORAGE_KEYS.CHART_DATA, chartData),
+        saveToDatabase(FAUCET_STORAGE_KEYS.TOTAL_FAUCETS, total)
+      ])
+
+      setData(chartData)
+      setTotalFaucets(total)
+      setLastUpdated(new Date())
+      
+      return { chartData, total }
+    } catch (error) {
+      console.error("Error fetching faucet data:", error)
+      throw error
+    }
+  }
+
+  const handleManualRefresh = async () => {
+    setLoading(true)
+    try {
+      await fetchFaucetData()
+    } catch (error) {
+      console.error('Manual refresh failed:', error)
+      // Fallback to cached data if available
+      const [cachedData, cachedTotal] = await Promise.all([
+        loadFromDatabase<ChartData[]>(FAUCET_STORAGE_KEYS.CHART_DATA),
+        loadFromDatabase<number>(FAUCET_STORAGE_KEYS.TOTAL_FAUCETS)
+      ])
+      
+      if (cachedData && cachedTotal !== null) {
+        console.log('Using cached faucet data as fallback');
+        setData(cachedData);
+        setTotalFaucets(cachedTotal);
+      }
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const formatLastUpdated = (dateString: string) => {
-    if (!dateString) return "Never"
-    
-    try {
-      const date = new Date(dateString)
-      const now = new Date()
-      const diffMs = now.getTime() - date.getTime()
-      const diffMins = Math.floor(diffMs / 60000)
-      
-      if (diffMins < 1) return "Just now"
-      if (diffMins < 60) return `${diffMins} min ago`
-      if (diffMins < 1440) return `${Math.floor(diffMins / 60)} hours ago`
-      return date.toLocaleDateString()
-    } catch {
-      return "Unknown"
-    }
-  }
-
-  if (loading) {
+  if (loading && data.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">Loading faucets data...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="text-sm text-destructive mb-4">{error}</p>
-          <Button variant="outline" onClick={fetchData}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Retry
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-sm text-muted-foreground">No data available</p>
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      {/* Header with stats and refresh button */}
       <div className="flex items-center justify-between">
         <div className="text-center">
-          <p className="text-2xl font-bold">{data.total.toLocaleString()}</p>
+          <p className="text-2xl font-bold">{totalFaucets}</p>
           <p className="text-sm text-muted-foreground">Total Faucets Created</p>
+          {lastUpdated && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Updated: {lastUpdated.toLocaleTimeString()}
+            </p>
+          )}
         </div>
-        
-        <div className="flex items-center gap-2">
-
-          
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={fetchData} 
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={handleManualRefresh} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
-      {/* Chart */}
-      {data.chartData.length > 0 ? (
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data.chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="network" />
-            <YAxis />
-            <Tooltip 
-              formatter={(value, name) => [value, 'Faucets']}
-              labelFormatter={(label) => `Network: ${label}`}
-            />
-            <Legend />
-            <Bar 
-              dataKey="faucets" 
-              fill="#0052FF" 
-              name="Faucets Created"
-              radius={[4, 4, 0, 0]}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      ) : (
-        <div className="flex items-center justify-center h-64 text-muted-foreground">
-          <div className="text-center">
-            <p className="text-sm">No faucets data available</p>
-            <Button variant="ghost" size="sm" onClick={fetchData} className="mt-2">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh Data
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Network breakdown */}
-      {data.chartData.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {data.chartData.map((item, index) => (
-            <div 
-              key={item.network}
-              className="bg-muted/50 rounded-lg p-3 text-center"
-            >
-              <p className="text-lg font-semibold">{item.faucets}</p>
-              <p className="text-xs text-muted-foreground">{item.network}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Data source indicator */}
-      <div className="text-xs text-muted-foreground text-center">
-        📊 Data served from onchain • Updates automatically
-      </div>
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="network" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="faucets" fill="#0052FF" />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   )
 }

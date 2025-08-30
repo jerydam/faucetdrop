@@ -3121,8 +3121,8 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       
       {/* ✅ Updated Follow Dialog with Dynamic Tasks */}
       <Dialog open={showFollowDialog} onOpenChange={setShowFollowDialog}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-lg max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-lg sm:text-xl">Complete Required Tasks</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
               {dynamicTasks.length > 0 
@@ -3131,7 +3131,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
               }
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 overflow-y-auto flex-1 min-h-0">
             {isLoadingSocialLinks ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
@@ -3206,7 +3206,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
             )}
           </div>
          
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0">
             <Button
               onClick={handleVerifyAllTasks}
               className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"

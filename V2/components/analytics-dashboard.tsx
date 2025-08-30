@@ -269,7 +269,7 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
             Analytics Dashboard
           </h1>
           <p className="text-muted-foreground mt-2">
-            Real-time data from all networks - automatically refreshed every 5 minutes
+            Real-time data from all networks
           </p>
           {finalLoading && (
             <div className="flex items-center justify-center md:justify-start mt-2">
@@ -278,9 +278,7 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
             </div>
           )}
           {finalData?.lastUpdated && !finalLoading && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Last updated: {new Date(finalData.lastUpdated).toLocaleString()}
-            </p>
+            ""
           )}
         </div>
 
@@ -297,30 +295,29 @@ function DashboardContent({ data: propData, loading: propLoading, error: propErr
               <StatCard
                 title="Total Faucets"
                 value={finalData?.totalFaucets}
-                icon={PieChart}
+                icon={BarChart3}
                 loading={finalLoading}
-                lastUpdated={finalData?.lastUpdated}
               />
               <StatCard
                 title="Total Transactions"
                 value={finalData?.totalTransactions}
                 icon={TrendingUp}
                 loading={finalLoading}
-                lastUpdated={finalData?.lastUpdated}
+                
               />
               <StatCard
                 title="Unique Users"
                 value={finalData?.uniqueUsers}
                 icon={Users}
                 loading={finalLoading}
-                lastUpdated={finalData?.lastUpdated}
+                
               />
               <StatCard
                 title="Total Drops"
                 value={finalData?.totalClaims}
-                icon={BarChart3}
+                icon={PieChart}
                 loading={finalLoading}
-                lastUpdated={finalData?.lastUpdated}
+               
               />
             </>
           )}

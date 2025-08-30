@@ -504,9 +504,9 @@ const loadSocialMediaLinks = async (): Promise<void> => {
 
   
   const popupContent = (amount: string, txHash: string | null) =>
-    `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
+    `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"} from the on going @web3lagoscon. Verify Drop 💧: ${
       txHash
-        ? `${selectedNetwork?.blockExplorerUrls || "https://explorer.unknown"}/tx/0x${txHash.slice(2)}`
+        ? `${selectedNetwork?.blockExplorerUrls || "https://explorer.unknown"}/tx/0x${txHash.slice(2)} #W3LC2025`
         : "Transaction not available"
     }`
 

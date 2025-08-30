@@ -213,16 +213,7 @@ export default function Home() {
                   </Button>
 
                   {/* New Droplist Button */}
-                  {/* <Button 
-                    onClick={handleDroplistClick}
-                    size="sm"
-                    variant="outline"
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 border-purple-200 text-purple-700 hover:bg-purple-50 hover:border-purple-300 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-900 transition-colors whitespace-nowrap"
-                  >
-                    <Users className="h-4 w-4 flex-shrink-0" />
-                    <span className="hidden xs:inline">Join Droplist</span>
-                    <span className="xs:hidden">Droplist</span>
-                  </Button>  */}
+                 
                 </div>
 
                 <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">

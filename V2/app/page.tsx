@@ -213,7 +213,7 @@ export default function Home() {
                   </Button>
 
                   {/* New Droplist Button */}
-                  <Button 
+                  {/* <Button 
                     onClick={handleDroplistClick}
                     size="sm"
                     variant="outline"
@@ -222,7 +222,7 @@ export default function Home() {
                     <Users className="h-4 w-4 flex-shrink-0" />
                     <span className="hidden xs:inline">Join Droplist</span>
                     <span className="xs:hidden">Droplist</span>
-                  </Button> 
+                  </Button>  */}
                 </div>
 
                 <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">

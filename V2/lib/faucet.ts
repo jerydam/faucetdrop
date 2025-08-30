@@ -1884,7 +1884,7 @@ export async function retrieveSecretCode(faucetAddress: string): Promise<string>
     }
 
     // Fallback to backend if not found in localStorage
-    const response = await fetch("https://fauctdrop-backend.onrender.com/retrieve-secret-code", {
+    const response = await fetch("http://0.0.0.0:10000/retrieve-secret-code", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

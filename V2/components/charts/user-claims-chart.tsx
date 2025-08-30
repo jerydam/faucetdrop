@@ -1,88 +1,17 @@
 "use client"
-
 import { useEffect, useState, useCallback } from "react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
-import { Loader2, RefreshCw, Trophy, Medal, Award, ExternalLink } from "lucide-react"
+import { Loader2, RefreshCw, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { JsonRpcProvider, Contract, isAddress, formatUnits, ZeroAddress } from "ethers"
 import { useNetwork } from "@/hooks/use-network"
-import { FACTORY_ABI } from "@/lib/abis"
+import { FACTORY_ABI, FAUCET_ABI, ERC20_ABI } from "@/lib/abis"
 import { useToast } from "@/hooks/use-toast"
-import { useBackgroundSync } from "@/hooks/use-background-sync"
-import { 
-  saveToDatabase, 
-  loadFromDatabase, 
-  isCacheValid,
-  clearExpiredCache 
-} from "@/lib/database-helpers"
+import { DataService, ClaimData } from "@/lib/database-helpers"
 
-// Database keys for caching
-const STORAGE_KEYS = {
-  FAUCET_NAMES: 'faucet_names_cache',
-  CLAIMS_DATA: 'faucet_claims_data',
-  TOTAL_CLAIMS: 'total_claims_count',
-  FAUCET_RANKINGS: 'faucet_rankings_data'
-}
-
-// ERC20 ABI for symbol and decimals
-const ERC20_ABI = [
-  {
-    "inputs": [],
-    "name": "symbol",
-    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "decimals",
-    "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }],
-    "stateMutability": "view",
-    "type": "function"
-  }
-]
-
-// Faucet ABI for getting faucet names and token addresses
-const FAUCET_ABI = [
-  {
-    "inputs": [],
-    "name": "name",
-    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "getName",
-    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "faucetName",
-    "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "token",
-    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "tokenAddress",
-    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
-    "stateMutability": "view",
-    "type": "function"
-  }
-]
-
+// Chain configurations
 interface ChainConfig {
   chainId: number
   name: string
@@ -121,90 +50,23 @@ const CHAIN_CONFIGS: Record<number, ChainConfig> = {
         symbol: "cUSD",
         decimals: 18,
       },
-      {
-        address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
-        name: "Celo Euro",
-        symbol: "cEUR",
-        decimals: 18,
-      },
-      {
-        address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
-        name: "Glo Dollar",
-        symbol: "USDGLO",
-        decimals: 18,
-      },
-      {
-        address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
-        name: "Good dollar",
-        symbol: "G$",
-        decimals: 18,
-      },
     ],
   },
-  42161: {
-    chainId: 42161,
-    name: "Arbitrum",
-    displayName: "Arbitrum",
-    nativeCurrency: { name: "ETHER", symbol: "ETH", decimals: 18 },
-    nativeTokenAddress: ZeroAddress,
-    factoryAddresses: [
-      "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
-    ],
-    rpcUrls: ["https://arb1.arbitrum.io/rpc"],
-    blockExplorerUrlsUrls: ["https://arbiscan.io"],
-    isTestnet: true,
-    defaultTokens: [
-      {
-        address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-        name: "USD Coin",
-        symbol: "USDC",
-        decimals: 6,
-      },
-    ],
-  },
-  1135: {
-    chainId: 1135,
-    name: "Lisk",
-    displayName: "Lisk Mainnet",
-    nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
-    nativeTokenAddress: ZeroAddress,
-    factoryAddresses: [
-      "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
-    ],
-    rpcUrls: ["https://rpc.api.lisk.com"],
-    blockExplorerUrlsUrls: ["https://blockscout.lisk.com"],
-    defaultTokens: [
-      {
-        address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
-        name: "USD Coin",
-        symbol: "USDC",
-        decimals: 6,
-      },
-    ],
-  },
-  8453: {
-    chainId: 8453,
-    name: "Base",
-    displayName: "Base Mainnet",
-    nativeCurrency: { name: "Ethereum", symbol: "ETH", decimals: 18 },
-    nativeTokenAddress: ZeroAddress,
-    factoryAddresses: [
-      "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
-      "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-    ],
-    rpcUrls: ["https://mainnet.base.org"],
-    blockExplorerUrlsUrls: ["https://basescan.org"],
-    defaultTokens: [
-      {
-        address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        name: "USD Coin",
-        symbol: "USDC",
-        decimals: 6,
-      },
-    ],
-  },
+  // Add other chain configs as needed...
 }
 
+// Local storage keys for faucet names caching
+const STORAGE_KEYS = {
+  FAUCET_NAMES: 'faucet_names_cache',
+  CLAIMS_DATA: 'faucet_claims_data',
+  LAST_UPDATED: 'claims_last_updated',
+  TOTAL_CLAIMS: 'totalclaim'
+}
+
+// Cache duration (5 minutes)
+const CACHE_DURATION = 5 * 60 * 1000
+
+// Claim type definition
 type ClaimType = {
   claimer: string
   faucet: string
@@ -217,24 +79,48 @@ type ClaimType = {
   isEther: boolean
 }
 
-interface ClaimData {
-  name: string
-  value: number
-  color: string
-  faucetAddress: string
+// Helper function to save data to localStorage
+function saveToLocalStorage(key: string, data: any) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(key, JSON.stringify(data, (k, v) => 
+        typeof v === 'bigint' ? v.toString() : v
+      ))
+    }
+  } catch (error) {
+    console.warn('Failed to save to localStorage:', error)
+  }
 }
 
-interface FaucetRanking {
-  rank: number
-  faucetAddress: string
-  faucetName: string
-  network: string
-  chainId: number
-  totalClaims: number
-  latestClaimTime: number
-  totalAmount: string
+// Helper function to load data from localStorage
+function loadFromLocalStorage<T>(key: string): T | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const data = localStorage.getItem(key)
+      if (!data) return null
+      return JSON.parse(data, (k, v) => {
+        if (k === 'amount' && typeof v === 'string') {
+          return BigInt(v)
+        }
+        return v
+      })
+    }
+    return null
+  } catch (error) {
+    console.warn('Failed to load from localStorage:', error)
+    return null
+  }
 }
 
+// Function to check if cache is valid
+function isCacheValid(): boolean {
+  const lastUpdated = loadFromLocalStorage<number>(STORAGE_KEYS.LAST_UPDATED)
+  if (!lastUpdated) return false
+  
+  return Date.now() - lastUpdated < CACHE_DURATION
+}
+
+// Helper function to get token information
 async function getTokenInfo(
   tokenAddress: string,
   provider: JsonRpcProvider,
@@ -250,6 +136,7 @@ async function getTokenInfo(
     }
   }
 
+  // Check if it's a known default token first
   if (chainConfig?.defaultTokens) {
     const knownToken = chainConfig.defaultTokens.find(
       token => token.address.toLowerCase() === tokenAddress.toLowerCase()
@@ -262,6 +149,7 @@ async function getTokenInfo(
     }
   }
 
+  // Query the token contract
   try {
     const tokenContract = new Contract(tokenAddress, ERC20_ABI, provider)
     const [symbol, decimals] = await Promise.all([
@@ -282,6 +170,7 @@ async function getTokenInfo(
   }
 }
 
+// Function to get claims from factories for a single network
 async function getAllClaimsFromFactories(
   provider: JsonRpcProvider,
   network: any,
@@ -299,15 +188,14 @@ async function getAllClaimsFromFactories(
 }[]> {
   try {
     let allClaims: any[] = []
-
+    
     for (const factoryAddress of network.factoryAddresses) {
       if (!isAddress(factoryAddress)) {
         console.warn(`Invalid factory address ${factoryAddress} on ${network.name}`)
         continue
       }
-
       const factoryContract = new Contract(factoryAddress, FACTORY_ABI, provider)
-
+      
       const code = await provider.getCode(factoryAddress)
       if (code === "0x") {
         console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`)
@@ -331,8 +219,10 @@ async function getAllClaimsFromFactories(
       }
     }
 
+    // Process claims and get additional information
     const processedClaims = await Promise.all(
       allClaims.map(async (claim) => {
+        // Get token information
         let tokenInfo
         if (claim.isEther) {
           tokenInfo = await getTokenInfo("", provider, network.chainId, true)
@@ -381,6 +271,7 @@ async function getAllClaimsFromFactories(
   }
 }
 
+// Function to get all claims from all networks
 async function getAllClaimsFromAllNetworks(
   networks: any[]
 ): Promise<ClaimType[]> {
@@ -393,6 +284,7 @@ async function getAllClaimsFromAllNetworks(
       const provider = new JsonRpcProvider(network.rpcUrl)
       const networkClaims = await getAllClaimsFromFactories(provider, network)
       
+      // Convert to ClaimType format
       const convertedClaims: ClaimType[] = networkClaims.map(claim => ({
         claimer: claim.initiator,
         faucet: claim.faucetAddress,
@@ -412,102 +304,131 @@ async function getAllClaimsFromAllNetworks(
     }
   }
 
+  // Sort by timestamp (newest first)
   allClaims.sort((a, b) => b.timestamp - a.timestamp)
   console.log(`Total claims from all networks: ${allClaims.length}`)
   return allClaims
 }
 
+interface ChartClaimData {
+  name: string
+  value: number
+  color: string
+  faucetAddress: string
+}
+
+interface FaucetRanking {
+  rank: number
+  faucetAddress: string
+  faucetName: string
+  network: string
+  chainId: number
+  totalClaims: number
+  latestClaimTime: number
+  totalAmount: string
+}
+
 export function UserClaimsChart() {
   const { networks } = useNetwork()
   const { toast } = useToast()
-  const [data, setData] = useState<ClaimData[]>([])
+  const [data, setData] = useState<ChartClaimData[]>([])
   const [loading, setLoading] = useState(true)
   const [totalClaims, setTotalClaims] = useState(0)
   const [totalFaucets, setTotalFaucets] = useState(0)
   const [faucetNames, setFaucetNames] = useState<Record<string, string>>({})
   const [faucetRankings, setFaucetRankings] = useState<FaucetRanking[]>([])
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   
-  // Background sync setup
-  const backgroundSync = useBackgroundSync({
-    syncKey: 'user_claims_data',
-    fetchFunction: fetchDataFromSources,
-    interval: 5 * 60 * 1000,
-    onSuccess: (data) => {
-      console.log('Background sync completed successfully')
-      setLastUpdated(new Date())
-    },
-    onError: (error) => {
-      console.error('Background sync failed:', error)
-      toast({
-        title: "Background sync failed",
-        description: "Data will be refreshed on next manual update",
-        variant: "destructive",
-      })
-    }
-  })
-
-  // Load cached data immediately on mount
   useEffect(() => {
-    loadCachedData()
-    clearExpiredCache()
+    // Load cached totalClaims on mount
+    const stored = localStorage.getItem('totalclaim')
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        if (typeof parsed === 'number') {
+          setTotalClaims(parsed)
+        }
+      } catch (e) {
+        console.warn('Error parsing cached totalClaims:', e)
+      }
+    }
   }, [])
 
-  // Start background sync when networks are available
-  useEffect(() => {
-    if (networks.length > 0) {
-      loadDataIfNeeded()
-      backgroundSync.startSync()
+  // Generate colors for the pie chart
+  const generateColors = (count: number) => {
+    const colors = []
+    for (let i = 0; i < count; i++) {
+      const hue = (i * 137.508) % 360 // Golden angle approximation for better color distribution
+      colors.push(`hsl(${hue}, 70%, 60%)`)
     }
-    
-    return () => {
-      backgroundSync.stopSync()
+    return colors
+  }
+
+  // Function to fetch faucet names with caching
+  const fetchFaucetNames = useCallback(async (claimsData: ClaimType[]) => {
+    // Load cached names first
+    const cachedNames = loadFromLocalStorage<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES) || {};
+    setFaucetNames(cachedNames);
+
+    const faucetAddresses = [...new Set(claimsData.map(claim => claim.faucet))];
+    const uncachedAddresses = faucetAddresses.filter(addr => !cachedNames[addr]);
+
+    if (uncachedAddresses.length === 0) {
+      console.log('All faucet names already cached');
+      return cachedNames;
     }
-  }, [networks, backgroundSync])
 
-  const loadCachedData = async () => {
-    try {
-      const [cachedClaims, cachedNames, cachedTotal, cachedRankings] = await Promise.all([
-        loadFromDatabase<ClaimType[]>(STORAGE_KEYS.CLAIMS_DATA),
-        loadFromDatabase<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES),
-        loadFromDatabase<number>(STORAGE_KEYS.TOTAL_CLAIMS),
-        loadFromDatabase<FaucetRanking[]>(STORAGE_KEYS.FAUCET_RANKINGS)
-      ])
+    console.log(`Fetching names for ${uncachedAddresses.length} uncached faucets...`);
+    const namePromises = uncachedAddresses.map(async (faucetAddress) => {
+      try {
+        const claim = claimsData.find(c => c.faucet === faucetAddress);
+        if (!claim) return null;
 
-      if (cachedClaims && cachedNames && cachedTotal && cachedRankings) {
-        console.log('Loading cached data from database')
-        
-        const chartData = processClaimsForChart(cachedClaims, cachedNames)
-        
-        setData(chartData)
-        setFaucetNames(cachedNames)
-        setTotalClaims(cachedTotal)
-        setFaucetRankings(cachedRankings)
-        setTotalFaucets(Object.keys(cachedNames).length)
-        setLoading(false)
-        setLastUpdated(new Date())
-        
-        console.log(`Loaded ${cachedTotal} cached claims from database`)
+        const network = networks.find(n => n.chainId === claim.chainId);
+        if (!network) return null;
+
+        const provider = new JsonRpcProvider(network.rpcUrl);
+        const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider);
+
+        let faucetName: string;
+        try {
+          faucetName = await faucetContract.name();
+          if (!faucetName || faucetName.trim() === '') {
+            faucetName = `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`;
+          }
+        } catch (error) {
+          faucetName = `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`;
+        }
+
+        return { address: faucetAddress, name: faucetName };
+      } catch (error) {
+        return {
+          address: faucetAddress,
+          name: `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`,
+        };
       }
-    } catch (error) {
-      console.warn('Failed to load cached data:', error)
-    }
-  }
+    });
 
-  const loadDataIfNeeded = async () => {
-    const isValid = await isCacheValid(STORAGE_KEYS.CLAIMS_DATA)
-    if (!isValid) {
-      console.log('Cache invalid or expired, fetching fresh data')
-      await fetchDataFromSources()
-    }
-  }
+    const results = await Promise.all(namePromises);
+    const newNames: Record<string, string> = { ...cachedNames };
+    
+    results.forEach(result => {
+      if (result && result.name) {
+        newNames[result.address] = result.name;
+      }
+    });
 
-  async function fetchDataFromSources(): Promise<any> {
+    setFaucetNames(newNames);
+    saveToLocalStorage(STORAGE_KEYS.FAUCET_NAMES, newNames);
+    return newNames;
+  }, [networks]);
+
+  const fetchAndStoreData = async () => {
+    setLoading(true)
     try {
-      console.log("Fetching claims from all sources...")
+      console.log("Fetching claims from factory sources...")
       
       const allClaims = await getAllClaimsFromAllNetworks(networks)
-      console.log("Fetched claims:", allClaims.length)
+      console.log("Fetched factory claims:", allClaims.length)
 
       const claimsByFaucet: { [key: string]: { 
         claims: number, 
@@ -518,8 +439,10 @@ export function UserClaimsChart() {
         tokenDecimals: number,
         latestTimestamp: number
       } } = {}
+
       let totalClaimsCount = allClaims.length
 
+      // Process all claims
       for (const claim of allClaims) {
         const faucetKey = claim.faucet.toLowerCase()
         
@@ -534,6 +457,7 @@ export function UserClaimsChart() {
             latestTimestamp: 0
           }
         }
+        
         claimsByFaucet[faucetKey].claims += 1
         claimsByFaucet[faucetKey].totalAmount += claim.amount
         
@@ -542,8 +466,13 @@ export function UserClaimsChart() {
         }
       }
 
+      setTotalClaims(totalClaimsCount)
+      setTotalFaucets(Object.keys(claimsByFaucet).length)
+
+      // Fetch faucet names with caching
       const fetchedNames = await fetchFaucetNames(allClaims)
 
+      // Create faucet rankings
       const rankingData: FaucetRanking[] = Object.entries(claimsByFaucet)
         .sort(([, a], [, b]) => b.latestTimestamp - a.latestTimestamp)
         .map(([faucet, data], index) => ({
@@ -557,159 +486,79 @@ export function UserClaimsChart() {
           totalAmount: `${Number(formatUnits(data.totalAmount, data.tokenDecimals)).toFixed(4)} ${data.tokenSymbol}`
         }))
 
-      // Save all data to database
-      await Promise.all([
-        saveToDatabase(STORAGE_KEYS.CLAIMS_DATA, allClaims),
-        saveToDatabase(STORAGE_KEYS.FAUCET_NAMES, fetchedNames),
-        saveToDatabase(STORAGE_KEYS.TOTAL_CLAIMS, totalClaimsCount),
-        saveToDatabase(STORAGE_KEYS.FAUCET_RANKINGS, rankingData)
-      ])
+      setFaucetRankings(rankingData)
 
-      const chartData = processClaimsForChart(allClaims, fetchedNames)
+      // Save to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.TOTAL_CLAIMS, JSON.stringify(totalClaimsCount))
+        console.log('Saved totalClaims to localStorage:', totalClaimsCount)
+      }
+
+      // Convert to chart data format - show ONLY TOP 10 faucets
+      const sortedFaucets = Object.entries(claimsByFaucet)
+        .sort(([, a], [, b]) => b.claims - a.claims)
+      
+      const top10Faucets = sortedFaucets.slice(0, 10)
+      const otherFaucets = sortedFaucets.slice(10)
+      
+      const otherTotalClaims = otherFaucets.reduce((sum, [, data]) => sum + data.claims, 0)
+      
+      const colors = generateColors(top10Faucets.length + (otherTotalClaims > 0 ? 1 : 0))
+      
+      const chartData: ChartClaimData[] = top10Faucets.map(([faucet, data], index) => {
+        const faucetName = fetchedNames[faucet] || `${faucet.slice(0, 6)}...${faucet.slice(-4)}`
+        return {
+          name: faucetName,
+          value: data.claims,
+          color: colors[index],
+          faucetAddress: faucet
+        }
+      })
+
+      if (otherTotalClaims > 0) {
+        chartData.push({
+          name: `Others (${otherFaucets.length} faucets)`,
+          value: otherTotalClaims,
+          color: colors[top10Faucets.length],
+          faucetAddress: 'others'
+        })
+      }
+
+      // Save to cache
+      saveToLocalStorage(STORAGE_KEYS.CLAIMS_DATA, allClaims)
+      saveToLocalStorage(STORAGE_KEYS.LAST_UPDATED, Date.now())
+
+      // Save to Supabase
+      const supabaseClaimData: Omit<ClaimData, 'id' | 'updated_at'>[] = rankingData.map(item => ({
+        faucet_address: item.faucetAddress,
+        faucet_name: item.faucetName,
+        network: item.network,
+        chain_id: item.chainId,
+        claims: item.totalClaims,
+        total_amount: item.totalAmount,
+        latest_claim_time: item.latestClaimTime
+      }))
+      await DataService.saveClaimData(supabaseClaimData)
+
+      console.log("Claims chart data (Top 10):", chartData)
+      console.log("Faucet rankings (All):", rankingData)
+      console.log("Total claims:", totalClaimsCount)
+      console.log("Total faucets:", Object.keys(claimsByFaucet).length)
 
       setData(chartData)
-      setFaucetNames(fetchedNames)
-      setTotalClaims(totalClaimsCount)
-      setFaucetRankings(rankingData)
-      setTotalFaucets(Object.keys(claimsByFaucet).length)
-
-      console.log("Data cached to database successfully")
       
-      return { allClaims, fetchedNames, totalClaimsCount, rankingData }
+      console.log('Claim data saved to both localStorage and Supabase')
+      
+      if (allClaims.length > 0) {
+        toast({
+          title: "Data refreshed",
+          description: `Loaded ${allClaims.length} total drops`,
+        })
+      }
     } catch (error) {
-      console.error("Error fetching claims data:", error)
-      throw error
-    }
-  }
-
-  const processClaimsForChart = (claims: ClaimType[], names: Record<string, string>): ClaimData[] => {
-    const claimsByFaucet: { [key: string]: number } = {}
-    
-    for (const claim of claims) {
-      const faucetKey = claim.faucet.toLowerCase()
-      claimsByFaucet[faucetKey] = (claimsByFaucet[faucetKey] || 0) + 1
-    }
-
-    const sortedFaucets = Object.entries(claimsByFaucet)
-      .sort(([, a], [, b]) => b - a)
-
-    const top10Faucets = sortedFaucets.slice(0, 10)
-    const otherFaucets = sortedFaucets.slice(10)
-    const otherTotalClaims = otherFaucets.reduce((sum, [, claims]) => sum + claims, 0)
-    
-    const colors = generateColors(top10Faucets.length + (otherTotalClaims > 0 ? 1 : 0))
-    
-    const chartData: ClaimData[] = top10Faucets.map(([faucet, claims], index) => {
-      const faucetName = names[faucet] || `${faucet.slice(0, 6)}...${faucet.slice(-4)}`
-      return {
-        name: faucetName,
-        value: claims,
-        color: colors[index],
-        faucetAddress: faucet
-      }
-    })
-
-    if (otherTotalClaims > 0) {
-      chartData.push({
-        name: `Others (${otherFaucets.length} faucets)`,
-        value: otherTotalClaims,
-        color: colors[top10Faucets.length],
-        faucetAddress: 'others'
-      })
-    }
-
-    return chartData
-  }
-
-  const generateColors = (count: number) => {
-    const colors = []
-    for (let i = 0; i < count; i++) {
-      const hue = (i * 137.508) % 360
-      colors.push(`hsl(${hue}, 70%, 60%)`)
-    }
-    return colors
-  }
-
-  const fetchFaucetNames = useCallback(async (claimsData: ClaimType[]) => {
-    const cachedNames = await loadFromDatabase<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES) || {};
-    setFaucetNames(cachedNames);
-
-    const faucetAddresses = [...new Set(claimsData.map(claim => claim.faucet))];
-    const uncachedAddresses = faucetAddresses.filter(addr => !cachedNames[addr]);
-
-    if (uncachedAddresses.length === 0) {
-      console.log('All faucet names already cached');
-      return cachedNames;
-    }
-
-    console.log(`Fetching names for ${uncachedAddresses.length} uncached faucets...`);
-
-    const namePromises = uncachedAddresses.map(async (faucetAddress) => {
-      try {
-        const claim = claimsData.find(c => c.faucet === faucetAddress);
-        if (!claim) {
-          console.warn(`No claim found for faucet ${faucetAddress}`);
-          return null;
-        }
-
-        const network = networks.find(n => n.chainId === claim.chainId);
-        if (!network) {
-          console.warn(`No network found for chainId ${claim.chainId}`);
-          return null;
-        }
-
-        const provider = new JsonRpcProvider(network.rpcUrl);
-        const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider);
-
-        let faucetName: string;
-        try {
-          faucetName = await faucetContract.name();
-          if (!faucetName || faucetName.trim() === '') {
-            console.warn(`Empty name returned for faucet ${faucetAddress}`);
-            faucetName = `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`;
-          }
-        } catch (error) {
-          console.warn(`Error fetching name for faucet ${faucetAddress}:`, error);
-          faucetName = `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`;
-        }
-
-        return { address: faucetAddress, name: faucetName };
-      } catch (error) {
-        console.error(`Error processing faucet ${faucetAddress}:`, error);
-        return {
-          address: faucetAddress,
-          name: `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`,
-        };
-      }
-    });
-
-    const results = await Promise.all(namePromises);
-    const newNames: Record<string, string> = { ...cachedNames };
-
-    results.forEach(result => {
-      if (result && result.name) {
-        newNames[result.address] = result.name;
-      }
-    });
-
-    console.log(`Successfully fetched ${Object.keys(newNames).length - Object.keys(cachedNames).length} new faucet names`);
-    setFaucetNames(newNames);
-    await saveToDatabase(STORAGE_KEYS.FAUCET_NAMES, newNames);
-    return newNames;
-  }, [networks]);
-
-  const handleManualRefresh = async () => {
-    setLoading(true)
-    try {
-      await fetchDataFromSources()
-      setLastUpdated(new Date())
+      console.error("Error fetching claim data:", error)
       toast({
-        title: "Data refreshed",
-        description: `Updated ${totalClaims} total drops`,
-      })
-    } catch (error) {
-      toast({
-        title: "Failed to refresh data",
+        title: "Failed to load data",
         description: error instanceof Error ? error.message : "Please try again later.",
         variant: "destructive",
       })
@@ -718,18 +567,78 @@ export function UserClaimsChart() {
     }
   }
 
-  const getRankIcon = (rank: number) => {
-    switch (rank) {
-      case 1:
-        return <Trophy className="h-5 w-5 text-yellow-500" />
-      case 2:
-        return <Medal className="h-5 w-5 text-gray-400" />
-      case 3:
-        return <Award className="h-5 w-5 text-orange-500" />
-      default:
-        return <span className="text-sm font-medium text-muted-foreground">#{rank}</span>
+  const loadStoredData = async () => {
+    // Try localStorage first
+    if (isCacheValid()) {
+      const cachedClaims = loadFromLocalStorage<ClaimType[]>(STORAGE_KEYS.CLAIMS_DATA)
+      if (cachedClaims && cachedClaims.length > 0) {
+        console.log('Using cached claims data from localStorage')
+        // Process cached data to rebuild UI state
+        // This is a simplified version - you might want to cache the processed data too
+        setLoading(false)
+        return true
+      }
     }
+
+    // Fallback to Supabase
+    try {
+      const supabaseData = await DataService.loadClaimData()
+      if (supabaseData.length > 0 && DataService.isDataFresh(supabaseData[0].updated_at)) {
+        console.log('Using fresh claim data from Supabase')
+        
+        const chartData = supabaseData.slice(0, 10).map((item, index) => ({
+          name: item.faucet_name,
+          value: item.claims,
+          color: `hsl(${(index * 137.508) % 360}, 70%, 60%)`,
+          faucetAddress: item.faucet_address
+        }))
+        
+        const rankingData = supabaseData.map((item, index) => ({
+          rank: index + 1,
+          faucetAddress: item.faucet_address,
+          faucetName: item.faucet_name,
+          network: item.network,
+          chainId: item.chain_id,
+          totalClaims: item.claims,
+          latestClaimTime: item.latest_claim_time,
+          totalAmount: item.total_amount
+        }))
+        
+        const totalClaimsCount = supabaseData.reduce((sum, item) => sum + item.claims, 0)
+        
+        setData(chartData)
+        setFaucetRankings(rankingData)
+        setTotalClaims(totalClaimsCount)
+        setTotalFaucets(supabaseData.length)
+        
+        setLoading(false)
+        return true
+      }
+    } catch (error) {
+      console.error('Error loading claim data from Supabase:', error)
+    }
+
+    return false
   }
+
+  useEffect(() => {
+    loadStoredData().then((dataLoaded) => {
+      if (!dataLoaded && networks.length > 0) {
+        fetchAndStoreData()
+      }
+    })
+  }, [networks])
+
+  // Auto-refresh data every 5 minutes
+  useEffect(() => {
+    if (networks.length === 0) return
+
+    const interval = setInterval(() => {
+      fetchAndStoreData()
+    }, CACHE_DURATION)
+
+    return () => clearInterval(interval)
+  }, [networks])
 
   const getNetworkColor = (network: string) => {
     switch (network.toLowerCase()) {
@@ -741,15 +650,12 @@ export function UserClaimsChart() {
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
       case 'lisk':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-      case 'polygon':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-      case 'ethereum':
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
     }
   }
 
+  // Helper function to get the explorer URL for a given chainId
   const getExplorerUrl = (chainId: number, address: string) => {
     const chainConfig = CHAIN_CONFIGS[chainId]
     if (chainConfig?.blockExplorerUrlsUrls?.length > 0) {
@@ -758,7 +664,7 @@ export function UserClaimsChart() {
     return '#'
   }
 
-  if (loading && data.length === 0) {
+  if (loading) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center h-64">
@@ -771,6 +677,7 @@ export function UserClaimsChart() {
     )
   }
 
+  // Custom tooltip to show faucet details
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload
@@ -796,26 +703,22 @@ export function UserClaimsChart() {
 
   return (
     <div className="space-y-4 md:space-y-6 p-2 md:p-4">
+      {/* Header Section with Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-grow">
           <div className="text-center p-3 bg-muted/50 rounded-lg">
             <p className="text-lg md:text-2xl font-bold">{totalClaims.toLocaleString()}</p>
             <p className="text-xs md:text-sm text-muted-foreground">Total Drops</p>
-            {lastUpdated && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Updated: {lastUpdated.toLocaleTimeString()}
-              </p>
-            )}
           </div>
         </div>
-
-        <Button variant="outline" size="sm" onClick={handleManualRefresh} disabled={loading} className="shrink-0">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button variant="outline" size="sm" onClick={fetchAndStoreData} disabled={loading} className="shrink-0">
+          <RefreshCw className="h-4 w-4" />
           <span className="hidden sm:inline ml-2">Refresh</span>
         </Button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
+        {/* Pie Chart - Top 10 Only */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg md:text-xl">Top 10 Faucets by Drops</CardTitle>
@@ -854,6 +757,7 @@ export function UserClaimsChart() {
           </CardContent>
         </Card>
 
+        {/* All Available Faucets Table */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-lg md:text-xl">All Available Faucets</CardTitle>
@@ -863,124 +767,63 @@ export function UserClaimsChart() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="max-h-96 overflow-auto">
-              <div className="sm:hidden">
-                {faucetRankings.length > 0 ? (
-                  <div className="space-y-3 p-4">
-                    {faucetRankings.map((item) => (
-                      <div key={item.faucetAddress} className="border rounded-lg p-3 space-y-2">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            {getRankIcon(item.rank)}
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium truncate text-sm" title={item.faucetName}>
-                                {item.faucetName}
-                              </p>
+              <table className="w-full">
+                <thead className="border-b">
+                  <tr>
+                    <th className="w-16 text-xs md:text-sm font-medium text-left p-2 md:p-4">Rank</th>
+                    <th className="text-xs md:text-sm font-medium text-left p-2 md:p-4">Faucet Name</th>
+                    <th className="text-xs md:text-sm font-medium text-left p-2 md:p-4">Network</th>
+                    <th className="text-right text-xs md:text-sm font-medium p-2 md:p-4">Drops</th>
+                    <th className="text-right text-xs md:text-sm font-medium p-2 md:p-4">Latest</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {faucetRankings.length > 0 ? (
+                    faucetRankings.map((item) => (
+                      <tr key={item.faucetAddress} className="border-b hover:bg-muted/50">
+                        <td className="font-medium p-2 md:p-4">
+                          <span className="text-sm font-medium text-muted-foreground">#{item.rank}</span>
+                        </td>
+                        <td className="p-2 md:p-4">
+                          <div className="max-w-[150px] md:max-w-[200px]">
+                            <div className="font-medium truncate mb-1 text-xs md:text-sm" title={item.faucetName}>
+                              {item.faucetName}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {item.faucetAddress.slice(0, 6)}...{item.faucetAddress.slice(-4)} 
+                              <a
+                                href={getExplorerUrl(item.chainId, item.faucetAddress)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:underline ml-1"
+                              > 
+                                <ExternalLink className="h-3 w-3 inline" />
+                              </a>
                             </div>
                           </div>
+                        </td>
+                        <td className="p-2 md:p-4">
                           <Badge variant="secondary" className={`${getNetworkColor(item.network)} text-xs`}>
                             {item.network}
                           </Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="text-muted-foreground">Drops: </span>
-                            <span className="font-medium">{item.totalClaims.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Latest: </span>
-                            <span>{new Date(item.latestClaimTime * 1000).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-                        <div className="text-xs">
-                          <span className="text-muted-foreground">Total: </span>
-                          <span className="font-mono">{item.totalAmount}</span>
-                        </div>
-                        <div className="pt-1">
-                          <a
-                            href={getExplorerUrl(item.chainId, item.faucetAddress)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            View on Explorer
-                          </a>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground p-4">
-                    <p className="text-sm">No faucet data available yet</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="hidden sm:block">
-                <table className="w-full">
-                  <thead className="border-b">
-                    <tr>
-                      <th className="w-16 text-xs md:text-sm font-medium text-left p-2 md:p-4">Rank</th>
-                      <th className="text-xs md:text-sm font-medium text-left p-2 md:p-4">Faucet Name & Address</th>
-                      <th className="text-xs md:text-sm font-medium text-left p-2 md:p-4">Network</th>
-                      <th className="text-right text-xs md:text-sm font-medium p-2 md:p-4">Drops</th>
-                      <th className="text-right text-xs md:text-sm font-medium p-2 md:p-4 hidden lg:table-cell">Total Amount</th>
-                      <th className="text-right text-xs md:text-sm font-medium p-2 md:p-4">Latest</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {faucetRankings.length > 0 ? (
-                      faucetRankings.map((item) => (
-                        <tr key={item.faucetAddress} className="border-b hover:bg-muted/50">
-                          <td className="font-medium p-2 md:p-4">
-                            <div className="flex items-center justify-center">
-                              {getRankIcon(item.rank)}
-                            </div>
-                          </td>
-                          <td className="p-2 md:p-4">
-                            <div className="max-w-[150px] md:max-w-[200px]">
-                              <div className="font-medium truncate mb-1 text-xs md:text-sm" title={item.faucetName}>
-                                {item.faucetName}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {item.faucetAddress.slice(0, 6)}...{item.faucetAddress.slice(-4)} 
-                                <a
-                                  href={getExplorerUrl(item.chainId, item.faucetAddress)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-500 hover:underline ml-1"
-                                > 
-                                  <ExternalLink className="h-3 w-3 inline" />
-                                </a>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-2 md:p-4">
-                            <Badge variant="secondary" className={`${getNetworkColor(item.network)} text-xs`}>
-                              {item.network}
-                            </Badge>
-                          </td>
-                          <td className="text-right font-medium text-xs md:text-sm p-2 md:p-4">
-                            {item.totalClaims.toLocaleString()}
-                          </td>
-                          <td className="text-right text-xs font-mono p-2 md:p-4 hidden lg:table-cell">
-                            {item.totalAmount}
-                          </td>
-                          <td className="text-right text-xs p-2 md:p-4">
-                            {new Date(item.latestClaimTime * 1000).toLocaleDateString()}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} className="text-center py-8 text-muted-foreground p-2 md:p-4">
-                          <p className="text-sm">No faucet data available yet</p>
+                        </td>
+                        <td className="text-right font-medium text-xs md:text-sm p-2 md:p-4">
+                          {item.totalClaims.toLocaleString()}
+                        </td>
+                        <td className="text-right text-xs p-2 md:p-4">
+                          {new Date(item.latestClaimTime * 1000).toLocaleDateString()}
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="text-center py-8 text-muted-foreground p-2 md:p-4">
+                        <p className="text-sm">No faucet data available yet</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>

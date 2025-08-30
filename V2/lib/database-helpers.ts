@@ -1,136 +1,228 @@
-import { supabase } from './supabase'
+// lib/supabase-data-service.ts
+import { createClient } from '@supabase/supabase-js'
 
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-interface CacheOptions {
-  ttl?: number
-  backgroundSync?: boolean
+export const supabase = createClient(supabaseUrl, supabaseKey)
+
+// Data types for Supabase storage
+export interface FaucetData {
+  id?: number
+  network: string
+  faucets: number
+  updated_at: string
 }
 
-export async function saveToDatabase(
-  key: string, 
-  data: any, 
-  options: CacheOptions = {}
-): Promise<boolean> {
-  try {
-    const { ttl = CACHE_DURATION } = options
-    const expiresAt = new Date(Date.now() + ttl).toISOString()
-    
-    const serializedData = JSON.parse(JSON.stringify(data, (k, v) => 
-      typeof v === 'bigint' ? v.toString() : v
-    ))
+export interface UserData {
+  id?: number
+  date: string
+  new_users: number
+  cumulative_users: number
+  updated_at: string
+}
 
-    const { error } = await supabase
-      .from('analytics_cache')
-      .upsert({
-        cache_key: key,
-        data: serializedData,
-        expires_at: expiresAt,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'cache_key'
-      })
+export interface ClaimData {
+  id?: number
+  faucet_address: string
+  faucet_name: string
+  network: string
+  chain_id: number
+  claims: number
+  total_amount: string
+  latest_claim_time: number
+  updated_at: string
+}
 
-    if (error) {
-      console.error('Failed to save to database:', error)
-      return false
+export interface TransactionData {
+  id?: number
+  network: string
+  chain_id: number
+  total_transactions: number
+  color: string
+  updated_at: string
+}
+
+export interface DashboardSummary {
+  id?: number
+  total_faucets: number
+  total_transactions: number
+  unique_users: number
+  total_claims: number
+  updated_at: string
+}
+
+// Centralized data service
+export class DataService {
+  // Save faucet data
+  static async saveFaucetData(data: Omit<FaucetData, 'id' | 'updated_at'>[]) {
+    try {
+      // Clear existing data
+      await supabase.from('faucet_data').delete().neq('id', 0)
+      
+      // Insert new data
+      const { error } = await supabase.from('faucet_data').insert(
+        data.map(item => ({ ...item, updated_at: new Date().toISOString() }))
+      )
+      
+      if (error) throw error
+      console.log('Faucet data saved to Supabase')
+    } catch (error) {
+      console.error('Error saving faucet data to Supabase:', error)
     }
-
-    return true
-  } catch (error) {
-    console.warn('Failed to save to database:', error)
-    return false
   }
-}
 
-export async function loadFromDatabase<T>(key: string): Promise<T | null> {
-  try {
-    const { data, error } = await supabase
-      .from('analytics_cache')
-      .select('data, expires_at')
-      .eq('cache_key', key)
-      .single()
+  // Load faucet data
+  static async loadFaucetData(): Promise<FaucetData[]> {
+    try {
+      const { data, error } = await supabase
+        .from('faucet_data')
+        .select('*')
+        .order('updated_at', { ascending: false })
+      
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error loading faucet data from Supabase:', error)
+      return []
+    }
+  }
 
-    if (error || !data) {
+  // Save user data
+  static async saveUserData(data: Omit<UserData, 'id' | 'updated_at'>[]) {
+    try {
+      await supabase.from('user_data').delete().neq('id', 0)
+      
+      const { error } = await supabase.from('user_data').insert(
+        data.map(item => ({ ...item, updated_at: new Date().toISOString() }))
+      )
+      
+      if (error) throw error
+      console.log('User data saved to Supabase')
+    } catch (error) {
+      console.error('Error saving user data to Supabase:', error)
+    }
+  }
+
+  // Load user data
+  static async loadUserData(): Promise<UserData[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_data')
+        .select('*')
+        .order('date', { ascending: true })
+      
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error loading user data from Supabase:', error)
+      return []
+    }
+  }
+
+  // Save claim data
+  static async saveClaimData(data: Omit<ClaimData, 'id' | 'updated_at'>[]) {
+    try {
+      await supabase.from('claim_data').delete().neq('id', 0)
+      
+      const { error } = await supabase.from('claim_data').insert(
+        data.map(item => ({ ...item, updated_at: new Date().toISOString() }))
+      )
+      
+      if (error) throw error
+      console.log('Claim data saved to Supabase')
+    } catch (error) {
+      console.error('Error saving claim data to Supabase:', error)
+    }
+  }
+
+  // Load claim data
+  static async loadClaimData(): Promise<ClaimData[]> {
+    try {
+      const { data, error } = await supabase
+        .from('claim_data')
+        .select('*')
+        .order('claims', { ascending: false })
+      
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error loading claim data from Supabase:', error)
+      return []
+    }
+  }
+
+  // Save transaction data
+  static async saveTransactionData(data: Omit<TransactionData, 'id' | 'updated_at'>[]) {
+    try {
+      await supabase.from('transaction_data').delete().neq('id', 0)
+      
+      const { error } = await supabase.from('transaction_data').insert(
+        data.map(item => ({ ...item, updated_at: new Date().toISOString() }))
+      )
+      
+      if (error) throw error
+      console.log('Transaction data saved to Supabase')
+    } catch (error) {
+      console.error('Error saving transaction data to Supabase:', error)
+    }
+  }
+
+  // Load transaction data
+  static async loadTransactionData(): Promise<TransactionData[]> {
+    try {
+      const { data, error } = await supabase
+        .from('transaction_data')
+        .select('*')
+        .order('total_transactions', { ascending: false })
+      
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error loading transaction data from Supabase:', error)
+      return []
+    }
+  }
+
+  // Save dashboard summary
+  static async saveDashboardSummary(data: Omit<DashboardSummary, 'id' | 'updated_at'>) {
+    try {
+      await supabase.from('dashboard_summary').delete().neq('id', 0)
+      
+      const { error } = await supabase.from('dashboard_summary').insert({
+        ...data,
+        updated_at: new Date().toISOString()
+      })
+      
+      if (error) throw error
+      console.log('Dashboard summary saved to Supabase')
+    } catch (error) {
+      console.error('Error saving dashboard summary to Supabase:', error)
+    }
+  }
+
+  // Load dashboard summary
+  static async loadDashboardSummary(): Promise<DashboardSummary | null> {
+    try {
+      const { data, error } = await supabase
+        .from('dashboard_summary')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single()
+      
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error loading dashboard summary from Supabase:', error)
       return null
     }
-
-    if (data.expires_at && new Date(data.expires_at) < new Date()) {
-      await supabase.from('analytics_cache').delete().eq('cache_key', key)
-      return null
-    }
-
-    return JSON.parse(JSON.stringify(data.data), (k, v) => {
-      if (k === 'amount' && typeof v === 'string' && /^\d+$/.test(v)) {
-        return BigInt(v)
-      }
-      return v
-    })
-  } catch (error) {
-    console.warn('Failed to load from database:', error)
-    return null
   }
-}
 
-export async function isCacheValid(key: string): Promise<boolean> {
-  try {
-    const { data } = await supabase
-      .from('analytics_cache')
-      .select('expires_at')
-      .eq('cache_key', key)
-      .single()
-
-    if (!data || !data.expires_at) return false
-    
-    return new Date(data.expires_at) > new Date()
-  } catch {
-    return false
-  }
-}
-
-export async function clearExpiredCache(): Promise<void> {
-  try {
-    await supabase
-      .from('analytics_cache')
-      .delete()
-      .lt('expires_at', new Date().toISOString())
-  } catch (error) {
-    console.warn('Failed to clear expired cache:', error)
-  }
-}
-
-export async function updateSyncStatus(
-  syncType: string, 
-  status: 'idle' | 'syncing' | 'error',
-  errorMessage?: string
-): Promise<void> {
-  try {
-    await supabase
-      .from('sync_status')
-      .upsert({
-        sync_type: syncType,
-        status,
-        last_sync: new Date().toISOString(),
-        error_message: errorMessage || null,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'sync_type'
-      })
-  } catch (error) {
-    console.warn('Failed to update sync status:', error)
-  }
-}
-
-export async function getSyncStatus(syncType: string) {
-  try {
-    const { data } = await supabase
-      .from('sync_status')
-      .select('*')
-      .eq('sync_type', syncType)
-      .single()
-
-    return data
-  } catch {
-    return null
+  // Check if data is fresh (within 5 minutes)
+  static isDataFresh(updatedAt: string): boolean {
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const lastUpdated = new Date(updatedAt).getTime()
+    return Date.now() - lastUpdated < CACHE_DURATION
   }
 }

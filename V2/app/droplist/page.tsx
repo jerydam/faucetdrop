@@ -31,7 +31,7 @@ import { Header } from '@/components/header'
 const PLATFORM_OWNER = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 
 // Backend API URL
-const API_BASE_URL = "http://0.0.0.0:10000"
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 interface DroplistTask {
   id: string

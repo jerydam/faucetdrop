@@ -100,7 +100,10 @@ export default function FaucetDetails() {
   const [tokenSymbol, setTokenSymbol] = useState("ETH")
   const [tokenDecimals, setTokenDecimals] = useState(18)
   const [hasClaimed, setHasClaimed] = useState(false)
-  
+  const [isGeneratingNewCode, setIsGeneratingNewCode] = useState(false)
+  const [showNewCodeDialog, setShowNewCodeDialog] = useState(false)
+  const [newlyGeneratedCode, setNewlyGeneratedCode] = useState("")
+
   // Verification system states
   const [usernames, setUsernames] = useState<Record<string, string>>({})
   const [verificationStates, setVerificationStates] = useState<Record<string, boolean>>({})
@@ -1339,6 +1342,106 @@ const loadSocialMediaLinks = async (): Promise<void> => {
       setIsClaiming(false)
     }
   }
+
+  const handleGenerateNewDropCode = async (): Promise<void> => {
+  if (!isConnected || !address || !chainId) {
+    toast({
+      title: "Wallet not connected",
+      description: "Please connect your wallet and ensure a network is selected",
+      variant: "destructive",
+    })
+    return
+  }
+  
+  if (faucetType !== 'dropcode') {
+    toast({
+      title: "Not Available",
+      description: "This feature is only available for Drop Code faucets",
+      variant: "destructive",
+    })
+    return
+  }
+  
+  if (!canAccessDropCode) {
+    toast({
+      title: "Unauthorized", 
+      description: "Only the faucet owner, admin, or authorized personnel can generate new drop codes",
+      variant: "destructive",
+    })
+    return
+  }
+
+  try {
+    setIsGeneratingNewCode(true)
+    
+    console.log(`🔄 Generating new drop code for faucet: ${faucetAddress}`)
+    
+    const response = await fetch("https://fauctdrop-backend.onrender.com/generate-new-drop-code", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        faucetAddress,
+        userAddress: address,
+        chainId: Number(chainId)
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || "Failed to generate new drop code")
+    }
+    
+    const result = await response.json()
+    const newCode = result.secretCode
+    
+    // Cache the new code and invalidate old cache
+    saveToStorage(`secretCode_${faucetAddress}`, newCode)
+    
+    // Clear any cached secret code data to force fresh retrieval
+    try {
+      localStorage.removeItem(`secretCode_${faucetAddress}_cached`)
+      localStorage.removeItem(`secretCodeData_${faucetAddress}`)
+    } catch (e) {
+      console.warn('Could not clear localStorage cache:', e)
+    }
+    
+    setNewlyGeneratedCode(newCode)
+    setShowNewCodeDialog(true)
+    
+    console.log(`✅ New drop code generated: ${newCode}`)
+    
+    toast({
+      title: "New Drop Code Generated! 🎉",
+      description: "A fresh drop code has been generated and is now active",
+    })
+    
+  } catch (error: any) {
+    console.error('❌ Failed to generate new drop code:', error)
+    
+    let errorMessage = "Unknown error occurred"
+    let errorTitle = "Failed to generate Drop code"
+    
+    if (error.message.includes('403')) {
+      errorTitle = "Unauthorized"
+      errorMessage = "Only authorized users can generate new drop codes"
+    } else if (error.message.includes('404')) {
+      errorTitle = "Faucet Not Found"
+      errorMessage = "The specified faucet could not be found"
+    } else {
+      errorMessage = error.message || "Failed to generate the new drop code"
+    }
+    
+    toast({
+      title: errorTitle,
+      description: errorMessage,
+      variant: "destructive",
+    })
+  } finally {
+    setIsGeneratingNewCode(false)
+  }
+}
 
   const handleFund = async (): Promise<void> => {
     if (!isConnected || !provider || !fundAmount || !chainId) {
@@ -2641,43 +2744,103 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
   )}
 </div>
 
-    <div className="flex flex-col sm:flex-row gap-2">
+   <div className="flex flex-col gap-3 sm:gap-4 w-full max-w-3xl mx-auto">
+  <Button
+    onClick={handleUpdateClaimParameters}
+    className="text-xs sm:text-sm font-medium py-2 sm:py-3 px-4 sm:px-6 hover:bg-accent hover:text-accent-foreground transition-colors w-full"
+    disabled={isUpdatingParameters || (faucetType !== 'custom' && !claimAmount) || !startTime || !endTime || startTimeError}
+  >
+    {isUpdatingParameters ? (
+      <span className="flex items-center justify-center">
+        <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-current mr-2"></div>
+        Updating...
+      </span>
+    ) : (
+      "Update Parameters"
+    )}
+  </Button>
+
+  {/* Extended access for secret code button */}
+  {shouldShowSecretCodeButton() && (
+    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full">
       <Button
-        onClick={handleUpdateClaimParameters}
-        className="text-xs sm:text-sm flex-1 hover:bg-accent hover:text-accent-foreground"
-        disabled={isUpdatingParameters || (faucetType !== 'custom' && !claimAmount) || !startTime || !endTime || startTimeError}
+        onClick={handleRetrieveSecretCode}
+        variant="outline"
+        className="text-xs sm:text-sm font-medium py-2 sm:py-3 px-4 sm:px-6 hover:bg-accent hover:text-accent-foreground transition-colors w-full"
+        disabled={isRetrievingSecret}
       >
-        {isUpdatingParameters ? (
-          <span className="flex items-center">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-            Updating...
+        {isRetrievingSecret ? (
+          <span className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-current mr-2"></div>
+            Retrieving...
           </span>
         ) : (
-          "Update Parameters"
+          <>
+            <Key className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+            Get Current Code
+          </>
         )}
       </Button>
-      {/* ✅ UPDATED: Extended access for secret code button */}
-      {shouldShowSecretCodeButton() && (
-        <Button
-          onClick={handleRetrieveSecretCode}
-          variant="outline"
-          className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-          disabled={isRetrievingSecret}
-        >
-          {isRetrievingSecret ? (
-            <span className="flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-              Retrieving...
-            </span>
-          ) : (
-            <>
-              <Key className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              Get Current Code
-            </>
-          )}
-        </Button>
-      )}
+
+      {/* Generate New Code Button */}
+      <Button
+        onClick={handleGenerateNewDropCode}
+        variant="outline"
+        className="text-xs sm:text-sm font-medium py-2 sm:py-3 px-4 sm:px-6 hover:bg-accent hover:text-accent-foreground transition-colors w-full"
+        disabled={isGeneratingNewCode}
+      >
+        {isGeneratingNewCode ? (
+          <span className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-b-2 border-current mr-2"></div>
+            Generating...
+          </span>
+        ) : (
+          <>
+            <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+            Generate New Code
+          </>
+        )}
+      </Button>
     </div>
+  )}
+</div>
+
+
+<Dialog open={showNewCodeDialog} onOpenChange={setShowNewCodeDialog}>
+  <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
+    <DialogHeader>
+      <DialogTitle className="text-lg sm:text-xl">New Drop Code Generated</DialogTitle>
+      <DialogDescription className="text-xs sm:text-sm">
+        Your new drop code has been generated and stored. The previous code is no longer valid.
+      </DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4 py-4">
+      <div className="text-center">
+        <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+          {newlyGeneratedCode}
+        </div>
+      </div>
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg">
+        <p className="text-xs text-yellow-800 dark:text-yellow-200 text-center">
+          ⚠️ Important: The previous drop code is now invalid. Only this new code will work for claims.
+        </p>
+      </div>
+      <p className="text-xs text-muted-foreground text-center">
+        Share this new code with users to allow them to drop tokens. Keep it safe and share it only with intended users.
+      </p>
+    </div>
+    <DialogFooter>
+      <Button
+        onClick={() => handleCopySecretCode(newlyGeneratedCode)}
+        className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
+      >
+        <Copy className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+        Copy New Code
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
   </div>
 </TabsContent>
                       {/* ✅ Whitelist Tab - Only shown for droplist faucets */}

@@ -16,7 +16,11 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useNetwork } from "@/hooks/use-network"
 
-export function WalletConnect() {
+interface WalletConnectProps {
+  className?: string
+}
+
+export function WalletConnect({ className }: WalletConnectProps) {
   const { address, isConnected, connect, disconnect } = useWallet()
   const { toast } = useToast()
   const { network } = useNetwork()
@@ -88,7 +92,7 @@ export function WalletConnect() {
 
   if (!isConnected) {
     return (
-      <Button onClick={handleConnect} disabled={isConnecting} className="flex items-center gap-2">
+      <Button onClick={handleConnect} disabled={isConnecting} className={`flex items-center gap-2 ${className}`}>
         <Wallet className="h-4 w-4" />
         {isConnecting ? "Connecting..." : "Connect Wallet"}
       </Button>
@@ -98,7 +102,7 @@ export function WalletConnect() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="flex items-center gap-2">
+        <Button variant="outline" className={`flex items-center gap-2 ${className}`}>
           <Wallet className="h-4 w-4" />
           {address ? truncateAddress(address) : "Connected"}
         </Button>

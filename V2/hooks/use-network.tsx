@@ -64,6 +64,35 @@ const networks: Network[] = [
     isTestnet: false,
   },
   {
+    name: "Celo Alfajores",
+    symbol: "CELO",
+    chainId: 44787,
+    rpcUrl: "https://alfajores-forno.celo-testnet.org",
+    blockExplorerUrls: "https://alfajores.celoscan.io",
+    color: "#35D07F",
+    logoUrl: "/celo.png", // ✅ Local path
+    iconUrl: "/celo.png", // ✅ Local path
+    factoryAddresses: [
+      "0x1d9E6F3b8A2e3b0CAd3e5c1f8b6f5D7E2E3bC4d5",
+      "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
+      "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7",
+      "0xd6Cb67dF496fF739c4eBA2448C1B0B44F4Cf0a7C",
+      "0x0837EACf85472891F350cba74937cB02D90E60A4"
+    ],
+    factories: {
+      droplist: "0xd6Cb67dF496fF739c4eBA2448C1B0B44F4Cf0a7C",
+      dropcode: "0x0837EACf85472891F350cba74937cB02D90E60A4",
+      custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7"
+    },
+    tokenAddress: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
+    nativeCurrency: {
+      name: "Celo",
+      symbol: "CELO",
+      decimals: 18,
+    },
+    isTestnet: true,
+  },
+  {
     name: "Lisk",
     symbol: "LSK",
     chainId: 1135,

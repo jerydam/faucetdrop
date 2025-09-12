@@ -23,6 +23,7 @@ import {
   withdrawTokens,
   setClaimParameters,
   saveToStorage,
+  storeClaim,
   getFromStorage,
   updateFaucetName,
   deleteFaucet,
@@ -1235,113 +1236,137 @@ const loadSocialMediaLinks = async (): Promise<void> => {
 
   // ✅ FIXED: Handle backend claim with proper faucet type validation
   async function handleBackendClaim(): Promise<void> {
-    if (!isConnected || !address || !provider) {
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet to drop tokens",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!chainId || !networkId) {
-      toast({
-        title: "Network not detected",
-        description: "Please ensure your wallet is connected to a supported network",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // ✅ FIXED: Validation based on actual faucet type
-    if (faucetType === 'dropcode' && backendMode && !isSecretCodeValid) {
-      toast({
-        title: "Invalid Drop code",
-        description: "Please enter a valid 6-character alphanumeric Drop code",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (faucetType === 'droplist' && !userIsWhitelisted) {
-      toast({
-        title: "Not Drop-listed",
-        description: "You are not Drop-listed to claim from this faucet",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (faucetType === 'custom' && !hasCustomAmount) {
-      toast({
-        title: "No Custom Allocation",
-        description: "You don't have a custom amount allocated for this faucet",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!allAccountsVerified) {
-      toast({
-        title: "Verification Required",
-        description: "Please complete and verify all required tasks before claiming",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!checkNetwork()) return
-    try {
-      setIsClaiming(true)
-      if (!window.ethereum) {
-        throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet.")
-      }
-      await window.ethereum.request({ method: "eth_requestAccounts" })
-      console.log("Sending drop request", { 
-        faucetType, 
-        backendMode, 
-        secretCode: (faucetType === 'dropcode' && backendMode) ? secretCode : "N/A" 
-      })
-      
-      // ✅ FIXED: Use appropriate claiming method based on actual faucet type
-      const result = faucetType === 'custom'
-        ? await claimCustomViaBackend(address, faucetAddress, provider as BrowserProvider)
-        : (faucetType === 'dropcode' && backendMode)
-        ? await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode)
-        : await claimNoCodeViaBackend(address, faucetAddress, provider as BrowserProvider)
-        
-      const formattedTxHash = result.txHash.startsWith("0x") ? result.txHash : (`0x${result.txHash}` as `0x${string}`)
-      setTxHash(formattedTxHash)
-      const networkName = selectedNetwork?.name || "Unknown Network"
-      
-      // Get the claimed amount for display
-      const claimedAmount = faucetType === 'custom' && hasCustomAmount
-        ? formatUnits(userCustomClaimAmount, tokenDecimals)
-        : faucetDetails.claimAmount 
-          ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
-          : "tokens"
-      
-      toast({
-        title: "Tokens dropped successfully",
-        description: `You have dropped ${claimedAmount} ${tokenSymbol} on ${networkName}`,
-      })
-      setShowClaimPopup(true)
-      setSecretCode("")
-      await loadFaucetDetails()
-      await loadTransactionHistory()
-    } catch (error: any) {
-      console.error("Error dropping tokens:", error)
-      let errorMessage = error.message || "Unknown error occurred"
-      if (errorMessage.includes("Unauthorized: Invalid Drop code")) {
-        errorMessage = "Invalid Drop code. Please check and try again."
-      }
-      toast({
-        title: "Failed to drop tokens",
-        description: errorMessage,
-        variant: "destructive",
-      })
-    } finally {
-      setIsClaiming(false)
-    }
+  if (!isConnected || !address || !provider) {
+    toast({
+      title: "Wallet not connected",
+      description: "Please connect your wallet to drop tokens",
+      variant: "destructive",
+    });
+    return;
   }
+
+  if (!chainId || !networkId) {
+    toast({
+      title: "Network not detected",
+      description: "Please ensure your wallet is connected to a supported network",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  // Validation based on faucet type
+  if (faucetType === 'dropcode' && backendMode && !isSecretCodeValid) {
+    toast({
+      title: "Invalid Drop code",
+      description: "Please enter a valid 6-character alphanumeric Drop code",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  if (faucetType === 'droplist' && !userIsWhitelisted) {
+    toast({
+      title: "Not Drop-listed",
+      description: "You are not Drop-listed to claim from this faucet",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  if (faucetType === 'custom' && !hasCustomAmount) {
+    toast({
+      title: "No Custom Allocation",
+      description: "You don't have a custom amount allocated for this faucet",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  if (!allAccountsVerified) {
+    toast({
+      title: "Verification Required",
+      description: "Please complete and verify all required tasks before claiming",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  if (!checkNetwork()) return;
+
+  try {
+    setIsClaiming(true);
+    if (!window.ethereum) {
+      throw new Error("Wallet not detected. Please install MetaMask or another Ethereum wallet.");
+    }
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    console.log("Sending drop request", {
+      faucetType,
+      backendMode,
+      secretCode: (faucetType === 'dropcode' && backendMode) ? secretCode : "N/A",
+    });
+
+    // Perform the claim based on faucet type
+    const result = faucetType === 'custom'
+      ? await claimCustomViaBackend(address, faucetAddress, provider as BrowserProvider)
+      : (faucetType === 'dropcode' && backendMode)
+      ? await claimViaBackend(address, faucetAddress, provider as BrowserProvider, secretCode)
+      : await claimNoCodeViaBackend(address, faucetAddress, provider as BrowserProvider);
+
+    const formattedTxHash = result.txHash.startsWith("0x") ? result.txHash : (`0x${result.txHash}` as `0x${string}`);
+    setTxHash(formattedTxHash);
+    const networkName = selectedNetwork?.name || "Unknown Network";
+
+    // Get the claimed amount for on-chain storage
+    const claimAmountBN = faucetType === 'custom' && hasCustomAmount
+      ? userCustomClaimAmount
+      : faucetDetails.claimAmount || 0n;
+
+    // Store the claim on-chain using the updated storeClaim function
+    await storeClaim(
+      provider as BrowserProvider,
+      address,
+      faucetAddress,
+      claimAmountBN,
+      formattedTxHash,
+      chainId,
+      Number(networkId),
+      networkName
+    );
+
+    // Get the claimed amount for display
+    const claimedAmount = faucetType === 'custom' && hasCustomAmount
+      ? formatUnits(userCustomClaimAmount, tokenDecimals)
+      : faucetDetails.claimAmount
+      ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
+      : "tokens";
+
+    toast({
+      title: "Tokens dropped successfully",
+      description: `You have dropped ${claimedAmount} ${tokenSymbol} on ${networkName} and recorded the claim on-chain`,
+    });
+    setShowClaimPopup(true);
+    setSecretCode("");
+    await loadFaucetDetails();
+    await loadTransactionHistory();
+  } catch (error: any) {
+    console.error("Error dropping tokens:", error);
+    let errorMessage = error.reason || error.message || "Unknown error occurred";
+    if (errorMessage.includes("Unauthorized: Invalid Drop code")) {
+      errorMessage = "Invalid Drop code. Please check and try again.";
+    } else if (errorMessage.includes("Network changed during transaction")) {
+      errorMessage = "Network changed during transaction. Please try again with a stable network connection.";
+    } else if (errorMessage.includes("Invalid transaction hash format")) {
+      errorMessage = "Invalid transaction hash format. Please try again.";
+    }
+    toast({
+      title: "Failed to drop tokens",
+      description: errorMessage,
+      variant: "destructive",
+    });
+  } finally {
+    setIsClaiming(false);
+  }
+}
 
   const handleGenerateNewDropCode = async (): Promise<void> => {
   if (!isConnected || !address || !chainId) {

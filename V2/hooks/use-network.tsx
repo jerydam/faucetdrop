@@ -128,7 +128,7 @@ const networks: Network[] = [
     name: "Base",
     symbol: "BASE",
     chainId: 8453,
-    rpcUrl: "https://base.publicnode.com", 
+    rpcUrl: "https://base.drpc.org", 
     blockExplorerUrls: "https://basescan.org",
     explorerUrl: "https://basescan.org",
     color: "#0052FF",

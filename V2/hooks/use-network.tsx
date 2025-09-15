@@ -128,7 +128,7 @@ const networks: Network[] = [
     name: "Base",
     symbol: "BASE",
     chainId: 8453,
-    rpcUrl: "https://base.drpc.org", 
+    rpcUrl: "https://base-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-", 
     blockExplorerUrls: "https://basescan.org",
     explorerUrl: "https://basescan.org",
     color: "#0052FF",

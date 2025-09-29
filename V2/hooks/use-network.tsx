@@ -1,9 +1,10 @@
-// Enhanced NetworkContext with logo support
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { ZeroAddress } from "ethers"
 import { useToast } from "@/hooks/use-toast"
+import { defineChain } from "thirdweb"
+import { useActiveWalletChain, useSwitchActiveWalletChain, useActiveWallet } from "thirdweb/react"
 
 export interface Network {
   name: string
@@ -13,8 +14,8 @@ export interface Network {
   blockExplorerUrls: string
   explorerUrl?: string
   color: string
-  logoUrl: string // Added logo URL
-  iconUrl?: string // Optional smaller icon
+  logoUrl: string
+  iconUrl?: string
   factoryAddresses: string[]
   factories: {
     dropcode?: string
@@ -30,9 +31,7 @@ export interface Network {
   isTestnet?: boolean
 }
 
-
 const networks: Network[] = [
-  // Mainnet Networks
   {
     name: "Celo",
     symbol: "CELO",
@@ -40,8 +39,8 @@ const networks: Network[] = [
     rpcUrl: "https://forno.celo.org",
     blockExplorerUrls: "https://celoscan.io",
     color: "#35D07F",
-    logoUrl: "/celo.png", // ✅ Local path
-    iconUrl: "/celo.png", // ✅ Local path
+    logoUrl: "/celo.png",
+    iconUrl: "/celo.png",
     factoryAddresses: [
       "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
       "0xB8De8f37B263324C44FD4874a7FB7A0C59D8C58E",
@@ -65,7 +64,6 @@ const networks: Network[] = [
     },
     isTestnet: false,
   },
-  
   {
     name: "Lisk",
     symbol: "LSK",
@@ -74,8 +72,8 @@ const networks: Network[] = [
     blockExplorerUrls: "https://blockscout.lisk.com",
     explorerUrl: "https://blockscout.lisk.com",
     color: "#0D4477",
-    logoUrl: "/lsk.png", // ✅ Local path
-    iconUrl: "/lsk.png", // ✅ Local path
+    logoUrl: "/lsk.png",
+    iconUrl: "/lsk.png",
     factoryAddresses: [
       "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
       "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
@@ -104,8 +102,8 @@ const networks: Network[] = [
     blockExplorerUrls: "https://arbiscan.io",
     explorerUrl: "https://arbiscan.io",
     color: "#28A0F0",
-    logoUrl: "/arb.jpeg", // ✅ Local path
-    iconUrl: "/arb.jpeg", // ✅ Local path
+    logoUrl: "/arb.jpeg",
+    iconUrl: "/arb.jpeg",
     factoryAddresses: [
       "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
       "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
@@ -128,12 +126,12 @@ const networks: Network[] = [
     name: "Base",
     symbol: "BASE",
     chainId: 8453,
-    rpcUrl: "https://base-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-", 
+    rpcUrl: "https://base-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
     blockExplorerUrls: "https://basescan.org",
     explorerUrl: "https://basescan.org",
     color: "#0052FF",
-    logoUrl: "/base.png", // ✅ Local path
-    iconUrl: "/base.png", // ✅ Local path
+    logoUrl: "/base.png",
+    iconUrl: "/base.png",
     factoryAddresses: [
       "0x945431302922b69D500671201CEE62900624C6d5",
       "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
@@ -152,7 +150,7 @@ const networks: Network[] = [
     },
     isTestnet: false,
   }
-];
+]
 
 // Image component with fallback
 interface NetworkImageProps {
@@ -238,7 +236,6 @@ export function NetworkImage({
   )
 }
 
-// Rest of the NetworkContext implementation remains the same...
 interface NetworkContextType {
   network: Network | null
   networks: Network[]
@@ -248,6 +245,7 @@ interface NetworkContextType {
   getFactoryAddress: (factoryType: 'dropcode' | 'droplist' | 'custom', network?: Network) => string | null
   isSwitchingNetwork: boolean
   currentChainId: number | null
+  thirdwebChain: any | null
 }
 
 const NetworkContext = createContext<NetworkContextType>({
@@ -259,13 +257,21 @@ const NetworkContext = createContext<NetworkContextType>({
   getFactoryAddress: () => null,
   isSwitchingNetwork: false,
   currentChainId: null,
+  thirdwebChain: null,
 })
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast()
   const [network, setNetwork] = useState<Network | null>(null)
-  const [currentChainId, setCurrentChainId] = useState<number | null>(null)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
+  const [thirdwebChain, setThirdwebChain] = useState<any | null>(null)
+
+  // Use Thirdweb hooks for chain management
+  const activeChain = useActiveWalletChain()
+  const switchChain = useSwitchActiveWalletChain()
+  const activeWallet = useActiveWallet()
+
+  const currentChainId = activeChain?.id || null
 
   const getLatestFactoryAddress = (targetNetwork?: Network) => {
     const selectedNetwork = targetNetwork || network
@@ -279,69 +285,51 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     return selectedNetwork.factories[factoryType] || null
   }
 
+  const createThirdwebChain = (network: Network) => {
+    return defineChain({
+      id: network.chainId,
+      name: network.name,
+      nativeCurrency: network.nativeCurrency,
+      rpc: network.rpcUrl,
+      blockExplorers: [
+        {
+          name: network.name + " Explorer",
+          url: network.blockExplorerUrls,
+        },
+      ],
+    })
+  }
+
+  // Update network when active chain changes
   useEffect(() => {
-    const detectCurrentChain = async () => {
-      if (typeof window === "undefined" || !window.ethereum) return
-
-      try {
-        const chainIdHex = await window.ethereum.request({ method: "eth_chainId" })
-        const chainId = Number.parseInt(chainIdHex, 16)
-        setCurrentChainId(chainId)
-        
-        const currentNetwork = networks.find((n) => n.chainId === chainId)
-        if (currentNetwork && !network) {
-          setNetwork(currentNetwork)
-        }
-      } catch (error) {
-        console.error("Error detecting chain:", error)
+    if (activeChain) {
+      const currentNetwork = networks.find((n) => n.chainId === activeChain.id)
+      if (currentNetwork) {
+        setNetwork(currentNetwork)
+        setThirdwebChain(createThirdwebChain(currentNetwork))
+        console.log(`Active network: ${currentNetwork.name} (${currentNetwork.chainId})`)
+      } else {
+        // Chain is connected but not in our supported networks
+        setNetwork(null)
+        setThirdwebChain(null)
+        toast({
+          title: "Unsupported Network",
+          description: `Chain ID ${activeChain.id} is not supported. Please switch to a supported network.`,
+          variant: "destructive",
+        })
       }
+    } else {
+      // No active chain
+      setNetwork(null)
+      setThirdwebChain(null)
     }
-
-    detectCurrentChain()
-
-    if (window.ethereum) {
-      const handleChainChanged = (chainIdHex: string) => {
-        try {
-          const chainId = Number.parseInt(chainIdHex, 16)
-          console.log(`Chain changed to: ${chainId}`)
-          setCurrentChainId(chainId)
-
-          const currentNetwork = networks.find((n) => n.chainId === chainId)
-          if (currentNetwork) {
-            setNetwork(currentNetwork)
-            toast({
-              title: "Network Changed",
-              description: `Switched to ${currentNetwork.name}`,
-              variant: "default",
-            })
-          } else {
-            setNetwork(null)
-            toast({
-              title: "Unsupported Network",
-              description: `Chain ID ${chainId} is not supported. Please switch to a supported network.`,
-              variant: "destructive",
-            })
-          }
-        } catch (error) {
-          console.error("Error handling chain change:", error)
-        }
-      }
-
-      window.ethereum.on("chainChanged", handleChainChanged)
-
-      return () => {
-        if (window.ethereum && window.ethereum.removeListener) {
-          window.ethereum.removeListener("chainChanged", handleChainChanged)
-        }
-      }
-    }
-  }, [network, toast])
+  }, [activeChain, toast])
 
   const switchNetwork = async (chainId: number) => {
-    if (typeof window === "undefined" || !window.ethereum) {
+    if (!activeWallet) {
       toast({
-        title: "No Ethereum Provider",
-        description: "Please install MetaMask or another wallet provider",
+        title: "No Wallet Connected",
+        description: "Please connect your wallet first",
         variant: "destructive",
       })
       return
@@ -366,77 +354,28 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       setIsSwitchingNetwork(true)
       console.log(`Attempting to switch to network ${targetNetwork.name} (${chainId})`)
 
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: `0x${chainId.toString(16)}` }],
-      })
+      const thirdwebChain = createThirdwebChain(targetNetwork)
+      await switchChain(thirdwebChain)
 
       console.log(`Successfully switched to ${targetNetwork.name}`)
-      setNetwork(targetNetwork)
-      setCurrentChainId(chainId)
       toast({
         title: "Network Switched",
         description: `Successfully switched to ${targetNetwork.name}`,
         variant: "default",
       })
     } catch (error: any) {
-      console.warn(`Error switching to ${targetNetwork.name}:`, error)
-
-      if (error.code === 4902) {
-        try {
-          console.log(`Adding network ${targetNetwork.name} to wallet`)
-
-          await window.ethereum.request({
-            method: "wallet_addEthereumChain",
-            params: [
-              {
-                chainId: `0x${chainId.toString(16)}`,
-                chainName: targetNetwork.name,
-                nativeCurrency: targetNetwork.nativeCurrency,
-                rpcUrls: [targetNetwork.rpcUrl],
-                blockExplorerUrls: [targetNetwork.blockExplorerUrls],
-                iconUrls: [targetNetwork.iconUrl || targetNetwork.logoUrl],
-              },
-            ],
-          })
-
-          console.log(`Successfully added network ${targetNetwork.name}`)
-
-          await window.ethereum.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: `0x${chainId.toString(16)}` }],
-          })
-
-          setNetwork(targetNetwork)
-          setCurrentChainId(chainId)
-          toast({
-            title: "Network Switched",
-            description: `Successfully switched to ${targetNetwork.name}`,
-            variant: "default",
-          })
-        } catch (addError: any) {
-          console.error(`Error adding network ${targetNetwork.name}:`, addError)
-          toast({
-            title: "Failed to Add Network",
-            description: `Could not add ${targetNetwork.name} to your wallet: ${addError.message}`,
-            variant: "destructive",
-          })
-        }
-      } else {
-        console.error(`Error switching to network ${targetNetwork.name}:`, error)
-        toast({
-          title: "Network Switch Failed",
-          description: `Could not switch to ${targetNetwork.name}: ${error.message}`,
-          variant: "destructive",
-        })
-      }
+      console.error(`Error switching to ${targetNetwork.name}:`, error)
+      toast({
+        title: "Network Switch Failed",
+        description: error?.message || `Could not switch to ${targetNetwork.name}`,
+        variant: "destructive",
+      })
     } finally {
       setIsSwitchingNetwork(false)
     }
   }
 
   const handleSetNetwork = (newNetwork: Network) => {
-    setNetwork(newNetwork)
     switchNetwork(newNetwork.chainId)
   }
 
@@ -451,6 +390,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         getFactoryAddress,
         isSwitchingNetwork,
         currentChainId,
+        thirdwebChain,
       }}
     >
       {children}

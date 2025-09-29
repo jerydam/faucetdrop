@@ -1,3 +1,4 @@
+// hooks/use-wallet.tsx
 "use client"
 
 import { useContext } from "react"

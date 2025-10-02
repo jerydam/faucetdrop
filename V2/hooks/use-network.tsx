@@ -42,7 +42,6 @@ const networks: Network[] = [
     logoUrl: "/celo.png",
     iconUrl: "/celo.png",
     factoryAddresses: [
-      "0xc9c89f695C7fa9D9AbA3B297C9b0d86C5A74f534",
       "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
       "0xB8De8f37B263324C44FD4874a7FB7A0C59D8C58E",
       "0xc26c4Ea50fd3b63B6564A5963fdE4a3A474d4024",
@@ -50,7 +49,8 @@ const networks: Network[] = [
       "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
       "0xF8707b53a2bEc818E96471DDdb34a09F28E0dE6D",
       "0x8D1306b3970278b3AB64D1CE75377BDdf00f61da",
-      "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"
+      "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5",
+      "0xc9c89f695C7fa9D9AbA3B297C9b0d86C5A74f534"
     ],
     factories: {
       droplist: "0xF8707b53a2bEc818E96471DDdb34a09F28E0dE6D",

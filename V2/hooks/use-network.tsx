@@ -1,10 +1,9 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import { ZeroAddress } from "ethers"
 import { useToast } from "@/hooks/use-toast"
-import { defineChain } from "thirdweb"
-import { useActiveWalletChain, useSwitchActiveWalletChain, useActiveWallet } from "thirdweb/react"
+import { useWallet } from "@/hooks/use-wallet"
 
 export interface Network {
   name: string
@@ -153,90 +152,6 @@ const networks: Network[] = [
   }
 ]
 
-// Image component with fallback
-interface NetworkImageProps {
-  network: Network
-  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
-  className?: string
-  showFallback?: boolean
-}
-
-export function NetworkImage({ 
-  network, 
-  size = 'md', 
-  className = '',
-  showFallback = true 
-}: NetworkImageProps) {
-  const [imageError, setImageError] = useState(false)
-  const [imageLoading, setImageLoading] = useState(true)
-
-  const sizeClasses = {
-    xs: 'w-4 h-4',
-    sm: 'w-6 h-6', 
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12',
-    xl: 'w-16 h-16'
-  }
-
-  const fallbackSizes = {
-    xs: 'text-xs',
-    sm: 'text-sm',
-    md: 'text-base',
-    lg: 'text-lg', 
-    xl: 'text-xl'
-  }
-
-  const handleImageLoad = () => {
-    setImageLoading(false)
-    setImageError(false)
-  }
-
-  const handleImageError = () => {
-    setImageLoading(false)
-    setImageError(true)
-  }
-
-  // Use icon URL for smaller sizes, logo URL for larger
-  const imageUrl = (size === 'xs' || size === 'sm') && network.iconUrl 
-    ? network.iconUrl 
-    : network.logoUrl
-
-  if (imageError && showFallback) {
-    return (
-      <div 
-        className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white ${className}`}
-        style={{ backgroundColor: network.color }}
-      >
-        <span className={fallbackSizes[size]}>
-          {network.symbol.slice(0, 2)}
-        </span>
-      </div>
-    )
-  }
-
-  return (
-    <div className={`${sizeClasses[size]} ${className} relative`}>
-      {imageLoading && showFallback && (
-        <div 
-          className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white absolute inset-0 animate-pulse`}
-          style={{ backgroundColor: network.color }}
-        >
-          <span className={fallbackSizes[size]}>
-            {network.symbol.slice(0, 2)}
-          </span>
-        </div>
-      )}
-      <img
-        src={imageUrl}
-        alt={`${network.name} logo`}
-        className={`${sizeClasses[size]} rounded-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
-        onLoad={handleImageLoad}
-        onError={handleImageError}
-      />
-    </div>
-  )
-}
-
 interface NetworkContextType {
   network: Network | null
   networks: Network[]
@@ -246,7 +161,6 @@ interface NetworkContextType {
   getFactoryAddress: (factoryType: 'dropcode' | 'droplist' | 'custom', network?: Network) => string | null
   isSwitchingNetwork: boolean
   currentChainId: number | null
-  thirdwebChain: any | null
 }
 
 const NetworkContext = createContext<NetworkContextType>({
@@ -258,21 +172,27 @@ const NetworkContext = createContext<NetworkContextType>({
   getFactoryAddress: () => null,
   isSwitchingNetwork: false,
   currentChainId: null,
-  thirdwebChain: null,
 })
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast()
-  const [network, setNetwork] = useState<Network | null>(null)
+  const [network, setNetworkState] = useState<Network | null>(null)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
-  const [thirdwebChain, setThirdwebChain] = useState<any | null>(null)
+  
+  const { chainId, address, switchChain } = useWallet()
+  const currentChainId = chainId
 
-  // Use Thirdweb hooks for chain management
-  const activeChain = useActiveWalletChain()
-  const switchChain = useSwitchActiveWalletChain()
-  const activeWallet = useActiveWallet()
-
-  const currentChainId = activeChain?.id || null
+  // Debug: Log network state changes
+  useEffect(() => {
+    console.log(`[NetworkProvider] State:`, {
+      networkName: network?.name,
+      networkChainId: network?.chainId,
+      currentChainId,
+      address,
+      hasAddress: !!address,
+      isSwitchingNetwork
+    })
+  }, [network, currentChainId, address, isSwitchingNetwork])
 
   const getLatestFactoryAddress = (targetNetwork?: Network) => {
     const selectedNetwork = targetNetwork || network
@@ -282,52 +202,46 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   const getFactoryAddress = (factoryType: 'dropcode' | 'droplist' | 'custom', targetNetwork?: Network) => {
     const selectedNetwork = targetNetwork || network
     if (!selectedNetwork) return null
-    
     return selectedNetwork.factories[factoryType] || null
   }
 
-  const createThirdwebChain = (network: Network) => {
-    return defineChain({
-      id: network.chainId,
-      name: network.name,
-      nativeCurrency: network.nativeCurrency,
-      rpc: network.rpcUrl,
-      blockExplorers: [
-        {
-          name: network.name + " Explorer",
-          url: network.blockExplorerUrls,
-        },
-      ],
-    })
-  }
-
-  // Update network when active chain changes
+  // Update network when chainId changes from wallet
   useEffect(() => {
-    if (activeChain) {
-      const currentNetwork = networks.find((n) => n.chainId === activeChain.id)
+    console.log(`[NetworkProvider] chainId effect:`, { chainId, hasAddress: !!address })
+    
+    if (chainId) {
+      const currentNetwork = networks.find((n) => n.chainId === chainId)
       if (currentNetwork) {
-        setNetwork(currentNetwork)
-        setThirdwebChain(createThirdwebChain(currentNetwork))
-        console.log(`Active network: ${currentNetwork.name} (${currentNetwork.chainId})`)
+        console.log(`[NetworkProvider] ✅ Setting network: ${currentNetwork.name}`)
+        setNetworkState(currentNetwork)
       } else {
-        // Chain is connected but not in our supported networks
-        setNetwork(null)
-        setThirdwebChain(null)
+        console.log(`[NetworkProvider] ⚠️ Unsupported chainId: ${chainId}`)
+        setNetworkState(null)
         toast({
           title: "Unsupported Network",
-          description: `Chain ID ${activeChain.id} is not supported. Please switch to a supported network.`,
+          description: `Chain ID ${chainId} is not supported.`,
           variant: "destructive",
         })
       }
+    } else if (address) {
+      // Has address but no chainId means wallet is connecting
+      console.log(`[NetworkProvider] ⏳ Has address but no chainId yet`)
     } else {
-      // No active chain
-      setNetwork(null)
-      setThirdwebChain(null)
+      console.log(`[NetworkProvider] ❌ No wallet connected`)
+      setNetworkState(null)
     }
-  }, [activeChain, toast])
+  }, [chainId, address])
 
-  const switchNetwork = async (chainId: number) => {
-    if (!activeWallet) {
+  const switchNetwork = useCallback(async (targetChainId: number) => {
+    console.log(`[switchNetwork] Called with:`, {
+      targetChainId,
+      currentAddress: address,
+      currentChainId: chainId,
+      hasAddress: !!address
+    })
+    
+    if (!address) {
+      console.log(`[switchNetwork] ❌ No wallet connected`)
       toast({
         title: "No Wallet Connected",
         description: "Please connect your wallet first",
@@ -337,35 +251,42 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     }
 
     if (isSwitchingNetwork) {
-      console.log("Network switch already in progress, skipping")
+      console.log(`[switchNetwork] ⏳ Already switching, ignoring`)
       return
     }
 
-    const targetNetwork = networks.find((n) => n.chainId === chainId)
+    const targetNetwork = networks.find((n) => n.chainId === targetChainId)
     if (!targetNetwork) {
+      console.log(`[switchNetwork] ❌ Network not found: ${targetChainId}`)
       toast({
         title: "Network Not Supported",
-        description: `Chain ID ${chainId} is not supported`,
+        description: `Chain ID ${targetChainId} is not supported`,
         variant: "destructive",
       })
       return
     }
 
+    // Already on target network
+    if (chainId === targetChainId) {
+      console.log(`[switchNetwork] ✅ Already on ${targetNetwork.name}`)
+      return
+    }
+
     try {
       setIsSwitchingNetwork(true)
-      console.log(`Attempting to switch to network ${targetNetwork.name} (${chainId})`)
+      console.log(`[switchNetwork] ⏳ Switching to ${targetNetwork.name}...`)
 
-      const thirdwebChain = createThirdwebChain(targetNetwork)
-      await switchChain(thirdwebChain)
+      // Let the wallet switch and the useEffect will update the UI
+      await switchChain(targetChainId)
+      console.log(`[switchNetwork] ✅ Switch completed`)
 
-      console.log(`Successfully switched to ${targetNetwork.name}`)
       toast({
         title: "Network Switched",
         description: `Successfully switched to ${targetNetwork.name}`,
-        variant: "default",
       })
     } catch (error: any) {
-      console.error(`Error switching to ${targetNetwork.name}:`, error)
+      console.error(`[switchNetwork] ❌ Error:`, error)
+      
       toast({
         title: "Network Switch Failed",
         description: error?.message || `Could not switch to ${targetNetwork.name}`,
@@ -374,11 +295,12 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSwitchingNetwork(false)
     }
-  }
+  }, [address, chainId, isSwitchingNetwork, switchChain, toast])
 
-  const handleSetNetwork = (newNetwork: Network) => {
+  const handleSetNetwork = useCallback((newNetwork: Network) => {
+    console.log(`[handleSetNetwork] Request to switch: ${newNetwork.name}`)
     switchNetwork(newNetwork.chainId)
-  }
+  }, [switchNetwork])
 
   return (
     <NetworkContext.Provider
@@ -391,7 +313,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         getFactoryAddress,
         isSwitchingNetwork,
         currentChainId,
-        thirdwebChain,
       }}
     >
       {children}
@@ -403,7 +324,6 @@ export function useNetwork() {
   return useContext(NetworkContext)
 }
 
-// Utility functions
 export function getMainnetNetworks() {
   return networks.filter(network => !network.isTestnet)
 }
@@ -419,7 +339,6 @@ export function getNetworkByChainId(chainId: number) {
 export function isFactoryTypeAvailable(chainId: number, factoryType: 'dropcode' | 'droplist' | 'custom'): boolean {
   const network = getNetworkByChainId(chainId)
   if (!network) return false
-  
   return !!network.factories[factoryType]
 }
 
@@ -428,7 +347,6 @@ export function getAvailableFactoryTypes(chainId: number): ('dropcode' | 'dropli
   if (!network) return []
   
   const availableTypes: ('dropcode' | 'droplist' | 'custom')[] = []
-  
   if (network.factories.dropcode) availableTypes.push('dropcode')
   if (network.factories.droplist) availableTypes.push('droplist')
   if (network.factories.custom) availableTypes.push('custom')

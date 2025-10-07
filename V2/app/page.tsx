@@ -2,11 +2,12 @@
 
 import { FaucetList } from "@/components/faucet-list"
 import { NetworkSelector } from "@/components/network-selector"
-import { WalletConnect } from "@/components/wallet-connect"
+import {  WalletConnectButton } from "@/components/wallet-connect"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
 import { DroplistTasks } from "@/components/droplist"
 import { Button } from "@/components/ui/button"
 import { Plus, Users, Loader2 } from "lucide-react"
+import { NetworkDebugPanel } from "@/components/network-debug-panel" 
 import Link from "next/link"
 import Image from "next/image"
 import { Contract, ethers } from "ethers"
@@ -341,9 +342,9 @@ export default function Home() {
   }, [isConnected, isJoiningDroplist, address, chainId])
 
   return (
-    <main className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+     <main className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="container mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8">
-         <div className="flex flex-col gap-4 sm:gap-6 lg:gap-8">
+        <div className="flex flex-col gap-4 sm:gap-6 lg:gap-8">
           {/* Header Section */}
           <header className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 p-4 sm:p-6">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
@@ -374,10 +375,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="ml-auto sm:ml-0 flex-shrink-0">
-                  <NetworkSelector 
-                    onNetworkChange={handleNetworkSelectorChange}
-                    isLoading={isNetworkSelectorLoading}
-                  />
+                  <NetworkSelector />
                 </div>
               </div>
 
@@ -385,30 +383,20 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full lg:w-auto lg:flex-shrink-0">
                 <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
                   <Button 
-                    onClick={handleCreateFaucetClick}
-                    disabled={isNavigatingToCreate}
+                    onClick={() => router.push('/create')}
                     size="sm"
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 transition-colors whitespace-nowrap"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
                   >
-                    {isNavigatingToCreate ? (
-                      <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
-                    ) : (
-                      <Plus className="h-4 w-4 flex-shrink-0" />
-                    )}
-                    <span className="hidden xs:inline">
-                      {isNavigatingToCreate ? "Loading..." : "Create Faucet"}
-                    </span>
-                    <span className="xs:hidden">
-                      {isNavigatingToCreate ? "Loading..." : "Create"}
-                    </span>
+                    <Plus className="h-4 w-4 flex-shrink-0" />
+                    <span className="hidden xs:inline">Create Faucet</span>
+                    <span className="xs:hidden">Create</span>
                   </Button>
 
-                  {/* Droplist Button */}
                   <Button 
                     onClick={handleJoinDroplist}
-                    disabled={!isConnected || isJoiningDroplist || !chainId || !isSupportedNetwork(chainId)}
+                    disabled={!isConnected || isJoiningDroplist}
                     size="sm"
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 transition-colors whitespace-nowrap"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700"
                   >
                     {isJoiningDroplist ? (
                       <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
@@ -425,9 +413,7 @@ export default function Home() {
                 </div>
 
                 <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-                  <div className="flex-1 xs:flex-none">
-                    <WalletConnect />
-                  </div>
+                  <WalletConnectButton />
                 </div>
               </div>
             </div>
@@ -479,6 +465,7 @@ export default function Home() {
         userAddress={address || ""}
         isWalletConnected={isConnected}
       />
+      {process.env.NODE_ENV === 'development' && <NetworkDebugPanel />}
     </main>
   )
 }

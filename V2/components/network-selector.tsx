@@ -1,12 +1,14 @@
 "use client"
 
 import { useNetwork, type Network } from "@/hooks/use-network"
+import { useWallet } from "@/hooks/use-wallet"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle } from "lucide-react"
 import { useState } from "react"
+import { useToast } from "@/hooks/use-toast"
 
-// Network image component with fallback (duplicated from the wizard for standalone use)
+// Network image component with fallback
 interface NetworkImageProps {
   network: Network
   size?: 'xs' | 'sm' | 'md' | 'lg'
@@ -78,12 +80,12 @@ function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProp
 }
 
 interface NetworkSelectorProps {
-  showName?: boolean // Option to show/hide network names
-  displayMode?: 'name' | 'logo' | 'both' // Different display modes
-  compact?: boolean // Compact mode for smaller spaces
-  showStatus?: boolean // Show connection status
-  showLogos?: boolean // Show network logos
-  className?: string // Additional CSS classes
+  showName?: boolean
+  displayMode?: 'name' | 'logo' | 'both'
+  compact?: boolean
+  showStatus?: boolean
+  showLogos?: boolean
+  className?: string
 }
 
 export function NetworkSelector({ 
@@ -95,7 +97,11 @@ export function NetworkSelector({
   className = ""
 }: NetworkSelectorProps) {
   const { network, networks, setNetwork, isSwitchingNetwork, currentChainId } = useNetwork()
+  const { address, connect } = useWallet()
+  const { toast } = useToast()
+  
   const isWalletAvailable = typeof window !== "undefined" && window.ethereum
+  const hasWalletConnected = !!address
 
   // Find the network name for the current chain ID, if available
   const currentNetwork = networks.find((net) => net.chainId === currentChainId)
@@ -106,7 +112,7 @@ export function NetworkSelector({
     
     switch (mode) {
       case 'logo':
-        return '' // Will show only logo
+        return ''
       case 'name':
         return net.name
       case 'both':
@@ -118,6 +124,7 @@ export function NetworkSelector({
   // Determine connection status
   const getConnectionStatus = () => {
     if (!isWalletAvailable) return 'no-wallet'
+    if (!hasWalletConnected) return 'disconnected'
     if (isSwitchingNetwork) return 'switching'
     if (!currentChainId) return 'disconnected'
     if (network && currentChainId === network.chainId) return 'connected'
@@ -167,6 +174,48 @@ export function NetworkSelector({
 
   const { icon: StatusIcon, color: statusColor } = getStatusIndicator()
 
+  // IMPROVED: Handle network selection with better checks
+  const handleNetworkSelect = async (net: Network) => {
+    console.log('Network selection clicked:', { 
+      network: net.name, 
+      hasAddress: hasWalletConnected,
+      isSwitchingNetwork,
+      address 
+    })
+
+    // Don't interrupt if already switching
+    if (isSwitchingNetwork) {
+      console.log('Already switching networks, ignoring click')
+      return
+    }
+
+    // Check if wallet is connected using address (more reliable than isConnected)
+    if (!hasWalletConnected) {
+      console.log('Wallet not connected, prompting connection...')
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first to switch networks",
+        variant: "destructive",
+      })
+      
+      // Trigger wallet connection
+      try {
+        await connect()
+      } catch (error) {
+        console.error('Failed to connect wallet:', error)
+      }
+      return
+    }
+
+    // Proceed with network switch
+    try {
+      await setNetwork(net)
+    } catch (error: any) {
+      console.error('Failed to switch network:', error)
+      // Error toast is already handled in use-network
+    }
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -175,7 +224,6 @@ export function NetworkSelector({
           className={`flex items-center gap-2 ${className}`}
           disabled={!isWalletAvailable || isSwitchingNetwork}
         >
-          {/* Show network logo if available and connected */}
           {showLogos && network && connectionStatus === 'connected' ? (
             <NetworkImage network={network} size={compact ? "xs" : "sm"} />
           ) : showStatus ? (
@@ -184,7 +232,6 @@ export function NetworkSelector({
             <NetworkIcon className="h-4 w-4" />
           )}
           
-          {/* Display text only for non-logo-only modes */}
           {displayMode !== 'logo' && (
             <span className={compact ? "text-sm" : ""}>{displayText()}</span>
           )}
@@ -220,11 +267,10 @@ export function NetworkSelector({
           return (
             <DropdownMenuItem
               key={net.chainId}
-              onClick={() => setNetwork(net)}
+              onClick={() => handleNetworkSelect(net)}
               className="flex items-center gap-3 cursor-pointer py-3"
-              disabled={!isWalletAvailable || isSwitchingNetwork}
+              disabled={!isWalletAvailable || isSwitchingNetwork || !hasWalletConnected}
             >
-              {/* Network Logo */}
               <NetworkImage network={net} size={compact ? "xs" : "sm"} />
               
               <div className="flex flex-col flex-1 min-w-0">
@@ -265,7 +311,10 @@ export function NetworkSelector({
         {/* Footer Information */}
         {!compact && (
           <div className="px-3 py-2 text-xs text-gray-500 border-t">
-            {networks.length} networks available
+            {hasWalletConnected 
+              ? `${networks.length} networks available`
+              : "Connect wallet to switch networks"
+            }
           </div>
         )}
       </DropdownMenuContent>
@@ -273,7 +322,6 @@ export function NetworkSelector({
   )
 }
 
-// Alternative compact version for tight spaces
 export function CompactNetworkSelector({ className }: { className?: string }) {
   return (
     <NetworkSelector 
@@ -287,7 +335,6 @@ export function CompactNetworkSelector({ className }: { className?: string }) {
   )
 }
 
-// Logo-only version
 export function LogoOnlyNetworkSelector({ className }: { className?: string }) {
   return (
     <NetworkSelector 
@@ -300,7 +347,6 @@ export function LogoOnlyNetworkSelector({ className }: { className?: string }) {
   )
 }
 
-// Status-focused version
 export function NetworkStatusSelector({ className }: { className?: string }) {
   return (
     <NetworkSelector 
@@ -314,22 +360,49 @@ export function NetworkStatusSelector({ className }: { className?: string }) {
   )
 }
 
-// Mobile-optimized version with logos
 export function MobileNetworkSelector({ className }: { className?: string }) {
   const { networks, network, setNetwork, isSwitchingNetwork } = useNetwork()
+  const { address, connect } = useWallet()
+  const { toast } = useToast()
+  
+  const hasWalletConnected = !!address
+  
+  const handleNetworkSelect = async (net: Network) => {
+    if (isSwitchingNetwork) return
+    
+    if (!hasWalletConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      })
+      try {
+        await connect()
+      } catch (error) {
+        console.error('Failed to connect wallet:', error)
+      }
+      return
+    }
+    
+    try {
+      await setNetwork(net)
+    } catch (error: any) {
+      console.error('Failed to switch network:', error)
+    }
+  }
   
   return (
     <div className={`grid grid-cols-2 gap-3 p-4 ${className}`}>
       {networks.map((net) => (
         <button
           key={net.chainId}
-          onClick={() => setNetwork(net)}
-          disabled={isSwitchingNetwork}
+          onClick={() => handleNetworkSelect(net)}
+          disabled={isSwitchingNetwork || !hasWalletConnected}
           className={`p-3 rounded-lg border-2 transition-all ${
             network?.chainId === net.chainId
               ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
               : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'
-          } ${isSwitchingNetwork ? 'opacity-50 cursor-not-allowed' : ''}`}
+          } ${isSwitchingNetwork || !hasWalletConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <div className="flex items-center space-x-3">
             <NetworkImage network={net} size="sm" />
@@ -349,7 +422,6 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
   )
 }
 
-// Network breadcrumb component with logo
 export function NetworkBreadcrumb({ className }: { className?: string }) {
   const { network } = useNetwork()
   
@@ -368,7 +440,6 @@ export function NetworkBreadcrumb({ className }: { className?: string }) {
   )
 }
 
-// Network status indicator component with logo
 export function NetworkStatusIndicator({ className }: { className?: string }) {
   const { network, currentChainId, isSwitchingNetwork } = useNetwork()
   
@@ -405,7 +476,6 @@ export function NetworkStatusIndicator({ className }: { className?: string }) {
   )
 }
 
-// Large network display card
 export function NetworkCard({ network: net, onClick, isActive }: { 
   network: Network; 
   onClick?: () => void; 
@@ -448,7 +518,6 @@ export function NetworkCard({ network: net, onClick, isActive }: {
   )
 }
 
-// Grid layout for network selection
 export function NetworkGrid({ onNetworkSelect }: { onNetworkSelect?: (network: Network) => void }) {
   const { networks, network } = useNetwork()
   
@@ -466,22 +535,49 @@ export function NetworkGrid({ onNetworkSelect }: { onNetworkSelect?: (network: N
   )
 }
 
-// Horizontal network selector with logos only
 export function HorizontalNetworkSelector({ className }: { className?: string }) {
   const { networks, network, setNetwork, isSwitchingNetwork } = useNetwork()
+  const { address, connect } = useWallet()
+  const { toast } = useToast()
+  
+  const hasWalletConnected = !!address
+  
+  const handleNetworkSelect = async (net: Network) => {
+    if (isSwitchingNetwork) return
+    
+    if (!hasWalletConnected) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet first",
+        variant: "destructive",
+      })
+      try {
+        await connect()
+      } catch (error) {
+        console.error('Failed to connect wallet:', error)
+      }
+      return
+    }
+    
+    try {
+      await setNetwork(net)
+    } catch (error: any) {
+      console.error('Failed to switch network:', error)
+    }
+  }
   
   return (
     <div className={`flex items-center space-x-2 overflow-x-auto ${className}`}>
       {networks.map((net) => (
         <button
           key={net.chainId}
-          onClick={() => setNetwork(net)}
-          disabled={isSwitchingNetwork}
+          onClick={() => handleNetworkSelect(net)}
+          disabled={isSwitchingNetwork || !hasWalletConnected}
           className={`flex-shrink-0 p-2 rounded-lg border-2 transition-all ${
             network?.chainId === net.chainId
               ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
               : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'
-          } ${isSwitchingNetwork ? 'opacity-50 cursor-not-allowed' : ''}`}
+          } ${isSwitchingNetwork || !hasWalletConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
           title={net.name}
         >
           <NetworkImage network={net} size="sm" />
@@ -491,7 +587,6 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
   )
 }
 
-// Mini network indicator (just logo)
 export function MiniNetworkIndicator({ className }: { className?: string }) {
   const { network } = useNetwork()
   

@@ -24,7 +24,7 @@ import {
   Eye,
   Edit
 } from "lucide-react"
-import { WalletConnect } from '@/components/wallet-connect'
+import { WalletConnectButton } from '@/components/wallet-connect'
 import { Header } from '@/components/header'
 
 // Platform owner address
@@ -368,7 +368,7 @@ export default function DroplistAdminPanel() {
       <div className="max-w-md mx-auto mt-8">
         <Card>
           <CardHeader className="text-center">
-            <WalletConnect />
+            <WalletConnectButton />
             <CardTitle>Connect Wallet</CardTitle>
             <CardDescription>
               Connect your wallet to access the Droplist Admin Panel

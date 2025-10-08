@@ -1,3 +1,4 @@
+// File: app/page.tsx (or components/home.tsx - the main Home component)
 "use client"
 
 import { FaucetList } from "@/components/faucet-list"
@@ -465,7 +466,7 @@ export default function Home() {
         userAddress={address || ""}
         isWalletConnected={isConnected}
       />
-      {process.env.NODE_ENV === 'development' && <NetworkDebugPanel />}
+      
     </main>
   )
 }

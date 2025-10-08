@@ -1,3 +1,4 @@
+// File: components/wallet-connect.tsx (WalletConnectButton)
 "use client"
 
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'

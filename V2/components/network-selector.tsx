@@ -1,10 +1,11 @@
+// File: components/network-selector.tsx (NetworkSelector with optional debounce)
 "use client"
 
 import { useNetwork, type Network } from "@/hooks/use-network"
 import { useWallet } from "@/hooks/use-wallet"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle } from "lucide-react"
+import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle, Loader2 } from "lucide-react"
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -96,13 +97,16 @@ export function NetworkSelector({
   showLogos = true,
   className = ""
 }: NetworkSelectorProps) {
-  const { network, networks, setNetwork, isSwitchingNetwork, currentChainId } = useNetwork()
+  const { network, networks, setNetwork, isSwitchingNetwork, currentChainId, isConnecting } = useNetwork() // NEW: Destructure isConnecting
   const { address, connect } = useWallet()
   const { toast } = useToast()
   
   const isWalletAvailable = typeof window !== "undefined" && window.ethereum
   const hasWalletConnected = !!address
 
+  // Add debounce state
+  const [isSelecting, setIsSelecting] = useState(false)
+  
   // Find the network name for the current chain ID, if available
   const currentNetwork = networks.find((net) => net.chainId === currentChainId)
   
@@ -121,8 +125,9 @@ export function NetworkSelector({
     }
   }
 
-  // Determine connection status
+  // FIXED: Enhanced status with connecting state
   const getConnectionStatus = () => {
+    if (isConnecting) return 'connecting' // NEW: Handle connecting
     if (!isWalletAvailable) return 'no-wallet'
     if (!hasWalletConnected) return 'disconnected'
     if (isSwitchingNetwork) return 'switching'
@@ -136,6 +141,8 @@ export function NetworkSelector({
 
   const displayText = () => {
     switch (connectionStatus) {
+      case 'connecting': // NEW
+        return "Connecting..."
       case 'no-wallet':
         return "No Wallet Detected"
       case 'switching':
@@ -156,6 +163,8 @@ export function NetworkSelector({
   // Get status icon and color
   const getStatusIndicator = () => {
     switch (connectionStatus) {
+      case 'connecting': // NEW
+        return { icon: Loader2, color: 'text-blue-500 animate-spin' }
       case 'connected':
         return { icon: Wifi, color: 'text-green-500' }
       case 'wrong-network':
@@ -174,18 +183,23 @@ export function NetworkSelector({
 
   const { icon: StatusIcon, color: statusColor } = getStatusIndicator()
 
-  // IMPROVED: Handle network selection with better checks
+  // IMPROVED: Handle network selection with better checks and debounce
   const handleNetworkSelect = async (net: Network) => {
+    if (isSelecting || isSwitchingNetwork || isConnecting) return // NEW: Block during connect
+    setIsSelecting(true)
+    
     console.log('Network selection clicked:', { 
       network: net.name, 
       hasAddress: hasWalletConnected,
       isSwitchingNetwork,
+      isConnecting, // NEW
       address 
     })
 
     // Don't interrupt if already switching
-    if (isSwitchingNetwork) {
-      console.log('Already switching networks, ignoring click')
+    if (isSwitchingNetwork || isConnecting) {
+      console.log('Already switching/connecting, ignoring click')
+      setIsSelecting(false)
       return
     }
 
@@ -201,8 +215,22 @@ export function NetworkSelector({
       // Trigger wallet connection
       try {
         await connect()
+        // FIXED: Post-connect check (give 1s for state to propagate)
+        setTimeout(() => {
+          if (network && network.chainId === net.chainId) {
+            toast({ title: "Ready", description: `Connected to ${network.name}` })
+          } else {
+            toast({ 
+              title: "Connection Complete", 
+              description: "Now switch to your desired network.", 
+              action: { label: "Switch Now", onClick: () => setNetwork(net) }
+            })
+          }
+          setIsSelecting(false)
+        }, 1000)
       } catch (error) {
         console.error('Failed to connect wallet:', error)
+        setIsSelecting(false)
       }
       return
     }
@@ -213,6 +241,8 @@ export function NetworkSelector({
     } catch (error: any) {
       console.error('Failed to switch network:', error)
       // Error toast is already handled in use-network
+    } finally {
+      setIsSelecting(false)
     }
   }
 
@@ -222,7 +252,7 @@ export function NetworkSelector({
         <Button 
           variant="outline" 
           className={`flex items-center gap-2 ${className}`}
-          disabled={!isWalletAvailable || isSwitchingNetwork}
+          disabled={!isWalletAvailable || isSwitchingNetwork || isSelecting || isConnecting} // NEW: Add isConnecting
         >
           {showLogos && network && connectionStatus === 'connected' ? (
             <NetworkImage network={network} size={compact ? "xs" : "sm"} />
@@ -250,6 +280,7 @@ export function NetworkSelector({
                   {connectionStatus === 'connected' && "Connected to"}
                   {connectionStatus === 'wrong-network' && "Wrong Network"}
                   {connectionStatus === 'switching' && "Switching Networks..."}
+                  {connectionStatus === 'connecting' && "Connecting..."} {/* NEW */}
                   {connectionStatus === 'disconnected' && "Not Connected"}
                   {connectionStatus === 'no-wallet' && "No Wallet Found"}
                   {connectionStatus === 'unknown-network' && "Unsupported Chain"}
@@ -269,7 +300,7 @@ export function NetworkSelector({
               key={net.chainId}
               onClick={() => handleNetworkSelect(net)}
               className="flex items-center gap-3 cursor-pointer py-3"
-              disabled={!isWalletAvailable || isSwitchingNetwork || !hasWalletConnected}
+              disabled={!isWalletAvailable || isSwitchingNetwork || isSelecting || isConnecting || !hasWalletConnected} // NEW: Add isConnecting
             >
               <NetworkImage network={net} size={compact ? "xs" : "sm"} />
               

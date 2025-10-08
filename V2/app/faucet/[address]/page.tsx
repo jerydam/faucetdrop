@@ -401,7 +401,7 @@ const loadSocialMediaLinks = async (): Promise<void> => {
     setIsLoadingSocialLinks(true)
     console.log(`🔍 Loading social media tasks for ${faucetType || 'unknown'} faucet: ${faucetAddress}`)
     
-    const response = await fetch(`http://127.0.0.1:8000/faucet-tasks/${faucetAddress}`)
+    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-tasks/${faucetAddress}`)
     
     if (!response.ok) {
       if (response.status === 404) {
@@ -1031,7 +1031,7 @@ const handleShareOnX = (): void => {
   // ✅ Helper functions for admin popup preferences
   const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/admin-popup-preference", {
+      const response = await fetch("https://fauctdrop-backend.onrender.com/admin-popup-preference", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1315,7 +1315,7 @@ const handleShareOnX = (): void => {
   const getAdminPopupPreference = async (userAddr: string, faucetAddr: string): Promise<boolean> => {
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+        `https://fauctdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
       )
       
       if (!response.ok) {
@@ -1531,7 +1531,7 @@ const handleShareOnX = (): void => {
     
     console.log(`🔄 Generating new drop code for faucet: ${faucetAddress}`)
     
-    const response = await fetch("http://127.0.0.1:8000/generate-new-drop-code", {
+    const response = await fetch("https://fauctdrop-backend.onrender.com/generate-new-drop-code", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1773,7 +1773,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       // Dropcode faucets in backend mode - generates secret code + stores tasks
       console.log("🔐 Dropcode faucet - generating secret code and storing tasks")
       
-      const response = await fetch("http://127.0.0.1:8000/set-claim-parameters", {
+      const response = await fetch("https://fauctdrop-backend.onrender.com/set-claim-parameters", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1804,7 +1804,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       
       if (tasksToSend.length > 0) {
         try {
-          const response = await fetch("http://127.0.0.1:8000/add-faucet-tasks", {
+          const response = await fetch("https://fauctdrop-backend.onrender.com/add-faucet-tasks", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

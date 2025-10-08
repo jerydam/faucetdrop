@@ -7,7 +7,7 @@ import { arbitrum, mainnet, base, celo, type AppKitNetwork } from '@reown/appkit
 import { QueryClient } from '@tanstack/react-query'
 
 // Your WalletConnect project ID from https://cloud.walletconnect.com
-export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'ab3bfd8746c594d1e5f08a8abfcc4593'
+export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '83d474a1874af18893a31155e04adad0'
 
 if (!projectId) {
   throw new Error('Project ID is not defined')

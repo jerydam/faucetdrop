@@ -148,6 +148,8 @@ export default function FaucetDetails() {
   const [isSavingSocialLinks, setIsSavingSocialLinks] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const transactionsPerPage = 10
+  const [customXPostTemplate, setCustomXPostTemplate] = useState("")
+  const [isLoadingXTemplate, setIsLoadingXTemplate] = useState(false)
 
   // ✅ UPDATED: Allow admin, owner, and backend address to access drop code
   const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785" // Backend address
@@ -288,6 +290,71 @@ const handleStartTimeChange = (e) => {
       router.push("/")
     }
   }
+const loadCustomXPostTemplate = async (): Promise<void> => {
+  if (!faucetAddress) return
+  
+  try {
+    setIsLoadingXTemplate(true)
+    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-x-template/${faucetAddress}`)
+    
+    if (!response.ok) {
+      console.log("No custom X post template found")
+      return
+    }
+    
+    const result = await response.json()
+    
+    if (result.success && result.template) {
+      setCustomXPostTemplate(result.template)
+      console.log(`✅ Loaded custom X post template for faucet ${faucetAddress}`)
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading X post template:', error)
+  } finally {
+    setIsLoadingXTemplate(false)
+  }
+}
+
+// Add function to save X post template
+const saveCustomXPostTemplate = async (): Promise<void> => {
+  if (!faucetAddress || !address || !chainId) return
+  
+  try {
+    const response = await fetch('https://fauctdrop-backend.onrender.com/faucet-x-template', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        faucetAddress,
+        template: customXPostTemplate,
+        userAddress: address,
+        chainId: Number(chainId)
+      }),
+    })
+    
+    if (!response.ok) {
+      throw new Error('Failed to save X post template')
+    }
+    
+    const result = await response.json()
+    console.log('✅ X post template saved:', result)
+    
+    toast({
+      title: "Template Saved",
+      description: "Your custom X post template has been saved successfully.",
+    })
+    
+  } catch (error) {
+    console.error('❌ Error saving X post template:', error)
+    toast({
+      title: "Failed to Save",
+      description: "Could not save X post template. Please try again.",
+      variant: "destructive",
+    })
+  }
+}
 
  // ✅ UPDATED: Load social media tasks for ALL faucet types
 const loadSocialMediaLinks = async (): Promise<void> => {
@@ -504,12 +571,33 @@ const loadSocialMediaLinks = async (): Promise<void> => {
   const shouldShowSecretCodeButton = (): boolean => faucetType === 'dropcode' && canAccessDropCode
 
   
-  const popupContent = (amount: string, txHash: string | null) =>
-    `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"} from the on going @web3lagoscon. Verify Drop 💧: ${
-      txHash
-        ? `${selectedNetwork?.blockExplorerUrls || "https://explorer.unknown"}/tx/0x${txHash.slice(2)} #W3LC2025`
+  const generateXPostContent = (amount: string, txHash: string | null): string => {
+  // If custom template exists, use it
+  if (customXPostTemplate && customXPostTemplate.trim()) {
+    let content = customXPostTemplate
+    
+    // Replace placeholders with actual values
+    content = content.replace(/\{amount\}/g, amount)
+    content = content.replace(/\{token\}/g, tokenSymbol)
+    content = content.replace(/\{network\}/g, selectedNetwork?.name || "the network")
+    content = content.replace(/\{faucet\}/g, faucetDetails?.name || "this faucet")
+    content = content.replace(/\{txHash\}/g, txHash || "Transaction not available")
+    content = content.replace(/\{explorer\}/g, 
+      txHash 
+        ? `${selectedNetwork?.blockExplorer || "https://explorer.unknown"}/tx/${txHash}`
         : "Transaction not available"
-    }`
+    )
+    
+    return content
+  }
+  
+  // Default template
+  return `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
+    txHash
+      ? `${selectedNetwork?.blockExplorer || "https://explorer.unknown"}/tx/${txHash}`
+      : "Transaction not available"
+  }`
+} 
 
   const calculateFee = (amount: string) => {
     try {
@@ -534,15 +622,17 @@ const loadSocialMediaLinks = async (): Promise<void> => {
     setShowFollowDialog(true)
   }
 
-  const handleShareOnX = (): void => {
-    const claimedAmount = faucetType === 'custom' && hasCustomAmount
-      ? formatUnits(userCustomClaimAmount, tokenDecimals)
-      : faucetDetails ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"
-    const shareText = encodeURIComponent(popupContent(claimedAmount, txHash))
-    const shareUrl = `https://x.com/intent/tweet?text=${shareText}`
-    window.open(shareUrl, "_blank")
-    setShowClaimPopup(false)
-  }
+  
+const handleShareOnX = (): void => {
+  const claimedAmount = faucetType === 'custom' && hasCustomAmount
+    ? formatUnits(userCustomClaimAmount, tokenDecimals)
+    : faucetDetails ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"
+  const shareText = encodeURIComponent(generateXPostContent(claimedAmount, txHash))
+  const shareUrl = `https://x.com/intent/tweet?text=${shareText}`
+  window.open(shareUrl, "_blank")
+  setShowClaimPopup(false)
+}
+
 
   const handleCopySecretCode = async (code: string): Promise<void> => {
     try {
@@ -1583,7 +1673,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
     return
   }
   
-  // ✅ UPDATED: For custom faucets, claimAmount is not required, but for others it is
+  // For custom faucets, claimAmount is not required, but for others it is
   if (faucetType !== 'custom' && !claimAmount) {
     toast({
       title: "Invalid Input",
@@ -1601,19 +1691,29 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
     })
     return
   }
+  
+  if (startTimeError) {
+    toast({
+      title: "Invalid Start Time",
+      description: startTimeError,
+      variant: "destructive",
+    })
+    return
+  }
+  
   if (!checkNetwork()) return
 
   try {
     setIsUpdatingParameters(true)
     
-    // ✅ For custom faucets, use 0 as claim amount since individual amounts are set separately
+    // For custom faucets, use 0 as claim amount since individual amounts are set separately
     const claimAmountBN = faucetType === 'custom' ? BigInt(0) : parseUnits(claimAmount, tokenDecimals)
     const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000)
     const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000)
     
     let secretCodeFromBackend = ""
     
-    // ✅ NEW: Prepare social media tasks for ALL faucet types
+    // Prepare social media tasks for ALL faucet types
     const tasksToSend = newSocialLinks.filter(link => 
       link.url.trim() && link.handle.trim()
     ).map(link => ({
@@ -1621,14 +1721,14 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       description: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} our ${link.platform} account: ${link.handle}`,
       url: link.url.trim(),
       required: true,
-      platform: link.platform,  // Store original platform info
-      handle: link.handle,      // Store original handle info  
-      action: link.action       // Store original action info
+      platform: link.platform,
+      handle: link.handle,
+      action: link.action
     }))
     
     console.log(`📋 Preparing to send ${tasksToSend.length} social media tasks for ${faucetType} faucet`)
     
-    // ✅ UPDATED: Handle backend communication for ALL faucet types
+    // Handle backend communication for ALL faucet types
     if (faucetType === 'dropcode' && backendMode) {
       // Dropcode faucets in backend mode - generates secret code + stores tasks
       console.log("🔐 Dropcode faucet - generating secret code and storing tasks")
@@ -1644,7 +1744,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
           startTime: startTimestamp,
           endTime: endTimestamp,
           chainId: Number(chainId),
-          tasks: tasksToSend  // ✅ Send tasks for dropcode faucets
+          tasks: tasksToSend
         }),
       })
       
@@ -1659,7 +1759,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       console.log(`✅ Dropcode: Secret code generated, ${result.tasksStored || 0} tasks stored`)
       
     } else {
-      // ✅ NEW: For ALL other faucet types (droplist, custom, dropcode in manual mode)
+      // For ALL other faucet types (droplist, custom, dropcode in manual mode)
       console.log(`📝 ${faucetType} faucet - storing tasks via add-faucet-tasks endpoint`)
       
       if (tasksToSend.length > 0) {
@@ -1686,12 +1786,22 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
           }
         } catch (taskError) {
           console.warn(`⚠️ Task storage failed for ${faucetType} faucet:`, taskError.message)
-          // Don't fail the entire operation if task storage fails
         }
       }
     }
 
-    // ✅ Continue with blockchain transaction for ALL faucet types
+    // Save custom X post template if it exists and has content
+    if (customXPostTemplate && customXPostTemplate.trim()) {
+      try {
+        console.log("💾 Saving custom X post template...")
+        await saveCustomXPostTemplate()
+      } catch (templateError) {
+        console.warn("⚠️ Failed to save X post template, continuing with parameter update:", templateError)
+        // Don't fail the entire operation if template save fails
+      }
+    }
+
+    // Continue with blockchain transaction for ALL faucet types
     await setClaimParameters(
       provider as BrowserProvider,
       faucetAddress,
@@ -1703,27 +1813,29 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       faucetType || undefined,
     )
 
-    // ✅ Handle secret code display only for dropcode faucets
+    // Handle secret code display only for dropcode faucets
     if (faucetType === 'dropcode' && backendMode && secretCodeFromBackend) {
       saveToStorage(`secretCode_${faucetAddress}`, secretCodeFromBackend)
       setGeneratedSecretCode(secretCodeFromBackend)
       setShowSecretCodeDialog(true)
     }
 
-    // ✅ Success message for ALL faucet types
+    // Success message for ALL faucet types
     const taskMessage = tasksToSend.length > 0 ? `${tasksToSend.length} social media tasks saved. ` : ""
-    const secretMessage = faucetType === 'dropcode' && backendMode ? "Drop code generated and stored." : ""
+    const secretMessage = faucetType === 'dropcode' && backendMode ? "Drop code generated and stored. " : ""
+    const templateMessage = customXPostTemplate && customXPostTemplate.trim() ? "Custom X post template saved. " : ""
     
     toast({
       title: "Drop parameters updated",
-      description: `Parameters updated successfully. ${taskMessage}${secretMessage}`,
+      description: `Parameters updated successfully. ${taskMessage}${secretMessage}${templateMessage}`,
     })
     
     // Clear the new social links after successful save
     setNewSocialLinks([])
     
     await loadFaucetDetails()
-    await loadSocialMediaLinks() // Reload social links for ALL faucet types
+    await loadSocialMediaLinks()
+    await loadCustomXPostTemplate() // Reload the template to confirm save
     await loadTransactionHistory()
     
   } catch (error: any) {
@@ -2163,9 +2275,10 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
   // ✅ Load faucet details when component mounts or dependencies change
   useEffect(() => {
   if (faucetAddress) {
-    loadSocialMediaLinks();
+    loadSocialMediaLinks()
+    loadCustomXPostTemplate() 
   }
-}, [faucetAddress]);
+}, [faucetAddress])
   
   useEffect(() => {
     if (provider && faucetAddress && networkId) {
@@ -2768,7 +2881,107 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
     </div>
   )}
 </div>
-
+{/* Custom X Post Template Section */}
+<div className="space-y-4 border-t pt-4">
+  <div className="flex items-center justify-between">
+    <div>
+      <Label className="text-xs sm:text-sm font-medium">
+        Custom Share on 𝕏 Post (Optional)
+      </Label>
+      <p className="text-xs text-muted-foreground mt-1">
+        Customize what users share when they claim. Use placeholders: {"{amount}"}, {"{token}"}, {"{network}"}, {"{faucet}"}, {"{explorer}"}
+      </p>
+    </div>
+  </div>
+  
+  {isLoadingXTemplate ? (
+    <div className="flex items-center justify-center py-4">
+      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+    </div>
+  ) : (
+    <>
+      <div className="space-y-2">
+        <Textarea
+          placeholder="Example: I just got {amount} {token} from {faucet} on {network}! 🎉 Check it out: {explorer} @FaucetDrops #crypto"
+          value={customXPostTemplate}
+          onChange={(e) => setCustomXPostTemplate(e.target.value)}
+          rows={4}
+          className="text-xs font-mono"
+        />
+        
+        <div className="flex flex-wrap gap-1">
+          <Badge 
+            variant="outline" 
+            className="text-xs cursor-pointer hover:bg-accent" 
+            onClick={() => setCustomXPostTemplate(customXPostTemplate + "{amount}")}
+          >
+            {"{amount}"}
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className="text-xs cursor-pointer hover:bg-accent"
+            onClick={() => setCustomXPostTemplate(customXPostTemplate + "{token}")}
+          >
+            {"{token}"}
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className="text-xs cursor-pointer hover:bg-accent"
+            onClick={() => setCustomXPostTemplate(customXPostTemplate + "{network}")}
+          >
+            {"{network}"}
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className="text-xs cursor-pointer hover:bg-accent"
+            onClick={() => setCustomXPostTemplate(customXPostTemplate + "{faucet}")}
+          >
+            {"{faucet}"}
+          </Badge>
+          <Badge 
+            variant="outline" 
+            className="text-xs cursor-pointer hover:bg-accent"
+            onClick={() => setCustomXPostTemplate(customXPostTemplate + "{explorer}")}
+          >
+            {"{explorer}"}
+          </Badge>
+        </div>
+        
+        {customXPostTemplate && (
+          <div className="p-3 bg-muted rounded-lg">
+            <Label className="text-xs font-medium mb-2 block">Preview:</Label>
+            <p className="text-xs break-words">
+              {generateXPostContent(
+                faucetDetails?.claimAmount 
+                  ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
+                  : "0",
+                "0x1234...5678"
+              )}
+            </p>
+          </div>
+        )}
+      </div>
+      
+      {customXPostTemplate && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setCustomXPostTemplate("")
+            toast({
+              title: "Template Cleared",
+              description: "Default share message will be used",
+            })
+          }}
+          className="text-xs"
+        >
+          Clear Template (Use Default)
+        </Button>
+      )}
+    </>
+  )}
+</div>
    <div className="flex flex-col gap-3 sm:gap-4 w-full max-w-3xl mx-auto">
   <Button
     onClick={handleUpdateClaimParameters}

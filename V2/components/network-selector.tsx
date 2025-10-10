@@ -2,8 +2,9 @@
 "use client"
 
 import { useNetwork, type Network } from "@/hooks/use-network"
-import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
-import { useSwitchChain } from 'wagmi'
+import { useAppKit, useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
+import { useSwitchChain, useAccount } from 'wagmi'
+
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle, Loader2 } from "lucide-react"
@@ -98,7 +99,8 @@ export function NetworkSelector({
   showLogos = true,
   className = ""
 }: NetworkSelectorProps) {
-  const { network, networks, currentChainId, isConnecting } = useNetwork() 
+  const { networks, isConnecting } = useNetwork() 
+  const { chainId } = useAppKitNetwork()
   const { open } = useAppKit()
   const { isConnected, address } = useAppKitAccount()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
@@ -106,8 +108,12 @@ export function NetworkSelector({
   
   const isWalletAvailable = typeof window !== "undefined" && window.ethereum
   const hasWalletConnected = isConnected && !!address
+  // const currentChainId = chainId
+
+  console.log("++++++++++++chainId+++++++++", chainId)
+  console.log("++++++++++++networks+++++++++", networks)
   
-  const currentNetwork = networks.find((net) => net.chainId === currentChainId)
+  const currentNetwork = networks.find((net) => net.chainId === chainId)
   
   const formatNetworkDisplay = (net: Network | null, mode: 'name' | 'logo' | 'both' = displayMode): string => {
     if (!net) return "Select Network"
@@ -128,9 +134,9 @@ export function NetworkSelector({
     if (!isWalletAvailable) return 'no-wallet'
     if (!hasWalletConnected) return 'disconnected'
     if (isSwitching) return 'switching'
-    if (!currentChainId) return 'disconnected'
-    if (network && network.chainId === currentChainId) return 'connected'
-    if (currentNetwork) return 'wrong-network'
+    if (!chainId) return 'disconnected'
+    if (currentNetwork && currentNetwork.chainId === chainId) return 'connected'
+    if (chainId !== currentNetwork?.chainId) return 'wrong-network'
     return 'unknown-network'
   }
 
@@ -147,7 +153,7 @@ export function NetworkSelector({
       case 'disconnected':
         return "Connect Wallet"
       case 'connected':
-        return formatNetworkDisplay(network)
+        return currentNetwork?.name
       case 'wrong-network':
         return `Wrong Network`
       case 'unknown-network':
@@ -190,7 +196,7 @@ export function NetworkSelector({
     }
     
     // Already on this network
-    if (currentChainId === net.chainId) {
+    if (chainId === net.chainId) {
       console.log('Already on', net.name)
       return
     }
@@ -220,8 +226,8 @@ export function NetworkSelector({
           className={`flex items-center gap-2 ${className}`}
           disabled={!isWalletAvailable || isConnecting || isSwitching} 
         >
-          {showLogos && network && connectionStatus === 'connected' ? (
-            <NetworkImage network={network} size={compact ? "xs" : "sm"} />
+          {showLogos && currentNetwork && connectionStatus === 'connected' ? (
+            <NetworkImage network={currentNetwork} size={compact ? "xs" : "sm"} />
           ) : showStatus ? (
             <StatusIcon className={`h-4 w-4 ${statusColor}`} />
           ) : (
@@ -258,8 +264,8 @@ export function NetworkSelector({
         
         {/* Network List */}
         {networks.map((net: Network) => {
-          const isActive = network?.chainId === net.chainId
-          const isCurrent = currentChainId === net.chainId
+          const isActive = currentNetwork?.chainId === net.chainId
+          const isCurrent = chainId === net.chainId
           
           return (
             <DropdownMenuItem
@@ -442,10 +448,13 @@ export function NetworkBreadcrumb({ className }: { className?: string }) {
 }
 
 export function NetworkStatusIndicator({ className }: { className?: string }) {
-  const { network, currentChainId } = useNetwork()
+  const { network } = useNetwork()
+  const { chainId } = useAppKitNetwork()
   const { isConnected } = useAppKitAccount()
+
+  // const currentChainId = chainId
   
-  if (!isConnected || !network || !currentChainId) {
+  if (!isConnected || !network || !chainId) {
     return (
       <div className={`flex items-center space-x-2 text-red-600 ${className}`}>
         <div className="w-4 h-4 bg-red-400 rounded-full" />
@@ -454,7 +463,7 @@ export function NetworkStatusIndicator({ className }: { className?: string }) {
     )
   }
   
-  const isCorrectNetwork = network.chainId === currentChainId
+  const isCorrectNetwork = network.chainId === chainId
   
   return (
     <div className={`flex items-center space-x-2 ${isCorrectNetwork ? 'text-green-600' : 'text-amber-600'} ${className}`}>

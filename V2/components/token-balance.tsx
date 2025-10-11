@@ -7,7 +7,7 @@ import { formatUnits, Contract, ZeroAddress, JsonRpcProvider } from "ethers"
 import { ERC20_ABI } from "@/lib/abis"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useNetwork } from "@/hooks/use-network"
-import { WalletConnect } from "@/components/wallet-connect"
+import { WalletConnectButton } from "@/components/wallet-connect"
 
 interface TokenBalanceProps {
   tokenAddress: string
@@ -90,7 +90,7 @@ export function TokenBalance({
           {loading ? (
             <Skeleton className="h-6 w-24" />
           ) : !address ? (
-            <WalletConnect className="bg-red-500 hover:bg-red-600 text-white" />
+            <WalletConnectButton className="bg-red-500 hover:bg-red-600 text-white" />
           ) : error ? (
             <span className="text-sm text-red-500">{error}</span>
           ) : (

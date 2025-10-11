@@ -161,7 +161,7 @@ interface NetworkContextType {
   getFactoryAddress: (factoryType: 'dropcode' | 'droplist' | 'custom', network?: Network) => string | null
   isSwitchingNetwork: boolean
   currentChainId: number | null
-  isConnecting: boolean // NEW: Track connection state
+  isConnecting: boolean
 }
 
 const NetworkContext = createContext<NetworkContextType>({
@@ -173,21 +173,20 @@ const NetworkContext = createContext<NetworkContextType>({
   getFactoryAddress: () => null,
   isSwitchingNetwork: false,
   currentChainId: null,
-  isConnecting: false, // NEW
+  isConnecting: false,
 })
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast()
   const [network, setNetworkState] = useState<Network | null>(null)
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false)
-  const [isConnecting, setIsConnecting] = useState(false) // NEW: Track connection state
+  const [isConnecting, setIsConnecting] = useState(false)
   
   const { chainId, address, switchChain } = useWallet()
   const currentChainId = chainId
   
   // Use ref to always have fresh values - update synchronously on every render
   const walletRef = useRef({ address, chainId, switchChain })
-  // Update ref synchronously (not in useEffect) to ensure it's always current
   walletRef.current = { address, chainId, switchChain }
 
   // Debug: Log network state changes
@@ -199,7 +198,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       address,
       hasAddress: !!address,
       isSwitchingNetwork,
-      isConnecting, // NEW
+      isConnecting,
       walletRef: walletRef.current
     })
   }, [network, currentChainId, address, isSwitchingNetwork, isConnecting])
@@ -210,30 +209,43 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     if (address && !chainId) {
       console.log(`[NetworkProvider] ⏳ Wallet connecting... (address ready, awaiting chainId)`)
       setIsConnecting(true)
-      setNetworkState(null) // NEW: Reset during connect to avoid stale network
     } else if (!address) {
       console.log(`[NetworkProvider] ❌ No wallet connected`)
       setIsConnecting(false)
       setNetworkState(null)
     }
-  }, [address]) // FIXED: Depend only on address for connection detection
+  }, [address, chainId])
 
   // FIXED: Dedicated effect for chainId updates (triggers network set/reset)
   useEffect(() => {
     console.log(`[NetworkProvider] chainId effect:`, { chainId, hasAddress: !!address, isConnecting })
     
-    if (!chainId) return // FIXED: Skip if no chainId (let connection effect handle)
+    // If wallet is connected but no chainId yet, keep waiting
+    if (!chainId) {
+      if (address) {
+        console.log(`[NetworkProvider] ⏳ Waiting for chainId...`)
+        return
+      }
+      // If no wallet connected, clear everything
+      console.log(`[NetworkProvider] ❌ No chainId and no address`)
+      setNetworkState(null)
+      return
+    }
     
-    setIsConnecting(false) // NEW: Clear connecting state
+    setIsConnecting(false) // Clear connecting state
     
     const currentNetwork = networks.find((n) => n.chainId === chainId)
     if (currentNetwork) {
       console.log(`[NetworkProvider] ✅ Setting network: ${currentNetwork.name}`)
       setNetworkState(currentNetwork)
-      toast({ // NEW: Success toast on valid network
-        title: "Network Detected",
-        description: `Connected to ${currentNetwork.name}`,
-      })
+      
+      // Only show toast if this is a user-initiated change (not initial load)
+      if (network && network.chainId !== chainId) {
+        toast({
+          title: "Network Changed",
+          description: `Switched to ${currentNetwork.name}`,
+        })
+      }
     } else {
       console.log(`[NetworkProvider] ⚠️ Unsupported chainId: ${chainId}`)
       setNetworkState(null)
@@ -241,16 +253,9 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         title: "Unsupported Network",
         description: `Chain ID ${chainId} is not supported. Please switch to Celo, Lisk, Arbitrum, or Base.`,
         variant: "destructive",
-        action: { // NEW: Add switch prompt
-          label: "Switch Networks",
-          onClick: () => {
-            // Trigger selector open or default switch (customize as needed)
-            window.location.href = '/'; // Or open a modal with selector
-          },
-        },
       })
     }
-  }, [chainId]) // FIXED: Depend only on chainId for network setting
+  }, [chainId, address])
 
   const getLatestFactoryAddress = (targetNetwork?: Network) => {
     const selectedNetwork = targetNetwork || network
@@ -315,18 +320,6 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       await currentSwitchChain(targetChainId)
       console.log(`[switchNetwork] ✅ Switch completed`)
 
-      // FIXED: Small delay + manual check (in case effect lags)
-      setTimeout(() => {
-        const postSwitchNetwork = networks.find(n => n.chainId === targetChainId)
-        if (!postSwitchNetwork) {
-          toast({
-            title: "Switch Incomplete",
-            description: "Network updated, but state not synced. Refresh page.",
-            variant: "destructive",
-          })
-        }
-      }, 1000)
-
       toast({
         title: "Network Switched",
         description: `Successfully switched to ${targetNetwork.name}`,
@@ -360,7 +353,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
         getFactoryAddress,
         isSwitchingNetwork,
         currentChainId,
-        isConnecting, // NEW: Expose for UI (e.g., show loader)
+        isConnecting,
       }}
     >
       {children}

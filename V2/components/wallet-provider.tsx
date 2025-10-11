@@ -3,8 +3,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { BrowserProvider, type JsonRpcSigner } from "ethers"
-import { useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react'
-import { useDisconnect, useSwitchChain, useAccount, useChainId } from 'wagmi'
+import { useDisconnect, useSwitchChain, useAccount, useChainId, useConnect } from 'wagmi'
 import { useToast } from "@/hooks/use-toast"
 
 interface WalletContextType {
@@ -13,6 +12,7 @@ interface WalletContextType {
   address: string | null
   chainId: number | null
   isConnected: boolean
+  isConnecting: boolean
   connect: () => Promise<void>
   disconnect: () => void
   ensureCorrectNetwork: (requiredChainId: number) => Promise<boolean>
@@ -25,6 +25,7 @@ export const WalletContext = createContext<WalletContextType>({
   address: null,
   chainId: null,
   isConnected: false,
+  isConnecting: false,
   connect: async () => {},
   disconnect: () => {},
   ensureCorrectNetwork: async () => false,
@@ -36,68 +37,30 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [signer, setSigner] = useState<JsonRpcSigner | null>(null)
   const { toast } = useToast()
   
-  // Use both AppKit and Wagmi hooks for better compatibility
-  const { open } = useAppKit()
-  const { address: appKitAddress, isConnected: appKitConnected } = useAppKitAccount()
-  const { walletProvider } = useAppKitProvider('eip155')
+  const { connectAsync } = useConnect()
   const { disconnect: wagmiDisconnect } = useDisconnect()
   const { switchChain: wagmiSwitchChain } = useSwitchChain()
   
-  // Use Wagmi's native hooks for more reliable state
-  const { address: wagmiAddress, isConnected: wagmiConnected } = useAccount()
-  const wagmiChainId = useChainId()
-  
-  // Prefer Wagmi state over AppKit state
-  const address = wagmiAddress || appKitAddress
-  const isConnected = wagmiConnected || appKitConnected
-  const chainId = wagmiChainId || null
+  const { address, isConnected, isConnecting } = useAccount()
+  const chainId = useChainId()
 
-  // Update provider and signer when wallet connects
   useEffect(() => {
     const updateProviderAndSigner = async () => {
-      if (isConnected && address) {
+      if (isConnected && address && typeof window !== 'undefined' && window.ethereum) {
         try {
           console.log('Setting up provider for address:', address, 'chainId:', chainId)
+          const ethersProvider = new BrowserProvider(window.ethereum)
+          const ethersSigner = await ethersProvider.getSigner()
           
-          let ethersProvider: BrowserProvider | null = null
+          setProvider(ethersProvider)
+          setSigner(ethersSigner)
           
-          // Try to get provider from walletProvider first
-          if (walletProvider) {
-            try {
-              ethersProvider = new BrowserProvider(walletProvider)
-              console.log('Created BrowserProvider from walletProvider')
-            } catch (error) {
-              console.warn('Failed to create provider from walletProvider:', error)
-            }
-          }
-          
-          // Fallback to window.ethereum if walletProvider fails
-          if (!ethersProvider && typeof window !== 'undefined' && window.ethereum) {
-            try {
-              ethersProvider = new BrowserProvider(window.ethereum)
-              console.log('Created BrowserProvider from window.ethereum')
-            } catch (error) {
-              console.warn('Failed to create provider from window.ethereum:', error)
-            }
-          }
-          
-          if (ethersProvider) {
-            const ethersSigner = await ethersProvider.getSigner()
-            
-            setProvider(ethersProvider)
-            setSigner(ethersSigner)
-            
-            console.log('✅ Wallet connected successfully:', { 
-              address, 
-              chainId,
-              hasProvider: !!ethersProvider,
-              hasSigner: !!ethersSigner
-            })
-          } else {
-            console.error('❌ Failed to create ethers provider')
-            setProvider(null)
-            setSigner(null)
-          }
+          console.log('✅ Wallet connected successfully:', { 
+            address, 
+            chainId,
+            hasProvider: !!ethersProvider,
+            hasSigner: !!ethersSigner
+          })
         } catch (error) {
           console.error('❌ Error setting up provider/signer:', error)
           setProvider(null)
@@ -111,25 +74,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
 
     updateProviderAndSigner()
-  }, [isConnected, address, chainId, walletProvider])
+  }, [isConnected, address, chainId])
 
-  // Log connection state changes for debugging
   useEffect(() => {
-    console.log('🔄 Connection state:', {
+    console.log('🔄 WalletProvider Connection state:', {
       isConnected,
-      address,
+      isConnecting,
+      address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null,
       chainId,
       hasProvider: !!provider,
       hasSigner: !!signer,
-      wagmiConnected,
-      appKitConnected
+      fullAddress: address // for debugging
     })
-  }, [isConnected, address, chainId, provider, signer, wagmiConnected, appKitConnected])
+  }, [isConnected, isConnecting, address, chainId, provider, signer])
 
   const connect = async () => {
     try {
       console.log('Opening wallet connection modal...')
-      await open()
+      await connectAsync()
     } catch (error: any) {
       console.error("Error connecting wallet:", error)
       toast({
@@ -187,7 +149,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.log('Wallet not connected, opening connection modal...')
       try {
         await connect()
-        // Wait a bit for connection to establish
         await new Promise(resolve => setTimeout(resolve, 2000))
       } catch (error) {
         console.error('Failed to connect wallet:', error)
@@ -199,7 +160,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.log(`Network mismatch: current=${chainId}, required=${requiredChainId}`)
       try {
         await switchChain(requiredChainId)
-        // Wait a bit for network switch to complete
         await new Promise(resolve => setTimeout(resolve, 1500))
         return true
       } catch (error) {
@@ -212,14 +172,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return true
   }
 
+  // Additional validation for connection state
+  const actuallyConnected = isConnected && !!address
+  
   return (
     <WalletContext.Provider
       value={{
         provider,
         signer,
         address: address || null,
-        chainId,
-        isConnected,
+        chainId: chainId || null,
+        isConnected: actuallyConnected, // Use validated connection state
+        isConnecting,
         connect,
         disconnect,
         ensureCorrectNetwork,
@@ -234,7 +198,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 export function useWallet() {
   const context = useContext(WalletContext)
   
-  // Add debug logging
   useEffect(() => {
     console.log('useWallet hook state:', {
       address: context.address,

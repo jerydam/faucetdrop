@@ -7,7 +7,7 @@ import { inAppWallet, createWallet } from "thirdweb/wallets"
 import { useActiveAccount, useActiveWallet, useConnect, useDisconnect } from "thirdweb/react"
 
 // Create Thirdweb client
-const client = createThirdwebClient({
+export const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!, // Add your client ID to env variables
 })
 

@@ -1,8 +1,10 @@
-// File: components/network-selector.tsx (NetworkSelector with optional debounce)
+// File: components/network-selector.tsx (NetworkSelector with Direct Switching)
 "use client"
 
 import { useNetwork, type Network } from "@/hooks/use-network"
-import { useWallet } from "@/hooks/use-wallet"
+import { useAppKit, useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
+import { useSwitchChain, useAccount } from 'wagmi'
+
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle, Loader2 } from "lucide-react"
@@ -97,20 +99,22 @@ export function NetworkSelector({
   showLogos = true,
   className = ""
 }: NetworkSelectorProps) {
-  const { network, networks, setNetwork, isSwitchingNetwork, currentChainId, isConnecting } = useNetwork() // NEW: Destructure isConnecting
-  const { address, connect } = useWallet()
+  const { networks, isConnecting } = useNetwork() 
+  const { chainId } = useAppKitNetwork()
+  const { open } = useAppKit()
+  const { isConnected, address } = useAppKitAccount()
+  const { switchChain, isPending: isSwitching } = useSwitchChain()
   const { toast } = useToast()
   
   const isWalletAvailable = typeof window !== "undefined" && window.ethereum
-  const hasWalletConnected = !!address
+  const hasWalletConnected = isConnected && !!address
+  // const currentChainId = chainId
 
-  // Add debounce state
-  const [isSelecting, setIsSelecting] = useState(false)
+  console.log("++++++++++++chainId+++++++++", chainId)
+  console.log("++++++++++++networks+++++++++", networks)
   
-  // Find the network name for the current chain ID, if available
-  const currentNetwork = networks.find((net) => net.chainId === currentChainId)
+  const currentNetwork = networks.find((net) => net.chainId === chainId)
   
-  // Function to format network display text
   const formatNetworkDisplay = (net: Network | null, mode: 'name' | 'logo' | 'both' = displayMode): string => {
     if (!net) return "Select Network"
     
@@ -125,15 +129,14 @@ export function NetworkSelector({
     }
   }
 
-  // FIXED: Enhanced status with connecting state
   const getConnectionStatus = () => {
-    if (isConnecting) return 'connecting' // NEW: Handle connecting
+    if (isConnecting) return 'connecting' 
     if (!isWalletAvailable) return 'no-wallet'
     if (!hasWalletConnected) return 'disconnected'
-    if (isSwitchingNetwork) return 'switching'
-    if (!currentChainId) return 'disconnected'
-    if (network && currentChainId === network.chainId) return 'connected'
-    if (currentNetwork) return 'wrong-network'
+    if (isSwitching) return 'switching'
+    if (!chainId) return 'disconnected'
+    if (currentNetwork && currentNetwork.chainId === chainId) return 'connected'
+    if (chainId !== currentNetwork?.chainId) return 'wrong-network'
     return 'unknown-network'
   }
 
@@ -141,16 +144,16 @@ export function NetworkSelector({
 
   const displayText = () => {
     switch (connectionStatus) {
-      case 'connecting': // NEW
+      case 'connecting': 
         return "Connecting..."
-      case 'no-wallet':
-        return "No Wallet Detected"
       case 'switching':
         return "Switching..."
+      case 'no-wallet':
+        return "No Wallet Detected"
       case 'disconnected':
         return "Connect Wallet"
       case 'connected':
-        return formatNetworkDisplay(network)
+        return currentNetwork?.name
       case 'wrong-network':
         return `Wrong Network`
       case 'unknown-network':
@@ -160,17 +163,16 @@ export function NetworkSelector({
     }
   }
 
-  // Get status icon and color
   const getStatusIndicator = () => {
     switch (connectionStatus) {
-      case 'connecting': // NEW
+      case 'connecting': 
         return { icon: Loader2, color: 'text-blue-500 animate-spin' }
+      case 'switching':
+        return { icon: NetworkIcon, color: 'text-blue-500 animate-pulse' }
       case 'connected':
         return { icon: Wifi, color: 'text-green-500' }
       case 'wrong-network':
         return { icon: AlertTriangle, color: 'text-orange-500' }
-      case 'switching':
-        return { icon: NetworkIcon, color: 'text-blue-500 animate-pulse' }
       case 'no-wallet':
       case 'disconnected':
         return { icon: WifiOff, color: 'text-red-500' }
@@ -183,66 +185,36 @@ export function NetworkSelector({
 
   const { icon: StatusIcon, color: statusColor } = getStatusIndicator()
 
-  // IMPROVED: Handle network selection with better checks and debounce
+  // Direct network switching without modal
   const handleNetworkSelect = async (net: Network) => {
-    if (isSelecting || isSwitchingNetwork || isConnecting) return // NEW: Block during connect
-    setIsSelecting(true)
+    console.log('Direct network switch to:', net.name, net.chainId)
     
-    console.log('Network selection clicked:', { 
-      network: net.name, 
-      hasAddress: hasWalletConnected,
-      isSwitchingNetwork,
-      isConnecting, // NEW
-      address 
-    })
-
-    // Don't interrupt if already switching
-    if (isSwitchingNetwork || isConnecting) {
-      console.log('Already switching/connecting, ignoring click')
-      setIsSelecting(false)
+    // If not connected, open wallet modal first
+    if (!hasWalletConnected) {
+      await open()
       return
     }
-
-    // Check if wallet is connected using address (more reliable than isConnected)
-    if (!hasWalletConnected) {
-      console.log('Wallet not connected, prompting connection...')
+    
+    // Already on this network
+    if (chainId === net.chainId) {
+      console.log('Already on', net.name)
+      return
+    }
+    
+    // Switch directly using wagmi
+    try {
+      await switchChain({ chainId: net.chainId })
       toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your wallet first to switch networks",
+        title: "Network Switched",
+        description: `Switched to ${net.name}`,
+      })
+    } catch (error: any) {
+      console.error('Network switch error:', error)
+      toast({
+        title: "Switch Failed",
+        description: error.message || "Failed to switch network",
         variant: "destructive",
       })
-      
-      // Trigger wallet connection
-      try {
-        await connect()
-        // FIXED: Post-connect check (give 1s for state to propagate)
-        setTimeout(() => {
-          if (network && network.chainId === net.chainId) {
-            toast({ title: "Ready", description: `Connected to ${network.name}` })
-          } else {
-            toast({ 
-              title: "Connection Complete", 
-              description: "Now switch to your desired network.", 
-              action: { label: "Switch Now", onClick: () => setNetwork(net) }
-            })
-          }
-          setIsSelecting(false)
-        }, 1000)
-      } catch (error) {
-        console.error('Failed to connect wallet:', error)
-        setIsSelecting(false)
-      }
-      return
-    }
-
-    // Proceed with network switch
-    try {
-      await setNetwork(net)
-    } catch (error: any) {
-      console.error('Failed to switch network:', error)
-      // Error toast is already handled in use-network
-    } finally {
-      setIsSelecting(false)
     }
   }
 
@@ -252,10 +224,10 @@ export function NetworkSelector({
         <Button 
           variant="outline" 
           className={`flex items-center gap-2 ${className}`}
-          disabled={!isWalletAvailable || isSwitchingNetwork || isSelecting || isConnecting} // NEW: Add isConnecting
+          disabled={!isWalletAvailable || isConnecting || isSwitching} 
         >
-          {showLogos && network && connectionStatus === 'connected' ? (
-            <NetworkImage network={network} size={compact ? "xs" : "sm"} />
+          {showLogos && currentNetwork && connectionStatus === 'connected' ? (
+            <NetworkImage network={currentNetwork} size={compact ? "xs" : "sm"} />
           ) : showStatus ? (
             <StatusIcon className={`h-4 w-4 ${statusColor}`} />
           ) : (
@@ -280,7 +252,7 @@ export function NetworkSelector({
                   {connectionStatus === 'connected' && "Connected to"}
                   {connectionStatus === 'wrong-network' && "Wrong Network"}
                   {connectionStatus === 'switching' && "Switching Networks..."}
-                  {connectionStatus === 'connecting' && "Connecting..."} {/* NEW */}
+                  {connectionStatus === 'connecting' && "Connecting..."}
                   {connectionStatus === 'disconnected' && "Not Connected"}
                   {connectionStatus === 'no-wallet' && "No Wallet Found"}
                   {connectionStatus === 'unknown-network' && "Unsupported Chain"}
@@ -292,15 +264,15 @@ export function NetworkSelector({
         
         {/* Network List */}
         {networks.map((net: Network) => {
-          const isActive = network?.chainId === net.chainId
-          const isCurrent = currentChainId === net.chainId
+          const isActive = currentNetwork?.chainId === net.chainId
+          const isCurrent = chainId === net.chainId
           
           return (
             <DropdownMenuItem
               key={net.chainId}
               onClick={() => handleNetworkSelect(net)}
               className="flex items-center gap-3 cursor-pointer py-3"
-              disabled={!isWalletAvailable || isSwitchingNetwork || isSelecting || isConnecting || !hasWalletConnected} // NEW: Add isConnecting
+              disabled={!isWalletAvailable || isConnecting || isSwitching || !hasWalletConnected} 
             >
               <NetworkImage network={net} size={compact ? "xs" : "sm"} />
               
@@ -359,7 +331,7 @@ export function CompactNetworkSelector({ className }: { className?: string }) {
       displayMode="logo" 
       compact={true} 
       showName={false}
-      showStatus={false}
+      showStatus={true}
       showLogos={true}
       className={className}
     />
@@ -392,33 +364,37 @@ export function NetworkStatusSelector({ className }: { className?: string }) {
 }
 
 export function MobileNetworkSelector({ className }: { className?: string }) {
-  const { networks, network, setNetwork, isSwitchingNetwork } = useNetwork()
-  const { address, connect } = useWallet()
+  const { networks, network } = useNetwork()
+  const { open } = useAppKit()
+  const { isConnected, address } = useAppKitAccount()
+  const { switchChain, isPending: isSwitching } = useSwitchChain()
   const { toast } = useToast()
   
-  const hasWalletConnected = !!address
+  const hasWalletConnected = isConnected && !!address
   
   const handleNetworkSelect = async (net: Network) => {
-    if (isSwitchingNetwork) return
+    console.log('Mobile network select:', net.name)
     
     if (!hasWalletConnected) {
-      toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your wallet first",
-        variant: "destructive",
-      })
-      try {
-        await connect()
-      } catch (error) {
-        console.error('Failed to connect wallet:', error)
-      }
+      await open()
       return
     }
     
+    if (network?.chainId === net.chainId) return
+    
     try {
-      await setNetwork(net)
+      await switchChain({ chainId: net.chainId })
+      toast({
+        title: "Network Switched",
+        description: `Switched to ${net.name}`,
+      })
     } catch (error: any) {
-      console.error('Failed to switch network:', error)
+      console.error('Network switch error:', error)
+      toast({
+        title: "Switch Failed",
+        description: error.message || "Failed to switch network",
+        variant: "destructive",
+      })
     }
   }
   
@@ -428,12 +404,12 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
         <button
           key={net.chainId}
           onClick={() => handleNetworkSelect(net)}
-          disabled={isSwitchingNetwork || !hasWalletConnected}
+          disabled={!hasWalletConnected || isSwitching}
           className={`p-3 rounded-lg border-2 transition-all ${
             network?.chainId === net.chainId
               ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
               : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'
-          } ${isSwitchingNetwork || !hasWalletConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+          } ${!hasWalletConnected || isSwitching ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           <div className="flex items-center space-x-3">
             <NetworkImage network={net} size="sm" />
@@ -472,18 +448,13 @@ export function NetworkBreadcrumb({ className }: { className?: string }) {
 }
 
 export function NetworkStatusIndicator({ className }: { className?: string }) {
-  const { network, currentChainId, isSwitchingNetwork } = useNetwork()
+  const { network } = useNetwork()
+  const { chainId } = useAppKitNetwork()
+  const { isConnected } = useAppKitAccount()
+
+  // const currentChainId = chainId
   
-  if (isSwitchingNetwork) {
-    return (
-      <div className={`flex items-center space-x-2 text-amber-600 ${className}`}>
-        <div className="w-4 h-4 bg-amber-400 rounded-full animate-pulse" />
-        <span className="text-sm">Switching networks...</span>
-      </div>
-    )
-  }
-  
-  if (!network || !currentChainId) {
+  if (!isConnected || !network || !chainId) {
     return (
       <div className={`flex items-center space-x-2 text-red-600 ${className}`}>
         <div className="w-4 h-4 bg-red-400 rounded-full" />
@@ -492,7 +463,7 @@ export function NetworkStatusIndicator({ className }: { className?: string }) {
     )
   }
   
-  const isCorrectNetwork = network.chainId === currentChainId
+  const isCorrectNetwork = network.chainId === chainId
   
   return (
     <div className={`flex items-center space-x-2 ${isCorrectNetwork ? 'text-green-600' : 'text-amber-600'} ${className}`}>
@@ -567,33 +538,35 @@ export function NetworkGrid({ onNetworkSelect }: { onNetworkSelect?: (network: N
 }
 
 export function HorizontalNetworkSelector({ className }: { className?: string }) {
-  const { networks, network, setNetwork, isSwitchingNetwork } = useNetwork()
-  const { address, connect } = useWallet()
+  const { networks, network } = useNetwork()
+  const { open } = useAppKit()
+  const { isConnected, address } = useAppKitAccount()
+  const { switchChain, isPending: isSwitching } = useSwitchChain()
   const { toast } = useToast()
   
-  const hasWalletConnected = !!address
+  const hasWalletConnected = isConnected && !!address
   
   const handleNetworkSelect = async (net: Network) => {
-    if (isSwitchingNetwork) return
-    
     if (!hasWalletConnected) {
-      toast({
-        title: "Wallet Not Connected",
-        description: "Please connect your wallet first",
-        variant: "destructive",
-      })
-      try {
-        await connect()
-      } catch (error) {
-        console.error('Failed to connect wallet:', error)
-      }
+      await open()
       return
     }
     
+    if (network?.chainId === net.chainId) return
+    
     try {
-      await setNetwork(net)
+      await switchChain({ chainId: net.chainId })
+      toast({
+        title: "Network Switched",
+        description: `Switched to ${net.name}`,
+      })
     } catch (error: any) {
-      console.error('Failed to switch network:', error)
+      console.error('Network switch error:', error)
+      toast({
+        title: "Switch Failed",
+        description: error.message || "Failed to switch network",
+        variant: "destructive",
+      })
     }
   }
   
@@ -603,12 +576,12 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
         <button
           key={net.chainId}
           onClick={() => handleNetworkSelect(net)}
-          disabled={isSwitchingNetwork || !hasWalletConnected}
+          disabled={!hasWalletConnected || isSwitching}
           className={`flex-shrink-0 p-2 rounded-lg border-2 transition-all ${
             network?.chainId === net.chainId
               ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
               : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'
-          } ${isSwitchingNetwork || !hasWalletConnected ? 'opacity-50 cursor-not-allowed' : ''}`}
+          } ${!hasWalletConnected || isSwitching ? 'opacity-50 cursor-not-allowed' : ''}`}
           title={net.name}
         >
           <NetworkImage network={net} size="sm" />

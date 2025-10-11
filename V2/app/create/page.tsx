@@ -1033,6 +1033,10 @@ export default function CreateFaucetWizard() {
 
   // ✅ FIXED: Enhanced faucet creation function with better debugging
   const handleFaucetCreation = async () => {
+
+    const effectiveChainId = chainId || appKitChainId
+    const currentNetwork = networks.find(n => n.chainId === effectiveChainId)
+    
     if (!wizardState.formData.faucetName.trim()) {
       setCreationError("Please enter a faucet name")
       return
@@ -1053,7 +1057,7 @@ export default function CreateFaucetWizard() {
       return
     }
 
-    if (!chainId || !network) {
+    if (!chainId || !currentNetwork) {
       setCreationError("Please connect your wallet to a supported network")
       return
     }
@@ -1661,7 +1665,7 @@ export default function CreateFaucetWizard() {
               <Check className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-700 dark:text-green-300">
                 <div className="flex items-center space-x-2">
-                  <span>Great! This name is available across all factory types on</span>
+                  <span>Great! This name (<b>{wizardState.formData.faucetName}</b>) is available across all factory types on</span>
                   {currentNetwork && <NetworkImage network={currentNetwork} size="xs" />}
                   <span>{currentNetwork?.name}</span>
                 </div>
@@ -1844,9 +1848,12 @@ export default function CreateFaucetWizard() {
 
   // Step 3: Review and Create
   const renderReviewAndCreate = () => {
+    const effectiveChainId = chainId || appKitChainId
+    const currentNetwork = networks.find(n => n.chainId === effectiveChainId)
+
     const selectedTokenConfig = getSelectedTokenConfiguration()
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType)
+    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork) // Pass currentNetwork
     const finalTokenAddress = getFinalTokenAddress()
 
     return (
@@ -1861,9 +1868,9 @@ export default function CreateFaucetWizard() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Network</Label>
                 <div className="flex items-center space-x-2">
-                  {network && <NetworkImage network={network} size="sm" />}
-                  <span>{network?.name || "Unknown Network"}</span>
-                  {network?.isTestnet && (
+                  {currentNetwork && <NetworkImage network={currentNetwork} size="sm" />}
+                  <span>{currentNetwork?.name || "Unknown Network"}</span>
+                  {currentNetwork?.isTestnet && (
                     <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
                       Testnet
                     </span>
@@ -1992,8 +1999,8 @@ export default function CreateFaucetWizard() {
             <AlertDescription>
               <div className="flex items-center space-x-2">
                 <span>{wizardState.selectedFaucetType} faucets are not available on</span>
-                {network && <NetworkImage network={network} size="xs" />}
-                <span>{network?.name}. Please select a different faucet type or switch networks.</span>
+                {currentNetwork && <NetworkImage network={currentNetwork} size="xs" />}
+                <span>{currentNetwork?.name}. Please select a different faucet type or switch networks.</span>
               </div>
             </AlertDescription>
           </Alert>
@@ -2047,8 +2054,11 @@ export default function CreateFaucetWizard() {
           : wizardState.formData.selectedTokenAddress !== ''
         return hasValidName && hasValidToken
       case 3:
+        const effectiveChainId = chainId || appKitChainId
+        const currentNetwork = networks.find(n => n.chainId === effectiveChainId)
+        
         const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-        const factoryAddress = getFactoryAddress(mappedFactoryType)
+        const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
         return !!factoryAddress
       default:
         return false

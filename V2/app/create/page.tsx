@@ -1063,7 +1063,7 @@ export default function CreateFaucetWizard() {
     }
 
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType)
+    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
 
     if (!factoryAddress) {
       setCreationError(`${wizardState.selectedFaucetType} faucets are not available on this network`)

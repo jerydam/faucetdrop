@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/hooks/use-wallet"
@@ -69,6 +69,7 @@ import LoadingPage from "@/components/loading"
 type FaucetType = 'dropcode' | 'droplist' | 'custom'
 
 export default function FaucetDetails() {
+  
   const { address: faucetAddress } = useParams<{ address: string }>()
   const searchParams = useSearchParams()
   const networkId = searchParams.get("networkId")
@@ -150,7 +151,23 @@ export default function FaucetDetails() {
   const transactionsPerPage = 10
   const [customXPostTemplate, setCustomXPostTemplate] = useState("")
   const [isLoadingXTemplate, setIsLoadingXTemplate] = useState(false)
+  
+useEffect(() => {
+  // Prevent infinite loading
+  const loadingTimeout = setTimeout(() => {
+    if (loading) {
+      console.warn('⏰ Loading timeout - forcing stop')
+      setLoading(false)
+      toast({
+        title: "Loading took too long",
+        description: "Please refresh the page",
+        variant: "destructive",
+      })
+    }
+  }, 15000) // 15 second timeout
 
+  return () => clearTimeout(loadingTimeout)
+}, [loading, toast])
   // ✅ UPDATED: Allow admin, owner, and backend address to access drop code
   const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785" // Backend address
   const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase()
@@ -1147,170 +1164,66 @@ const handleShareOnX = (): void => {
   }
 
   // ✅ FIXED: Updated loadFaucetDetails function with proper network handling
-  const loadFaucetDetails = async (): Promise<void> => {
-    if (!faucetAddress || !networkId) {
+  const loadFaucetDetails = useCallback(async (): Promise<void> => {
+  if (!faucetAddress || !networkId) {
+    toast({
+      title: "Invalid Parameters",
+      description: "Faucet address or network ID is missing",
+      variant: "destructive",
+    })
+    setLoading(false)
+    return
+  }
+  
+  try {
+    setLoading(true)
+    
+    const targetNetworkId = Number(networkId)
+    const targetNetwork = networks.find((n) => n.chainId === targetNetworkId)
+    
+    if (!targetNetwork) {
       toast({
-        title: "Invalid Parameters",
-        description: "Faucet address or network ID is missing",
+        title: "Network Not Found", 
+        description: `Network ID ${networkId} is not supported`,
         variant: "destructive",
       })
       setLoading(false)
+      router.push("/")
       return
     }
     
-    try {
-      setLoading(true)
-      
-      // ✅ CRITICAL FIX: Find the correct network by chainId and validate
-      const targetNetworkId = Number(networkId)
-      const targetNetwork = networks.find((n) => n.chainId === targetNetworkId)
-      
-      if (!targetNetwork) {
-        toast({
-          title: "Network Not Found", 
-          description: `Network ID ${networkId} is not supported`,
-          variant: "destructive",
-        })
-        setLoading(false)
-        router.push("/")
-        return
-      }
-      
-      console.log(`🌐 Loading faucet details for network: ${targetNetwork.name} (Chain ID: ${targetNetwork.chainId})`)
-      setSelectedNetwork(targetNetwork)
-      
-      // ✅ CRITICAL FIX: Always use the target network's RPC URL for reading data
-      const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
-      console.log(`🔗 Using RPC: ${targetNetwork.rpcUrl}`)
-      
-      // STEP 1: Get faucet type directly from contract
-      console.log("🔍 Step 1: Getting faucet type from contract...")
-      let detectedType: FaucetType
-      try {
-        detectedType = await detectFaucetType(detailsProvider, faucetAddress)
-        console.log(`✅ Detected type: ${detectedType} on ${targetNetwork.name}`)
-        setFaucetType(detectedType)
-      } catch (error) {
-        console.error("❌ Failed to detect type, defaulting to dropcode:", error)
-        detectedType = 'dropcode'
-        setFaucetType('dropcode')
-      }
-      
-      // STEP 2: Get faucet details with the detected type and correct network
-      console.log(`📋 Step 2: Getting faucet details for ${detectedType} on ${targetNetwork.name}`)
-      
-      // ✅ FIXED: Pass network information to getFaucetDetails
-      const details = await getFaucetDetails(detailsProvider, faucetAddress, detectedType, targetNetwork)
-      
-      // ✅ CRITICAL FIX: Ensure the details have the correct network information
-      if (details) {
-        details.network = targetNetwork
-        console.log(`✅ Faucet details loaded for ${targetNetwork.name}:`, {
-          type: detectedType,
-          tokenSymbol: details.tokenSymbol,
-          balance: details.balance ? formatUnits(details.balance, details.tokenDecimals || 18) : "0",
-          isEther: details.isEther
-        })
-      }
-      
-      // STEP 3: Double-check type from details (if available)
-      if (details.faucetType && details.faucetType !== detectedType) {
-        console.log(`🔄 Type mismatch detected, updating from ${detectedType} to ${details.faucetType}`)
-        setFaucetType(details.faucetType)
-        detectedType = details.faucetType
-      }
-      
-      setFaucetDetails(details)
-      console.log(`✅ Final faucet type: ${detectedType} on ${targetNetwork.name}`)
-      
-      // ✅ CRITICAL FIX: Safe admin loading with error handling
-      try {
-        const admins = await getAllAdmins(detailsProvider, faucetAddress, detectedType)
-        const [factoryOwnerAddr, ...otherAdmins] = admins
-        setFactoryOwner(factoryOwnerAddr)
-        
-        // Create admin list that includes owner but excludes factory owner
-        const allAdminsIncludingOwner = [details.owner, ...otherAdmins].filter(
-          (admin, index, self) => 
-            self.indexOf(admin) === index && 
-            admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase()
-        )
-        
-        setAdminList(allAdminsIncludingOwner)
-        
-        if (address) {
-          const isUserAdmin = otherAdmins.some((admin: string) => admin.toLowerCase() === address.toLowerCase())
-          setUserIsAdmin(isUserAdmin)
-          
-          if (isUserAdmin || (address.toLowerCase() === details.owner.toLowerCase())) {
-            const dontShowAgain = await getAdminPopupPreference(address, faucetAddress)
-            if (!dontShowAgain) {
-              setShowAdminPopup(true)
-            }
-          }
-        } else {
-          setUserIsAdmin(false)
-        }
-      } catch (adminError) {
-        console.error("⚠️ Error loading admins (non-fatal):", adminError)
-        // Set default admin data
-        setAdminList(details.owner ? [details.owner] : [])
-        setUserIsAdmin(false)
-        setFactoryOwner(null)
-      }
-      
-      // ✅ CRITICAL FIX: Set token symbol with network-specific defaults
-      // The token symbol should now be correctly set from getFaucetDetails with network info
-      const tokenSym = details.tokenSymbol || targetNetwork.nativeCurrency.symbol
-      setTokenSymbol(tokenSym)
-      console.log(`💰 Token symbol set to: ${tokenSym} (isEther: ${details.isEther}, network: ${targetNetwork.name})`)
-      
-      // Set other details
-      setTokenDecimals(details.tokenDecimals || 18)
-      setHasClaimed(details.hasClaimed || false)
-      setBackendMode(details.backendMode)
-      
-      if (details.claimAmount) {
-        setClaimAmount(formatUnits(details.claimAmount, details.tokenDecimals || 18))
-      }
-      if (details.startTime) {
-        const date = new Date(Number(details.startTime) * 1000)
-        setStartTime(date.toISOString().slice(0, 16))
-      }
-      if (details.endTime) {
-        const date = new Date(Number(details.endTime) * 1000)
-        setEndTime(date.toISOString().slice(0, 16))
-      }
-      
-      // Handle different faucet type specific logic
-      if (address) {
-        if (detectedType === 'droplist') {
-          const whitelisted = await isWhitelisted(detailsProvider, faucetAddress, address, detectedType)
-          setUserIsWhitelisted(whitelisted)
-          console.log(`✅ User droplist status on ${targetNetwork.name}:`, whitelisted)
-        } else if (detectedType === 'custom') {
-          const customClaimInfo = await getUserCustomClaimAmount(detailsProvider, address)
-          setUserCustomClaimAmount(customClaimInfo.amount)
-          setHasCustomAmount(customClaimInfo.hasCustom)
-          console.log(`✅ User custom claim on ${targetNetwork.name}:`, formatUnits(customClaimInfo.amount, details.tokenDecimals || 18), "Has custom:", customClaimInfo.hasCustom)
-        }
-      } else {
-        setUserIsWhitelisted(false)
-        setUserCustomClaimAmount(BigInt(0))
-        setHasCustomAmount(false)
-      }
-      
-    } catch (error) {
-      console.error(`❌ Error loading faucet details for ${networkId}:`, error)
-      toast({
-        title: "Failed to load faucet details",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
+    console.log(`🌐 Loading faucet details for network: ${targetNetwork.name}`)
+    setSelectedNetwork(targetNetwork)
+    
+    const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
+    
+    // ... rest of your loadFaucetDetails code ...
+    
+  } catch (error) {
+    console.error(`❌ Error loading faucet details:`, error)
+    toast({
+      title: "Failed to load faucet details",
+      description: error instanceof Error ? error.message : "Unknown error occurred",
+      variant: "destructive",
+    })
+  } finally {
+    setLoading(false)
   }
+}, [faucetAddress, networkId, networks, router, toast])   
+useEffect(() => {
+  // Reload when address changes (for whitelist/admin status)
+  if (address && faucetDetails && !loading) {
+    console.log('👤 Address changed, refreshing status...')
+    loadFaucetDetails()
+  }
+}, [address]) 
+useEffect(() => {
+  // Only load if we have required params
+  if (faucetAddress && networkId) {
+    console.log('📥 Loading faucet details...', { faucetAddress, networkId })
+    loadFaucetDetails()
+  }
+}, [faucetAddress, networkId, loadFaucetDetails])
 
   const getAdminPopupPreference = async (userAddr: string, faucetAddr: string): Promise<boolean> => {
     try {

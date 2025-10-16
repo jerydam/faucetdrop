@@ -1,7 +1,6 @@
-
 'use client'
 import { Alert } from "@/components/ui/alert"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useWallet } from "@/hooks/use-wallet"
 import { useNetwork, isFactoryTypeAvailable, getAvailableFactoryTypes } from "@/hooks/use-network"
 import { useToast } from "@/hooks/use-toast"
@@ -288,6 +287,9 @@ const FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING: Record<FaucetType, FactoryType> = {
   [FAUCET_TYPES.CUSTOM]: 'custom',    // ✅ Custom faucets use custom factory
 }
 
+// Supported chain IDs for quick switching
+const SUPPORTED_CHAIN_IDS = [42220, 1135, 42161, 8453] as const;
+
 // Enhanced token configurations for different networks with local logos
 const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
   // Celo Mainnet (42220)
@@ -298,7 +300,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "CELO",
       decimals: 18,
       isNative: true,
-      logoUrl: "/celo.jpeg", // ✅ Local path
+      logoUrl: "/celo.jpeg",
       description: "Native Celo token for governance and staking",
     },
     {
@@ -306,7 +308,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Nigerian Naira",
       symbol: "cNGN",
       decimals: 18,
-      logoUrl: "/cngn.png", // ✅ Local path
+      logoUrl: "/cngn.png",
       description: "Naira-pegged stablecoin on Celo",
     },
     {
@@ -314,7 +316,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Dollar",
       symbol: "cUSD",
       decimals: 18,
-      logoUrl: "/cusd.png", // ✅ Local path
+      logoUrl: "/cusd.png",
       description: "USD-pegged stablecoin on Celo",
     },
     {
@@ -322,7 +324,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether",
       symbol: "USDT",
       decimals: 6,
-      logoUrl: "/usdt.jpg", // ✅ Local path
+      logoUrl: "/usdt.jpg",
       description: "Tether USD stablecoin",
     },
     {
@@ -330,7 +332,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Brazilian Real",
       symbol: "cREAL",
       decimals: 18,
-      logoUrl: "/creal.jpg", // ✅ Local path
+      logoUrl: "/creal.jpg",
       description: "Brazilian Real-pegged stablecoin on Celo",
     },
     {
@@ -338,7 +340,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Kenyan Shilling",
       symbol: "cKES",
       decimals: 18,
-      logoUrl: "/ckes.jpg", // ✅ Local path
+      logoUrl: "/ckes.jpg",
       description: "Kenyan Shilling-pegged stablecoin on Celo",
     },
     {
@@ -346,7 +348,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
-      logoUrl: "/usdc.jpg", // ✅ Local path
+      logoUrl: "/usdc.jpg",
       description: "USD Coin stablecoin",
     },
     {
@@ -354,7 +356,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Euro",
       symbol: "cEUR",
       decimals: 18,
-      logoUrl: "/ceur.png", // ✅ Local path
+      logoUrl: "/ceur.png",
       description: "Euro-pegged stablecoin on Celo",
     },
     {
@@ -362,7 +364,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Glo Dollar",
       symbol: "USDGLO",
       decimals: 18,
-      logoUrl: "/glo.jpg", // ✅ Local path
+      logoUrl: "/glo.jpg",
       description: "Philanthropic dollar that funds global poverty relief",
     },
     {
@@ -370,7 +372,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "GoodDollar",
       symbol: "G$",
       decimals: 18,
-      logoUrl: "/gd.jpg", // ✅ Local path
+      logoUrl: "/gd.jpg",
       description: "Universal basic income token",
     },
   ],
@@ -383,7 +385,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg", // ✅ Local path
+      logoUrl: "/ether.jpeg",
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -391,7 +393,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Lisk",
       symbol: "LSK",
       decimals: 18,
-      logoUrl: "/lsk.png", // ✅ Local path
+      logoUrl: "/lsk.png",
       description: "Lisk native token",
     },
     {
@@ -399,7 +401,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether USD",
       symbol: "USDT",
       decimals: 6,
-      logoUrl: "/usdt.jpg", // ✅ Local path
+      logoUrl: "/usdt.jpg",
       description: "Tether USD stablecoin",
     },
     {
@@ -407,7 +409,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Bridged USDC",
       symbol: "USDC.e",
       decimals: 6,
-      logoUrl: "/usdc.jpg", // ✅ Local path
+      logoUrl: "/usdc.jpg",
       description: "Bridged USD Coin from Ethereum",
     },
   ],
@@ -420,7 +422,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg", // ✅ Local path
+      logoUrl: "/ether.jpeg",
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -428,7 +430,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
-      logoUrl: "/usdc.jpg", // ✅ Local path
+      logoUrl: "/usdc.jpg",
       description: "Native USD Coin on Arbitrum",
     },
     {
@@ -436,7 +438,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether USD",
       symbol: "USDT",
       decimals: 6,
-      logoUrl: "/usdt.jpg", // ✅ Local path
+      logoUrl: "/usdt.jpg",
       description: "Tether USD stablecoin",
     },
     {
@@ -444,7 +446,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Arbitrum",
       symbol: "ARB",
       decimals: 18,
-      logoUrl: "/arb.jpeg", // ✅ Local path
+      logoUrl: "/arb.jpeg",
       description: "Arbitrum governance token",
     },
   ],
@@ -457,7 +459,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg", // ✅ Local path
+      logoUrl: "/ether.jpeg",
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -465,7 +467,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
-      logoUrl: "/usdc.jpg", // ✅ Local path
+      logoUrl: "/usdc.jpg",
       description: "Native USD Coin on Base",
     },
     {
@@ -473,7 +475,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Bridged Tether USD",
       symbol: "USDT",
       decimals: 6,
-      logoUrl: "/usdt.jpg", // ✅ Local path
+      logoUrl: "/usdt.jpg",
       description: "Bridged Tether USD from Ethereum",
     },
     {
@@ -481,11 +483,12 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Degen",
       symbol: "DEGEN",
       decimals: 18,
-      logoUrl: "/degen.png", // ✅ Local path
+      logoUrl: "/degen.png",
       description: "Degen community token",
     },
   ],
 }
+
 // Enhanced template configurations with better structure
 const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{
   templateName: string
@@ -546,9 +549,30 @@ const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{
 }
 
 export default function CreateFaucetWizard() {
-  const { provider, address, isConnected, connect, chainId } = useWallet()
-  const { network, getFactoryAddress } = useNetwork()
+  const { provider, address, isConnected, connect, chainId, switchChain } = useWallet()
+  const { networks, getFactoryAddress } = useNetwork() // ✅ CHANGED: Use networks array directly
   const { toast } = useToast()
+
+  // ✅ ADDED: Create fallback network object from chainId with useMemo
+  const currentNetwork = useMemo(() => {
+    if (!chainId) return null
+    const matched = networks.find(n => n.chainId === chainId)
+    if (matched) return matched
+    
+    // Fallback for unsupported chain
+    console.warn(`[CreatePage] ⚠️ Chain ${chainId} not in config, using fallback`)
+    return {
+      chainId,
+      name: `Chain ${chainId}`,
+      symbol: 'UNK',
+      isTestnet: false,
+      color: '#6B7280',
+      logoUrl: null,
+      nativeCurrency: { name: 'Unknown', symbol: 'UNK', decimals: 18 },
+      tokenAddress: zeroAddress,
+      factories: {}, // Empty factories for unsupported
+    }
+  }, [chainId, networks])
 
   // Wizard navigation state
   const [wizardState, setWizardState] = useState<WizardStepState>({
@@ -586,24 +610,25 @@ export default function CreateFaucetWizard() {
   const [creationError, setCreationError] = useState<string | null>(null)
   const [showConflictDetails, setShowConflictDetails] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
+
   // Enhanced token fetching function with predefined tokens
   const fetchAvailableTokensForNetwork = async (): Promise<TokenConfiguration[]> => {
-    if (!network) return []
+    if (!currentNetwork) return []
     
     // Get predefined tokens for the current network
-    const networkTokens = NETWORK_TOKENS[network.chainId] || []
+    const networkTokens = NETWORK_TOKENS[currentNetwork.chainId] || []
     
-    // Add native token if not already in the list
+    // Always add native token as fallback
     const hasNativeToken = networkTokens.some(token => token.isNative)
-    if (!hasNativeToken) {
+    if (!hasNativeToken || networkTokens.length === 0) {
       networkTokens.unshift({
-        address: network.tokenAddress,
-        name: network.nativeCurrency.name,
-        symbol: network.nativeCurrency.symbol,
-        decimals: network.nativeCurrency.decimals,
+        address: currentNetwork.tokenAddress || zeroAddress,
+        name: currentNetwork.nativeCurrency?.name || 'Native Token',
+        symbol: currentNetwork.nativeCurrency?.symbol || 'NATIVE',
+        decimals: currentNetwork.nativeCurrency?.decimals || 18,
         isNative: true,
-        logoUrl: network.logoUrl,
-        description: `Native ${network.symbol} token for transaction fees`,
+        logoUrl: currentNetwork.logoUrl,
+        description: `Native token for chain ${currentNetwork.chainId}`,
       })
     }
     
@@ -740,7 +765,7 @@ export default function CreateFaucetWizard() {
       return
     }
 
-    if (!provider || !chainId || !network) {
+    if (!provider || !chainId || !currentNetwork) {
       setNameValidation({
         isValidating: false,
         isNameAvailable: false,
@@ -773,9 +798,9 @@ export default function CreateFaucetWizard() {
     setNameValidation(prev => ({ ...prev, isValidating: true, validationError: null }))
 
     try {
-      console.log(`Validating name "${nameToValidate}" across all factories on ${network.name}...`)
+      console.log(`Validating name "${nameToValidate}" across all factories on ${currentNetwork.name}...`)
       
-      const validationResult = await checkFaucetNameExists(provider, network, nameToValidate)
+      const validationResult = await checkFaucetNameExists(provider, currentNetwork, nameToValidate)
       
       if (validationResult.exists && validationResult.conflictingFaucets) {
         const conflictCount = validationResult.conflictingFaucets.length
@@ -825,7 +850,7 @@ export default function CreateFaucetWizard() {
         validationError: "Failed to validate name across all factories",
       })
     }
-  }, [provider, chainId, network, wizardState.selectedFaucetType, getFactoryAddress])
+  }, [provider, chainId, currentNetwork, wizardState.selectedFaucetType, getFactoryAddress])
 
   // Debounced name validation effect
   useEffect(() => {
@@ -838,58 +863,58 @@ export default function CreateFaucetWizard() {
     return () => clearTimeout(validationTimer)
   }, [wizardState.formData.faucetName, validateFaucetNameAcrossFactories])
 
-  // Load available tokens when network or chainId changes
-useEffect(() => {
-  const loadNetworkTokens = async () => {
-    // Use chainId as primary source, network.chainId as fallback
-    const effectiveChainId = chainId || network?.chainId
-    
-    if (!effectiveChainId) {
-      console.log('[CreatePage] ⏳ No chainId available yet')
-      return
-    }
-    
-    console.log('[CreatePage] 🔄 Loading tokens for chainId:', effectiveChainId, {
-      hasNetwork: !!network,
-      networkName: network?.name,
-      hasChainId: !!chainId
-    })
-    
-    setIsTokensLoading(true)
-    try {
-      // Fetch tokens directly from NETWORK_TOKENS using chainId
-      const networkTokens = NETWORK_TOKENS[effectiveChainId] || []
+  // ✅ FIXED: Load available tokens when chainId changes
+  useEffect(() => {
+    const loadNetworkTokens = async () => {
+      // Use chainId directly
+      const effectiveChainId = chainId
       
-      console.log('[CreatePage] ✅ Loaded', networkTokens.length, 'tokens')
-      
-      setAvailableTokens(networkTokens)
-      
-      // Set default token if none selected
-      if (networkTokens.length > 0 && !wizardState.formData.selectedTokenAddress) {
-        console.log('[CreatePage] 📌 Setting default token:', networkTokens[0].symbol)
-        setWizardState(prev => ({
-          ...prev,
-          formData: {
-            ...prev.formData,
-            selectedTokenAddress: networkTokens[0].address,
-          }
-        }))
+      if (!effectiveChainId) {
+        console.log('[CreatePage] ⏳ No chainId available yet')
+        return
       }
-    } catch (error) {
-      console.error('[CreatePage] ❌ Failed to load tokens:', error)
-      setCreationError("Failed to load available tokens")
-    } finally {
-      setIsTokensLoading(false)
+      
+      console.log('[CreatePage] 🔄 Loading tokens for chainId:', effectiveChainId, {
+        hasNetwork: !!currentNetwork,
+        networkName: currentNetwork?.name,
+        hasChainId: !!chainId
+      })
+      
+      setIsTokensLoading(true)
+      try {
+        // Fetch tokens directly from NETWORK_TOKENS using chainId
+        const networkTokens = await fetchAvailableTokensForNetwork()
+        
+        console.log('[CreatePage] ✅ Loaded', networkTokens.length, 'tokens')
+        
+        setAvailableTokens(networkTokens)
+        
+        // Set default token if none selected
+        if (networkTokens.length > 0 && !wizardState.formData.selectedTokenAddress) {
+          console.log('[CreatePage] 📌 Setting default token:', networkTokens[0].symbol)
+          setWizardState(prev => ({
+            ...prev,
+            formData: {
+              ...prev.formData,
+              selectedTokenAddress: networkTokens[0].address,
+            }
+          }))
+        }
+      } catch (error) {
+        console.error('[CreatePage] ❌ Failed to load tokens:', error)
+        setCreationError("Failed to load available tokens")
+      } finally {
+        setIsTokensLoading(false)
+      }
     }
-  }
-  
-  loadNetworkTokens()
-}, [chainId, network, wizardState.formData.selectedTokenAddress])
+    
+    loadNetworkTokens()
+  }, [chainId, currentNetwork]) // ✅ FIXED: Use currentNetwork (fallback included)
 
   // Network support validation and faucet type reset
   useEffect(() => {
-    if (!chainId || !network) {
-      setCreationError("Please connect your wallet to a supported network")
+    if (!chainId) {
+      setCreationError("Please connect your wallet")
       return
     }
 
@@ -899,11 +924,11 @@ useEffect(() => {
       setWizardState(prev => ({ ...prev, selectedFaucetType: '' }))
       toast({
         title: "Faucet Type Unavailable",
-        description: `${wizardState.selectedFaucetType} faucets are not available on ${network.name}. Please select a different type.`,
+        description: `${wizardState.selectedFaucetType} faucets are not available on chain ${chainId}. Please select a different type.`,
         variant: "destructive",
       })
     }
-  }, [chainId, network, wizardState.selectedFaucetType, toast])
+  }, [chainId, wizardState.selectedFaucetType, toast])
 
   // Reset custom token input when switching away from custom
   useEffect(() => {
@@ -964,7 +989,7 @@ useEffect(() => {
       console.warn(`❌ Cannot select ${type} - not available on current network`)
       toast({
         title: "Faucet Type Unavailable",
-        description: `${type} faucets are not available on ${network?.name}`,
+        description: `${type} faucets are not available on chain ${chainId}`,
         variant: "destructive",
       })
       return
@@ -1019,7 +1044,7 @@ useEffect(() => {
       return
     }
 
-    if (!chainId || !network) {
+    if (!chainId) {
       setCreationError("Please connect your wallet to a supported network")
       return
     }
@@ -1154,26 +1179,26 @@ useEffect(() => {
   }
 
   useEffect(() => {
-  const initializeComponent = async () => {
-    try {
-      setInitialLoading(true)
-      console.log('[CreatePage] 🚀 Initializing...', { 
-        chainId, 
-        network: network?.name 
-      })
-      
-      // Brief delay to let providers initialize
-      await new Promise(resolve => setTimeout(resolve, 500))
-    } catch (error) {
-      console.error('[CreatePage] ❌ Error initializing:', error)
-    } finally {
-      setInitialLoading(false)
-      console.log('[CreatePage] ✅ Initialization complete')
+    const initializeComponent = async () => {
+      try {
+        setInitialLoading(true)
+        console.log('[CreatePage] 🚀 Initializing...', { 
+          chainId, 
+          network: currentNetwork?.name 
+        })
+        
+        // Brief delay to let providers initialize
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch (error) {
+        console.error('[CreatePage] ❌ Error initializing:', error)
+      } finally {
+        setInitialLoading(false)
+        console.log('[CreatePage] ✅ Initialization complete')
+      }
     }
-  }
 
-  initializeComponent()
-}, []) // Only run once on mount
+    initializeComponent()
+  }, []) // Only run once on mount
 
   const getWizardStepDescription = (step: number): string => {
     switch (step) {
@@ -1188,11 +1213,6 @@ useEffect(() => {
   const renderUseCaseTemplates = (faucetType: FaucetType) => {
     const templates = FAUCET_USE_CASE_TEMPLATES[faucetType]
     if (!templates) return null
-    
-     if (initialLoading) {
-    return <LoadingPage/>
-  }
-
 
     return (
       <div className="space-y-3">
@@ -1375,25 +1395,59 @@ useEffect(() => {
 
     return (
       <div className="space-y-6">
-        {!network && (
+        {!chainId && (
           <Alert className="border-red-500 bg-red-50 dark:bg-red-900/20">
             <AlertTriangle className="h-4 w-4 text-red-600" />
-            <AlertTitle className="text-red-700 dark:text-red-300">No Network Selected</AlertTitle>
+            <AlertTitle className="text-red-700 dark:text-red-300">No Network Detected</AlertTitle>
             <AlertDescription className="text-red-700 dark:text-red-300">
-              Please connect your wallet and switch to a supported network to create a faucet.
+              Please connect your wallet to get started.
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button onClick={connect} variant="outline" size="sm">
+                  Connect Wallet
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}
 
-        {unavailableTypes.length > 0 && network && (
+        {chainId && !SUPPORTED_CHAIN_IDS.includes(chainId as any) && (
+          <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            <AlertTitle className="text-yellow-700 dark:text-yellow-300">Unsupported Network</AlertTitle>
+            <AlertDescription className="text-yellow-700 dark:text-yellow-300">
+              You're on chain {chainId}, which is not fully supported. Limited features available (native token only).
+              <div className="mt-2 flex flex-wrap gap-2">
+                {SUPPORTED_CHAIN_IDS.map((id) => (
+                  <Button 
+                    key={id} 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={async () => {
+                      try {
+                        await switchChain(id)
+                        toast({ title: "Switched Network", description: `Now on chain ${id}` })
+                      } catch (error) {
+                        toast({ title: "Switch Failed", description: "Failed to switch network", variant: "destructive" })
+                      }
+                    }}
+                  >
+                    Switch to {id}
+                  </Button>
+                ))}
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {unavailableTypes.length > 0 && chainId && (
           <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-900/20">
             <AlertTriangle className="h-4 w-4 text-orange-600" />
             <AlertTitle className="text-orange-700 dark:text-orange-300">Limited Factory Support</AlertTitle>
             <AlertDescription className="text-orange-700 dark:text-orange-300">
               Some faucet types are not yet available on:
               <div className="flex items-center space-x-2 mt-2">
-                <NetworkImage network={network} size="xs" />
-                <span>{network.name}</span>
+                <NetworkImage network={currentNetwork} size="xs" />
+                <span>{currentNetwork?.name}</span>
               </div>
               <div className="mt-2 space-y-1">
                 {unavailableTypes.map((type) => (
@@ -1435,11 +1489,11 @@ useEffect(() => {
               <p className="text-sm text-gray-600">
                 Open faucet for wide distribution with drop code protection.
               </p>
-              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.OPEN) && network && (
+              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.OPEN) && currentNetwork && (
                 <div className="flex items-center space-x-2 mt-2">
                   <p className="text-xs text-red-600">Not available on</p>
-                  <NetworkImage network={network} size="xs" />
-                  <span className="text-xs text-red-600">{network.name}</span>
+                  <NetworkImage network={currentNetwork} size="xs" />
+                  <span className="text-xs text-red-600">{currentNetwork.name}</span>
                 </div>
               )}
             </CardContent>
@@ -1472,11 +1526,11 @@ useEffect(() => {
               <p className="text-sm text-gray-600">
                 Restricted faucet for specific wallet addresses only.
               </p>
-              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.GATED) && network && (
+              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.GATED) && currentNetwork && (
                 <div className="flex items-center space-x-2 mt-2">
                   <p className="text-xs text-red-600">Not available on</p>
-                  <NetworkImage network={network} size="xs" />
-                  <span className="text-xs text-red-600">{network.name}</span>
+                  <NetworkImage network={currentNetwork} size="xs" />
+                  <span className="text-xs text-red-600">{currentNetwork.name}</span>
                 </div>
               )}
             </CardContent>
@@ -1620,8 +1674,8 @@ useEffect(() => {
               <AlertDescription className="text-green-700 dark:text-green-300">
                 <div className="flex items-center space-x-2">
                   <span>Great! This name is available across all factory types on</span>
-                  {network && <NetworkImage network={network} size="xs" />}
-                  <span>{network?.name}</span>
+                  {currentNetwork && <NetworkImage network={currentNetwork} size="xs" />}
+                  <span>{currentNetwork?.name}</span>
                 </div>
                 {nameValidation.validationWarning && (
                   <div className="mt-1 text-xs text-yellow-700">
@@ -1819,9 +1873,9 @@ useEffect(() => {
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Network</Label>
                 <div className="flex items-center space-x-2">
-                  {network && <NetworkImage network={network} size="sm" />}
-                  <span>{network?.name || "Unknown Network"}</span>
-                  {network?.isTestnet && (
+                  {currentNetwork && <NetworkImage network={currentNetwork} size="sm" />}
+                  <span>{currentNetwork?.name || "Unknown Network"}</span>
+                  {currentNetwork?.isTestnet && (
                     <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
                       Testnet
                     </span>
@@ -1950,8 +2004,8 @@ useEffect(() => {
             <AlertDescription>
               <div className="flex items-center space-x-2">
                 <span>{wizardState.selectedFaucetType} faucets are not available on</span>
-                {network && <NetworkImage network={network} size="xs" />}
-                <span>{network?.name}. Please select a different faucet type or switch networks.</span>
+                {currentNetwork && <NetworkImage network={currentNetwork} size="xs" />}
+                <span>{currentNetwork?.name}. Please select a different faucet type or switch networks.</span>
               </div>
             </AlertDescription>
           </Alert>
@@ -2013,7 +2067,11 @@ useEffect(() => {
     }
   }
 
-  const isActionDisabled = isFaucetCreating || !chainId || !network
+  const isActionDisabled = isFaucetCreating || !chainId
+
+  if (initialLoading) {
+    return <LoadingPage/>
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -2029,10 +2087,10 @@ useEffect(() => {
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Home</span>
             </Button>
-            {network && (
+            {currentNetwork && (
               <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <NetworkImage network={network} size="xs" />
-                <span>Creating on {network.name}</span>
+                <NetworkImage network={currentNetwork} size="xs" />
+                <span>Creating on {currentNetwork.name}</span>
               </div>
             )}
           </div>

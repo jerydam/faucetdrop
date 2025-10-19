@@ -1,13 +1,16 @@
 'use client'
+
 import { Alert } from "@/components/ui/alert"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useWallet } from "@/hooks/use-wallet"
 import { useNetwork, isFactoryTypeAvailable, getAvailableFactoryTypes } from "@/hooks/use-network"
+import { useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
+import { useAccount, useChainId } from 'wagmi'
 import { useToast } from "@/hooks/use-toast"
-import { 
-  createFaucet, 
+import {
+  createFaucet,
   checkFaucetNameExists,
-  checkFaucetNameExistsAcrossAllFactories 
+  checkFaucetNameExistsAcrossAllFactories
 } from "@/lib/faucet"
 import {
   Card,
@@ -60,6 +63,7 @@ import {
 import { zeroAddress } from "viem"
 import { isAddress } from "ethers"
 import LoadingPage from "@/components/loading"
+import { useRouter } from 'next/navigation';
 
 // Network image component with fallback
 interface NetworkImageProps {
@@ -71,34 +75,29 @@ interface NetworkImageProps {
 function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProps) {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
-
   const sizeClasses = {
     xs: 'w-4 h-4',
     sm: 'w-6 h-6',
     md: 'w-8 h-8',
     lg: 'w-12 h-12'
   }
-
   const fallbackSizes = {
     xs: 'text-xs',
     sm: 'text-xs',
     md: 'text-sm',
     lg: 'text-base'
   }
-
   const handleImageLoad = () => {
     setImageLoading(false)
     setImageError(false)
   }
-
   const handleImageError = () => {
     setImageLoading(false)
     setImageError(true)
   }
-
   if (imageError || !network?.logoUrl) {
     return (
-      <div 
+      <div
         className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white ${className}`}
         style={{ backgroundColor: network?.color || '#6B7280' }}
       >
@@ -108,11 +107,10 @@ function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProp
       </div>
     )
   }
-
   return (
     <div className={`${sizeClasses[size]} ${className} relative`}>
       {imageLoading && (
-        <div 
+        <div
           className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white absolute inset-0 animate-pulse`}
           style={{ backgroundColor: network?.color || '#6B7280' }}
         >
@@ -142,41 +140,35 @@ interface TokenImageProps {
 function TokenImage({ token, size = 'md', className = '' }: TokenImageProps) {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
-
   const sizeClasses = {
     xs: 'w-4 h-4',
     sm: 'w-5 h-5',
     md: 'w-6 h-6',
     lg: 'w-8 h-8'
   }
-
   const fallbackSizes = {
     xs: 'text-xs',
     sm: 'text-xs',
     md: 'text-sm',
     lg: 'text-base'
   }
-
   const handleImageLoad = () => {
     setImageLoading(false)
     setImageError(false)
   }
-
   const handleImageError = () => {
     setImageLoading(false)
     setImageError(true)
   }
-
   // Color scheme for different token types
   const getTokenColor = () => {
     if (token.isNative) return '#3B82F6' // Blue for native tokens
     if (token.isCustom) return '#8B5CF6' // Purple for custom tokens
     return '#6B7280' // Gray for other tokens
   }
-
   if (imageError || !token.logoUrl) {
     return (
-      <div 
+      <div
         className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white ${className}`}
         style={{ backgroundColor: getTokenColor() }}
       >
@@ -186,11 +178,10 @@ function TokenImage({ token, size = 'md', className = '' }: TokenImageProps) {
       </div>
     )
   }
-
   return (
     <div className={`${sizeClasses[size]} ${className} relative`}>
       {imageLoading && (
-        <div 
+        <div
           className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold text-white absolute inset-0 animate-pulse`}
           style={{ backgroundColor: getTokenColor() }}
         >
@@ -376,7 +367,6 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "Universal basic income token",
     },
   ],
-
   // Lisk Mainnet (1135)
   1135: [
     {
@@ -413,7 +403,6 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "Bridged USD Coin from Ethereum",
     },
   ],
-
   // Arbitrum One (42161)
   42161: [
     {
@@ -450,7 +439,6 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "Arbitrum governance token",
     },
   ],
-
   // Base Mainnet (8453)
   8453: [
     {
@@ -549,21 +537,28 @@ const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{
 }
 
 export default function CreateFaucetWizard() {
-  const { provider, address, isConnected, connect, chainId, switchChain } = useWallet()
-  const { networks, getFactoryAddress } = useNetwork() // ✅ CHANGED: Use networks array directly
+  // const { provider, address, isConnected, connect, chainId } = useWallet()
+  // const { network, getFactoryAddress } = useNetwork()
+  const { provider, connect } = useWallet()
+  const { network, getFactoryAddress, networks } = useNetwork()
+  const { address, isConnected } = useAppKitAccount()
+  const chainId = useChainId()
+  const { chainId: appKitChainId } = useAppKitNetwork()
   const { toast } = useToast()
+  const router = useRouter()
 
-  // ✅ ADDED: Create fallback network object from chainId with useMemo
+  // ✅ ADDED: Create fallback network object from effectiveChainId with useMemo
+  const effectiveChainId = chainId || appKitChainId;
   const currentNetwork = useMemo(() => {
-    if (!chainId) return null
-    const matched = networks.find(n => n.chainId === chainId)
+    if (!effectiveChainId) return null
+    const matched = networks.find(n => n.chainId === effectiveChainId)
     if (matched) return matched
     
     // Fallback for unsupported chain
-    console.warn(`[CreatePage] ⚠️ Chain ${chainId} not in config, using fallback`)
+    console.warn(`[CreatePage] ⚠️ Chain ${effectiveChainId} not in config, using fallback`)
     return {
-      chainId,
-      name: `Chain ${chainId}`,
+      chainId: effectiveChainId,
+      name: `Chain ${effectiveChainId}`,
       symbol: 'UNK',
       isTestnet: false,
       color: '#6B7280',
@@ -572,7 +567,7 @@ export default function CreateFaucetWizard() {
       tokenAddress: zeroAddress,
       factories: {}, // Empty factories for unsupported
     }
-  }, [chainId, networks])
+  }, [effectiveChainId, networks])
 
   // Wizard navigation state
   const [wizardState, setWizardState] = useState<WizardStepState>({
@@ -613,25 +608,22 @@ export default function CreateFaucetWizard() {
 
   // Enhanced token fetching function with predefined tokens
   const fetchAvailableTokensForNetwork = async (): Promise<TokenConfiguration[]> => {
-    if (!currentNetwork) return []
-    
+    if (!network) return []
     // Get predefined tokens for the current network
-    const networkTokens = NETWORK_TOKENS[currentNetwork.chainId] || []
-    
-    // Always add native token as fallback
+    const networkTokens = NETWORK_TOKENS[network.chainId] || []
+    // Add native token if not already in the list
     const hasNativeToken = networkTokens.some(token => token.isNative)
     if (!hasNativeToken || networkTokens.length === 0) {
       networkTokens.unshift({
-        address: currentNetwork.tokenAddress || zeroAddress,
-        name: currentNetwork.nativeCurrency?.name || 'Native Token',
-        symbol: currentNetwork.nativeCurrency?.symbol || 'NATIVE',
-        decimals: currentNetwork.nativeCurrency?.decimals || 18,
+        address: currentNetwork?.tokenAddress || zeroAddress,
+        name: currentNetwork?.nativeCurrency?.name || 'Native Token',
+        symbol: currentNetwork?.nativeCurrency?.symbol || 'NATIVE',
+        decimals: currentNetwork?.nativeCurrency?.decimals || 18,
         isNative: true,
-        logoUrl: currentNetwork.logoUrl,
-        description: `Native token for chain ${currentNetwork.chainId}`,
+        logoUrl: currentNetwork?.logoUrl,
+        description: `Native token for chain ${currentNetwork?.chainId}`,
       })
     }
-    
     return networkTokens
   }
 
@@ -646,7 +638,7 @@ export default function CreateFaucetWizard() {
       })
       return
     }
-
+  
     if (!isAddress(tokenAddress)) {
       setCustomTokenValidation({
         isValidating: false,
@@ -656,7 +648,7 @@ export default function CreateFaucetWizard() {
       })
       return
     }
-
+  
     if (!provider) {
       setCustomTokenValidation({
         isValidating: false,
@@ -666,11 +658,10 @@ export default function CreateFaucetWizard() {
       })
       return
     }
-
+  
     setCustomTokenValidation(prev => ({ ...prev, isValidating: true, validationError: null }))
-
+  
     try {
-      // Create a contract instance to fetch token details
       const tokenContract = new (await import("ethers")).Contract(
         tokenAddress,
         [
@@ -680,13 +671,13 @@ export default function CreateFaucetWizard() {
         ],
         provider
       )
-
+  
       const [name, symbol, decimals] = await Promise.all([
         tokenContract.name(),
         tokenContract.symbol(),
         tokenContract.decimals(),
       ])
-
+  
       const tokenInfo: TokenConfiguration = {
         address: tokenAddress,
         name,
@@ -695,14 +686,14 @@ export default function CreateFaucetWizard() {
         isCustom: true,
         description: "Custom ERC-20 token",
       }
-
+  
       setCustomTokenValidation({
         isValidating: false,
         isValid: true,
         tokenInfo,
         validationError: null,
       })
-      
+  
     } catch (error: any) {
       console.error("Custom token validation error:", error)
       setCustomTokenValidation({
@@ -720,37 +711,31 @@ export default function CreateFaucetWizard() {
       const validationTimer = setTimeout(() => {
         validateCustomTokenAddress(wizardState.formData.customTokenAddress)
       }, 500)
-
       return () => clearTimeout(validationTimer)
     }
   }, [wizardState.formData.customTokenAddress, wizardState.formData.showCustomTokenInput, validateCustomTokenAddress])
 
   // ✅ FIXED: Enhanced faucet type availability checking with proper logging
   const isFaucetTypeAvailableOnNetwork = (faucetType: FaucetType): boolean => {
-    if (!chainId) {
+    if (!effectiveChainId) {
       console.log("❌ No chainId available for type check")
       return false
     }
-    
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[faucetType]
-    const isAvailable = isFactoryTypeAvailable(chainId, mappedFactoryType)
-    
-    console.log(`🔍 Checking availability for ${faucetType} (${mappedFactoryType}) on chain ${chainId}:`, isAvailable)
-    
+    const isAvailable = isFactoryTypeAvailable(effectiveChainId, mappedFactoryType)
+    console.log(`🔍 Checking availability for ${faucetType} (${mappedFactoryType}) on chain ${effectiveChainId}:`, isAvailable)
     return isAvailable
   }
 
   // Get list of unavailable faucet types for current network
   const getUnavailableFaucetTypesForNetwork = (): FaucetType[] => {
-    if (!chainId) return []
-    
+    if (!effectiveChainId) return []
     const unavailableTypes: FaucetType[] = []
     Object.entries(FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING).forEach(([faucetType, factoryType]) => {
-      if (!isFactoryTypeAvailable(chainId, factoryType)) {
+      if (!isFactoryTypeAvailable(effectiveChainId, factoryType)) {
         unavailableTypes.push(faucetType as FaucetType)
       }
     })
-    
     return unavailableTypes
   }
 
@@ -764,8 +749,7 @@ export default function CreateFaucetWizard() {
       })
       return
     }
-
-    if (!provider || !chainId || !currentNetwork) {
+    if (!provider) {
       setNameValidation({
         isValidating: false,
         isNameAvailable: false,
@@ -773,7 +757,14 @@ export default function CreateFaucetWizard() {
       })
       return
     }
-
+    if (!effectiveChainId || !currentNetwork) {
+      setNameValidation({
+        isValidating: false,
+        isNameAvailable: false,
+        validationError: "Please connect to a supported network",
+      })
+      return
+    }
     if (!wizardState.selectedFaucetType) {
       setNameValidation({
         isValidating: false,
@@ -782,10 +773,8 @@ export default function CreateFaucetWizard() {
       })
       return
     }
-
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const primaryFactoryAddress = getFactoryAddress(mappedFactoryType)
-    
+    const primaryFactoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
     if (!primaryFactoryAddress) {
       setNameValidation({
         isValidating: false,
@@ -794,24 +783,19 @@ export default function CreateFaucetWizard() {
       })
       return
     }
-
     setNameValidation(prev => ({ ...prev, isValidating: true, validationError: null }))
-
     try {
-      console.log(`Validating name "${nameToValidate}" across all factories on ${currentNetwork.name}...`)
-      
+      console.log(`Validating name "${nameToValidate}" across all factories on ${currentNetwork?.name}...`)
       const validationResult = await checkFaucetNameExists(provider, currentNetwork, nameToValidate)
-      
       if (validationResult.exists && validationResult.conflictingFaucets) {
         const conflictCount = validationResult.conflictingFaucets.length
         const factoryTypeList = validationResult.conflictingFaucets
           .map((conflict: ValidationConflict) => `${conflict.factoryType} factory`)
           .join(', ')
-        
         setNameValidation({
           isValidating: false,
           isNameAvailable: false,
-          validationError: conflictCount > 1 
+          validationError: conflictCount > 1
             ? `Name "${validationResult.existingFaucet?.name}" exists in ${conflictCount} factories: ${factoryTypeList}`
             : `Name "${validationResult.existingFaucet?.name}" already exists in ${factoryTypeList}`,
           conflictingFaucets: validationResult.conflictingFaucets.map((conflict: ValidationConflict) => ({
@@ -824,7 +808,6 @@ export default function CreateFaucetWizard() {
         })
         return
       }
-
       if (validationResult.warning) {
         console.warn("Name validation warning:", validationResult.warning)
         setNameValidation({
@@ -835,13 +818,11 @@ export default function CreateFaucetWizard() {
         })
         return
       }
-      
       setNameValidation({
         isValidating: false,
         isNameAvailable: true,
         validationError: null,
       })
-      
     } catch (error: any) {
       console.error("Name validation error:", error)
       setNameValidation({
@@ -850,7 +831,7 @@ export default function CreateFaucetWizard() {
         validationError: "Failed to validate name across all factories",
       })
     }
-  }, [provider, chainId, currentNetwork, wizardState.selectedFaucetType, getFactoryAddress])
+  }, [provider, effectiveChainId, currentNetwork, wizardState.selectedFaucetType, getFactoryAddress])
 
   // Debounced name validation effect
   useEffect(() => {
@@ -859,36 +840,28 @@ export default function CreateFaucetWizard() {
         validateFaucetNameAcrossFactories(wizardState.formData.faucetName)
       }
     }, 500)
-
     return () => clearTimeout(validationTimer)
   }, [wizardState.formData.faucetName, validateFaucetNameAcrossFactories])
 
-  // ✅ FIXED: Load available tokens when chainId changes
+  // Load available tokens when network or chainId changes
   useEffect(() => {
     const loadNetworkTokens = async () => {
-      // Use chainId directly
-      const effectiveChainId = chainId
-      
+      // Use effectiveChainId
       if (!effectiveChainId) {
         console.log('[CreatePage] ⏳ No chainId available yet')
         return
       }
-      
       console.log('[CreatePage] 🔄 Loading tokens for chainId:', effectiveChainId, {
-        hasNetwork: !!currentNetwork,
-        networkName: currentNetwork?.name,
+        hasNetwork: !!network,
+        networkName: network?.name,
         hasChainId: !!chainId
       })
-      
       setIsTokensLoading(true)
       try {
-        // Fetch tokens directly from NETWORK_TOKENS using chainId
-        const networkTokens = await fetchAvailableTokensForNetwork()
-        
+        // Fetch tokens directly from NETWORK_TOKENS using effectiveChainId
+        const networkTokens = NETWORK_TOKENS[effectiveChainId] || []
         console.log('[CreatePage] ✅ Loaded', networkTokens.length, 'tokens')
-        
         setAvailableTokens(networkTokens)
-        
         // Set default token if none selected
         if (networkTokens.length > 0 && !wizardState.formData.selectedTokenAddress) {
           console.log('[CreatePage] 📌 Setting default token:', networkTokens[0].symbol)
@@ -907,28 +880,31 @@ export default function CreateFaucetWizard() {
         setIsTokensLoading(false)
       }
     }
-    
     loadNetworkTokens()
-  }, [chainId, currentNetwork]) // ✅ FIXED: Use currentNetwork (fallback included)
+  }, [effectiveChainId, wizardState.formData.selectedTokenAddress])
 
   // Network support validation and faucet type reset
   useEffect(() => {
-    if (!chainId) {
-      setCreationError("Please connect your wallet")
+    if (!effectiveChainId) {
+      setCreationError("Please connect your wallet to a supported network")
       return
     }
-
+    // Find network from your networks array
+    const matchedNetwork = networks.find(n => n.chainId === effectiveChainId)
+    if (!matchedNetwork) {
+      setCreationError(`Chain ID ${effectiveChainId} is not supported`)
+      return
+    }
     setCreationError(null)
-    // Reset faucet type if it's not available on current network
     if (wizardState.selectedFaucetType && !isFaucetTypeAvailableOnNetwork(wizardState.selectedFaucetType as FaucetType)) {
       setWizardState(prev => ({ ...prev, selectedFaucetType: '' }))
       toast({
         title: "Faucet Type Unavailable",
-        description: `${wizardState.selectedFaucetType} faucets are not available on chain ${chainId}. Please select a different type.`,
+        description: `${wizardState.selectedFaucetType} faucets are not available on ${matchedNetwork.name}`,
         variant: "destructive",
       })
     }
-  }, [chainId, wizardState.selectedFaucetType, toast])
+  }, [effectiveChainId, networks, wizardState.selectedFaucetType, toast])
 
   // Reset custom token input when switching away from custom
   useEffect(() => {
@@ -980,7 +956,7 @@ export default function CreateFaucetWizard() {
 
   // Navigate back to main page
   const navigateToMainPage = () => {
-    window.location.href = '/'
+    router.back()
   }
 
   // ✅ FIXED: Enhanced type selection with validation
@@ -989,12 +965,11 @@ export default function CreateFaucetWizard() {
       console.warn(`❌ Cannot select ${type} - not available on current network`)
       toast({
         title: "Faucet Type Unavailable",
-        description: `${type} faucets are not available on chain ${chainId}`,
+        description: `${type} faucets are not available on chain ${effectiveChainId}`,
         variant: "destructive",
       })
       return
     }
-    
     console.log(`✅ Selected faucet type: ${type}`)
     setWizardState(prev => ({ ...prev, selectedFaucetType: type }))
   }
@@ -1032,33 +1007,26 @@ export default function CreateFaucetWizard() {
       setCreationError("Please choose a valid faucet name")
       return
     }
-
     const finalTokenAddress = getFinalTokenAddress()
     if (!finalTokenAddress) {
       setCreationError("Please select a token or enter a custom token address")
       return
     }
-
     if (wizardState.formData.showCustomTokenInput && !customTokenValidation.isValid) {
       setCreationError("Please enter a valid custom token address")
       return
     }
-
-    if (!chainId) {
+    if (!effectiveChainId || !currentNetwork) {
       setCreationError("Please connect your wallet to a supported network")
       return
     }
-
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType)
-    
+    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
     if (!factoryAddress) {
       setCreationError(`${wizardState.selectedFaucetType} faucets are not available on this network`)
       return
     }
-
     setCreationError(null)
-
     if (!isConnected) {
       try {
         await connect()
@@ -1068,28 +1036,23 @@ export default function CreateFaucetWizard() {
         return
       }
     }
-
     if (!provider) {
       setCreationError("Wallet not connected")
       return
     }
-
     if (!address) {
       setCreationError("Unable to get wallet address")
       return
     }
-
     setIsFaucetCreating(true)
     try {
       // ✅ FIXED: Better parameter determination with debugging
       let shouldUseBackend = false
       let isCustomFaucet = false
-
       console.log("🏭 Creating faucet with selected type:", wizardState.selectedFaucetType)
       console.log("🏭 Mapped factory type:", mappedFactoryType)
       console.log("🏭 Factory address:", factoryAddress)
       console.log("🏭 Final token address:", finalTokenAddress)
-
       switch (wizardState.selectedFaucetType) {
         case FAUCET_TYPES.OPEN: // 'open'
           shouldUseBackend = wizardState.formData.requiresDropCode
@@ -1109,13 +1072,12 @@ export default function CreateFaucetWizard() {
         default:
           throw new Error(`Invalid faucet type selected: ${wizardState.selectedFaucetType}`)
       }
-
       console.log("🔧 Final creation parameters:", {
         factoryAddress,
         factoryType: mappedFactoryType,
         faucetName: wizardState.formData.faucetName,
         tokenAddress: finalTokenAddress,
-        chainId: chainId.toString(),
+        chainId: effectiveChainId.toString(),
         shouldUseBackend,
         isCustomFaucet,
         selectedFaucetType: wizardState.selectedFaucetType,
@@ -1123,40 +1085,33 @@ export default function CreateFaucetWizard() {
         userAddress: address,
         isCustomToken: wizardState.formData.showCustomTokenInput,
       })
-
       const createdFaucetAddress = await createFaucet(
         provider,
         factoryAddress,
         wizardState.formData.faucetName,
         finalTokenAddress,
-        BigInt(chainId),
-        BigInt(chainId),
+        BigInt(effectiveChainId),
+        BigInt(effectiveChainId),
         shouldUseBackend,
         isCustomFaucet
       )
-
       if (!createdFaucetAddress) {
         throw new Error("Failed to get created faucet address")
       }
-
       console.log("🎉 Faucet created successfully at:", createdFaucetAddress)
       console.log("🎉 Expected type:", mappedFactoryType)
-
       const selectedToken = getSelectedTokenConfiguration()
       toast({
         title: "Faucet Created Successfully! 🎉",
         description: `Your ${selectedToken?.symbol || "token"} faucet (${mappedFactoryType}) has been created at ${createdFaucetAddress}`,
       })
-
       // ✅ Add a small delay to ensure the contract is indexed before redirecting
       setTimeout(() => {
-        window.location.href = `/faucet/${createdFaucetAddress}?networkId=${chainId}`
+        window.location.href = `/faucet/${createdFaucetAddress}?networkId=${effectiveChainId}`
       }, 2000)
-
     } catch (error: any) {
       console.error("❌ Error creating faucet:", error)
       let errorMessage = error.message || "Failed to create faucet"
-      
       toast({
         title: "Failed to create faucet",
         description: errorMessage,
@@ -1182,11 +1137,10 @@ export default function CreateFaucetWizard() {
     const initializeComponent = async () => {
       try {
         setInitialLoading(true)
-        console.log('[CreatePage] 🚀 Initializing...', { 
-          chainId, 
-          network: currentNetwork?.name 
+        console.log('[CreatePage] 🚀 Initializing...', {
+          effectiveChainId,
+          network: network?.name
         })
-        
         // Brief delay to let providers initialize
         await new Promise(resolve => setTimeout(resolve, 500))
       } catch (error) {
@@ -1196,7 +1150,6 @@ export default function CreateFaucetWizard() {
         console.log('[CreatePage] ✅ Initialization complete')
       }
     }
-
     initializeComponent()
   }, []) // Only run once on mount
 
@@ -1213,7 +1166,9 @@ export default function CreateFaucetWizard() {
   const renderUseCaseTemplates = (faucetType: FaucetType) => {
     const templates = FAUCET_USE_CASE_TEMPLATES[faucetType]
     if (!templates) return null
-
+    if (initialLoading) {
+      return <LoadingPage />
+    }
     return (
       <div className="space-y-3">
         {templates.map((template, index) => (
@@ -1231,19 +1186,17 @@ export default function CreateFaucetWizard() {
     if (!nameValidation.conflictingFaucets || nameValidation.conflictingFaucets.length === 0) {
       return null
     }
-
     return (
       <>
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => setShowConflictDetails(true)}
           className="mt-2"
         >
-          <Info className="h-4 w-4 mr-2" />
+          <Info className="h-4 w-4 mr-2" />Choose Faucet
           View Conflict Details
         </Button>
-        
         <Dialog open={showConflictDetails} onOpenChange={setShowConflictDetails}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -1292,8 +1245,8 @@ export default function CreateFaucetWizard() {
 
   // Enhanced Token Selection Component with Logos
   const EnhancedTokenSelector = () => (
-    <Select 
-      value={wizardState.formData.showCustomTokenInput ? "custom" : wizardState.formData.selectedTokenAddress} 
+    <Select
+      value={wizardState.formData.showCustomTokenInput ? "custom" : wizardState.formData.selectedTokenAddress}
       onValueChange={handleTokenSelectionChange}
     >
       <SelectTrigger id="token-selector">
@@ -1310,7 +1263,6 @@ export default function CreateFaucetWizard() {
                 </div>
               )
             }
-            
             const selectedToken = availableTokens.find(t => t.address === wizardState.formData.selectedTokenAddress)
             if (selectedToken) {
               return (
@@ -1324,7 +1276,6 @@ export default function CreateFaucetWizard() {
                 </div>
               )
             }
-            
             return "Select a token"
           })()}
         </SelectValue>
@@ -1348,14 +1299,12 @@ export default function CreateFaucetWizard() {
             </div>
           </SelectItem>
         ))}
-        
         {/* Divider */}
         {availableTokens.some(t => t.isNative) && availableTokens.some(t => !t.isNative) && (
           <SelectItem disabled value="_divider_native" className="border-t border-gray-200 mt-1 pt-1">
             <span className="text-gray-400 text-xs">━━━ Other Tokens ━━━</span>
           </SelectItem>
         )}
-        
         {/* Other tokens */}
         {availableTokens.filter(token => !token.isNative).map((token) => (
           <SelectItem key={token.address} value={token.address}>
@@ -1374,7 +1323,6 @@ export default function CreateFaucetWizard() {
             </div>
           </SelectItem>
         ))}
-        
         {/* Custom token option */}
         <SelectItem disabled value="_divider_custom" className="border-t border-gray-200 mt-1 pt-1">
           <span className="text-gray-400 text-xs">━━━━━━━━━━━━━━━━━━━━</span>
@@ -1392,10 +1340,9 @@ export default function CreateFaucetWizard() {
   // Step 1: Faucet Type Selection
   const renderFaucetTypeSelection = () => {
     const unavailableTypes = getUnavailableFaucetTypesForNetwork()
-
     return (
       <div className="space-y-6">
-        {!chainId && (
+        {!isConnected && (
           <Alert className="border-red-500 bg-red-50 dark:bg-red-900/20">
             <AlertTriangle className="h-4 w-4 text-red-600" />
             <AlertTitle className="text-red-700 dark:text-red-300">No Network Detected</AlertTitle>
@@ -1409,37 +1356,16 @@ export default function CreateFaucetWizard() {
             </AlertDescription>
           </Alert>
         )}
-
-        {chainId && !SUPPORTED_CHAIN_IDS.includes(chainId as any) && (
-          <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20">
-            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-            <AlertTitle className="text-yellow-700 dark:text-yellow-300">Unsupported Network</AlertTitle>
-            <AlertDescription className="text-yellow-700 dark:text-yellow-300">
-              You're on chain {chainId}, which is not fully supported. Limited features available (native token only).
-              <div className="mt-2 flex flex-wrap gap-2">
-                {SUPPORTED_CHAIN_IDS.map((id) => (
-                  <Button 
-                    key={id} 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={async () => {
-                      try {
-                        await switchChain(id)
-                        toast({ title: "Switched Network", description: `Now on chain ${id}` })
-                      } catch (error) {
-                        toast({ title: "Switch Failed", description: "Failed to switch network", variant: "destructive" })
-                      }
-                    }}
-                  >
-                    Switch to {id}
-                  </Button>
-                ))}
-              </div>
+        {isConnected && (networks.find((net) => net.chainId === chainId)?.chainId !== appKitChainId) && (
+          <Alert className="border-red-500 bg-red-50 dark:bg-red-900/20">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <AlertTitle className="text-red-700 dark:text-red-300">Wrong Network Selected</AlertTitle>
+            <AlertDescription className="text-red-700 dark:text-red-300">
+              Please switch to a supported network to create a faucet.
             </AlertDescription>
           </Alert>
         )}
-
-        {unavailableTypes.length > 0 && chainId && (
+        {unavailableTypes.length > 0 && network && (
           <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-900/20">
             <AlertTriangle className="h-4 w-4 text-orange-600" />
             <AlertTitle className="text-orange-700 dark:text-orange-300">Limited Factory Support</AlertTitle>
@@ -1460,17 +1386,15 @@ export default function CreateFaucetWizard() {
             </AlertDescription>
           </Alert>
         )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Open Drop Faucet Card */}
           <Card
-            className={`cursor-pointer border-2 transition-all ${
-              !isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.OPEN) 
-                ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed' 
-                : wizardState.selectedFaucetType === FAUCET_TYPES.OPEN 
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+            className={`cursor-pointer border-2 transition-all ${!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.OPEN)
+                ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                : wizardState.selectedFaucetType === FAUCET_TYPES.OPEN
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                   : 'border-gray-200 hover:border-gray-300'
-            }`}
+              }`}
             onClick={() => isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.OPEN) && selectFaucetType(FAUCET_TYPES.OPEN)}
           >
             <CardHeader>
@@ -1498,16 +1422,14 @@ export default function CreateFaucetWizard() {
               )}
             </CardContent>
           </Card>
-          
           {/* Gated Drop Faucet Card */}
           <Card
-            className={`cursor-pointer border-2 transition-all ${
-              !isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.GATED) 
-                ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed' 
-                : wizardState.selectedFaucetType === FAUCET_TYPES.GATED 
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+            className={`cursor-pointer border-2 transition-all ${!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.GATED)
+                ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                : wizardState.selectedFaucetType === FAUCET_TYPES.GATED
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                   : 'border-gray-200 hover:border-gray-300'
-            }`}
+              }`}
             onClick={() => isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.GATED) && selectFaucetType(FAUCET_TYPES.GATED)}
           >
             <CardHeader>
@@ -1535,35 +1457,68 @@ export default function CreateFaucetWizard() {
               )}
             </CardContent>
           </Card>
+          {/* Custom Drop Faucet Card */}
+          <Card
+            className={`cursor-pointer border-2 transition-all ${!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM)
+                ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                : wizardState.selectedFaucetType === FAUCET_TYPES.CUSTOM
+                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            onClick={() => isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) && selectFaucetType(FAUCET_TYPES.CUSTOM)}
+          >
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <Settings className={`h-5 w-5 ${isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) ? 'text-purple-600' : 'text-gray-400'}`} />
+                <CardTitle className="text-lg flex items-center space-x-2">
+                  <span>Custom Drop</span>
+                  {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) && (
+                    <XCircle className="h-4 w-4 text-red-500" />
+                  )}
+                </CardTitle>
+              </div>
+              <CardDescription>Advanced Customization</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600">
+                Fully customizable faucet with advanced logic and integrations.
+              </p>
+              {!isFaucetTypeAvailableOnNetwork(FAUCET_TYPES.CUSTOM) && currentNetwork && (
+                <div className="flex items-center space-x-2 mt-2">
+                  <p className="text-xs text-red-600">Not available on</p>
+                  <NetworkImage network={currentNetwork} size="xs" />
+                  <span className="text-xs text-red-600">{currentNetwork.name}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
-        
         {wizardState.selectedFaucetType && (
           <>
             <Alert>
               <Info className="h-4 w-4" />
               <AlertTitle>
-                {wizardState.selectedFaucetType === FAUCET_TYPES.OPEN ? "Open Drop Selected" : 
-                 wizardState.selectedFaucetType === FAUCET_TYPES.GATED ? "Whitelist Drop Selected" : 
-                 "Custom Drop Selected"}
+                {wizardState.selectedFaucetType === FAUCET_TYPES.OPEN ? "Open Drop Selected" :
+                  wizardState.selectedFaucetType === FAUCET_TYPES.GATED ? "Whitelist Drop Selected" :
+                    "Custom Drop Selected"}
               </AlertTitle>
               <AlertDescription>
                 {wizardState.selectedFaucetType === FAUCET_TYPES.OPEN
                   ? "This faucet will be accessible to anyone with a drop code for security."
                   : wizardState.selectedFaucetType === FAUCET_TYPES.GATED
-                  ? "This faucet will be restricted to specific wallet addresses that you whitelist."
-                  : "This faucet offers advanced customization options and is perfect for complex distribution scenarios."}
+                    ? "This faucet will be restricted to specific wallet addresses that you whitelist."
+                    : "This faucet offers advanced customization options and is perfect for complex distribution scenarios."}
               </AlertDescription>
             </Alert>
-            
             {/* Desktop: Show use cases inline */}
             <Card className="hidden md:block">
               <CardHeader>
                 <CardTitle className="text-lg">Available Use Cases</CardTitle>
                 <CardDescription>
                   These are common use cases for {
-                    wizardState.selectedFaucetType === FAUCET_TYPES.OPEN ? "open drop" : 
-                    wizardState.selectedFaucetType === FAUCET_TYPES.GATED ? "whitelist drop" : 
-                    "custom drop"
+                    wizardState.selectedFaucetType === FAUCET_TYPES.OPEN ? "open drop" :
+                      wizardState.selectedFaucetType === FAUCET_TYPES.GATED ? "whitelist drop" :
+                        "custom drop"
                   } faucets
                 </CardDescription>
               </CardHeader>
@@ -1571,10 +1526,9 @@ export default function CreateFaucetWizard() {
                 {renderUseCaseTemplates(wizardState.selectedFaucetType as FaucetType)}
               </CardContent>
             </Card>
-
             {/* Mobile: Show use cases in popup */}
             <div className="md:hidden">
-              <Dialog open={wizardState.showUseCasesDialog} onOpenChange={(open) => 
+              <Dialog open={wizardState.showUseCasesDialog} onOpenChange={(open) =>
                 setWizardState(prev => ({ ...prev, showUseCasesDialog: open }))}>
                 <DialogTrigger asChild>
                   <Button variant="outline" className="w-full">
@@ -1587,9 +1541,9 @@ export default function CreateFaucetWizard() {
                     <DialogTitle>Available Use Cases</DialogTitle>
                     <DialogDescription>
                       Common use cases for {
-                        wizardState.selectedFaucetType === FAUCET_TYPES.OPEN ? "open drop" : 
-                        wizardState.selectedFaucetType === FAUCET_TYPES.GATED ? "whitelist drop" : 
-                        "custom drop"
+                        wizardState.selectedFaucetType === FAUCET_TYPES.OPEN ? "open drop" :
+                          wizardState.selectedFaucetType === FAUCET_TYPES.GATED ? "whitelist drop" :
+                            "custom drop"
                       } faucets
                     </DialogDescription>
                   </DialogHeader>
@@ -1599,13 +1553,12 @@ export default function CreateFaucetWizard() {
                 </DialogContent>
               </Dialog>
             </div>
-
             {wizardState.selectedFaucetType === FAUCET_TYPES.CUSTOM && (
               <Alert className="border-purple-500 bg-purple-50 dark:bg-purple-900/20">
                 <Zap className="h-4 w-4 text-purple-600" />
                 <AlertTitle className="text-purple-700 dark:text-purple-300">Advanced Features</AlertTitle>
                 <AlertDescription className="text-purple-700 dark:text-purple-300">
-                  Custom faucets provide maximum flexibility with features like dynamic claim amounts, 
+                  Custom faucets provide maximum flexibility with features like dynamic claim amounts,
                   complex eligibility rules, API integrations, and custom distribution logic.
                 </AlertDescription>
               </Alert>
@@ -1636,8 +1589,8 @@ export default function CreateFaucetWizard() {
                 wizardState.formData.faucetName.length >= 3 && nameValidation.validationError
                   ? "border-red-500 focus:border-red-500"
                   : wizardState.formData.faucetName.length >= 3 && nameValidation.isNameAvailable
-                  ? "border-green-500 focus:border-green-500"
-                  : ""
+                    ? "border-green-500 focus:border-green-500"
+                    : ""
               }
             />
             {wizardState.formData.faucetName.length >= 3 && (
@@ -1652,7 +1605,6 @@ export default function CreateFaucetWizard() {
               </div>
             )}
           </div>
-          
           {/* Enhanced Validation Feedback */}
           {wizardState.formData.faucetName.length >= 3 && nameValidation.validationError && (
             <div className="space-y-2">
@@ -1667,13 +1619,12 @@ export default function CreateFaucetWizard() {
               )}
             </div>
           )}
-          
           {wizardState.formData.faucetName.length >= 3 && nameValidation.isNameAvailable && (
             <Alert className="border-green-500 bg-green-50 dark:bg-green-900/20">
               <Check className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-700 dark:text-green-300">
                 <div className="flex items-center space-x-2">
-                  <span>Great! This name is available across all factory types on</span>
+                  <span>Great! This name (<b>{wizardState.formData.faucetName}</b>) is available across all factory types on</span>
                   {currentNetwork && <NetworkImage network={currentNetwork} size="xs" />}
                   <span>{currentNetwork?.name}</span>
                 </div>
@@ -1685,21 +1636,17 @@ export default function CreateFaucetWizard() {
               </AlertDescription>
             </Alert>
           )}
-          
           {wizardState.formData.faucetName.length > 0 && wizardState.formData.faucetName.length < 3 && (
             <p className="text-sm text-gray-500">
               Name must be at least 3 characters long
             </p>
           )}
         </div>
-        
         {/* Enhanced Token Selection with Logos */}
         <div className="space-y-2">
           <Label htmlFor="token-selector">Select Token</Label>
-          
           {/* Enhanced Token Selection Component */}
           <EnhancedTokenSelector />
-
           {/* Custom Token Input */}
           {wizardState.formData.showCustomTokenInput && (
             <div className="space-y-3 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200">
@@ -1723,7 +1670,6 @@ export default function CreateFaucetWizard() {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              
               <div className="relative">
                 <Input
                   id="custom-token-address"
@@ -1737,8 +1683,8 @@ export default function CreateFaucetWizard() {
                     wizardState.formData.customTokenAddress.length > 0 && customTokenValidation.validationError
                       ? "border-red-500 focus:border-red-500"
                       : wizardState.formData.customTokenAddress.length > 0 && customTokenValidation.isValid
-                      ? "border-green-500 focus:border-green-500"
-                      : ""
+                        ? "border-green-500 focus:border-green-500"
+                        : ""
                   }
                 />
                 {wizardState.formData.customTokenAddress.length > 0 && (
@@ -1753,7 +1699,6 @@ export default function CreateFaucetWizard() {
                   </div>
                 )}
               </div>
-
               {/* Custom Token Validation Feedback */}
               {wizardState.formData.customTokenAddress.length > 0 && customTokenValidation.validationError && (
                 <Alert variant="destructive" className="mt-2">
@@ -1763,7 +1708,6 @@ export default function CreateFaucetWizard() {
                   </AlertDescription>
                 </Alert>
               )}
-
               {wizardState.formData.customTokenAddress.length > 0 && customTokenValidation.isValid && customTokenValidation.tokenInfo && (
                 <Alert className="border-green-500 bg-green-50 dark:bg-green-900/20 mt-2">
                   <Check className="h-4 w-4 text-green-600" />
@@ -1782,14 +1726,12 @@ export default function CreateFaucetWizard() {
                   </AlertDescription>
                 </Alert>
               )}
-
               <div className="text-xs text-purple-600 dark:text-purple-400">
                 <Info className="h-3 w-3 inline mr-1" />
                 We'll automatically fetch the token details from the contract. Make sure the token follows ERC-20 standard.
               </div>
             </div>
           )}
-
           {/* Token Information Display */}
           {!wizardState.formData.showCustomTokenInput && wizardState.formData.selectedTokenAddress && (
             <div className="text-sm text-gray-600">
@@ -1817,7 +1759,6 @@ export default function CreateFaucetWizard() {
             </div>
           )}
         </div>
-        
         {/* Drop Code Requirement (Open Faucets Only) */}
         {wizardState.selectedFaucetType === FAUCET_TYPES.OPEN && (
           <div className="space-y-2">
@@ -1838,14 +1779,13 @@ export default function CreateFaucetWizard() {
             </p>
           </div>
         )}
-
         {/* Custom Faucet Information */}
         {wizardState.selectedFaucetType === FAUCET_TYPES.CUSTOM && (
           <Alert className="border-purple-500 bg-purple-50 dark:bg-purple-900/20">
             <Settings className="h-4 w-4 text-purple-600" />
             <AlertTitle className="text-purple-700 dark:text-purple-300">Custom Configuration</AlertTitle>
             <AlertDescription className="text-purple-700 dark:text-purple-300">
-              After creation, you'll have access to advanced settings including custom claim amounts, 
+              After creation, you'll have access to advanced settings including custom claim amounts,
               dynamic distribution rules, and API endpoints for external integrations.
             </AlertDescription>
           </Alert>
@@ -1858,9 +1798,8 @@ export default function CreateFaucetWizard() {
   const renderReviewAndCreate = () => {
     const selectedTokenConfig = getSelectedTokenConfiguration()
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType)
+    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork) // Pass currentNetwork
     const finalTokenAddress = getFinalTokenAddress()
-
     return (
       <div className="space-y-6">
         <Card>
@@ -1882,7 +1821,6 @@ export default function CreateFaucetWizard() {
                   )}
                 </div>
               </div>
-              
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Faucet Type</Label>
                 <p className="flex items-center space-x-2">
@@ -1904,14 +1842,12 @@ export default function CreateFaucetWizard() {
                   )}
                 </p>
               </div>
-              
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Factory Address</Label>
                 <p className="text-sm font-mono text-gray-600">
                   {factoryAddress ? `${factoryAddress.slice(0, 6)}...${factoryAddress.slice(-4)}` : 'N/A'}
                 </p>
               </div>
-              
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Faucet Name</Label>
                 <p className="flex items-center space-x-2">
@@ -1921,7 +1857,6 @@ export default function CreateFaucetWizard() {
                   )}
                 </p>
               </div>
-              
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Token</Label>
                 <div className="flex items-center space-x-2">
@@ -1939,7 +1874,6 @@ export default function CreateFaucetWizard() {
                   {finalTokenAddress.slice(0, 8)}...{finalTokenAddress.slice(-6)}
                 </p>
               </div>
-              
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Token Source</Label>
                 <p className="flex items-center space-x-2">
@@ -1956,7 +1890,6 @@ export default function CreateFaucetWizard() {
                   )}
                 </p>
               </div>
-              
               {wizardState.selectedFaucetType === FAUCET_TYPES.OPEN && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-gray-500">Drop Code Required</Label>
@@ -1975,7 +1908,6 @@ export default function CreateFaucetWizard() {
                   </p>
                 </div>
               )}
-
               {wizardState.selectedFaucetType === FAUCET_TYPES.CUSTOM && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-gray-500">Advanced Features</Label>
@@ -1988,7 +1920,6 @@ export default function CreateFaucetWizard() {
             </div>
           </CardContent>
         </Card>
-        
         {creationError && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -1996,7 +1927,6 @@ export default function CreateFaucetWizard() {
             <AlertDescription>{creationError}</AlertDescription>
           </Alert>
         )}
-        
         {!factoryAddress && (
           <Alert variant="destructive">
             <XCircle className="h-4 w-4" />
@@ -2010,24 +1940,22 @@ export default function CreateFaucetWizard() {
             </AlertDescription>
           </Alert>
         )}
-
         {wizardState.selectedFaucetType === FAUCET_TYPES.CUSTOM && (
           <Alert className="border-purple-500 bg-purple-50 dark:bg-purple-900/20">
             <Settings className="h-4 w-4 text-purple-600" />
             <AlertTitle className="text-purple-700 dark:text-purple-300">Next Steps</AlertTitle>
             <AlertDescription className="text-purple-700 dark:text-purple-300">
-              After creation, you'll be able to configure advanced settings including custom eligibility rules, 
+              After creation, you'll be able to configure advanced settings including custom eligibility rules,
               dynamic claim amounts, API integrations, and more through the faucet management interface.
             </AlertDescription>
           </Alert>
         )}
-
         {wizardState.formData.showCustomTokenInput && (
           <Alert className="border-purple-500 bg-purple-50 dark:bg-purple-900/20">
             <Info className="h-4 w-4 text-purple-600" />
             <AlertTitle className="text-purple-700 dark:text-purple-300">Custom Token Notice</AlertTitle>
             <AlertDescription className="text-purple-700 dark:text-purple-300">
-              You're using a custom token contract. Please ensure you have sufficient tokens in your wallet 
+              You're using a custom token contract. Please ensure you have sufficient tokens in your wallet
               to fund the faucet and that the contract is legitimate and follows ERC-20 standards.
             </AlertDescription>
           </Alert>
@@ -2050,28 +1978,25 @@ export default function CreateFaucetWizard() {
   const canProceedToNextStep = (): boolean => {
     switch (wizardState.currentStep) {
       case 1:
-        return wizardState.selectedFaucetType !== '' && 
-               isFaucetTypeAvailableOnNetwork(wizardState.selectedFaucetType as FaucetType)
+        return wizardState.selectedFaucetType !== '' &&
+          isFaucetTypeAvailableOnNetwork(wizardState.selectedFaucetType as FaucetType)
       case 2:
         const hasValidName = wizardState.formData.faucetName.trim() !== '' && nameValidation.isNameAvailable
-        const hasValidToken = wizardState.formData.showCustomTokenInput 
-          ? customTokenValidation.isValid 
+        const hasValidToken = wizardState.formData.showCustomTokenInput
+          ? customTokenValidation.isValid
           : wizardState.formData.selectedTokenAddress !== ''
         return hasValidName && hasValidToken
       case 3:
         const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-        const factoryAddress = getFactoryAddress(mappedFactoryType)
+        const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
         return !!factoryAddress
       default:
         return false
     }
   }
 
-  const isActionDisabled = isFaucetCreating || !chainId
-
-  if (initialLoading) {
-    return <LoadingPage/>
-  }
+  // const isActionDisabled = isFaucetCreating || !chainId || !network
+  const isActionDisabled = isFaucetCreating || !effectiveChainId || !currentNetwork
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -2079,33 +2004,33 @@ export default function CreateFaucetWizard() {
         {/* Header with Back Button */}
         <div className="mb-8">
           <div className="flex items-center space-x-4 mb-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={navigateToMainPage}
               className="flex items-center space-x-2"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Back to Home</span>
             </Button>
-            {currentNetwork && (
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <NetworkImage network={currentNetwork} size="xs" />
-                <span>Creating on {currentNetwork.name}</span>
-              </div>
-            )}
+            {(() => {
+              return currentNetwork && (
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <NetworkImage network={currentNetwork} size="xs" />
+                  <span>Creating on {currentNetwork.name}</span>
+                </div>
+              )
+            })()}
           </div>
           <Header pageTitle="Create Faucet" />
         </div>
-        
         {/* Wizard Progress Indicator */}
         <div className="max-w-4xl mx-auto mb-8">
           <div className="flex items-center justify-between mb-4">
             {[1, 2, 3].map((step) => (
               <div key={step} className="flex items-center">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    step <= wizardState.currentStep ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
-                  }`}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step <= wizardState.currentStep ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                    }`}
                 >
                   {step}
                 </div>
@@ -2119,7 +2044,6 @@ export default function CreateFaucetWizard() {
             <p className="text-sm text-gray-600">Step {wizardState.currentStep} of 3</p>
           </div>
         </div>
-        
         {/* Main Wizard Content */}
         <div className="max-w-4xl mx-auto">
           <Card className="border-0 shadow-lg">

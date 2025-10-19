@@ -64,12 +64,12 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import LoadingPage from "@/components/loading"
+import { CustomClaimUploader } from "@/components/customClaim"
 
 // Faucet type definitions
 type FaucetType = 'dropcode' | 'droplist' | 'custom'
 
 export default function FaucetDetails() {
-  
   const { address: faucetAddress } = useParams<{ address: string }>()
   const searchParams = useSearchParams()
   const networkId = searchParams.get("networkId")
@@ -169,11 +169,10 @@ useEffect(() => {
   return () => clearTimeout(loadingTimeout)
 }, [loading, toast])
   // ✅ UPDATED: Allow admin, owner, and backend address to access drop code
-  const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785" // Backend address
+  const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
   const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase()
   const isBackendAddress = address && address.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()
-  const canAccessAdminControls = isOwner || userIsAdmin
-  // ✅ NEW: Extended access for drop code - includes backend address
+  const canAccessAdminControls = isOwner || userIsAdmin || isBackendAddress  // ✅ Add isBackendAddress
   const canAccessDropCode = isOwner || userIsAdmin || isBackendAddress
   const isSecretCodeValid = secretCode.length === 6 && /^[A-Z0-9]{6}$/.test(secretCode)
   
@@ -184,7 +183,40 @@ useEffect(() => {
   const allUsernamesProvided = dynamicTasks.length === 0 ? true : dynamicTasks.every(task => 
     usernames[task.platform] && usernames[task.platform].trim().length > 0
   )
-
+const checkIsAdmin = async (provider: any, faucetAddress: string, userAddress: string, type: FaucetType): Promise<boolean> => {
+    // ✅ Backend address is always admin
+    if (userAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()) {
+      console.log("✅ Backend address detected - granting admin access")
+      return true
+    }
+    
+    try {
+      const { Contract } = await import("ethers")
+      let abi: any[]
+      
+      // Import the correct ABI based on type
+      if (type === 'dropcode') {
+        const { FAUCET_ABI_DROPCODE } = await import("@/lib/abis")
+        abi = FAUCET_ABI_DROPCODE
+      } else if (type === 'droplist') {
+        const { FAUCET_ABI_DROPLIST } = await import("@/lib/abis")
+        abi = FAUCET_ABI_DROPLIST
+      } else if (type === 'custom') {
+        const { FAUCET_ABI_CUSTOM } = await import("@/lib/abis")
+        abi = FAUCET_ABI_CUSTOM
+      } else {
+        return false
+      }
+      
+      const contract = new Contract(faucetAddress, abi, provider)
+      const isContractAdmin = await contract.isAdmin(userAddress)
+      console.log(`Admin status for ${userAddress}: ${isContractAdmin}`)
+      return isContractAdmin
+    } catch (error) {
+      console.warn("Error checking admin status:", error)
+      return false
+    }
+  }
 
 // Add this to your component's state variables
 const [startTimeError, setStartTimeError] = useState('');
@@ -553,6 +585,412 @@ const loadSocialMediaLinks = async (): Promise<void> => {
       }, 2000)
     }, 3000)
   }
+// ✅ 1. Add this helper function near the top of the component (after the imports, around line 50)
+const isAdmin = async (provider: any, faucetAddress: string, userAddress: string, type: FaucetType): Promise<boolean> => {
+  // ✅ Backend address is always admin
+  if (userAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()) {
+    console.log("✅ Backend address detected - granting admin access")
+    return true
+  }
+  
+  try {
+    const { Contract } = await import("ethers")
+    let abi: any[]
+    
+    // Import the correct ABI based on type
+    if (type === 'dropcode') {
+      const { FAUCET_ABI_DROPCODE } = await import("@/lib/abis")
+      abi = FAUCET_ABI_DROPCODE
+    } else if (type === 'droplist') {
+      const { FAUCET_ABI_DROPLIST } = await import("@/lib/abis")
+      abi = FAUCET_ABI_DROPLIST
+    } else if (type === 'custom') {
+      const { FAUCET_ABI_CUSTOM } = await import("@/lib/abis")
+      abi = FAUCET_ABI_CUSTOM
+    } else {
+      return false
+    }
+    
+    const contract = new Contract(faucetAddress, abi, provider)
+    const isContractAdmin = await contract.isAdmin(userAddress)
+    console.log(`Admin status for ${userAddress}: ${isContractAdmin}`)
+    return isContractAdmin
+  } catch (error) {
+    console.warn("Error checking admin status:", error)
+    return false
+  }
+}
+
+// ✅ FIXED: Direct faucet type detection using the faucetType() function
+  const detectFaucetType = async (provider: any, address: string): Promise<FaucetType> => {
+    const { Contract } = await import("ethers")
+    
+    try {
+      console.log("🔍 Getting faucet type directly from contract:", address)
+      
+      // ✅ Use a basic ABI with just the faucetType function
+      const basicABI = [
+        {
+          "inputs": [],
+          "name": "faucetType",
+          "outputs": [
+            {
+              "internalType": "string", 
+              "name": "",
+              "type": "string"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ]
+      
+      const contract = new Contract(address, basicABI, provider)
+      
+      // ✅ Call faucetType() directly from the contract
+      const contractType = await contract.faucetType()
+      console.log("✅ Contract returned faucet type:", contractType)
+      
+      // ✅ Map the contract response to our internal types
+      switch (contractType.toLowerCase()) {
+        case 'dropcode':
+          return 'dropcode'
+        case 'droplist':
+          return 'droplist'  
+        case 'custom':
+          return 'custom'
+        default:
+          console.warn("⚠️ Unknown faucet type from contract:", contractType, "defaulting to dropcode")
+          return 'dropcode'
+      }
+      
+    } catch (error) {
+      console.error("❌ Error getting faucet type from contract:", error)
+      // ✅ Fallback to the old detection method if faucetType() fails
+      return await fallbackTypeDetection(provider, address)
+    }
+  }
+
+  // ✅ Fallback detection method (kept as backup)
+  const fallbackTypeDetection = async (provider: any, address: string): Promise<FaucetType> => {
+    const { Contract } = await import("ethers")
+    
+    try {
+      console.log("🔄 Using fallback detection method")
+      
+      // Import all ABIs
+      const { FAUCET_ABI_DROPCODE, FAUCET_ABI_DROPLIST, FAUCET_ABI_CUSTOM } = await import("@/lib/abis")
+      
+      // Test for droplist-specific functions first
+      try {
+        const droplistContract = new Contract(address, FAUCET_ABI_DROPLIST, provider)
+        await droplistContract.whitelist.staticCall("0x0000000000000000000000000000000000000000")
+        console.log("✅ Droplist function exists - this is a DROPLIST faucet")
+        return 'droplist'
+      } catch (error) {
+        console.log("❌ No whitelist function - not droplist")
+      }
+      
+      // Test for custom-specific functions
+      try {
+        const customContract = new Contract(address, FAUCET_ABI_CUSTOM, provider)
+        await customContract.hasCustomClaimAmount.staticCall("0x0000000000000000000000000000000000000000")
+        console.log("✅ Custom function exists - this is a CUSTOM faucet")
+        return 'custom'
+      } catch (error) {
+        console.log("❌ No custom functions - not custom")
+      }
+      
+      // Default to dropcode
+      console.log("✅ Defaulting to DROPCODE")
+      return 'dropcode'
+      
+    } catch (error) {
+      console.error("❌ Fallback detection failed:", error)
+      return 'dropcode'
+    }
+  }
+
+// ✅ 4. Updated loadFaucetDetails function
+const loadFaucetDetails = useCallback(async (): Promise<void> => {
+    if (!faucetAddress || !networkId) {
+      toast({
+        title: "Invalid Parameters",
+        description: "Faucet address or network ID is missing",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+    }
+    
+    try {
+      setLoading(true)
+      console.log("🔄 Starting faucet details loading...")
+      
+      const targetNetworkId = Number(networkId)
+      const targetNetwork = networks.find((n) => n.chainId === targetNetworkId)
+      
+      if (!targetNetwork) {
+        toast({
+          title: "Network Not Found", 
+          description: `Network ID ${networkId} is not supported`,
+          variant: "destructive",
+        })
+        setLoading(false)
+        router.push("/")
+        return
+      }
+      
+      console.log(`🌐 Loading faucet details for network: ${targetNetwork.name}`)
+      setSelectedNetwork(targetNetwork)
+      
+      const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
+      
+      // ✅ STEP 1: Detect faucet type FIRST
+      console.log("🔍 Step 1: Detecting faucet type...")
+      const detectedType = await detectFaucetType(detailsProvider, faucetAddress)
+      console.log(`✅ Step 1 Complete: Detected faucet type: ${detectedType}`)
+      
+      // ✅ STEP 2: Set faucet type in state
+      console.log("📝 Step 2: Setting faucet type in state...")
+      setFaucetType(detectedType)
+      await new Promise(resolve => setTimeout(resolve, 100))
+      console.log(`✅ Step 2 Complete: Faucet type set to ${detectedType}`)
+      
+      // ✅ STEP 3: Get faucet details
+      console.log(`📊 Step 3: Loading details for ${detectedType} faucet...`)
+      const details = await getFaucetDetails(detailsProvider, faucetAddress, detectedType)
+      console.log("✅ Step 3 Complete: Faucet details loaded:", details)
+      
+      if (!details || details.error) {
+        throw new Error(details?.error || "Failed to fetch faucet details")
+      }
+      
+      // ✅ STEP 4: Set basic details
+      console.log("📝 Step 4: Setting faucet details in state...")
+      setFaucetDetails(details)
+      setTokenSymbol(details.tokenSymbol || "ETH")
+      setTokenDecimals(details.tokenDecimals || 18)
+      setBackendMode(details.backendMode || false)
+      
+      if (detectedType !== 'custom' && details.claimAmount) {
+        setClaimAmount(formatUnits(details.claimAmount, details.tokenDecimals || 18))
+      }
+      if (details.startTime) {
+        const startDate = new Date(Number(details.startTime) * 1000)
+        setStartTime(startDate.toISOString().slice(0, 16))
+      }
+      if (details.endTime) {
+        const endDate = new Date(Number(details.endTime) * 1000)
+        setEndTime(endDate.toISOString().slice(0, 16))
+      }
+      console.log("✅ Step 4 Complete: Basic details set")
+      
+      // ✅ STEP 5: Check user-specific states
+      if (address) {
+        console.log("👤 Step 5: Checking user-specific states for:", address)
+        
+        setHasClaimed(details.hasClaimed || false)
+        
+        if (detectedType === 'droplist') {
+          try {
+            const whitelisted = await isWhitelisted(detailsProvider, faucetAddress, address, detectedType)
+            setUserIsWhitelisted(whitelisted)
+            console.log(`✅ Whitelist status: ${whitelisted}`)
+          } catch (error) {
+            console.warn("Could not check whitelist status:", error)
+            setUserIsWhitelisted(false)
+          }
+        }
+        
+        if (detectedType === 'custom') {
+          try {
+            const customClaimInfo = await getUserCustomClaimAmount(detailsProvider, address)
+            setUserCustomClaimAmount(customClaimInfo.amount)
+            setHasCustomAmount(customClaimInfo.hasCustom)
+            console.log(`✅ Custom claim amount: ${customClaimInfo.hasCustom ? formatUnits(customClaimInfo.amount, details.tokenDecimals) : 'none'}`)
+          } catch (error) {
+            console.warn("Could not check custom claim amount:", error)
+            setUserCustomClaimAmount(BigInt(0))
+            setHasCustomAmount(false)
+          }
+        }
+        
+        // ✅ CRITICAL: Use checkIsAdmin instead of isAdmin
+        try {
+          const adminStatus = await checkIsAdmin(detailsProvider, faucetAddress, address, detectedType)
+          setUserIsAdmin(adminStatus)
+          console.log(`✅ Admin status for ${address}: ${adminStatus}`)
+        } catch (error) {
+          console.warn("Could not check admin status:", error)
+          setUserIsAdmin(false)
+        }
+        
+        console.log("✅ Step 5 Complete: User states checked")
+      } else {
+        console.log("⏭️ Step 5 Skipped: No wallet connected")
+      }
+      
+      // ✅ STEP 6: Load admin list (with backend address)
+      console.log("👥 Step 6: Loading admin list...")
+      try {
+        const admins = await getAllAdmins(detailsProvider, faucetAddress, detectedType)
+        
+        const allAdmins = [...admins]
+        
+        if (details.owner && !allAdmins.some(a => a.toLowerCase() === details.owner.toLowerCase())) {
+          allAdmins.unshift(details.owner)
+        }
+        
+        // ✅ Always add backend address
+        if (!allAdmins.some(a => a.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase())) {
+          allAdmins.push(FACTORY_OWNER_ADDRESS)
+          console.log("✅ Added backend address to admin list")
+        }
+        
+        setAdminList(allAdmins)
+        console.log(`✅ Step 6 Complete: Loaded ${allAdmins.length} admins (including backend)`)
+      } catch (error) {
+        console.warn("Could not load admin list:", error)
+        const fallbackAdmins = [FACTORY_OWNER_ADDRESS]
+        if (details.owner) fallbackAdmins.unshift(details.owner)
+        setAdminList(fallbackAdmins)
+      }
+      
+      // ✅ STEP 7: Load social media tasks
+      console.log(`📱 Step 7: Loading social media tasks for ${detectedType} faucet...`)
+      try {
+        await loadSocialMediaLinks()
+        console.log("✅ Step 7 Complete: Social media tasks loaded")
+      } catch (error) {
+        console.warn("Could not load social media tasks:", error)
+      }
+      
+      // ✅ STEP 8: Load X post template
+      console.log("📝 Step 8: Loading custom X post template...")
+      try {
+        await loadCustomXPostTemplate()
+        console.log("✅ Step 8 Complete: X post template loaded")
+      } catch (error) {
+        console.warn("Could not load X post template:", error)
+      }
+      
+      // ✅ STEP 9: Check admin popup (FIXED to include backend address)
+      if (address && (
+        details.owner?.toLowerCase() === address.toLowerCase() || 
+        userIsAdmin || 
+        address.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()
+      )) {
+        console.log("🔔 Step 9: Checking admin popup preference...")
+        try {
+          const dontShow = await getAdminPopupPreference(address, faucetAddress)
+          if (!dontShow) {
+            setShowAdminPopup(true)
+            console.log("✅ Step 9 Complete: Admin popup shown")
+          } else {
+            console.log("⏭️ Step 9: Admin popup suppressed by user preference")
+          }
+        } catch (error) {
+          console.warn("Could not check admin popup preference:", error)
+        }
+      } else {
+        console.log("⏭️ Step 9 Skipped: Not an admin")
+        console.log("Debug - address:", address, "owner:", details.owner, "userIsAdmin:", userIsAdmin, "isBackend:", address?.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase())
+      }
+      
+      console.log("🎉 All steps complete! Faucet details loaded successfully")
+      
+    } catch (error: any) {
+      console.error(`❌ Error loading faucet details:`, error)
+      toast({
+        title: "Failed to load faucet details",
+        description: error.message || "Unknown error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+      console.log("✅ Loading state cleared")
+    }
+  }, [faucetAddress, networkId, networks, router, toast, address])  
+// ✅ 5. Updated handleManageAdmin function
+const handleManageAdmin = async (): Promise<void> => {
+  if (!isConnected || !provider || !newAdminAddress.trim() || !chainId) {
+    toast({
+      title: "Invalid Input",
+      description: "Please connect your wallet, ensure a network is selected, and enter a valid address",
+      variant: "destructive",
+    })
+    return
+  }
+  if (!checkNetwork()) return
+
+  // Check if trying to add/remove the owner
+  if (newAdminAddress.toLowerCase() === faucetDetails?.owner.toLowerCase()) {
+    toast({
+      title: "Cannot modify owner",
+      description: "The faucet owner cannot be added or removed as an admin",
+      variant: "destructive",
+    })
+    return
+  }
+
+  // ✅ UPDATED: Check if trying to add/remove the backend address
+  if (newAdminAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()) {
+    toast({
+      title: "Cannot modify backend address",
+      description: "The backend address is a permanent admin and cannot be removed",
+      variant: "destructive",
+    })
+    return
+  }
+
+  try {
+    setIsManagingAdmin(true)
+    if (isAddingAdmin) {
+      await addAdmin(
+        provider as BrowserProvider,
+        faucetAddress,
+        newAdminAddress,
+        BigInt(chainId),
+        BigInt(Number(networkId)),
+        faucetType || undefined,
+      )
+      toast({
+        title: "Admin added",
+        description: `Address ${newAdminAddress} has been added as an admin`,
+      })
+      // Update admin list by adding the new admin
+      setAdminList((prev) => [...prev, newAdminAddress])
+    } else {
+      await removeAdmin(
+        provider as BrowserProvider,
+        faucetAddress,
+        newAdminAddress,
+        BigInt(chainId),
+        BigInt(Number(networkId)),
+        faucetType || undefined,
+      )
+      toast({
+        title: "Admin removed",
+        description: `Address ${newAdminAddress} has been removed as an admin`,
+      })
+      // Update admin list by removing the admin
+      setAdminList((prev) => prev.filter((admin) => admin.toLowerCase() !== newAdminAddress.toLowerCase()))
+    }
+    setNewAdminAddress("")
+    setShowAddAdminDialog(false)
+    await loadFaucetDetails()
+  } catch (error: any) {
+    console.error("Error managing admin:", error)
+    toast({
+      title: `Failed to ${isAddingAdmin ? "add" : "remove"} admin`,
+      description: error.message || "Unknown error occurred",
+      variant: "destructive",
+    })
+  } finally {
+    setIsManagingAdmin(false)
+  }
+}
 
   const getAllAccountsVerified = (): boolean => {
     if (dynamicTasks.length === 0) return true // No tasks required
@@ -877,85 +1315,6 @@ const handleShareOnX = (): void => {
     }
   }
 
-  const handleManageAdmin = async (): Promise<void> => {
-    if (!isConnected || !provider || !newAdminAddress.trim() || !chainId) {
-      toast({
-        title: "Invalid Input",
-        description: "Please connect your wallet, ensure a network is selected, and enter a valid address",
-        variant: "destructive",
-      })
-      return
-    }
-    if (!checkNetwork()) return
-
-    // Check if trying to add/remove the owner
-    if (newAdminAddress.toLowerCase() === faucetDetails?.owner.toLowerCase()) {
-      toast({
-        title: "Cannot modify owner",
-        description: "The faucet owner cannot be added or removed as an admin",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Check if trying to add/remove the factory owner
-    if (newAdminAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()) {
-      toast({
-        title: "Cannot modify factory owner",
-        description: "The factory owner cannot be added or removed as an admin",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      setIsManagingAdmin(true)
-      if (isAddingAdmin) {
-        await addAdmin(
-          provider as BrowserProvider,
-          faucetAddress,
-          newAdminAddress,
-          BigInt(chainId),
-          BigInt(Number(networkId)),
-          faucetType || undefined,
-        )
-        toast({
-          title: "Admin added",
-          description: `Address ${newAdminAddress} has been added as an admin`,
-        })
-        // Update admin list by adding the new admin
-        setAdminList((prev) => [...prev, newAdminAddress])
-      } else {
-        await removeAdmin(
-          provider as BrowserProvider,
-          faucetAddress,
-          newAdminAddress,
-          BigInt(chainId),
-          BigInt(Number(networkId)),
-          faucetType || undefined,
-        )
-        toast({
-          title: "Admin removed",
-          description: `Address ${newAdminAddress} has been removed as an admin`,
-        })
-        // Update admin list by removing the admin
-        setAdminList((prev) => prev.filter((admin) => admin.toLowerCase() !== newAdminAddress.toLowerCase()))
-      }
-      setNewAdminAddress("")
-      setShowAddAdminDialog(false)
-      await loadFaucetDetails()
-    } catch (error: any) {
-      console.error("Error managing admin:", error)
-      toast({
-        title: `Failed to ${isAddingAdmin ? "add" : "remove"} admin`,
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      })
-    } finally {
-      setIsManagingAdmin(false)
-    }
-  }
-
   const checkAdminStatus = (inputAddress: string): void => {
     if (!inputAddress.trim()) {
       setIsAddingAdmin(true)
@@ -1073,143 +1432,6 @@ const handleShareOnX = (): void => {
     }
   }
 
-  // ✅ FIXED: Direct faucet type detection using the faucetType() function
-  const detectFaucetType = async (provider: any, address: string): Promise<FaucetType> => {
-    const { Contract } = await import("ethers")
-    
-    try {
-      console.log("🔍 Getting faucet type directly from contract:", address)
-      
-      // ✅ Use a basic ABI with just the faucetType function
-      const basicABI = [
-        {
-          "inputs": [],
-          "name": "faucetType",
-          "outputs": [
-            {
-              "internalType": "string", 
-              "name": "",
-              "type": "string"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function"
-        }
-      ]
-      
-      const contract = new Contract(address, basicABI, provider)
-      
-      // ✅ Call faucetType() directly from the contract
-      const contractType = await contract.faucetType()
-      console.log("✅ Contract returned faucet type:", contractType)
-      
-      // ✅ Map the contract response to our internal types
-      switch (contractType.toLowerCase()) {
-        case 'dropcode':
-          return 'dropcode'
-        case 'droplist':
-          return 'droplist'  
-        case 'custom':
-          return 'custom'
-        default:
-          console.warn("⚠️ Unknown faucet type from contract:", contractType, "defaulting to dropcode")
-          return 'dropcode'
-      }
-      
-    } catch (error) {
-      console.error("❌ Error getting faucet type from contract:", error)
-      // ✅ Fallback to the old detection method if faucetType() fails
-      return await fallbackTypeDetection(provider, address)
-    }
-  }
-
-  // ✅ Fallback detection method (kept as backup)
-  const fallbackTypeDetection = async (provider: any, address: string): Promise<FaucetType> => {
-    const { Contract } = await import("ethers")
-    
-    try {
-      console.log("🔄 Using fallback detection method")
-      
-      // Import all ABIs
-      const { FAUCET_ABI_DROPCODE, FAUCET_ABI_DROPLIST, FAUCET_ABI_CUSTOM } = await import("@/lib/abis")
-      
-      // Test for droplist-specific functions first
-      try {
-        const droplistContract = new Contract(address, FAUCET_ABI_DROPLIST, provider)
-        await droplistContract.whitelist.staticCall("0x0000000000000000000000000000000000000000")
-        console.log("✅ Droplist function exists - this is a DROPLIST faucet")
-        return 'droplist'
-      } catch (error) {
-        console.log("❌ No whitelist function - not droplist")
-      }
-      
-      // Test for custom-specific functions
-      try {
-        const customContract = new Contract(address, FAUCET_ABI_CUSTOM, provider)
-        await customContract.hasCustomClaimAmount.staticCall("0x0000000000000000000000000000000000000000")
-        console.log("✅ Custom function exists - this is a CUSTOM faucet")
-        return 'custom'
-      } catch (error) {
-        console.log("❌ No custom functions - not custom")
-      }
-      
-      // Default to dropcode
-      console.log("✅ Defaulting to DROPCODE")
-      return 'dropcode'
-      
-    } catch (error) {
-      console.error("❌ Fallback detection failed:", error)
-      return 'dropcode'
-    }
-  }
-
-  // ✅ FIXED: Updated loadFaucetDetails function with proper network handling
-  const loadFaucetDetails = useCallback(async (): Promise<void> => {
-  if (!faucetAddress || !networkId) {
-    toast({
-      title: "Invalid Parameters",
-      description: "Faucet address or network ID is missing",
-      variant: "destructive",
-    })
-    setLoading(false)
-    return
-  }
-  
-  try {
-    setLoading(true)
-    
-    const targetNetworkId = Number(networkId)
-    const targetNetwork = networks.find((n) => n.chainId === targetNetworkId)
-    
-    if (!targetNetwork) {
-      toast({
-        title: "Network Not Found", 
-        description: `Network ID ${networkId} is not supported`,
-        variant: "destructive",
-      })
-      setLoading(false)
-      router.push("/")
-      return
-    }
-    
-    console.log(`🌐 Loading faucet details for network: ${targetNetwork.name}`)
-    setSelectedNetwork(targetNetwork)
-    
-    const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
-    
-    // ... rest of your loadFaucetDetails code ...
-    
-  } catch (error) {
-    console.error(`❌ Error loading faucet details:`, error)
-    toast({
-      title: "Failed to load faucet details",
-      description: error instanceof Error ? error.message : "Unknown error occurred",
-      variant: "destructive",
-    })
-  } finally {
-    setLoading(false)
-  }
-}, [faucetAddress, networkId, networks, router, toast])   
 useEffect(() => {
   // Reload when address changes (for whitelist/admin status)
   if (address && faucetDetails && !loading) {
@@ -3107,65 +3329,89 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                       )}
 
                       {/* ✅ Custom Tab - Only shown for custom faucets */}
-                      {shouldShowCustomTab() && (
-                        <TabsContent value="custom" className="space-y-4 mt-4">
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="custom-claim-file" className="text-xs sm:text-sm">
-                                Upload Custom Claim Amounts (CSV/TXT/PDF)
-                              </Label>
-                              <Input
-                                id="custom-claim-file"
-                                type="file"
-                                accept=".csv,.txt,.pdf"
-                                onChange={handleCustomClaimFile}
-                                className="text-xs sm:text-sm"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Upload a CSV, TXT, or PDF file with addresses and amounts. Supports formats: address,amount or address amount (one per line)
-                              </p>
-                            </div>
-                            <Button
-                              onClick={handleUploadCustomClaims}
-                              disabled={isUploadingCustomClaims || !customClaimFile}
-                              className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-                            >
-                              {isUploadingCustomClaims ? (
-                                <span className="flex items-center">
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                                  Uploading...
-                                </span>
-                              ) : (
-                                <>
-                                  <FileUp className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                                  Upload Custom Claims
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        </TabsContent>
-                      )}
+                      {/* Custom Tab - with new uploader component */}
+{shouldShowCustomTab() && (
+  <TabsContent value="custom" className="space-y-4 mt-4">
+    <CustomClaimUploader
+      tokenSymbol={tokenSymbol}
+      tokenDecimals={tokenDecimals}
+      onDataParsed={async (addresses, amounts) => {
+        if (!isConnected || !provider || !chainId) {
+          toast({
+            title: "Invalid Input",
+            description: "Please ensure your wallet is connected",
+            variant: "destructive",
+          })
+          return
+        }
+        
+        if (!checkNetwork()) return
+        
+        try {
+          setIsUploadingCustomClaims(true)
+          
+          await setCustomClaimAmountsBatch(
+            provider as BrowserProvider,
+            faucetAddress,
+            addresses,
+            amounts,
+            BigInt(chainId),
+            BigInt(Number(networkId)),
+            faucetType || undefined,
+          )
+          
+          toast({
+            title: "Custom claim amounts set",
+            description: `Successfully set custom amounts for ${addresses.length} addresses`,
+          })
+          
+          await loadFaucetDetails()
+          await loadTransactionHistory()
+        } catch (error: any) {
+          console.error("Error setting custom claim amounts:", error)
+          toast({
+            title: "Failed to set custom claim amounts",
+            description: error.message || "Unknown error occurred",
+            variant: "destructive",
+          })
+        } finally {
+          setIsUploadingCustomClaims(false)
+        }
+      }}
+      onCancel={() => setActiveTab("fund")}
+    />
+  </TabsContent>
+)}
 
                       {/* Admin Power Tab */}
                       <TabsContent value="admin-power" className="space-y-4 mt-4">
                         <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label className="text-xs sm:text-sm">All Admins </Label>
-                            {adminList.length > 0 ? (
-                              <div className="space-y-2">
-                                {adminList.map((admin) => (
-                                  <div key={admin} className="flex items-center justify-between p-2 rounded-lg">
-                                    <span className="font-mono break-all text-xs sm:text-sm">{admin}</span>
-                                    {admin.toLowerCase() === faucetDetails?.owner.toLowerCase() && (
-                                      <Badge variant="secondary" className="text-xs">Owner</Badge>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs sm:text-sm text-muted-foreground">No admins found</p>
-                            )}
-                          </div>
+                          {/* ✅ 6. Updated Admin List Display in Admin Power Tab */}
+<div className="space-y-2">
+  <Label className="text-xs sm:text-sm">All Admins</Label>
+  {adminList.length > 0 ? (
+    <div className="space-y-2">
+      {adminList.map((admin) => (
+        <div key={admin} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+          <span className="font-mono break-all text-xs sm:text-sm">{admin}</span>
+          <div className="flex gap-2">
+            {admin.toLowerCase() === faucetDetails?.owner.toLowerCase() && (
+              <Badge variant="secondary" className="text-xs">Owner</Badge>
+            )}
+           
+            {/* Show regular admin badge only if not owner or backend */}
+            {admin.toLowerCase() !== faucetDetails?.owner.toLowerCase() && 
+             admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase() && (
+              <Badge variant="outline" className="text-xs">Admin</Badge>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <p className="text-xs sm:text-sm text-muted-foreground">No admins found</p>
+  )}
+</div>
                           {isOwner && (
                             <div className="space-y-2">
                               <Label htmlFor="new-admin" className="text-xs sm:text-sm">

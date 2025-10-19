@@ -467,7 +467,7 @@ export default function CreateFaucetWizard() {
     formData.append('file', file)
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/upload-image', {
+      const response = await fetch('https://fauctdrop-backend.onrender.com/upload-image', {
         method: 'POST',
         body: formData,
       })

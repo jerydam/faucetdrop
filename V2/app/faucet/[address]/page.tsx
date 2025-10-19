@@ -85,6 +85,7 @@ export default function FaucetDetails() {
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [isUpdatingParameters, setIsUpdatingParameters] = useState(false)
   const [isUpdatingWhitelist, setIsUpdatingWhitelist] = useState(false)
+  const [faucetMetadata, setFaucetMetadata] = useState<{description?: string, imageUrl?: string}>({})
   const [isUploadingCustomClaims, setIsUploadingCustomClaims] = useState(false)
   const [isResettingClaims, setIsResettingClaims] = useState(false)
   const [isUpdatingName, setIsUpdatingName] = useState(false)
@@ -339,6 +340,26 @@ const handleStartTimeChange = (e) => {
       router.push("/")
     }
   }
+const loadFaucetMetadata = async (): Promise<void> => {
+  if (!faucetAddress) return
+  
+  try {
+    console.log(`📝 Loading metadata for faucet: ${faucetAddress}`)
+    
+    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-metadata/${faucetAddress}`)
+    
+    if (response.ok) {
+      const result = await response.json()
+      setFaucetMetadata({
+        description: result.description,
+        imageUrl: result.imageUrl
+      })
+      console.log('✅ Faucet metadata loaded')
+    }
+  } catch (error) {
+    console.warn('Could not load faucet metadata:', error)
+  }
+}
 
 const loadCustomXPostTemplate = async (): Promise<void> => {
   if (!faucetAddress) return
@@ -2038,11 +2059,12 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
 
   // Load social media links when component mounts
   useEffect(() => {
-    if (faucetAddress) {
-      loadSocialMediaLinks()
-    }
-  }, [faucetAddress])
-
+  if (faucetAddress) {
+    loadSocialMediaLinks()
+    loadCustomXPostTemplate()
+    loadFaucetMetadata() // Add this line
+  }
+}, [faucetAddress])
   // ✅ Handle whitelist update (only for droplist faucets)
   const handleUpdateWhitelist = async (): Promise<void> => {
     if (!isConnected || !provider || !whitelistAddresses.trim() || !chainId) {
@@ -2612,6 +2634,27 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                     </div>
                   </CardDescription>
                 </CardHeader>
+                {(faucetMetadata.imageUrl || faucetMetadata.description) && (
+  <div className="px-4 sm:px-6 pb-2 space-y-2">
+    {faucetMetadata.imageUrl && (
+      <img 
+        src={faucetMetadata.imageUrl} 
+        alt={faucetDetails?.name || 'Faucet'} 
+        className="w-full h-48 object-cover rounded-lg"
+        onError={(e) => {
+          e.currentTarget.style.display = 'none'
+        }}
+      />
+    )}
+    {faucetMetadata.description && (
+      <div className="p-3 bg-muted rounded-lg">
+        <p className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap">
+          {faucetMetadata.description}
+        </p>
+      </div>
+    )}
+  </div>
+)}
                 {faucetDetails && (
                   <div className="px-4 sm:px-6 pb-2">
                     <TokenBalance

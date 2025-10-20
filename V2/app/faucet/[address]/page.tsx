@@ -184,6 +184,15 @@ useEffect(() => {
   const allUsernamesProvided = dynamicTasks.length === 0 ? true : dynamicTasks.every(task => 
     usernames[task.platform] && usernames[task.platform].trim().length > 0
   )
+  
+// Default faucet metadata constants
+const DEFAULT_FAUCET_IMAGE = "https://faucetdrops.io/logo.png"
+
+// Helper function to get default description
+const getDefaultFaucetDescription = (networkName: string, ownerAddress: string): string => {
+  return `This is a faucet on ${networkName} by ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`
+}
+
 const checkIsAdmin = async (provider: any, faucetAddress: string, userAddress: string, type: FaucetType): Promise<boolean> => {
     // ✅ Backend address is always admin
     if (userAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()) {
@@ -350,14 +359,37 @@ const loadFaucetMetadata = async (): Promise<void> => {
     
     if (response.ok) {
       const result = await response.json()
+      
+      // ✅ Apply defaults if metadata is missing
+      const finalMetadata = {
+        description: result.description || (
+          faucetDetails?.owner && selectedNetwork 
+            ? getDefaultFaucetDescription(selectedNetwork.name, faucetDetails.owner)
+            : result.description || null
+        ),
+        imageUrl: result.imageUrl || DEFAULT_FAUCET_IMAGE
+      }
+      setFaucetMetadata(finalMetadata)
+      console.log('✅ Faucet metadata loaded with defaults applied if needed')
+    } else {
+      // ✅ Use defaults if fetch fails
+      console.log('📝 Using default metadata')
       setFaucetMetadata({
-        description: result.description,
-        imageUrl: result.imageUrl
+        description: faucetDetails?.owner && selectedNetwork 
+          ? getDefaultFaucetDescription(selectedNetwork.name, faucetDetails.owner)
+          : null,
+        imageUrl: DEFAULT_FAUCET_IMAGE
       })
-      console.log('✅ Faucet metadata loaded')
     }
-  } catch (error) {
-    console.warn('Could not load faucet metadata:', error)
+  }catch (error) {
+    console.warn('Could not load faucet metadata, using defaults:', error)
+    // ✅ Use defaults on error
+    setFaucetMetadata({
+      description: faucetDetails?.owner && selectedNetwork 
+        ? getDefaultFaucetDescription(selectedNetwork.name, faucetDetails.owner)
+        : null,
+      imageUrl: DEFAULT_FAUCET_IMAGE
+    })
   }
 }
 
@@ -1452,6 +1484,13 @@ const handleShareOnX = (): void => {
       return false
     }
   }
+
+useEffect(() => {
+  if (faucetAddress && faucetDetails && selectedNetwork) {
+    console.log('📥 Loading faucet metadata with defaults...')
+    loadFaucetMetadata()
+  }
+}, [faucetAddress, faucetDetails, selectedNetwork]) // Added dependencies  
 
 useEffect(() => {
   // Reload when address changes (for whitelist/admin status)
@@ -2550,6 +2589,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                         </div>
                       )}
                     </div>
+                    
                     <div className="flex items-center gap-2 flex-wrap">
                       {selectedNetwork ? (
                         <Badge
@@ -2570,6 +2610,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                            'Unknown'}
                         </Badge>
                       )}
+                      
                       {faucetDetails.isClaimActive ? (
                         <span className="text-xs bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded-full">
                           Active
@@ -2581,6 +2622,30 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                       )}
                     </div>
                   </div>
+                   {(faucetMetadata.imageUrl || faucetMetadata.description) && (
+                  <div className="px-4 sm:px-6 pb-2 space-y-2">
+                  {/* Always show image (use default if not available) */}
+                  <img src={faucetMetadata.imageUrl || DEFAULT_FAUCET_IMAGE} 
+                    alt={faucetDetails?.name || 'Faucet'} 
+                    className="w-full h-48 object-cover rounded-lg"
+                    onError={(e) => {
+                      // Fallback to default image if custom image fails to load
+                      e.currentTarget.src = DEFAULT_FAUCET_IMAGE
+                    }}
+                  />
+                  
+                  {/* Always show description (use default if not available) */}
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap">
+                      {faucetMetadata.description || (
+                        faucetDetails?.owner && selectedNetwork 
+                          ? getDefaultFaucetDescription(selectedNetwork.name, faucetDetails.owner)
+                          : "A faucet for distributing tokens"
+                      )}
+                    </p>
+                  </div>
+                </div>
+                )}
                   <CardDescription className="text-xs sm:text-sm">
                     <div className="flex flex-col gap-2 mt-2">
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
@@ -2634,27 +2699,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                     </div>
                   </CardDescription>
                 </CardHeader>
-                {(faucetMetadata.imageUrl || faucetMetadata.description) && (
-  <div className="px-4 sm:px-6 pb-2 space-y-2">
-    {faucetMetadata.imageUrl && (
-      <img 
-        src={faucetMetadata.imageUrl} 
-        alt={faucetDetails?.name || 'Faucet'} 
-        className="w-full h-48 object-cover rounded-lg"
-        onError={(e) => {
-          e.currentTarget.style.display = 'none'
-        }}
-      />
-    )}
-    {faucetMetadata.description && (
-      <div className="p-3 bg-muted rounded-lg">
-        <p className="text-xs sm:text-sm text-muted-foreground whitespace-pre-wrap">
-          {faucetMetadata.description}
-        </p>
-      </div>
-    )}
-  </div>
-)}
+               
                 {faucetDetails && (
                   <div className="px-4 sm:px-6 pb-2">
                     <TokenBalance

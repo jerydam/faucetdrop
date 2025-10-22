@@ -2070,7 +2070,7 @@ export async function fundFaucet(
   if (!checkNetwork(chainId, networkId)) {
     throw new Error("Switch to the network to perform operation")
   }
-
+  
   try {
     const signer = await provider.getSigner()
     const signerAddress = await signer.getAddress()
@@ -2080,7 +2080,7 @@ export async function fundFaucet(
     
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const isCelo = isCeloNetwork(chainId)
-
+    
     console.log("Funding params:", {
       faucetAddress,
       amount: amount.toString(),
@@ -2089,15 +2089,48 @@ export async function fundFaucet(
       networkId: networkId.toString(),
       signerAddress,
     })
-
+    
+    // Helper function to get gas parameters
+    const getGasParams = async () => {
+      try {
+        const feeData = await provider.getFeeData()
+        
+        if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+          // EIP-1559
+          return {
+            maxFeePerGas: feeData.maxFeePerGas,
+            maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+          }
+        } else if (feeData.gasPrice) {
+          // Legacy
+          return {
+            gasPrice: feeData.gasPrice,
+          }
+        }
+        return {}
+      } catch (error) {
+        console.warn("Could not fetch fee data, using defaults:", error)
+        return {}
+      }
+    }
+    
     if (isEther && !isCelo) {
       console.log(`Funding faucet ${faucetAddress} with ${amount} native tokens on chain ${chainId}`)
       
-      // Simplified native token transfer
+      const gasParams = await getGasParams()
+      const gasLimit = await provider.estimateGas({
+        to: faucetAddress,
+        from: signerAddress,
+        value: amount,
+        data: "0x",
+      })
+      
       const tx = await signer.sendTransaction({
         to: faucetAddress,
         value: amount,
         data: "0x",
+        gasLimit: gasLimit,
+        ...gasParams,
       })
       
       console.log("Transaction hash:", tx.hash)
@@ -2109,43 +2142,96 @@ export async function fundFaucet(
       await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
       return tx.hash
     }
-
+    
     const tokenAddress =
       isEther && isCelo
         ? "0x471EcE3750Da237f93B8E339c536989b8978a438" // Wrapped CELO
         : await faucetContract.token()
-
+    
     if (tokenAddress === ZeroAddress) {
       throw new Error("Token address is zero, cannot proceed with ERC-20 transfer")
     }
-
+    
     const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer)
-    console.log(`Approving ${amount} ${isEther && isCelo ? "CELO" : "tokens"} for faucet ${faucetAddress}`)
-
-    const approveData = tokenContract.interface.encodeFunctionData("approve", [faucetAddress, amount])
-    const approveDataWithReferral = appendDivviReferralData(approveData)
     
-    // Simplified approve transaction
-    const approveTx = await signer.sendTransaction({
-      to: tokenAddress,
-      data: approveDataWithReferral,
-    })
+    // Check current allowance first
+    console.log("Checking current allowance...")
+    const currentAllowance = await tokenContract.allowance(signerAddress, faucetAddress)
     
-    const approveReceipt = await approveTx.wait()
-    if (!approveReceipt) {
-      throw new Error("Approve transaction receipt is null")
+    if (currentAllowance >= amount) {
+      console.log("Sufficient allowance already exists, skipping approve")
+    } else {
+      console.log(`Approving ${amount} ${isEther && isCelo ? "CELO" : "tokens"} for faucet ${faucetAddress}`)
+      
+      // Reset allowance to 0 if needed (some tokens require this)
+      if (currentAllowance > 0n) {
+        console.log("Resetting allowance to 0 first...")
+        const resetData = tokenContract.interface.encodeFunctionData("approve", [faucetAddress, 0n])
+        const resetDataWithReferral = appendDivviReferralData(resetData)
+        
+        const gasParams = await getGasParams()
+        const resetGasLimit = await provider.estimateGas({
+          to: tokenAddress,
+          from: signerAddress,
+          data: resetDataWithReferral,
+        })
+        
+        const resetTx = await signer.sendTransaction({
+          to: tokenAddress,
+          data: resetDataWithReferral,
+          gasLimit: resetGasLimit,
+          ...gasParams,
+        })
+        
+        const resetReceipt = await resetTx.wait()
+        if (!resetReceipt) {
+          throw new Error("Reset allowance transaction receipt is null")
+        }
+        console.log("Reset allowance confirmed:", resetReceipt.hash)
+      }
+      
+      const approveData = tokenContract.interface.encodeFunctionData("approve", [faucetAddress, amount])
+      const approveDataWithReferral = appendDivviReferralData(approveData)
+      
+      const gasParams = await getGasParams()
+      const approveGasLimit = await provider.estimateGas({
+        to: tokenAddress,
+        from: signerAddress,
+        data: approveDataWithReferral,
+      })
+      
+      const approveTx = await signer.sendTransaction({
+        to: tokenAddress,
+        data: approveDataWithReferral,
+        gasLimit: approveGasLimit,
+        ...gasParams,
+      })
+      
+      console.log("Approve transaction hash:", approveTx.hash)
+      const approveReceipt = await approveTx.wait()
+      if (!approveReceipt) {
+        throw new Error("Approve transaction receipt is null")
+      }
+      console.log("Approve transaction confirmed:", approveReceipt.hash)
+      await reportTransactionToDivvi(approveTx.hash as `0x${string}`, Number(chainId))
     }
-    console.log("Approve transaction confirmed:", approveReceipt.hash)
-    await reportTransactionToDivvi(approveTx.hash as `0x${string}`, Number(chainId))
-
+    
     console.log(`Funding faucet ${faucetAddress} with ${amount} ${isEther && isCelo ? "CELO" : "tokens"}`)
     const fundData = faucetContract.interface.encodeFunctionData("fund", [amount])
     const fundDataWithReferral = appendDivviReferralData(fundData)
     
-    // Simplified fund transaction
+    const gasParams = await getGasParams()
+    const fundGasLimit = await provider.estimateGas({
+      to: faucetAddress,
+      from: signerAddress,
+      data: fundDataWithReferral,
+    })
+    
     const fundTx = await signer.sendTransaction({
       to: faucetAddress,
       data: fundDataWithReferral,
+      gasLimit: fundGasLimit,
+      ...gasParams,
     })
     
     console.log("Fund transaction hash:", fundTx.hash)
@@ -2156,15 +2242,32 @@ export async function fundFaucet(
     console.log("Fund transaction confirmed:", fundReceipt.hash)
     await reportTransactionToDivvi(fundTx.hash as `0x${string}`, Number(chainId))
     return fundTx.hash
+    
   } catch (error: any) {
     console.error("Error funding faucet:", error)
+    
+    // Enhanced error handling
     if (error.message?.includes("network changed")) {
       throw new Error("Network changed during transaction. Please try again with a stable network connection.")
     }
-    throw new Error(error.reason || error.message || "Failed to fund faucet")
+    
+    if (error.code === "INSUFFICIENT_FUNDS") {
+      throw new Error("Insufficient funds to complete the transaction including gas fees.")
+    }
+    
+    if (error.message?.includes("user rejected")) {
+      throw new Error("Transaction was rejected by user.")
+    }
+    
+    if (error.message?.includes("RPC endpoint")) {
+      throw new Error("RPC endpoint error. Please check your network connection and try again.")
+    }
+    
+    // Extract useful error message
+    const errorMessage = error.reason || error.message || "Failed to fund faucet"
+    throw new Error(errorMessage)
   }
 }
-
 export async function withdrawTokens(
   provider: BrowserProvider,
   faucetAddress: string,

@@ -1,11 +1,16 @@
-// File: components/wallet-connect.tsx (WalletConnectButton)
+// File: components/wallet-connect.tsx
 "use client"
 
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 import { Button } from "@/components/ui/button"
 import { Wallet } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-export function WalletConnectButton() {
+interface WalletConnectButtonProps {
+  className?: string
+}
+
+export function WalletConnectButton({ className }: WalletConnectButtonProps) {
   const { open } = useAppKit()
   const { address, isConnected } = useAppKitAccount()
 
@@ -29,7 +34,7 @@ export function WalletConnectButton() {
         {isConnected && address ? formatAddress(address) : "Connect Wallet"}
       </span>
       <span className="xs:hidden">
-        {isConnected ? formatAddress(address!) : "Connect"}
+        {isConnected ? formatAddress(address!) : "Connect Wallet"}
       </span>
     </Button>
   )

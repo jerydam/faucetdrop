@@ -18,6 +18,9 @@ import { ERC20_ABI } from "@/lib/abis";
 import { Header } from "@/components/header";
 import Link from "next/link";
 
+// Default image and description constants
+const DEFAULT_FAUCET_IMAGE = "https://faucetdrops.io/logo.png";
+
 // Types for better type safety
 interface FaucetData {
   faucetAddress: string;
@@ -34,9 +37,14 @@ interface FaucetData {
   network?: {
     chainId: number;
     name: string;
+    description?: string;
+    imageUrl?: string;
     color: string;
   };
   createdAt?: string | number; // For sorting by latest
+  description?: string;
+  imageUrl?: string;
+  owner?: string; // Faucet owner address
 }
 
 // Filter and sort options
@@ -114,6 +122,22 @@ function usePreviousPage() {
   return { goBack, canGoBack };
 }
 
+const loadFaucetMetadata = async (faucetAddress: string): Promise<{description?: string, imageUrl?: string}> => {
+  try {
+    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-metadata/${faucetAddress}`)
+    if (response.ok) {
+      const result = await response.json()
+      return {
+        description: result.description,
+        imageUrl: result.imageUrl
+      }
+    }
+  } catch (error) {
+    console.warn('Could not load faucet metadata:', error)
+  }
+  return {}
+}
+
 // ✅ Helper function to get native token symbol based on network
 const getNativeTokenSymbol = (networkName: string): string => {
   switch (networkName) {
@@ -131,6 +155,11 @@ const getNativeTokenSymbol = (networkName: string): string => {
     default:
       return "ETH"
   }
+}
+
+// ✅ NEW: Helper function to generate default description
+const getDefaultDescription = (networkName: string, ownerAddress: string): string => {
+  return `This is a faucet on ${networkName} by ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`;
 }
 
 // TokenBalance component
@@ -277,6 +306,30 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
             </span>
           )}
         </CardTitle>
+        
+        {/* Add image (use default if not available) */}
+        <div className="px-3 sm:px-4 pt-2">
+          <img 
+            src={faucet.imageUrl || DEFAULT_FAUCET_IMAGE} 
+            alt={faucet.name || 'Faucet'} 
+            className="w-full h-32 sm:h-40 object-cover rounded-lg"
+            onError={(e) => {
+              // Fallback to default image if custom image fails to load
+              e.currentTarget.src = DEFAULT_FAUCET_IMAGE;
+            }}
+          />
+        </div>
+        
+        {/* Add description (use default if not available) */}
+        <div className="px-3 sm:px-4 pb-2">
+          <p className="text-xs text-muted-foreground line-clamp-2">
+            {faucet.description || (faucet.network && faucet.owner 
+              ? getDefaultDescription(faucet.network.name, faucet.owner)
+              : `A faucet for ${displayTokenSymbol} tokens`
+            )}
+          </p>
+        </div>
+        
         <CardDescription className="text-[10px] sm:text-xs md:text-sm truncate">
           {faucet.faucetAddress}
         </CardDescription>
@@ -605,7 +658,7 @@ export default function NetworkFaucets() {
     return filtered;
   }, [faucets, searchTerm, filterBy, sortBy]);
 
-  // ✅ FIXED: Enhanced loadFaucets function with proper network handling
+  // ✅ FIXED: Enhanced loadFaucets function with proper network handling and metadata loading with defaults
   const loadFaucets = useCallback(async () => {
     if (!network || isNaN(chainId)) {
       console.log("Skipping loadFaucets: network undefined or invalid chainId", { chainId, network });
@@ -643,7 +696,30 @@ export default function NetworkFaucets() {
         isEther: faucetsWithNetwork[0].isEther
       } : "No faucets found");
       
-      setFaucets(faucetsWithNetwork);
+      // ✅ NEW: Load metadata (description and image) for each faucet with defaults
+      const faucetsWithMetadata = await Promise.all(
+        faucetsWithNetwork.map(async (faucet) => {
+          const metadata = await loadFaucetMetadata(faucet.faucetAddress);
+          
+          // ✅ Apply defaults if metadata is missing
+          const finalFaucet = {
+            ...faucet,
+            imageUrl: metadata.imageUrl || DEFAULT_FAUCET_IMAGE,
+            description: metadata.description || (
+              faucet.owner 
+                ? getDefaultDescription(network.name, faucet.owner)
+                : `A faucet for ${faucet.tokenSymbol || 'tokens'} on ${network.name}`
+            )
+          };
+          
+          return finalFaucet;
+        })
+      );
+      
+      console.log(`📝 Loaded metadata for ${faucetsWithMetadata.length} faucets (with defaults applied)`);
+      
+      // Set faucets with metadata
+      setFaucets(faucetsWithMetadata);
       setPage(1);
     } catch (error) {
       console.error(`❌ Error loading faucets for network ${network.name} (chainId ${chainId}):`, error);

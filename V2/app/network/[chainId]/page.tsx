@@ -19,7 +19,7 @@ import { Header } from "@/components/header";
 import Link from "next/link";
 
 // Default image and description constants
-const DEFAULT_FAUCET_IMAGE = "default.jpeg";
+const DEFAULT_FAUCET_IMAGE = "/default.jpeg";
 
 // Types for better type safety
 interface FaucetData {

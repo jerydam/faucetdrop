@@ -186,7 +186,7 @@ useEffect(() => {
   )
   
 // Default faucet metadata constants
-const DEFAULT_FAUCET_IMAGE = "https://faucetdrops.io/logo.png"
+const DEFAULT_FAUCET_IMAGE = "/default.jpeg";
 
 // Helper function to get default description
 const getDefaultFaucetDescription = (networkName: string, ownerAddress: string): string => {

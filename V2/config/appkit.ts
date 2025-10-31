@@ -61,7 +61,7 @@ export const modal = createAppKit({
   projectId,
   features: {
     analytics: true,
-    email: false,
+    email: true,
     socials: false
   },
   themeMode: 'light',

@@ -62,7 +62,7 @@ export const modal = createAppKit({
   features: {
     analytics: true,
     email: true,
-    socials: false
+    socials: ['google', 'github', 'apple', 'facebook', 'x', 'discord', 'farcaster']
   },
   themeMode: 'light',
   themeVariables: {

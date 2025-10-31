@@ -53,7 +53,7 @@ const metadata = {
 // Create Query Client
 export const queryClient = new QueryClient()
 
-// Create the modal
+// Create the modal here
 export const modal = createAppKit({
   adapters: [wagmiAdapter],
   networks,

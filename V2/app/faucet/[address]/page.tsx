@@ -1559,8 +1559,7 @@ useEffect(() => {
     return true
   }
 
-  // ✅ FIXED: Handle backend claim with proper faucet type validation
-  async function handleBackendClaim(): Promise<void> {
+ async function handleBackendClaim(): Promise<void> {
   if (!isConnected || !address || !provider) {
     toast({
       title: "Wallet not connected",
@@ -1639,24 +1638,6 @@ useEffect(() => {
 
     const formattedTxHash = result.txHash.startsWith("0x") ? result.txHash : (`0x${result.txHash}` as `0x${string}`);
     setTxHash(formattedTxHash);
-    const networkName = selectedNetwork?.name || "Unknown Network";
-
-    // Get the claimed amount for on-chain storage
-    const claimAmountBN = faucetType === 'custom' && hasCustomAmount
-      ? userCustomClaimAmount
-      : faucetDetails.claimAmount || 0n;
-
-    // Store the claim on-chain using the updated storeClaim function
-    await storeClaim(
-      provider as BrowserProvider,
-      address,
-      faucetAddress,
-      claimAmountBN,
-      formattedTxHash,
-      chainId,
-      Number(networkId),
-      networkName
-    );
 
     // Get the claimed amount for display
     const claimedAmount = faucetType === 'custom' && hasCustomAmount
@@ -1665,9 +1646,11 @@ useEffect(() => {
       ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
       : "tokens";
 
+    const networkName = selectedNetwork?.name || "Unknown Network";
+
     toast({
       title: "Tokens dropped successfully",
-      description: `You have dropped ${claimedAmount} ${tokenSymbol} on ${networkName} and recorded the claim on-chain`,
+      description: `You have dropped ${claimedAmount} ${tokenSymbol} on ${networkName}`,
     });
     setShowClaimPopup(true);
     setSecretCode("");

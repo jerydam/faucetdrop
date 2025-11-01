@@ -2772,16 +2772,16 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                       ? "Complete Tasks First"
                       : faucetType === 'custom' 
                         ? hasCustomAmount 
-                          ? `Drop ${formatUnits(userCustomClaimAmount, tokenDecimals)} ${tokenSymbol}`
+                          ? `Dr1p ${formatUnits(userCustomClaimAmount, tokenDecimals)} ${tokenSymbol}`
                           : "No Allocation Available"
                         : faucetType === 'droplist'
                         ? userIsWhitelisted
-                          ? `Drop ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`
+                          ? `Drip ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`
                           : "Not Drop-listed"
                         : faucetType === 'dropcode'
                         ? backendMode && !isSecretCodeValid
                           ? "Enter Drop Code"
-                          : `Drop ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`
+                          : `Drip ${faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : ""} ${tokenSymbol}`
                         : "Drop Tokens"
                     }
                   </Button>

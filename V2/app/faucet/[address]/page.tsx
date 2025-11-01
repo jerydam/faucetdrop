@@ -2690,7 +2690,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                     <div className="flex flex-col p-3 sm:p-4 border rounded-lg">
                       <span className="text-xs sm:text-sm text-muted-foreground">
                         {/* ✅ Show appropriate label based on actual faucet type */}
-                        {faucetType === 'custom' ? 'Your Claim Amount' : 'Drop Amount'}
+                        {faucetType === 'custom' ? 'Your Claim Amount' : 'Drip Amount'}
                       </span>
                       <span className="text-lg sm:text-2xl font-bold truncate">
                         {/* ✅ Show appropriate amount based on actual faucet type */}
@@ -2733,7 +2733,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                         maxLength={6}
                       />
                       <p className="text-xs text-muted-foreground">
-                        Enter the 6-character alphanumeric code to drop tokens
+                        Enter the 6-character alphanumeric code to drip tokens
                       </p>
                     </div>
                   )}
@@ -2764,7 +2764,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                     disabled={isClaiming || !address || !canClaim}
                   >
                     {isClaiming
-                      ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Dropping...</span>
+                      ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Dripping...</span>
                       : hasClaimed
                       ? "Already dropped"
                       : !address
@@ -2956,7 +2956,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
     {faucetType !== 'custom' && (
       <div className="space-y-2">
         <Label htmlFor="claim-amount" className="text-xs sm:text-sm">
-          Drop Amount
+          Drip Amount
         </Label>
         <Input
           id="claim-amount"
@@ -2965,7 +2965,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
           onChange={(e) => setClaimAmount(e.target.value)}
           className="text-xs sm:text-sm"
         />
-        <p className="text-xs text-muted-foreground">Amount of {tokenSymbol} users can drop</p>
+        <p className="text-xs text-muted-foreground">Amount of {tokenSymbol} users can drip</p>
       </div>
     )}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">

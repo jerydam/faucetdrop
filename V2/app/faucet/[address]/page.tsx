@@ -2631,22 +2631,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                 )}
                   <CardDescription className="text-xs sm:text-sm">
                     <div className="flex flex-col gap-2 mt-2">
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-                        <span className="font-medium">Network:</span>
-                        <span className="text-xs font-medium">{selectedNetwork?.name || "Unknown"}</span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-                        <span className="font-medium">Faucet Address:</span>
-                        <span className="text-xs font-mono break-all">{faucetAddress}</span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-                        <span className="font-medium">Token Address:</span>
-                        <span className="text-xs font-mono break-all">{faucetDetails.token}</span>
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-                        <span className="font-medium">Owner:</span>
-                        <span className="text-xs font-mono break-all">{faucetDetails.owner}</span>
-                      </div>
+                      
                       {address && (
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
                           <span className="font-medium">Connected Address:</span>

@@ -1649,8 +1649,8 @@ useEffect(() => {
     const networkName = selectedNetwork?.name || "Unknown Network";
 
     toast({
-      title: "Tokens dropped successfully",
-      description: `You have dropped ${claimedAmount} ${tokenSymbol} on ${networkName}`,
+      title: "Tokens dripped successfully",
+      description: `You have dripped ${claimedAmount} ${tokenSymbol} on ${networkName}`,
     });
     setShowClaimPopup(true);
     setSecretCode("");

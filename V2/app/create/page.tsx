@@ -135,7 +135,7 @@ interface NetworkImageProps {
   size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
 }
-const DEFAULT_FAUCET_IMAGE = "https://faucetdrops.io/logo.png"
+const DEFAULT_FAUCET_IMAGE = "/default.jpeg"
 function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProps) {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)

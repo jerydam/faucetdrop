@@ -2632,13 +2632,12 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                   <CardDescription className="text-xs sm:text-sm">
                     <div className="flex flex-col gap-2 mt-2">
                       
-                      {address && (
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">
-                          <span className="font-medium">Connected Address:</span>
-                          <span className="text-xs font-mono break-all">{address}</span>
-                        </div>
-                      )}
-
+                  {address && (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2 font-bold">
+                    <span>Connected Address:</span>
+                    <span className="text-xs font-semibold font-mono break-all">{address}</span>
+                  </div>
+                )}
                       {/* ✅ Show status based on actual faucet type */}
                       {faucetType === 'droplist' && (
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-1 sm:gap-2">

@@ -283,28 +283,31 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
 
   return (
     <Card className="relative w-full max-w-[400px] mx-auto">
-      {faucet.network && (
-        <div className="absolute top-2 sm:top-3 right-2 sm:right-3">
-          <Badge
-            style={{ backgroundColor: faucet.network.color }}
-            className="text-white text-[10px] sm:text-xs md:text-sm font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
-          >
-            {faucet.network.name}
-          </Badge>
-        </div>
-      )}
+     
       <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-4">
-        <CardTitle className="text-sm sm:text-base md:text-lg flex items-center justify-between pr-12 sm:pr-16 md:pr-20">
+        <CardTitle className="text-sm sm:text-base md:text-lg flex items-center justify-between ">
           <span className="truncate">{faucet.name || `${displayTokenSymbol} Faucet`}</span>
-          {faucet.isClaimActive ? (
-            <span className="text-[10px] sm:text-xs md:text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 sm:px-2 py-0.5 rounded-full">
-              Active
-            </span>
-          ) : (
-            <span className="text-[10px] sm:text-xs md:text-sm bg-red-500/20 text-red-600 dark:text-red-400 px-1.5 sm:px-2 py-0.5 rounded-full">
-              Inactive
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {faucet.isClaimActive ? (
+              <span className="text-[10px] sm:text-xs md:text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+                Active
+              </span>
+            ) : (
+              <span className="text-[10px] sm:text-xs md:text-sm bg-red-500/20 text-red-600 dark:text-red-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+                Inactive
+              </span>
+            )}
+            {faucet.network && (
+              // <div className="absolute top-2 sm:top-3 right-2 sm:right-3">
+                <Badge
+                  style={{ backgroundColor: faucet.network.color }}
+                  className="text-white text-[10px] sm:text-xs md:text-sm font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
+                >
+                  {faucet.network.name}
+                </Badge>
+              // </div>
+            )}
+          </div>
         </CardTitle>
         
         {/* Add image (use default if not available) */}

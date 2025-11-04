@@ -465,37 +465,41 @@ function SearchAndFilterControls({
       {/* Filter and Sort Controls */}
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <div className="flex items-center gap-2 flex-1">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={filterBy} onValueChange={(value: FilterOption) => setFilterBy(value)}>
-            <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
-              <SelectValue placeholder="Filter by..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={FILTER_OPTIONS.ALL}>All Faucets</SelectItem>
-              <SelectItem value={FILTER_OPTIONS.ACTIVE}>Active Only</SelectItem>
-              <SelectItem value={FILTER_OPTIONS.INACTIVE}>Inactive Only</SelectItem>
-              <SelectItem value={FILTER_OPTIONS.NATIVE}>Native Tokens</SelectItem>
-              <SelectItem value={FILTER_OPTIONS.ERC20}>ERC20 Tokens</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center border border-input rounded-md h-8 sm:h-9 px-2 w-full">
+            <Filter className="h-4 w-4 text-muted-foreground mr-2" />
+            <Select value={filterBy} onValueChange={(value: FilterOption) => setFilterBy(value)}>
+              <SelectTrigger className="border-0 shadow-none h-full p-0 text-xs sm:text-sm focus:ring-0 focus:outline-none">
+                <SelectValue placeholder="Filter by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={FILTER_OPTIONS.ALL}>All Faucets</SelectItem>
+                <SelectItem value={FILTER_OPTIONS.ACTIVE}>Active Only</SelectItem>
+                <SelectItem value={FILTER_OPTIONS.INACTIVE}>Inactive Only</SelectItem>
+                <SelectItem value={FILTER_OPTIONS.NATIVE}>Native Tokens</SelectItem>
+                <SelectItem value={FILTER_OPTIONS.ERC20}>ERC20 Tokens</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-1">
-          <SortAsc className="h-4 w-4 text-muted-foreground" />
-          <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
-            <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
-              <SelectValue placeholder="Sort by..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={SORT_OPTIONS.DEFAULT}>Default (Active First)</SelectItem>
-              <SelectItem value={SORT_OPTIONS.NAME_ASC}>Name A-Z</SelectItem>
-              <SelectItem value={SORT_OPTIONS.NAME_DESC}>Name Z-A</SelectItem>
-              <SelectItem value={SORT_OPTIONS.BALANCE_HIGH}>Balance (High to Low)</SelectItem>
-              <SelectItem value={SORT_OPTIONS.BALANCE_LOW}>Balance (Low to High)</SelectItem>
-              <SelectItem value={SORT_OPTIONS.AMOUNT_HIGH}>Drop Amount (High to Low)</SelectItem>
-              <SelectItem value={SORT_OPTIONS.AMOUNT_LOW}>Drop Amount (Low to High)</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center border border-input rounded-md h-8 sm:h-9 px-2 w-full">
+            <SortAsc className="h-4 w-4 text-muted-foreground mr-2" />
+            <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
+              <SelectTrigger className="border-0 shadow-none h-full p-0 text-xs sm:text-sm focus:ring-0 focus:outline-none">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SORT_OPTIONS.DEFAULT}>Default (Active First)</SelectItem>
+                <SelectItem value={SORT_OPTIONS.NAME_ASC}>Name A-Z</SelectItem>
+                <SelectItem value={SORT_OPTIONS.NAME_DESC}>Name Z-A</SelectItem>
+                <SelectItem value={SORT_OPTIONS.BALANCE_HIGH}>Balance (High to Low)</SelectItem>
+                <SelectItem value={SORT_OPTIONS.BALANCE_LOW}>Balance (Low to High)</SelectItem>
+                <SelectItem value={SORT_OPTIONS.AMOUNT_HIGH}>Drop Amount (High to Low)</SelectItem>
+                <SelectItem value={SORT_OPTIONS.AMOUNT_LOW}>Drop Amount (Low to High)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {hasActiveFilters && (

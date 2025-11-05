@@ -2523,7 +2523,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
           <Header pageTitle="Faucet Details" />
           
           {/* ✅ NEW: Navigation and action buttons */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex flex-row  justify-between items-start sm:items-center gap-4">
             <Button
               variant="outline"
               onClick={handleGoBack}
@@ -2737,7 +2737,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                     </div>
                   )}
                 </CardContent>
-                <CardFooter className="flex flex-col gap-2 px-4 sm:px-6">
+                <CardFooter className="flex flex-col md:flex-row gap-2 px-4 sm:px-6">
                   <Button
                     className="w-full h-8 sm:h-9 text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                     onClick={handleFollowAll}

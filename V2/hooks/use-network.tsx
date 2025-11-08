@@ -42,7 +42,7 @@ const networks: Network[] = [
     iconUrl: "/celo.png",
     factoryAddresses: [
       "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
-      "0xB8De8f37B263324C44FD4874a7FB7A0C59D8C58E",
+      "0x96da3FAdeDE2fe2A87A72308d84fC66993551268",
       "0xc26c4Ea50fd3b63B6564A5963fdE4a3A474d4024",
       "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
       "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",

@@ -283,28 +283,31 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
 
   return (
     <Card className="relative w-full max-w-[400px] mx-auto">
-      {faucet.network && (
-        <div className="absolute top-2 sm:top-3 right-2 sm:right-3">
-          <Badge
-            style={{ backgroundColor: faucet.network.color }}
-            className="text-white text-[10px] sm:text-xs md:text-sm font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
-          >
-            {faucet.network.name}
-          </Badge>
-        </div>
-      )}
+     
       <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-4">
-        <CardTitle className="text-sm sm:text-base md:text-lg flex items-center justify-between pr-12 sm:pr-16 md:pr-20">
+        <CardTitle className="text-sm sm:text-base md:text-lg flex items-center justify-between ">
           <span className="truncate">{faucet.name || `${displayTokenSymbol} Faucet`}</span>
-          {faucet.isClaimActive ? (
-            <span className="text-[10px] sm:text-xs md:text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 sm:px-2 py-0.5 rounded-full">
-              Active
-            </span>
-          ) : (
-            <span className="text-[10px] sm:text-xs md:text-sm bg-red-500/20 text-red-600 dark:text-red-400 px-1.5 sm:px-2 py-0.5 rounded-full">
-              Inactive
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {faucet.isClaimActive ? (
+              <span className="text-[10px] sm:text-xs md:text-sm bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+                Active
+              </span>
+            ) : (
+              <span className="text-[10px] sm:text-xs md:text-sm bg-red-500/20 text-red-600 dark:text-red-400 px-1.5 sm:px-2 py-0.5 rounded-full">
+                Inactive
+              </span>
+            )}
+            {faucet.network && (
+              // <div className="absolute top-2 sm:top-3 right-2 sm:right-3">
+                <Badge
+                  style={{ backgroundColor: faucet.network.color }}
+                  className="text-white text-[10px] sm:text-xs md:text-sm font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
+                >
+                  {faucet.network.name}
+                </Badge>
+              // </div>
+            )}
+          </div>
         </CardTitle>
         
         {/* Add image (use default if not available) */}
@@ -443,59 +446,65 @@ function SearchAndFilterControls({
     <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6">
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search faucets by name, symbol, or address..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10 pr-4 h-9 sm:h-10 text-xs sm:text-sm"
-        />
-        {searchTerm && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSearchTerm("")}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        )}
+        <div className="flex items-center border border-input rounded-md h-8 sm:h-9 w-full">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search faucets by name, symbol, or address..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-4 h-9 sm:h-10 text-xs sm:text-sm"
+          />
+          {searchTerm && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSearchTerm("")}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filter and Sort Controls */}
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <div className="flex items-center gap-2 flex-1">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={filterBy} onValueChange={(value: FilterOption) => setFilterBy(value)}>
-            <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
-              <SelectValue placeholder="Filter by..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={FILTER_OPTIONS.ALL}>All Faucets</SelectItem>
-              <SelectItem value={FILTER_OPTIONS.ACTIVE}>Active Only</SelectItem>
-              <SelectItem value={FILTER_OPTIONS.INACTIVE}>Inactive Only</SelectItem>
-              <SelectItem value={FILTER_OPTIONS.NATIVE}>Native Tokens</SelectItem>
-              <SelectItem value={FILTER_OPTIONS.ERC20}>ERC20 Tokens</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center border border-input rounded-md h-8 sm:h-9 px-2 w-full">
+            <Filter className="h-4 w-4 text-muted-foreground mr-2" />
+            <Select value={filterBy} onValueChange={(value: FilterOption) => setFilterBy(value)}>
+              <SelectTrigger className="border-0 shadow-none h-full p-0 text-xs sm:text-sm focus:ring-0 focus:outline-none">
+                <SelectValue placeholder="Filter by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={FILTER_OPTIONS.ALL}>All Faucets</SelectItem>
+                <SelectItem value={FILTER_OPTIONS.ACTIVE}>Active Only</SelectItem>
+                <SelectItem value={FILTER_OPTIONS.INACTIVE}>Inactive Only</SelectItem>
+                <SelectItem value={FILTER_OPTIONS.NATIVE}>Native Tokens</SelectItem>
+                <SelectItem value={FILTER_OPTIONS.ERC20}>ERC20 Tokens</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-1">
-          <SortAsc className="h-4 w-4 text-muted-foreground" />
-          <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
-            <SelectTrigger className="h-8 sm:h-9 text-xs sm:text-sm">
-              <SelectValue placeholder="Sort by..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={SORT_OPTIONS.DEFAULT}>Default (Active First)</SelectItem>
-              <SelectItem value={SORT_OPTIONS.NAME_ASC}>Name A-Z</SelectItem>
-              <SelectItem value={SORT_OPTIONS.NAME_DESC}>Name Z-A</SelectItem>
-              <SelectItem value={SORT_OPTIONS.BALANCE_HIGH}>Balance (High to Low)</SelectItem>
-              <SelectItem value={SORT_OPTIONS.BALANCE_LOW}>Balance (Low to High)</SelectItem>
-              <SelectItem value={SORT_OPTIONS.AMOUNT_HIGH}>Drop Amount (High to Low)</SelectItem>
-              <SelectItem value={SORT_OPTIONS.AMOUNT_LOW}>Drop Amount (Low to High)</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center border border-input rounded-md h-8 sm:h-9 px-2 w-full">
+            <SortAsc className="h-4 w-4 text-muted-foreground mr-2" />
+            <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
+              <SelectTrigger className="border-0 shadow-none h-full p-0 text-xs sm:text-sm focus:ring-0 focus:outline-none">
+                <SelectValue placeholder="Sort by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SORT_OPTIONS.DEFAULT}>Default (Active First)</SelectItem>
+                <SelectItem value={SORT_OPTIONS.NAME_ASC}>Name A-Z</SelectItem>
+                <SelectItem value={SORT_OPTIONS.NAME_DESC}>Name Z-A</SelectItem>
+                <SelectItem value={SORT_OPTIONS.BALANCE_HIGH}>Balance (High to Low)</SelectItem>
+                <SelectItem value={SORT_OPTIONS.BALANCE_LOW}>Balance (Low to High)</SelectItem>
+                <SelectItem value={SORT_OPTIONS.AMOUNT_HIGH}>Drop Amount (High to Low)</SelectItem>
+                <SelectItem value={SORT_OPTIONS.AMOUNT_LOW}>Drop Amount (Low to High)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {hasActiveFilters && (

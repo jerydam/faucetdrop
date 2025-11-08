@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import Head from "@/components/Head"
 
 // Smart contract details
-const DROPLIST_CONTRACT_ADDRESS = "0xB8De8f37B263324C44FD4874a7FB7A0C59D8C58E"
+const DROPLIST_CONTRACT_ADDRESS = "0x96da3FAdeDE2fe2A87A72308d84fC66993551268"
 const CHECKIN_ABI = [
   {
     "anonymous": false,

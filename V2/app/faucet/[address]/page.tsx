@@ -2772,7 +2772,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                       ? "Complete Tasks First"
                       : faucetType === 'custom' 
                         ? hasCustomAmount 
-                          ? `Dr1p ${formatUnits(userCustomClaimAmount, tokenDecimals)} ${tokenSymbol}`
+                          ? `Drip ${formatUnits(userCustomClaimAmount, tokenDecimals)} ${tokenSymbol}`
                           : "No Allocation Available"
                         : faucetType === 'droplist'
                         ? userIsWhitelisted
@@ -3442,31 +3442,35 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                       <TabsContent value="admin-power" className="space-y-4 mt-4">
                         <div className="space-y-4">
                           {/* ✅ 6. Updated Admin List Display in Admin Power Tab */}
-<div className="space-y-2">
-  <Label className="text-xs sm:text-sm">All Admins</Label>
-  {adminList.length > 0 ? (
-    <div className="space-y-2">
-      {adminList.map((admin) => (
-        <div key={admin} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-          <span className="font-mono break-all text-xs sm:text-sm">{admin}</span>
-          <div className="flex gap-2">
-            {admin.toLowerCase() === faucetDetails?.owner.toLowerCase() && (
-              <Badge variant="secondary" className="text-xs">Owner</Badge>
-            )}
-           
-            {/* Show regular admin badge only if not owner or backend */}
-            {admin.toLowerCase() !== faucetDetails?.owner.toLowerCase() && 
-             admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase() && (
-              <Badge variant="outline" className="text-xs">Admin</Badge>
-            )}
-          </div>
+
+
+        <div className="space-y-2">
+          <Label className="text-xs sm:text-sm">All Admins</Label>
+          {adminList.length > 0 ? (
+            <div className="space-y-2">
+              {adminList
+                .filter(admin => admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase()) // 👈 Filter out backend address
+                .map((admin) => (
+                <div key={admin} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                  <span className="font-mono break-all text-xs sm:text-sm">{admin}</span>
+                  <div className="flex gap-2">
+                    {admin.toLowerCase() === faucetDetails?.owner.toLowerCase() && (
+                      <Badge variant="secondary" className="text-xs">Owner</Badge>
+                    )}
+                   
+                    {/* Show regular admin badge only if not owner or backend */}
+                    {admin.toLowerCase() !== faucetDetails?.owner.toLowerCase() && 
+                     admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase() && (
+                      <Badge variant="outline" className="text-xs">Admin</Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs sm:text-sm text-muted-foreground">No admins found</p>
+          )}
         </div>
-      ))}
-    </div>
-  ) : (
-    <p className="text-xs sm:text-sm text-muted-foreground">No admins found</p>
-  )}
-</div>
                           {isOwner && (
                             <div className="space-y-2">
                               <Label htmlFor="new-admin" className="text-xs sm:text-sm">

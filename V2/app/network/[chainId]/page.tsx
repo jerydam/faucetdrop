@@ -15,8 +15,9 @@ import { formatUnits, Contract, ZeroAddress, JsonRpcProvider } from "ethers";
 import { Coins, Clock, Search, Filter, SortAsc, X, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ERC20_ABI } from "@/lib/abis";
-import { Header } from "@/components/header";
+// import { Header } from "@/components/header";
 import Link from "next/link";
+import Head from "@/components/Head";
 
 // Default image and description constants
 const DEFAULT_FAUCET_IMAGE = "/default.jpeg";
@@ -872,11 +873,12 @@ export default function NetworkFaucets() {
           Back
         </Button>
         <div className="flex-1">
-          <Header
+          {/* <Header
             pageTitle={`Faucets on ${network?.name || "Unknown Network"}`}
             onRefresh={loadFaucets}
             loading={loadingFaucets}
-          />
+          /> */}
+          <Head />
         </div>
       </div>
 

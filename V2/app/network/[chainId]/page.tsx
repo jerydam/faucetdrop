@@ -37,8 +37,9 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ERC20_ABI } from "@/lib/abis";
-import { Header } from "@/components/header";
+// import { Header } from "@/components/header";
 import Link from "next/link";
+import Head from "@/components/Head";
 
 const DEFAULT_FAUCET_IMAGE = "/default.jpeg";
 const FAUCETS_PER_PAGE = 6; // ✅ Hardcoded limit for pagination
@@ -777,11 +778,12 @@ export default function NetworkFaucets() {
           Back
         </Button>
         <div className="flex-1">
-          <Header
+          {/* <Header
             pageTitle={`Faucets on ${network?.name || "Unknown Network"}`}
             onRefresh={() => loadFaucets(1, false, true)}
             loading={loadingFaucets}
-          />
+          /> */}
+          <Head />
         </div>
       </div>
 

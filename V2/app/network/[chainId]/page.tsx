@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -6,23 +6,45 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useNetwork } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import LoadingPage from "@/components/loading";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+  CardDescription,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { getFaucetsForNetwork } from "@/lib/faucet";
 import { formatUnits, Contract, ZeroAddress, JsonRpcProvider } from "ethers";
-import { Coins, Clock, Search, Filter, SortAsc, X, ArrowLeft } from "lucide-react";
+import {
+  Coins,
+  Clock,
+  Search,
+  Filter,
+  SortAsc,
+  X,
+  ArrowLeft,
+  Loader2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ERC20_ABI } from "@/lib/abis";
 // import { Header } from "@/components/header";
 import Link from "next/link";
 import Head from "@/components/Head";
 
-// Default image and description constants
 const DEFAULT_FAUCET_IMAGE = "/default.jpeg";
+const FAUCETS_PER_PAGE = 6; // ✅ Hardcoded limit for pagination
 
-// Types for better type safety
+// Types
 interface FaucetData {
   faucetAddress: string;
   name?: string;
@@ -42,35 +64,34 @@ interface FaucetData {
     imageUrl?: string;
     color: string;
   };
-  createdAt?: string | number; // For sorting by latest
+  createdAt?: string | number;
   description?: string;
   imageUrl?: string;
-  owner?: string; // Faucet owner address
+  owner?: string;
 }
 
-// Filter and sort options
 const FILTER_OPTIONS = {
-  ALL: 'all',
-  ACTIVE: 'active',
-  INACTIVE: 'inactive',
-  NATIVE: 'native',
-  ERC20: 'erc20'
+  ALL: "all",
+  ACTIVE: "active",
+  INACTIVE: "inactive",
+  NATIVE: "native",
+  ERC20: "erc20",
 } as const;
 
 const SORT_OPTIONS = {
-  DEFAULT: 'default', // Active first, then by latest
-  NAME_ASC: 'name_asc',
-  NAME_DESC: 'name_desc',
-  BALANCE_HIGH: 'balance_high',
-  BALANCE_LOW: 'balance_low',
-  AMOUNT_HIGH: 'amount_high',
-  AMOUNT_LOW: 'amount_low'
+  DEFAULT: "default",
+  NAME_ASC: "name_asc",
+  NAME_DESC: "name_desc",
+  BALANCE_HIGH: "balance_high",
+  BALANCE_LOW: "balance_low",
+  AMOUNT_HIGH: "amount_high",
+  AMOUNT_LOW: "amount_low",
 } as const;
 
 type FilterOption = typeof FILTER_OPTIONS[keyof typeof FILTER_OPTIONS];
 type SortOption = typeof SORT_OPTIONS[keyof typeof SORT_OPTIONS];
 
-// Hook to track window size
+// Hooks
 function useWindowSize() {
   const [windowSize, setWindowSize] = useState<{ width: number; height: number }>({
     width: typeof window !== "undefined" ? window.innerWidth : 0,
@@ -102,13 +123,11 @@ function useWindowSize() {
   return windowSize;
 }
 
-// Hook for back navigation
 function usePreviousPage() {
   const router = useRouter();
   const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
-    // Check if there's a previous page in history
     setCanGoBack(window.history.length > 1);
   }, []);
 
@@ -116,54 +135,54 @@ function usePreviousPage() {
     if (canGoBack) {
       router.back();
     } else {
-      router.push('/');
+      router.push("/");
     }
   }, [router, canGoBack]);
 
   return { goBack, canGoBack };
 }
 
-const loadFaucetMetadata = async (faucetAddress: string): Promise<{description?: string, imageUrl?: string}> => {
+// Metadata loader
+const loadFaucetMetadata = async (faucetAddress: string): Promise<{ description?: string; imageUrl?: string }> => {
   try {
-    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-metadata/${faucetAddress}`)
+    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-metadata/${faucetAddress}`);
     if (response.ok) {
-      const result = await response.json()
+      const result = await response.json();
       return {
         description: result.description,
-        imageUrl: result.imageUrl
-      }
+        imageUrl: result.imageUrl,
+      };
     }
   } catch (error) {
-    console.warn('Could not load faucet metadata:', error)
+    console.warn("Could not load faucet metadata:", error);
   }
-  return {}
-}
+  return {};
+};
 
-// ✅ Helper function to get native token symbol based on network
+// Helpers
 const getNativeTokenSymbol = (networkName: string): string => {
   switch (networkName) {
     case "Celo":
-      return "CELO"
+      return "CELO";
     case "Lisk":
     case "Arbitrum":
     case "Base":
     case "Ethereum":
-      return "ETH"
+      return "ETH";
     case "Polygon":
-      return "MATIC"
+      return "MATIC";
     case "Optimism":
-      return "ETH"
+      return "ETH";
     default:
-      return "ETH"
+      return "ETH";
   }
-}
+};
 
-// ✅ NEW: Helper function to generate default description
 const getDefaultDescription = (networkName: string, ownerAddress: string): string => {
   return `This is a faucet on ${networkName} by ${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}`;
-}
+};
 
-// TokenBalance component
+// Token Balance Component
 function TokenBalance({
   tokenAddress,
   tokenSymbol,
@@ -233,10 +252,10 @@ function TokenBalance({
   );
 }
 
-// FaucetCard component
+// Faucet Card
 function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetworkSwitch: () => Promise<void> }) {
   const { chainId } = useWallet();
-  const isOnCorrectNetwork = chainId === faucet.network?.chainId;
+  const isOnCorrectNetwork = chainId === BigInt(faucet.network?.chainId || 0);
   const [startCountdown, setStartCountdown] = useState<string>("");
   const [endCountdown, setEndCountdown] = useState<string>("");
 
@@ -278,15 +297,13 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
     return () => clearInterval(interval);
   }, [faucet.startTime, faucet.endTime, faucet.isClaimActive]);
 
-  // ✅ FIXED: Ensure proper token symbol display based on network
-  const displayTokenSymbol = faucet.tokenSymbol || 
-    (faucet.isEther ? getNativeTokenSymbol(faucet.network?.name || "Ethereum") : "TOK");
+  const displayTokenSymbol =
+    faucet.tokenSymbol || (faucet.isEther ? getNativeTokenSymbol(faucet.network?.name || "Ethereum") : "TOK");
 
   return (
     <Card className="relative w-full max-w-[400px] mx-auto">
-     
       <CardHeader className="pb-1 sm:pb-2 px-3 sm:px-4">
-        <CardTitle className="text-sm sm:text-base md:text-lg flex items-center justify-between ">
+        <CardTitle className="text-sm sm:text-base md:text-lg flex items-center justify-between">
           <span className="truncate">{faucet.name || `${displayTokenSymbol} Faucet`}</span>
           <div className="flex items-center gap-2">
             {faucet.isClaimActive ? (
@@ -299,45 +316,41 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
               </span>
             )}
             {faucet.network && (
-              // <div className="absolute top-2 sm:top-3 right-2 sm:right-3">
-                <Badge
-                  style={{ backgroundColor: faucet.network.color }}
-                  className="text-white text-[10px] sm:text-xs md:text-sm font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
-                >
-                  {faucet.network.name}
-                </Badge>
-              // </div>
+              <Badge
+                style={{ backgroundColor: faucet.network.color }}
+                className="text-white text-[10px] sm:text-xs md:text-sm font-medium px-1.5 sm:px-2 py-0.5 sm:py-1"
+              >
+                {faucet.network.name}
+              </Badge>
             )}
           </div>
         </CardTitle>
-        
-        {/* Add image (use default if not available) */}
+
         <div className="px-3 sm:px-4 pt-2">
-          <img 
-            src={faucet.imageUrl || DEFAULT_FAUCET_IMAGE} 
-            alt={faucet.name || 'Faucet'} 
+          <img
+            src={faucet.imageUrl || DEFAULT_FAUCET_IMAGE}
+            alt={faucet.name || "Faucet"}
             className="w-full h-32 sm:h-40 object-cover rounded-lg"
             onError={(e) => {
-              // Fallback to default image if custom image fails to load
               e.currentTarget.src = DEFAULT_FAUCET_IMAGE;
             }}
           />
         </div>
-        
-        {/* Add description (use default if not available) */}
+
         <div className="px-3 sm:px-4 pb-2">
           <p className="text-xs text-muted-foreground line-clamp-2">
-            {faucet.description || (faucet.network && faucet.owner 
-              ? getDefaultDescription(faucet.network.name, faucet.owner)
-              : `A faucet for ${displayTokenSymbol} tokens`
-            )}
+            {faucet.description ||
+              (faucet.network && faucet.owner
+                ? getDefaultDescription(faucet.network.name, faucet.owner)
+                : `A faucet for ${displayTokenSymbol} tokens`)}
           </p>
         </div>
-        
+
         <CardDescription className="text-[10px] sm:text-xs md:text-sm truncate">
           {faucet.faucetAddress}
         </CardDescription>
       </CardHeader>
+
       <div className="px-3 sm:px-4 pb-1 sm:pb-2">
         {isOnCorrectNetwork ? (
           <TokenBalance
@@ -365,13 +378,12 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
           </Card>
         )}
       </div>
+
       <CardContent className="pb-1 sm:pb-2 px-3 sm:px-4">
         <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm md:text-base">
           <div className="flex justify-between items-center gap-2">
             <span className="text-muted-foreground">Network:</span>
-            <span className="font-medium truncate">
-              {faucet.network?.name || "Unknown"}
-            </span>
+            <span className="font-medium truncate">{faucet.network?.name || "Unknown"}</span>
           </div>
           <div className="flex justify-between items-center gap-2">
             <span className="text-muted-foreground">Balance:</span>
@@ -405,15 +417,13 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
           </div>
         </div>
       </CardContent>
+
       <CardFooter className="px-3 sm:px-4">
         <Link
           href={`/faucet/${faucet.faucetAddress}?networkId=${faucet.network?.chainId}`}
           className="w-full"
         >
-          <Button
-            variant="outline"
-            className="w-full h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base"
-          >
+          <Button variant="outline" className="w-full h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
             <Coins className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" />
             View Details
           </Button>
@@ -423,7 +433,7 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
   );
 }
 
-// Search and Filter Controls
+// Search & Filter Controls
 function SearchAndFilterControls({
   searchTerm,
   setSearchTerm,
@@ -432,7 +442,7 @@ function SearchAndFilterControls({
   sortBy,
   setSortBy,
   onClearFilters,
-  hasActiveFilters
+  hasActiveFilters,
 }: {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
@@ -448,19 +458,19 @@ function SearchAndFilterControls({
       {/* Search Bar */}
       <div className="relative">
         <div className="flex items-center border border-input rounded-md h-8 sm:h-9 w-full">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search faucets by name, symbol, or address..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 pr-4 h-9 sm:h-10 text-xs sm:text-sm"
+            className="pl-10 pr-4 h-full border-0 shadow-none focus:ring-0 text-xs sm:text-sm"
           />
           {searchTerm && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setSearchTerm("")}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
             >
               <X className="h-3 w-3" />
             </Button>
@@ -468,44 +478,40 @@ function SearchAndFilterControls({
         </div>
       </div>
 
-      {/* Filter and Sort Controls */}
+      {/* Filter and Sort */}
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-        <div className="flex items-center gap-2 flex-1">
-          <div className="flex items-center border border-input rounded-md h-8 sm:h-9 px-2 w-full">
-            <Filter className="h-4 w-4 text-muted-foreground mr-2" />
-            <Select value={filterBy} onValueChange={(value: FilterOption) => setFilterBy(value)}>
-              <SelectTrigger className="border-0 shadow-none h-full p-0 text-xs sm:text-sm focus:ring-0 focus:outline-none">
-                <SelectValue placeholder="Filter by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={FILTER_OPTIONS.ALL}>All Faucets</SelectItem>
-                <SelectItem value={FILTER_OPTIONS.ACTIVE}>Active Only</SelectItem>
-                <SelectItem value={FILTER_OPTIONS.INACTIVE}>Inactive Only</SelectItem>
-                <SelectItem value={FILTER_OPTIONS.NATIVE}>Native Tokens</SelectItem>
-                <SelectItem value={FILTER_OPTIONS.ERC20}>ERC20 Tokens</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="flex items-center border border-input rounded-md h-8 sm:h-9 px-2 w-full">
+          <Filter className="h-4 w-4 text-muted-foreground mr-2" />
+          <Select value={filterBy} onValueChange={setFilterBy}>
+            <SelectTrigger className="border-0 shadow-none h-full p-0 text-xs sm:text-sm focus:ring-0">
+              <SelectValue placeholder="Filter by..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTER_OPTIONS.ALL}>All Faucets</SelectItem>
+              <SelectItem value={FILTER_OPTIONS.ACTIVE}>Active Only</SelectItem>
+              <SelectItem value={FILTER_OPTIONS.INACTIVE}>Inactive Only</SelectItem>
+              <SelectItem value={FILTER_OPTIONS.NATIVE}>Native Tokens</SelectItem>
+              <SelectItem value={FILTER_OPTIONS.ERC20}>ERC20 Tokens</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        <div className="flex items-center gap-2 flex-1">
-          <div className="flex items-center border border-input rounded-md h-8 sm:h-9 px-2 w-full">
-            <SortAsc className="h-4 w-4 text-muted-foreground mr-2" />
-            <Select value={sortBy} onValueChange={(value: SortOption) => setSortBy(value)}>
-              <SelectTrigger className="border-0 shadow-none h-full p-0 text-xs sm:text-sm focus:ring-0 focus:outline-none">
-                <SelectValue placeholder="Sort by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SORT_OPTIONS.DEFAULT}>Default (Active First)</SelectItem>
-                <SelectItem value={SORT_OPTIONS.NAME_ASC}>Name A-Z</SelectItem>
-                <SelectItem value={SORT_OPTIONS.NAME_DESC}>Name Z-A</SelectItem>
-                <SelectItem value={SORT_OPTIONS.BALANCE_HIGH}>Balance (High to Low)</SelectItem>
-                <SelectItem value={SORT_OPTIONS.BALANCE_LOW}>Balance (Low to High)</SelectItem>
-                <SelectItem value={SORT_OPTIONS.AMOUNT_HIGH}>Drop Amount (High to Low)</SelectItem>
-                <SelectItem value={SORT_OPTIONS.AMOUNT_LOW}>Drop Amount (Low to High)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="flex items-center border border-input rounded-md h-8 sm:h-9 px-2 w-full">
+          <SortAsc className="h-4 w-4 text-muted-foreground mr-2" />
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="border-0 shadow-none h-full p-0 text-xs sm:text-sm focus:ring-0">
+              <SelectValue placeholder="Sort by..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SORT_OPTIONS.DEFAULT}>Default (Active First)</SelectItem>
+              <SelectItem value={SORT_OPTIONS.NAME_ASC}>Name A-Z</SelectItem>
+              <SelectItem value={SORT_OPTIONS.NAME_DESC}>Name Z-A</SelectItem>
+              <SelectItem value={SORT_OPTIONS.BALANCE_HIGH}>Balance (High to Low)</SelectItem>
+              <SelectItem value={SORT_OPTIONS.BALANCE_LOW}>Balance (Low to High)</SelectItem>
+              <SelectItem value={SORT_OPTIONS.AMOUNT_HIGH}>Drop Amount (High to Low)</SelectItem>
+              <SelectItem value={SORT_OPTIONS.AMOUNT_LOW}>Drop Amount (Low to High)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {hasActiveFilters && (
@@ -524,72 +530,164 @@ function SearchAndFilterControls({
   );
 }
 
+// Main Component
 export default function NetworkFaucets() {
   const { chainId: chainIdStr } = useParams<{ chainId: string }>();
   const router = useRouter();
-  const { provider, ensureCorrectNetwork } = useWallet();
+  const { ensureCorrectNetwork } = useWallet();
   const { networks, setNetwork } = useNetwork();
   const { toast } = useToast();
   const { goBack } = usePreviousPage();
+
   const [faucets, setFaucets] = useState<FaucetData[]>([]);
+  const [totalFaucets, setTotalFaucets] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1); // ✅ NEW: Track current page
   const [loadingFaucets, setLoadingFaucets] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [page, setPage] = useState(1);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
-  const { width, height } = useWindowSize();
+  const { width } = useWindowSize(); // Retained but not used for limit calculation anymore
 
-  // Search and filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [filterBy, setFilterBy] = useState<FilterOption>(FILTER_OPTIONS.ALL);
   const [sortBy, setSortBy] = useState<SortOption>(SORT_OPTIONS.DEFAULT);
 
-  // ✅ FIXED: Parse chainId with proper validation and network lookup
   const chainId = chainIdStr ? parseInt(chainIdStr, 10) : NaN;
   const network = !isNaN(chainId) ? networks.find((n) => n.chainId === chainId) : undefined;
 
-  console.log(`🌐 NetworkFaucets: chainId=${chainId}, network=${network?.name || 'not found'}`);
+  // Use the fixed limit for fetching.
+  const limit = FAUCETS_PER_PAGE; 
 
-  // Calculate faucetsPerPage based on screen size and viewport height
-  const calculateFaucetsPerPage = useCallback(() => {
-    if (!height || !width) {
-      if (width < 640) return 5;
-      if (width < 1024) return 8;
-      return 10;
+  const loadFaucets = useCallback(
+    async (pageToLoad: number, isInitialLoad: boolean, resetFaucetsList: boolean = false) => {
+      if (!network || isNaN(chainId)) {
+        setLoadingFaucets(false);
+        setInitialLoading(false);
+        return;
+      }
+
+      setLoadingFaucets(true);
+      setCurrentPage(pageToLoad); // Update current page state
+
+      try {
+        const networkProvider = new JsonRpcProvider(network.rpcUrl);
+        const { faucets: fetchedFaucets, totalFaucets: newTotalFaucets } = await getFaucetsForNetwork(
+          network,
+          pageToLoad,
+          limit, // limit is fixed at 6
+          networkProvider
+        );
+
+        setTotalFaucets(newTotalFaucets);
+
+        const faucetsWithNetwork = fetchedFaucets
+          .filter((f: any) => f && f.faucetAddress)
+          .map((faucet: any) => ({
+            ...faucet,
+            network: network,
+            tokenSymbol:
+              faucet.tokenSymbol || (faucet.isEther ? getNativeTokenSymbol(network.name) : "TOK"),
+          }));
+
+        const faucetsWithMetadata = await Promise.all(
+          faucetsWithNetwork.map(async (faucet: FaucetData) => {
+            const metadata = await loadFaucetMetadata(faucet.faucetAddress);
+            return {
+              ...faucet,
+              imageUrl: metadata.imageUrl || DEFAULT_FAUCET_IMAGE,
+              description:
+                metadata.description ||
+                (faucet.owner
+                  ? getDefaultDescription(network.name, faucet.owner)
+                  : `A faucet for ${faucet.tokenSymbol || "tokens"} on ${network.name}`),
+            };
+          })
+        );
+
+        setFaucets((prevFaucets) => {
+          if (pageToLoad === 1 || resetFaucetsList) {
+            return faucetsWithMetadata as FaucetData[];
+          }
+          const newFaucets = faucetsWithMetadata.filter(
+            (newF) => !prevFaucets.some((prevF) => prevF.faucetAddress === newF.faucetAddress)
+          );
+          return [...prevFaucets, ...newFaucets] as FaucetData[];
+        });
+      } catch (error) {
+        console.error(`Error loading faucets for page ${pageToLoad}:`, error);
+        toast({
+          title: `Failed to load faucets for ${network.name}`,
+          description: "Please try again later.",
+          variant: "destructive",
+        });
+        if (pageToLoad === 1) {
+          setFaucets([]);
+        }
+      } finally {
+        setLoadingFaucets(false);
+        if (isInitialLoad) {
+          setInitialLoading(false);
+        }
+      }
+    },
+    [network, chainId, limit, toast]
+  );
+
+  const loadNextPage = useCallback(() => {
+    if (!loadingFaucets && faucets.length < totalFaucets) {
+      const nextPage = currentPage + 1; // ✅ Use currentPage state for next page number
+      loadFaucets(nextPage, false);
     }
-
-    const headerHeight = width < 640 ? 60 : 120;
-    const searchFilterHeight = width < 640 ? 120 : 80; // Space for search/filter controls
-    const paginationHeight = width < 640 ? 50 : 60;
-    const containerPadding = width < 640 ? 32 : 64;
-    const cardHeight = width < 640 ? 300 : width < 1024 ? 320 : 350;
-    const gridGap = width < 640 ? 12 : width < 1024 ? 16 : 24;
-
-    const availableHeight = height - (headerHeight + searchFilterHeight + paginationHeight + containerPadding);
-    const cardsPerColumn = Math.floor(availableHeight / (cardHeight + gridGap));
-    const columns = width < 640 ? 1 : width < 1024 ? 2 : 3;
-    let faucetsPerPage = cardsPerColumn * columns;
-
-    faucetsPerPage = Math.max(3, Math.min(12, faucetsPerPage));
-    if (faucetsPerPage <= 0) faucetsPerPage = 3;
-
-    return faucetsPerPage;
-  }, [width, height]);
-
-  const [faucetsPerPage, setFaucetsPerPage] = useState(calculateFaucetsPerPage());
+  }, [loadingFaucets, faucets.length, totalFaucets, loadFaucets, currentPage]); // ✅ Dependency added
 
   useEffect(() => {
-    const newFaucetsPerPage = calculateFaucetsPerPage();
-    if (newFaucetsPerPage !== faucetsPerPage) {
-      setFaucetsPerPage(newFaucetsPerPage);
-      setPage(1);
+    if (isNaN(chainId) || !network) {
+      setInitialLoading(false);
+      toast({
+        title: "Network Not Found",
+        description: `Network with chain ID ${chainIdStr || "unknown"} is not supported`,
+        variant: "destructive",
+      });
+      router.push("/");
+      return;
     }
-  }, [calculateFaucetsPerPage, faucetsPerPage]);
 
-  // Filter and sort faucets
+    setFaucets([]);
+    setTotalFaucets(0);
+    setSearchTerm("");
+    setFilterBy(FILTER_OPTIONS.ALL);
+    setSortBy(SORT_OPTIONS.DEFAULT);
+
+    loadFaucets(1, true, true);
+  }, [chainId, network, router, toast, loadFaucets, chainIdStr]);
+
+  const handleNetworkSwitch = async (targetChainId: number) => {
+    setSwitchingNetwork(true);
+    try {
+      const targetNetwork = networks.find((n) => n.chainId === targetChainId);
+      if (!targetNetwork) throw new Error(`Target network with chainId ${targetChainId} not found`);
+      setNetwork(targetNetwork);
+      await ensureCorrectNetwork(targetChainId);
+    } catch (error) {
+      console.error("Error switching network:", error);
+      toast({
+        title: "Network switch failed",
+        description: "Failed to switch network. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSwitchingNetwork(false);
+    }
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setFilterBy(FILTER_OPTIONS.ALL);
+    setSortBy(SORT_OPTIONS.DEFAULT);
+  };
+
   const filteredAndSortedFaucets = useMemo(() => {
     let filtered = [...faucets];
 
-    // Apply search filter
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase().trim();
       filtered = filtered.filter((faucet) => {
@@ -600,7 +698,6 @@ export default function NetworkFaucets() {
       });
     }
 
-    // Apply type filter
     if (filterBy !== FILTER_OPTIONS.ALL) {
       filtered = filtered.filter((faucet) => {
         switch (filterBy) {
@@ -618,47 +715,43 @@ export default function NetworkFaucets() {
       });
     }
 
-    // Apply sorting
     filtered.sort((a, b) => {
       switch (sortBy) {
         case SORT_OPTIONS.DEFAULT:
-          // Active first, then by latest (createdAt or startTime)
-          if (a.isClaimActive !== b.isClaimActive) {
-            return a.isClaimActive ? -1 : 1;
-          }
+          if (a.isClaimActive !== b.isClaimActive) return a.isClaimActive ? -1 : 1;
           const aTime = Number(a.createdAt || a.startTime || 0);
           const bTime = Number(b.createdAt || b.startTime || 0);
           return bTime - aTime;
 
         case SORT_OPTIONS.NAME_ASC:
-          const aName = (a.name || a.tokenSymbol || "").toLowerCase();
-          const bName = (b.name || b.tokenSymbol || "").toLowerCase();
-          return aName.localeCompare(bName);
+          return (a.name || a.tokenSymbol || "").localeCompare(b.name || b.tokenSymbol || "");
 
         case SORT_OPTIONS.NAME_DESC:
-          const aNameDesc = (a.name || a.tokenSymbol || "").toLowerCase();
-          const bNameDesc = (b.name || b.tokenSymbol || "").toLowerCase();
-          return bNameDesc.localeCompare(aNameDesc);
+          return (b.name || b.tokenSymbol || "").localeCompare(a.name || a.tokenSymbol || "");
 
         case SORT_OPTIONS.BALANCE_HIGH:
-          const aBalance = Number(formatUnits(a.balance || BigInt(0), a.tokenDecimals || 18));
-          const bBalance = Number(formatUnits(b.balance || BigInt(0), b.tokenDecimals || 18));
-          return bBalance - aBalance;
+          return (
+            Number(formatUnits(b.balance || BigInt(0), b.tokenDecimals || 18)) -
+            Number(formatUnits(a.balance || BigInt(0), a.tokenDecimals || 18))
+          );
 
         case SORT_OPTIONS.BALANCE_LOW:
-          const aBalanceLow = Number(formatUnits(a.balance || BigInt(0), a.tokenDecimals || 18));
-          const bBalanceLow = Number(formatUnits(b.balance || BigInt(0), b.tokenDecimals || 18));
-          return aBalanceLow - bBalanceLow;
+          return (
+            Number(formatUnits(a.balance || BigInt(0), a.tokenDecimals || 18)) -
+            Number(formatUnits(b.balance || BigInt(0), b.tokenDecimals || 18))
+          );
 
         case SORT_OPTIONS.AMOUNT_HIGH:
-          const aAmount = Number(formatUnits(a.claimAmount || BigInt(0), a.tokenDecimals || 18));
-          const bAmount = Number(formatUnits(b.claimAmount || BigInt(0), b.tokenDecimals || 18));
-          return bAmount - aAmount;
+          return (
+            Number(formatUnits(b.claimAmount || BigInt(0), b.tokenDecimals || 18)) -
+            Number(formatUnits(a.claimAmount || BigInt(0), a.tokenDecimals || 18))
+          );
 
         case SORT_OPTIONS.AMOUNT_LOW:
-          const aAmountLow = Number(formatUnits(a.claimAmount || BigInt(0), a.tokenDecimals || 18));
-          const bAmountLow = Number(formatUnits(b.claimAmount || BigInt(0), b.tokenDecimals || 18));
-          return aAmountLow - bAmountLow;
+          return (
+            Number(formatUnits(a.claimAmount || BigInt(0), a.tokenDecimals || 18)) -
+            Number(formatUnits(b.claimAmount || BigInt(0), b.tokenDecimals || 18))
+          );
 
         default:
           return 0;
@@ -668,221 +761,32 @@ export default function NetworkFaucets() {
     return filtered;
   }, [faucets, searchTerm, filterBy, sortBy]);
 
-  // ✅ FIXED: Enhanced loadFaucets function with proper network handling and metadata loading with defaults
-  const loadFaucets = useCallback(async () => {
-    if (!network || isNaN(chainId)) {
-      console.log("Skipping loadFaucets: network undefined or invalid chainId", { chainId, network });
-      setLoadingFaucets(false);
-      setInitialLoading(false);
-      return;
-    }
-
-    console.log(`🔄 Loading faucets for network: ${network.name} (Chain ID: ${network.chainId})`);
-    setLoadingFaucets(true);
-    
-    try {
-      // ✅ CRITICAL FIX: Create a provider for the target network to read data
-      const networkProvider = new JsonRpcProvider(network.rpcUrl);
-      console.log(`🔗 Using network RPC: ${network.rpcUrl}`);
-      
-      // ✅ Pass the network-specific provider to getFaucetsForNetwork
-      const fetchedFaucets = await getFaucetsForNetwork(network, networkProvider);
-      
-      // ✅ Ensure all faucets have the correct network information
-      const faucetsWithNetwork = fetchedFaucets
-        .filter((f) => f && f.faucetAddress)
-        .map((faucet) => ({
-          ...faucet,
-          network: network, // Ensure correct network is set
-          tokenSymbol: faucet.tokenSymbol || 
-            (faucet.isEther ? getNativeTokenSymbol(network.name) : "TOK")
-        }));
-      
-      console.log(`✅ Loaded ${faucetsWithNetwork.length} faucets for ${network.name}`);
-      console.log("Sample faucet:", faucetsWithNetwork[0] ? {
-        address: faucetsWithNetwork[0].faucetAddress,
-        network: faucetsWithNetwork[0].network?.name,
-        symbol: faucetsWithNetwork[0].tokenSymbol,
-        isEther: faucetsWithNetwork[0].isEther
-      } : "No faucets found");
-      
-      // ✅ NEW: Load metadata (description and image) for each faucet with defaults
-      const faucetsWithMetadata = await Promise.all(
-        faucetsWithNetwork.map(async (faucet) => {
-          const metadata = await loadFaucetMetadata(faucet.faucetAddress);
-          
-          // ✅ Apply defaults if metadata is missing
-          const finalFaucet = {
-            ...faucet,
-            imageUrl: metadata.imageUrl || DEFAULT_FAUCET_IMAGE,
-            description: metadata.description || (
-              faucet.owner 
-                ? getDefaultDescription(network.name, faucet.owner)
-                : `A faucet for ${faucet.tokenSymbol || 'tokens'} on ${network.name}`
-            )
-          };
-          
-          return finalFaucet;
-        })
-      );
-      
-      console.log(`📝 Loaded metadata for ${faucetsWithMetadata.length} faucets (with defaults applied)`);
-      
-      // Set faucets with metadata
-      setFaucets(faucetsWithMetadata);
-      setPage(1);
-    } catch (error) {
-      console.error(`❌ Error loading faucets for network ${network.name} (chainId ${chainId}):`, error);
-      toast({
-        title: `Failed to load faucets for ${network.name}`,
-        description: "Please try again later.",
-        variant: "destructive",
-      });
-      setFaucets([]); // Clear faucets on error
-    } finally {
-      setLoadingFaucets(false);
-      setInitialLoading(false);
-    }
-  }, [network, chainId, toast]);
-
-  useEffect(() => {
-    if (isNaN(chainId) || !network) {
-      console.log("❌ Invalid chainId or network not found", { chainId, network, chainIdStr });
-      setInitialLoading(false);
-      toast({
-        title: "Network Not Found",
-        description: `Network with chain ID ${chainIdStr || "unknown"} is not supported`,
-        variant: "destructive",
-      });
-      router.push("/");
-      return;
-    }
-
-    console.log(`✅ Valid network found: ${network.name} (${network.chainId})`);
-    loadFaucets();
-  }, [chainId, network, router, toast, loadFaucets, chainIdStr]);
-
-  const handleNetworkSwitch = async (targetChainId: number) => {
-    setSwitchingNetwork(true);
-    try {
-      const targetNetwork = networks.find((n) => n.chainId === targetChainId);
-      if (!targetNetwork) {
-        throw new Error(`Target network with chainId ${targetChainId} not found`);
-      }
-      console.log(`🔄 Switching to network: ${targetNetwork.name} (${targetChainId})`);
-      setNetwork(targetNetwork);
-      await ensureCorrectNetwork(targetChainId);
-    } catch (error) {
-      console.error("❌ Error switching network:", error);
-      toast({
-        title: "Network switch failed",
-        description: "Failed to switch network. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setSwitchingNetwork(false);
-    }
-  };
-
-  const handleClearFilters = () => {
-    setSearchTerm("");
-    setFilterBy(FILTER_OPTIONS.ALL);
-    setSortBy(SORT_OPTIONS.DEFAULT);
-    setPage(1);
-  };
-
   const hasActiveFilters = searchTerm.trim() !== "" || filterBy !== FILTER_OPTIONS.ALL || sortBy !== SORT_OPTIONS.DEFAULT;
+  const canLoadMore = faucets.length < totalFaucets;
+  const totalFilteredAndSorted = filteredAndSortedFaucets.length;
+  const isFirstLoad = faucets.length === 0 && loadingFaucets;
 
-  // Reset page when filters change
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm, filterBy, sortBy]);
-
-  const totalPages = Math.ceil(filteredAndSortedFaucets.length / faucetsPerPage);
-  const paginatedFaucets = filteredAndSortedFaucets.slice((page - 1) * faucetsPerPage, page * faucetsPerPage);
-
-  const getPageButtons = () => {
-    const buttons = [];
-    const maxButtons = 5;
-    const start = Math.max(1, page - Math.floor(maxButtons / 2));
-    const end = Math.min(totalPages, start + maxButtons - 1);
-
-    if (start > 1) {
-      buttons.push(
-        <Button
-          key={1}
-          variant={1 === page ? "default" : "outline"}
-          size="sm"
-          onClick={() => setPage(1)}
-          className="w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm"
-        >
-          1
-        </Button>
-      );
-      if (start > 2) buttons.push(<span key="start-ellipsis" className="text-xs sm:text-sm">...</span>);
-    }
-
-    for (let p = start; p <= end; p++) {
-      buttons.push(
-        <Button
-          key={p}
-          variant={p === page ? "default" : "outline"}
-          size="sm"
-          onClick={() => setPage(p)}
-          className="w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm"
-        >
-          {p}
-        </Button>
-      );
-    }
-
-    if (end < totalPages) {
-      if (end < totalPages - 1) buttons.push(<span key="end-ellipsis" className="text-xs sm:text-sm">...</span>);
-      buttons.push(
-        <Button
-          key={totalPages}
-          variant={totalPages === page ? "default" : "outline"}
-          size="sm"
-          onClick={() => setPage(totalPages)}
-          className="w-8 h-8 sm:w-9 sm:h-9 text-xs sm:text-sm"
-        >
-          {totalPages}
-        </Button>
-      );
-    }
-
-    return buttons;
-  };
-
-  // ✅ UPDATED: Show LoadingPage during initial load
   if (initialLoading) {
     return <LoadingPage />;
   }
 
   return (
     <div className="container mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6">
-      {/* Header with Back Button */}
       <div className="flex items-center gap-4 mb-6">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={goBack}
-          className="flex items-center gap-2"
-        >
+        <Button variant="outline" size="sm" onClick={goBack} className="flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
         <div className="flex-1">
           {/* <Header
             pageTitle={`Faucets on ${network?.name || "Unknown Network"}`}
-            onRefresh={loadFaucets}
+            onRefresh={() => loadFaucets(1, false, true)}
             loading={loadingFaucets}
           /> */}
           <Head />
         </div>
       </div>
 
-      {/* Search and Filter Controls */}
       <SearchAndFilterControls
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
@@ -894,38 +798,34 @@ export default function NetworkFaucets() {
         hasActiveFilters={hasActiveFilters}
       />
 
-      {/* ✅ UPDATED: Show loading state only for content loading, not initial page load */}
-      {loadingFaucets && !initialLoading ? (
+      {isFirstLoad && loadingFaucets ? (
         <div className="flex justify-center items-center py-8 sm:py-10 md:py-12">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 border-b-2 border-primary mx-auto"></div>
+            <Loader2 className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 text-primary mx-auto" />
             <p className="mt-3 sm:mt-4 text-xs sm:text-sm md:text-base">Loading faucets...</p>
           </div>
         </div>
-      ) : filteredAndSortedFaucets.length === 0 ? (
+      ) : totalFilteredAndSorted === 0 ? (
         <Card className="w-full max-w-[400px] mx-auto">
           <CardContent className="flex flex-col items-center justify-center py-6 sm:py-8 md:py-10">
             <Coins className="h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 text-muted-foreground mb-2 sm:mb-3 md:mb-4" />
             <h3 className="text-base sm:text-lg md:text-xl font-medium mb-1 sm:mb-2">
-              {faucets.length === 0 ? "No Faucets Found" : "No Matching Faucets"}
+              {totalFaucets === 0 ? "No Faucets Found" : "No Matching Faucets"}
             </h3>
             <p className="text-xs sm:text-sm md:text-base text-muted-foreground mb-3 sm:mb-4 md:mb-6 text-center">
-              {faucets.length === 0 
+              {totalFaucets === 0
                 ? `No faucets are available on ${network?.name || "this network"} yet.`
-                : "Try adjusting your search or filter criteria."
-              }
+                : "Try adjusting your search or filter criteria."}
             </p>
-            {faucets.length === 0 ? (
+            {totalFaucets === 0 && (
               <Link href="/create">
                 <Button className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
                   Create Faucet
                 </Button>
               </Link>
-            ) : (
-              <Button 
-                onClick={handleClearFilters}
-                className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base"
-              >
+            )}
+            {totalFaucets > 0 && (
+              <Button onClick={handleClearFilters} className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
                 Clear Filters
               </Button>
             )}
@@ -933,21 +833,15 @@ export default function NetworkFaucets() {
         </Card>
       ) : (
         <>
-          {/* Results Summary */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs sm:text-sm text-muted-foreground">
             <span>
-              Showing {filteredAndSortedFaucets.length} of {faucets.length} faucets on {network?.name || "Unknown Network"}
-              {hasActiveFilters && " (filtered)"}
+              Showing {totalFilteredAndSorted} of {totalFaucets} faucets on {network?.name || "Unknown Network"}
+              {hasActiveFilters && " (filtered on loaded data)"}
             </span>
             {hasActiveFilters && (
               <div className="flex items-center gap-2">
                 <span className="text-primary font-medium">Filters applied</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearFilters}
-                  className="h-6 text-xs px-2"
-                >
+                <Button variant="ghost" size="sm" onClick={handleClearFilters} className="h-6 text-xs px-2">
                   Clear all
                 </Button>
               </div>
@@ -955,7 +849,7 @@ export default function NetworkFaucets() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-            {paginatedFaucets.map((faucet) => (
+            {filteredAndSortedFaucets.map((faucet) => (
               <FaucetCard
                 key={`${faucet.faucetAddress}-${network?.chainId || chainId}`}
                 faucet={faucet}
@@ -964,34 +858,26 @@ export default function NetworkFaucets() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4 mt-4 sm:mt-6">
-              <div className="text-xs sm:text-sm md:text-base text-muted-foreground text-center sm:text-left">
-                Showing {(page - 1) * faucetsPerPage + 1} to{" "}
-                {Math.min(page * faucetsPerPage, filteredAndSortedFaucets.length)} of {filteredAndSortedFaucets.length} faucets
-              </div>
-              <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1 || loadingFaucets}
-                  className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base px-2 sm:px-3"
-                >
-                  Previous
-                </Button>
-                {getPageButtons()}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages || loadingFaucets}
-                  className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base px-2 sm:px-3"
-                >
-                  Next
-                </Button>
-              </div>
+          {canLoadMore && (
+            <div className="flex justify-center mt-6">
+              <Button
+                onClick={loadNextPage}
+                disabled={loadingFaucets || switchingNetwork}
+                className="h-10 px-6 text-sm sm:text-base"
+              >
+                {loadingFaucets ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  // ✅ Updated Load More button text to reflect the 6-item chunk
+                  `Load Next ${Math.min(limit, totalFaucets - faucets.length)} Faucets (${totalFaucets - faucets.length} remaining)`
+                )}
+              </Button>
             </div>
+          )}
+          {faucets.length > 0 && !canLoadMore && (
+            <p className="text-center text-xs sm:text-sm text-muted-foreground mt-4">
+              You've loaded all {totalFaucets} available faucets.
+            </p>
           )}
         </>
       )}

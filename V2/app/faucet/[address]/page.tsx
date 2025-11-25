@@ -3503,7 +3503,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                                 </Button>
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                Note: Owner and factory owner cannot be modified through this interface.
+                                Note: Owner cannot be modified through this interface.
                               </p>
                             </div>
                           )}

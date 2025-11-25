@@ -1405,11 +1405,26 @@ const handleShareOnX = (): void => {
   }
 
   useEffect(() => {
+    // 1. Initial check for missing faucet details
     if (!faucetDetails) return
+
+    // 2. Check for unconfigured parameters: Assuming a new faucet has startTime = 0.
+    // Adjust this check based on what value 'faucetDetails.startTime' holds for a new, unconfigured faucet.
+    const isUnconfigured = Number(faucetDetails.startTime) === 0 && Number(faucetDetails.endTime) === 0;
+
+    if (isUnconfigured) {
+        setStartCountdown("Please Update your parameter")
+        setEndCountdown("Please Update your parameter")
+        return // Stop execution if unconfigured
+    }
+
     const updateCountdown = () => {
       const now = Date.now()
+      // Convert seconds (from contract/details) to milliseconds
       const start = Number(faucetDetails.startTime) * 1000
       const end = Number(faucetDetails.endTime) * 1000
+
+      // --- START COUNTDOWN LOGIC ---
       if (start > now) {
         const diff = start - now
         const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -1418,8 +1433,10 @@ const handleShareOnX = (): void => {
         const seconds = Math.floor((diff % (1000 * 60)) / 1000)
         setStartCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s until active`)
       } else {
-        setStartCountdown("Already active")
+        setStartCountdown("")
       }
+
+      // --- END COUNTDOWN LOGIC ---
       if (end > now && faucetDetails.isClaimActive) {
         const diff = end - now
         const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -1430,13 +1447,17 @@ const handleShareOnX = (): void => {
       } else if (end > 0 && end <= now) {
         setEndCountdown("Ended")
       } else {
+        // This covers cases where end time is 0 or less than 0, or not active
+        // NOTE: If you want to show 'N/A' for active faucets without an end time,
+        // you might adjust the `end > 0` condition.
         setEndCountdown("N/A")
       }
     }
+
     updateCountdown()
     const interval = setInterval(updateCountdown, 1000)
     return () => clearInterval(interval)
-  }, [faucetDetails])
+}, [faucetDetails]) // Ensure setStartCountdown/setEndCountdown are in the dependencies if they are not defined outside the component.
 
   // ✅ Refresh custom claim amounts when address changes or faucet type is detected
   useEffect(() => {
@@ -2708,7 +2729,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                   </div>
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                      
                       <span className="text-xs sm:text-sm">{startCountdown}</span>
                     </div>
                     <div className="flex items-center gap-2">

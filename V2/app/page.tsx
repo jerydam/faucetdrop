@@ -3,7 +3,6 @@
 
 import { FaucetList } from "@/components/faucet-list"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
-import { DroplistTasks } from "@/components/droplist"
 import { Contract } from "ethers"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
@@ -298,16 +297,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Droplist Tasks Modal */}
-      <DroplistTasks
-        isOpen={isDroplistOpen}
-        onClose={handleDroplistClose}
-        userAddress={address || ""}
-        isWalletConnected={isConnected}
-      />
-      
+      </div>      
     </main>
   )
 }

@@ -11,8 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-// import { Header } from "@/components/header"
-import Head from "@/components/Head"
+import { Header } from "@/components/header"
 import {
   getFaucetDetails,
   isWhitelisted,
@@ -1419,7 +1418,7 @@ const handleShareOnX = (): void => {
         const seconds = Math.floor((diff % (1000 * 60)) / 1000)
         setStartCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s until active`)
       } else {
-        setStartCountdown("Already Active")
+        setStartCountdown("Already active")
       }
       if (end > now && faucetDetails.isClaimActive) {
         const diff = end - now
@@ -2521,8 +2520,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="flex flex-col gap-6 sm:gap-8 max-w-3xl sm:max-w-4xl mx-auto">
-          {/* <Header pageTitle="Faucet Details" /> */}
-          <Head />
+          <Header pageTitle="Faucet Details" />
           
           {/* ✅ NEW: Navigation and action buttons */}
           <div className="flex flex-row  justify-between items-start sm:items-center gap-4">

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
+import { JoinDroplistButton } from "./droplist";
 
 export function Header({ pageTitle }: { pageTitle: string }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -63,6 +64,7 @@ export function Header({ pageTitle }: { pageTitle: string }) {
             <Plus className="h-4 w-4" />
             <span>Create Faucet</span>
           </Button>
+          <JoinDroplistButton/>
           <WalletConnectButton />
         </div>
       </div>
@@ -70,6 +72,7 @@ export function Header({ pageTitle }: { pageTitle: string }) {
       {/* Desktop Actions */}
       <div className="hidden sm:flex items-center gap-2 sm:gap-3">
         <NetworkSelector />
+        
         <Button
           onClick={() => router.push('/create')}
           size="sm"
@@ -78,6 +81,7 @@ export function Header({ pageTitle }: { pageTitle: string }) {
           <Plus className="h-4 w-4" />
           <span>Create Faucet</span>
         </Button>
+        <JoinDroplistButton/>
         <WalletConnectButton />
       </div>
     </header>

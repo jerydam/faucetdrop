@@ -29,7 +29,7 @@ export function Header({ pageTitle }: { pageTitle: string }) {
   return (
     <header className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-6 bg-background">
      
-      <h1 className="text-base sm:text-lg font-semibold">{pageTitle}</h1>
+      <h1 className="text-base sm:text-lg font-semibold" title="Go Back Home"><Link href="/">{pageTitle}</Link></h1>
     
       {/* Mobile Toggle Button */}
       <div className="sm:hidden">

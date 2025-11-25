@@ -7,9 +7,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { JsonRpcProvider, Contract, isAddress, formatUnits, ZeroAddress } from "ethers"
 import { useNetwork } from "@/hooks/use-network"
-import { FACTORY_ABI, FAUCET_ABI, ERC20_ABI } from "@/lib/abis" // Assuming FAUCET_ABI and ERC20_ABI are defined elsewhere
+import { FAUCET_ABI_CUSTOM, FAUCET_ABI_DROPCODE, FAUCET_ABI_DROPLIST } from "@/lib/abis"
+// Assuming these ABIs are defined and accessible via this path
+import { FACTORY_ABI, FAUCET_ABI, ERC20_ABI } from "@/lib/abis" 
 import { useToast } from "@/hooks/use-toast"
 import { DataService, ClaimData } from "@/lib/database-helpers"
+
+// --- PROVIDED FAUCET ABIs ---
+// NOTE: These ABIs are used inside the batchFetchFaucetDetails helper for name fallback.
+
+
+const FAUCET_ABIS = {
+  custom: FAUCET_ABI_CUSTOM,
+  dropcode: FAUCET_ABI_DROPCODE,
+  droplist: FAUCET_ABI_DROPLIST
+};
+// -----------------------------
 
 // Chain configurations
 interface ChainConfig {
@@ -66,7 +79,7 @@ const STORAGE_KEYS = {
 // Cache duration (5 minutes)
 const CACHE_DURATION = 5 * 60 * 1000
 
-// Claim type definition (UPDATED to include faucetName)
+// Claim type definition (Updated for 2-step fetch)
 type ClaimType = {
   claimer: string
   faucet: string
@@ -74,10 +87,13 @@ type ClaimType = {
   networkName: string
   timestamp: number
   chainId: number
+  isEther: boolean
+  // Raw fields from Step 1
+  tokenAddress: string | Promise<string> 
+  // Enriched fields from Step 2
   tokenSymbol: string
   tokenDecimals: number
-  isEther: boolean
-  faucetName?: string // Now included from chain fetch
+  faucetName: string 
 }
 
 // Helper function to save data to localStorage
@@ -172,42 +188,7 @@ async function getTokenInfo(
   }
 }
 
-// NEW HELPER: Robustly get the faucet name
-async function getFaucetName(
-  faucetAddress: string,
-  provider: JsonRpcProvider
-): Promise<string> {
-  const defaultName = `Faucet ${faucetAddress.slice(0, 6)}...${faucetAddress.slice(-4)}`;
-  
-  // Try common name functions (assuming FAUCET_ABI includes them, or we define custom ABIs here)
-  const nameFunctions = ['name', 'getName', 'faucetName'];
-  
-  for (const func of nameFunctions) {
-    try {
-      // Create a temporary contract interface just for this function call
-      const contract = new Contract(faucetAddress, [{
-        "inputs": [],
-        "name": func,
-        "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
-        "stateMutability": "view",
-        "type": "function"
-      }], provider);
-      
-      const fetchedName = await contract[func]();
-      
-      if (fetchedName && fetchedName.trim() !== '' && fetchedName !== ZeroAddress) {
-        return fetchedName;
-      }
-    } catch (error) {
-      // Ignore errors and try the next function
-    }
-  }
-
-  return defaultName;
-}
-
-
-// Function to get claims from factories for a single network (UPDATED to fetch name)
+// --- STEP 1 HELPER: Get raw claims only ---
 async function getAllClaimsFromFactories(
   provider: JsonRpcProvider,
   network: any,
@@ -220,9 +201,7 @@ async function getAllClaimsFromFactories(
   timestamp: number
   networkName: string
   chainId: number
-  tokenSymbol: string
-  tokenDecimals: number
-  faucetName: string // Explicitly added to the return type
+  tokenAddress: string // Raw field
 }[]> {
   try {
     let allClaims: any[] = []
@@ -232,7 +211,6 @@ async function getAllClaimsFromFactories(
         console.warn(`Invalid factory address ${factoryAddress} on ${network.name}`)
         continue
       }
-      // Assuming FACTORY_ABI includes getAllTransactions()
       const factoryContract = new Contract(factoryAddress, FACTORY_ABI, provider)
       
       const code = await provider.getCode(factoryAddress)
@@ -258,113 +236,162 @@ async function getAllClaimsFromFactories(
       }
     }
 
-    // Process claims and get additional information
-    const processedClaims = await Promise.all(
+    // Process claims to get the bare minimum needed for Step 2
+    const rawClaims = await Promise.all(
       allClaims.map(async (claim) => {
-        
-        let tokenInfo;
         let tokenAddress = ZeroAddress;
-        let faucetName = '';
-
-        if (claim.isEther) {
-          tokenInfo = await getTokenInfo("", provider, network.chainId, true)
-          faucetName = `${network.nativeCurrency.symbol} Faucet (Native)`;
+        let isEther = claim.isEther;
+        
+        if (!isEther) {
+          try {
+            const faucetContract = new Contract(claim.faucetAddress, FAUCET_ABI, provider);
+            // Use Promise.race or chained promises to try multiple getters
+            tokenAddress = await faucetContract.token().catch(() => faucetContract.tokenAddress()).catch(() => ZeroAddress);
+          } catch {
+            const chainConfig = CHAIN_CONFIGS[network.chainId];
+            tokenAddress = chainConfig?.nativeTokenAddress || ZeroAddress;
+          }
         } else {
-          // --- Fetch Token Address ---
-          try {
-            const faucetContract = new Contract(claim.faucetAddress, FAUCET_ABI, provider)
-            
-            try {
-              tokenAddress = await faucetContract.token()
-            } catch {
-              try {
-                tokenAddress = await faucetContract.tokenAddress()
-              } catch {
-                const chainConfig = CHAIN_CONFIGS[network.chainId]
-                tokenAddress = chainConfig?.nativeTokenAddress || ZeroAddress
-              }
-            }
-          } catch (error) {
-             // Failed to get token address, proceed with default/native address
-          }
-            
-          // --- Fetch Token Info AND Faucet Name concurrently ---
-          try {
-            const [fetchedTokenInfo, fetchedFaucetName] = await Promise.all([
-                getTokenInfo(tokenAddress, provider, network.chainId, false),
-                getFaucetName(claim.faucetAddress, provider)
-            ]);
-
-            tokenInfo = fetchedTokenInfo;
-            faucetName = fetchedFaucetName;
-          } catch (error) {
-            console.warn(`Error fetching details for faucet ${claim.faucetAddress}:`, error);
-            tokenInfo = { symbol: "TOKEN", decimals: 18 };
-            faucetName = `Faucet ${claim.faucetAddress.slice(0, 6)}...${claim.faucetAddress.slice(-4)}`;
-          }
+            // For native ETH/CELO claims, use the native token address/placeholder
+            tokenAddress = CHAIN_CONFIGS[network.chainId]?.nativeTokenAddress || ZeroAddress;
         }
-
+        
         return {
           faucetAddress: claim.faucetAddress,
           transactionType: claim.transactionType,
           initiator: claim.initiator,
           amount: BigInt(claim.amount),
-          isEther: claim.isEther,
+          isEther: isEther,
           timestamp: Number(claim.timestamp),
           networkName: network.name,
           chainId: network.chainId,
-          tokenSymbol: tokenInfo.symbol,
-          tokenDecimals: tokenInfo.decimals,
-          faucetName: faucetName // <-- Now included
+          tokenAddress: tokenAddress.toString(),
         }
       })
     )
-
-    return processedClaims
+    return rawClaims;
   } catch (error: any) {
     console.error(`Error fetching claims from factories on ${network.name}:`, error)
     throw new Error(error.message || "Failed to fetch claims from factories")
   }
 }
 
-// Function to get all claims from all networks (UPDATED to map faucetName)
+// Function to get all claims from all networks (Step 1 runner)
 async function getAllClaimsFromAllNetworks(
   networks: any[]
 ): Promise<ClaimType[]> {
-  const allClaims: ClaimType[] = []
-
-  for (const network of networks) {
+  const rawClaimsPromises = networks.map(async (network) => {
     try {
-      console.log(`Fetching claims from ${network.name}...`)
-      
-      const provider = new JsonRpcProvider(network.rpcUrl)
+      console.log(`Fetching raw claims from ${network.name}...`)
+      const provider = new JsonRpcProvider(network.rpcUrls[0])
       const networkClaims = await getAllClaimsFromFactories(provider, network)
       
-      // Convert to ClaimType format
-      const convertedClaims: ClaimType[] = networkClaims.map(claim => ({
-        claimer: claim.initiator,
-        faucet: claim.faucetAddress,
-        amount: claim.amount,
-        networkName: claim.networkName,
-        timestamp: claim.timestamp,
-        chainId: claim.chainId,
-        tokenSymbol: claim.tokenSymbol,
-        tokenDecimals: claim.tokenDecimals,
-        isEther: claim.isEther,
-        faucetName: claim.faucetName, // <-- Now mapped
-      }))
-      
-      allClaims.push(...convertedClaims)
-      console.log(`Added ${convertedClaims.length} claims from ${network.name}`)
+      return networkClaims.map(claim => ({
+        ...claim,
+        // Set enriched fields to placeholders for now
+        tokenSymbol: 'N/A', 
+        tokenDecimals: 18,
+        faucetName: `Faucet ${claim.faucetAddress.slice(0, 6)}...${claim.faucetAddress.slice(-4)}`,
+      })) as ClaimType[]
     } catch (error) {
-      console.error(`Error fetching claims from ${network.name}:`, error)
+      console.error(`Error fetching raw claims from ${network.name}:`, error)
+      return [] as ClaimType[]
     }
-  }
+  });
+
+  const results = await Promise.all(rawClaimsPromises);
+  let allClaims: ClaimType[] = results.flat();
 
   // Sort by timestamp (newest first)
   allClaims.sort((a, b) => b.timestamp - a.timestamp)
-  console.log(`Total claims from all networks: ${allClaims.length}`)
+  
+  console.log(`Total raw claims gathered: ${allClaims.length}`)
   return allClaims
+}
+
+// --- STEP 2 HELPER: Batch fetch name and token details ---
+// --- MODIFIED STEP 2 HELPER: Batch fetch name and token details ---
+async function batchFetchFaucetDetails(
+    faucetAddresses: Set<string>,
+    claims: ClaimType[],
+    networks: any[]
+): Promise<Record<string, { name: string; symbol: string; decimals: number }>> {
+    const detailsMap: Record<string, { name: string; symbol: string; decimals: number }> = {};
+    const promises: Promise<void>[] = [];
+    
+    // Group claims by faucet address to find the corresponding chain/token address
+    const claimMap: Record<string, ClaimType> = {};
+    claims.forEach(c => {
+        if (!claimMap[c.faucet]) claimMap[c.faucet] = c;
+    });
+
+    for (const address of faucetAddresses) {
+        const claim = claimMap[address];
+        if (!claim) continue;
+        
+        const network = networks.find(n => n.chainId === claim.chainId);
+        if (!network) continue;
+        
+        const provider = new JsonRpcProvider(network.rpcUrls[0]);
+        const chainConfig = CHAIN_CONFIGS[claim.chainId];
+        
+        promises.push((async () => {
+            let name = `Faucet ${address.slice(0, 6)}...${address.slice(-4)}`;
+            let tokenAddress = claim.tokenAddress.toString();
+            const isNative = tokenAddress === chainConfig?.nativeTokenAddress;
+            
+            let symbol = isNative ? chainConfig.nativeCurrency.symbol : "TOKEN";
+            let decimals = isNative ? chainConfig.nativeCurrency.decimals : 18;
+
+            // 1. Fetch Name (Robust Multi-ABI Attempt)
+            const namePromises = Object.entries(FAUCET_ABIS).map(([abiKey, abi]) => {
+                const nameAbi = abi.find(fn => fn.name === 'name' && fn.type === 'function');
+                if (!nameAbi) return Promise.resolve(null);
+                
+                // Create minimal contract instance for the 'name' function
+                const contract = new Contract(address, [nameAbi], provider);
+                
+                return contract.name()
+                    .then(n => {
+                        if (n && n.trim() !== '') {
+                            console.log(`✅ Faucet ${address} name found via ${abiKey}: ${n}`);
+                            return n;
+                        }
+                        return null;
+                    })
+                    .catch(e => {
+                        // console.warn(`Name fetch failed for ${address} via ${abiKey}:`, e.message);
+                        return null; // Swallow RPC error, try next ABI
+                    }); 
+            });
+
+            // Wait for the first successful name retrieval
+            const fetchedNames = await Promise.all(namePromises);
+            const successfulName = fetchedNames.find(n => n);
+            
+            if (successfulName) {
+                name = successfulName;
+            } else {
+                 console.warn(`❌ Faucet ${address} failed to retrieve name on chain ${claim.chainId}. Using fallback.`);
+            }
+
+            // 2. Fetch Token Info (if not native)
+            if (!isNative && tokenAddress !== ZeroAddress) {
+                const tokenInfo = await getTokenInfo(tokenAddress, provider, claim.chainId, false).catch(e => {
+                    return null;
+                });
+                if (tokenInfo) {
+                    symbol = tokenInfo.symbol;
+                    decimals = tokenInfo.decimals;
+                }
+            }
+            
+            detailsMap[address] = { name, symbol, decimals };
+        })());
+    }
+
+    await Promise.all(promises);
+    return detailsMap;
 }
 
 interface ChartClaimData {
@@ -397,7 +424,7 @@ export function UserClaimsChart() {
   
   useEffect(() => {
     // Load cached totalClaims on mount
-    const stored = localStorage.getItem('totalclaim')
+    const stored = localStorage.getItem(STORAGE_KEYS.TOTAL_CLAIMS)
     if (stored) {
       try {
         const parsed = JSON.parse(stored)
@@ -420,16 +447,18 @@ export function UserClaimsChart() {
     return colors
   }
 
-  // Function to fetch faucet names with caching (SIMPLIFIED)
-  const fetchFaucetNames = useCallback(async (claimsData: ClaimType[]) => {
+  // --- Step 2.5: Enriches Faucet Names Cache ---
+  const updateFaucetNamesCache = useCallback((claimsData: ClaimType[], detailsMap: Record<string, { name: string; symbol: string; decimals: number }>) => {
     // Load cached names first
     const cachedNames = loadFromLocalStorage<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES) || {};
     let newNames: Record<string, string> = { ...cachedNames };
 
-    // Update with names freshly retrieved from the chain (present in claimsData)
+    // Update with names freshly retrieved from the chain/details map
     claimsData.forEach(claim => {
-        if (claim.faucetName) {
-            newNames[claim.faucet.toLowerCase()] = claim.faucetName;
+        // Use the enriched name if available, otherwise use the direct claim name (from cache/placeholder)
+        const enrichedName = detailsMap[claim.faucet]?.name || claim.faucetName;
+        if (enrichedName) {
+            newNames[claim.faucet.toLowerCase()] = enrichedName;
         }
     });
 
@@ -438,15 +467,21 @@ export function UserClaimsChart() {
     return newNames;
   }, []);
 
+
   const fetchAndStoreData = async () => {
     setLoading(true)
     try {
-      console.log("Fetching claims from factory sources...")
+      console.log("Starting 2-step data fetch...")
       
-      // Claims now include faucetName
-      const allClaims = await getAllClaimsFromAllNetworks(networks)
-      console.log("Fetched factory claims:", allClaims.length)
+      // STEP 1: Fetch ALL Claims (raw data)
+      const rawClaims = await getAllClaimsFromAllNetworks(networks)
+      
+      // STEP 2: Identify unique addresses and batch fetch details
+      const uniqueFaucets = new Set(rawClaims.map(c => c.faucet));
+      const faucetDetailsMap = await batchFetchFaucetDetails(uniqueFaucets, rawClaims, networks);
 
+      // STEP 3: Process Claims and Integrate Details
+      let allClaims: ClaimType[] = [];
       const claimsByFaucet: { [key: string]: { 
         claims: number, 
         network: string,
@@ -457,39 +492,50 @@ export function UserClaimsChart() {
         latestTimestamp: number
       } } = {}
 
-      let totalClaimsCount = allClaims.length
+      for (const rawClaim of rawClaims) {
+          const detail = faucetDetailsMap[rawClaim.faucet] || { 
+              name: rawClaim.faucetName, // Placeholder/Cached Name
+              symbol: rawClaim.tokenSymbol, // Placeholder/Cached Symbol
+              decimals: rawClaim.tokenDecimals // Placeholder/Cached Decimals
+          };
+          
+          const claim: ClaimType = {
+              ...rawClaim,
+              tokenSymbol: detail.symbol,
+              tokenDecimals: detail.decimals,
+              faucetName: detail.name
+          };
+          allClaims.push(claim);
 
-      // Process all claims
-      for (const claim of allClaims) {
-        const faucetKey = claim.faucet.toLowerCase()
-        
-        if (!claimsByFaucet[faucetKey]) {
-          claimsByFaucet[faucetKey] = { 
-            claims: 0, 
-            network: claim.networkName,
-            chainId: claim.chainId,
-            totalAmount: BigInt(0),
-            tokenSymbol: claim.tokenSymbol,
-            tokenDecimals: claim.tokenDecimals,
-            latestTimestamp: 0
+          const faucetKey = claim.faucet.toLowerCase();
+          
+          if (!claimsByFaucet[faucetKey]) {
+            claimsByFaucet[faucetKey] = { 
+              claims: 0, 
+              network: claim.networkName,
+              chainId: claim.chainId,
+              totalAmount: BigInt(0),
+              tokenSymbol: detail.symbol,
+              tokenDecimals: detail.decimals,
+              latestTimestamp: 0
+            }
           }
-        }
-        
-        claimsByFaucet[faucetKey].claims += 1
-        claimsByFaucet[faucetKey].totalAmount += claim.amount
-        
-        if (claim.timestamp > claimsByFaucet[faucetKey].latestTimestamp) {
-          claimsByFaucet[faucetKey].latestTimestamp = claim.timestamp
-        }
+          
+          claimsByFaucet[faucetKey].claims += 1
+          claimsByFaucet[faucetKey].totalAmount += claim.amount
+          
+          if (claim.timestamp > claimsByFaucet[faucetKey].latestTimestamp) {
+            claimsByFaucet[faucetKey].latestTimestamp = claim.timestamp
+          }
       }
 
-      setTotalClaims(totalClaimsCount)
+      setTotalClaims(allClaims.length)
       setTotalFaucets(Object.keys(claimsByFaucet).length)
 
-      // Fetch faucet names with caching (Populates faucetNames state and cache)
-      const combinedNames = await fetchFaucetNames(allClaims)
+      // STEP 4: Update Cache and State (CRUCIAL for loadStoredData)
+      const combinedNames = updateFaucetNamesCache(allClaims, faucetDetailsMap)
 
-      // Create faucet rankings
+      // STEP 5: Create faucet rankings
       const rankingData: FaucetRanking[] = Object.entries(claimsByFaucet)
         .sort(([, a], [, b]) => b.latestTimestamp - a.latestTimestamp)
         .map(([faucet, data], index) => {
@@ -510,8 +556,7 @@ export function UserClaimsChart() {
 
       // Save to localStorage
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEYS.TOTAL_CLAIMS, JSON.stringify(totalClaimsCount))
-        console.log('Saved totalClaims to localStorage:', totalClaimsCount)
+        localStorage.setItem(STORAGE_KEYS.TOTAL_CLAIMS, JSON.stringify(allClaims.length))
       }
 
       // Convert to chart data format - show ONLY TOP 10 faucets
@@ -560,12 +605,7 @@ export function UserClaimsChart() {
       }))
       await DataService.saveClaimData(supabaseClaimData)
 
-      console.log("Claims chart data (Top 10):", chartData)
-      console.log("Faucet rankings (All):", rankingData)
-
       setData(chartData)
-      
-      console.log('Claim data saved to both localStorage and Supabase')
       
       if (allClaims.length > 0) {
         toast({
@@ -585,7 +625,7 @@ export function UserClaimsChart() {
     }
   }
 
-  // UPDATED: loadStoredData to correctly populate faucetNames state from cache/Supabase
+  // UPDATED: loadStoredData to correctly handle cache and Supabase name retrieval
   const loadStoredData = async () => {
     // Try localStorage first
     if (isCacheValid()) {
@@ -593,7 +633,10 @@ export function UserClaimsChart() {
       if (cachedClaims && cachedClaims.length > 0) {
         console.log('Using cached claims data from localStorage')
         
-        // --- LOGIC FOR CACHED DATA PROCESSING ---
+        // Load cached names separately (CRITICAL FIX)
+        const cachedNames = loadFromLocalStorage<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES) || {};
+        
+        // --- DATA PROCESSING ---
         const claimsByFaucet: { [key: string]: { 
             claims: number, 
             network: string,
@@ -613,8 +656,9 @@ export function UserClaimsChart() {
                     network: claim.networkName,
                     chainId: claim.chainId,
                     totalAmount: BigInt(0),
-                    tokenSymbol: claim.tokenSymbol,
-                    tokenDecimals: claim.tokenDecimals,
+                    // Use cached details if available, otherwise fallback
+                    tokenSymbol: claim.tokenSymbol || 'N/A', 
+                    tokenDecimals: claim.tokenDecimals || 18,
                     latestTimestamp: 0
                 }
             }
@@ -626,9 +670,6 @@ export function UserClaimsChart() {
                 claimsByFaucet[faucetKey].latestTimestamp = claim.timestamp
             }
         }
-        
-        // Load cached names separately (CRITICAL FIX)
-        const cachedNames = loadFromLocalStorage<Record<string, string>>(STORAGE_KEYS.FAUCET_NAMES) || {};
         
         // Use cached names and data to build rankings/chart data
         const rankingData = Object.entries(claimsByFaucet)

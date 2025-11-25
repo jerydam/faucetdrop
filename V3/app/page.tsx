@@ -1,9 +1,11 @@
-import Image from "next/image";
+// import Image from "next/image";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-     FAUCET LANDING PAGE HERE
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="container">
+        FAUCET LANDING PAGE HERE
+      </div>
     </div>
   );
 }

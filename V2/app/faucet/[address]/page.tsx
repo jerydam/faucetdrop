@@ -407,7 +407,7 @@ const loadCustomXPostTemplate = async (): Promise<void> => {
         console.log("📝 No custom X post template found, using default template")
         // PRE-FILL with default template so owner can edit it
         setCustomXPostTemplate(
-          `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+          `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
         )
         return
       }
@@ -423,7 +423,7 @@ const loadCustomXPostTemplate = async (): Promise<void> => {
       console.log("📝 No custom template set, pre-filling with default")
       // PRE-FILL with default template so owner can edit it
       setCustomXPostTemplate(
-        `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+        `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
       )
     }
     
@@ -431,7 +431,7 @@ const loadCustomXPostTemplate = async (): Promise<void> => {
     console.error('❌ Error loading X post template:', error)
     // PRE-FILL with default template even on error
     setCustomXPostTemplate(
-      `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+      `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
     )
     toast({
       title: "Could not load custom template",
@@ -1140,7 +1140,7 @@ const generateXPostContent = (amount: string, txHash: string | null): string => 
   
   // Default template (fallback)
   console.log("📱 Using default X post template")
-  return `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
+  return `I just dripped ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
     txHash
       ? `${selectedNetwork?.blockExplorerUrls || "https://explorer.unknown"}/tx/${txHash}` // FIXED: use blockExplorerUrls
       : "Transaction not available"
@@ -2031,7 +2031,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
 
     // Save custom X post template only if it's been modified from default
 if (customXPostTemplate && customXPostTemplate.trim()) {
-  const defaultTemplate = `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+  const defaultTemplate = `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
   
   // Only save if it's different from the default
   if (customXPostTemplate !== defaultTemplate) {
@@ -3161,7 +3161,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
     <>
       <div className="space-y-2">
         <Textarea
-          placeholder="I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}"
+          placeholder="I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}"
           value={customXPostTemplate}
           onChange={(e) => setCustomXPostTemplate(e.target.value)}
           rows={4}
@@ -3229,7 +3229,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
           size="sm"
           onClick={() => {
             // Reset to default template
-            const defaultTemplate = `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+            const defaultTemplate = `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
             setCustomXPostTemplate(defaultTemplate)
             toast({
               title: "Template Reset",
@@ -3241,7 +3241,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
           Reset to Default
         </Button>
         
-        {customXPostTemplate !== `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}` && (
+        {customXPostTemplate !== `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}` && (
           <Button
             type="button"
             variant="ghost"
@@ -3807,7 +3807,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              You have successfully received a drop of{" "}
+              You have successfully dripped{" "}
               {faucetType === 'custom' && hasCustomAmount
                 ? formatUnits(userCustomClaimAmount, tokenDecimals)
                 : faucetDetails?.claimAmount 

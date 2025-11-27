@@ -150,7 +150,7 @@ const FAUCET_ABI_CUSTOM: any[] = [
 
 // --- CONSTANTS ---
 const PLATFORM_BACKEND_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"; // Trusted backend address (Platform Owner)
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "http://0.0.0.0:8000"; // Backend API base URL
 
 // --- Data Structures (omitted for brevity, assume consistency) ---
 type VerificationType = 'auto_social' | 'auto_tx' | 'manual_link' | 'manual_upload' | 'none';
@@ -688,7 +688,7 @@ export default function QuestCreator() {
                         }
                     </Badge>
                 </div>
-            </div>
+                        </div>
             {/* --- END REWARD CONFIG --- */}
             
             <div className="grid grid-cols-2 gap-3">

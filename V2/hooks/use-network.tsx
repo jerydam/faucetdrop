@@ -126,7 +126,7 @@ export const networks: Network[] = [
     name: "Base",
     symbol: "BASE",
     chainId: 8453,
-    rpcUrl: "https://mainnet.base.org",
+    rpcUrl: "https://base-mainnet.infura.io/v3/5198f7f01bba4634ba6966cddfe50523",
     blockExplorerUrls: "https://basescan.org",
     explorerUrl: "https://basescan.org",
     color: "#0052FF",

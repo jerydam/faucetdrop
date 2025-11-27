@@ -23,11 +23,122 @@ import {
 } from "lucide-react"
 import { Header } from '@/components/header'
 import { useWallet } from "@/hooks/use-wallet" 
-import { useNetwork } from "@/hooks/use-network" // Import the Network Context
+import { useNetwork, networks } from "@/hooks/use-network" 
 import { ethers } from 'ethers'; 
 
+// Define Zero Address (must be outside the component)
+const zeroAddress = ethers.ZeroAddress; 
+
+// --- TYPE & CONSTANT DEFINITIONS (Integrated Directly) ---
+
+interface TokenConfiguration {
+  address: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  isNative?: boolean;
+  logoUrl?: string; // Added logoUrl
+}
+
+// Define Supported Chain IDs and Tokens
+// NOTE: 42220=Celo, 1135=Lisk, 42161=Arbitrum, 8453=Base
+const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
+  // Celo Mainnet (42220)
+  42220: [
+    { // Native Token
+      address: "0x471EcE3750Da237f93B8E339c536989b8978a438", 
+      name: "Celo",
+      symbol: "CELO",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/celo.png", 
+    },
+    {
+      address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
+      name: "Celo Dollar",
+      symbol: "cUSD",
+      decimals: 18,
+      logoUrl: "/cusd.png",
+    },
+    {
+      address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
+      name: "Celo Euro",
+      symbol: "cEUR",
+      decimals: 18,
+      logoUrl: "/ceur.png",
+    },
+    {
+      address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+      name: "Glo Dollar",
+      symbol: "USDGLO",
+      decimals: 18,
+      logoUrl: "/glo.jpg",
+    },
+    {
+      address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
+      name: "Good dollar",
+      symbol: "G$",
+      decimals: 18,
+      logoUrl: "/gd.jpg",
+    },
+  ],
+  // Arbitrum (42161)
+  42161: [
+    { // Native Token
+      address: zeroAddress,
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/ether.jpeg",
+    },
+    {
+      address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // Placeholder for ARB USDC
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg",
+    },
+  ],
+  // Lisk Mainnet (1135)
+  1135: [
+    { // Native Token
+      address: zeroAddress,
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/ether.jpeg",
+    },
+    {
+      address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // Placeholder for Lisk USDC
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg",
+    },
+  ],
+  // Base Mainnet (8453)
+  8453: [
+    { // Native Token
+      address: zeroAddress,
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/ether.jpeg",
+    },
+    {
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg",
+    },
+  ],
+};
+
 // --- FACTORY & FAUCET ABI CONTENT (PLACEHOLDERS) ---
-// Note: These ABIs are simplified for display. You must ensure the full ABIs are imported correctly.
 const FACTORY_ABI_CUSTOM: any[] = [
     { "inputs": [], "stateMutability": "nonpayable", "type": "constructor" },
     { "inputs": [{ "internalType": "string", "name": "_name", "type": "string" }, { "internalType": "address", "name": "_token", "type": "address" }, { "internalType": "address", "name": "_backend", "type": "address" }], "name": "createCustomFaucet", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "nonpayable", "type": "function" },
@@ -41,7 +152,7 @@ const FAUCET_ABI_CUSTOM: any[] = [
 const PLATFORM_BACKEND_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"; // Trusted backend address (Platform Owner)
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
-// --- Data Structures ---
+// --- Data Structures (omitted for brevity, assume consistency) ---
 type VerificationType = 'auto_social' | 'auto_tx' | 'manual_link' | 'manual_upload' | 'none';
 
 interface QuestTask {
@@ -101,10 +212,20 @@ const initialNewTaskForm: Partial<QuestTask> = {
   targetPlatform: "Twitter"
 }
 
+
+// --- FACTORY ADDRESS LOOKUP (Uses the imported 'networks' array) ---
+const getCustomFactoryAddress = (currentChainId: number | null) => {
+    if (!currentChainId) return null;
+    
+    // Assumes 'networks' array is correctly exported from use-network.tsx
+    const currentNetworkConfig = networks.find(n => n.chainId === currentChainId);
+    return currentNetworkConfig?.factories.custom || null;
+};
+// ------------------------------------------------------------------
+
 export default function QuestCreator() {
   const { address, isConnected, chainId } = useWallet(); 
-  // Use useNetwork to get configuration info
-  const { network, getFactoryAddress, isConnecting: isNetworkConnecting } = useNetwork(); 
+  const { network, isConnecting: isNetworkConnecting } = useNetwork(); 
   
   const [newQuest, setNewQuest] = useState<Omit<Quest, 'id' | 'creatorAddress'>>(initialNewQuest)
   const [newTask, setNewTask] = useState<Partial<QuestTask>>(initialNewTaskForm)
@@ -112,12 +233,45 @@ export default function QuestCreator() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null);
 
-  // Dynamically get the Custom Faucet Factory address for the current chain
-  const FAUCET_FACTORY_ADDRESS = getFactoryAddress('custom');
-  const isFactoryAvailable = !!FAUCET_FACTORY_ADDRESS && !!chainId && !isNetworkConnecting;
+  // --- NEW TOKEN STATE & LOGIC ---
+  const [selectedToken, setSelectedToken] = useState<TokenConfiguration | null>(null);
+  const [isCustomToken, setIsCustomToken] = useState(false);
+  const [customTokenAddress, setCustomTokenAddress] = useState('');
 
+  // Derive available tokens from the current chainId using the integrated data
+  const availableTokens = chainId ? ALL_TOKENS_BY_CHAIN[chainId] || [] : [];
+  
+  // Set initial token when network or chainId changes
+  useEffect(() => {
+    if (chainId && availableTokens.length > 0) {
+      const currentTokenAddress = newQuest.tokenAddress;
+      let initialToken = availableTokens.find(t => t.address.toLowerCase() === currentTokenAddress.toLowerCase());
+      
+      if (!initialToken) {
+          initialToken = availableTokens.find(t => t.isNative) || availableTokens[0];
+      }
 
-  // --- Task Management Handlers (kept minimal for response) ---
+      setSelectedToken(initialToken);
+      setNewQuest(prev => ({
+        ...prev,
+        rewardTokenType: initialToken!.isNative ? 'native' : 'erc20',
+        tokenAddress: initialToken!.address,
+      }));
+      setIsCustomToken(false);
+      setCustomTokenAddress('');
+    } else if (!chainId) {
+      setSelectedToken(null);
+      setNewQuest(initialNewQuest); 
+      setIsCustomToken(false);
+      setCustomTokenAddress('');
+    }
+  }, [chainId]); // Re-run only when chainId changes
+
+  // Factory lookup 
+  const FAUCET_FACTORY_ADDRESS = getCustomFactoryAddress(chainId);
+  const isFactoryAvailable = !!FAUCET_FACTORY_ADDRESS && isConnected; 
+
+  // --- Utility Handlers (omitted for brevity) ---
   const handleAddTask = () => {
     if (!newTask.title || !newTask.description || !newTask.url) return
 
@@ -133,7 +287,7 @@ export default function QuestCreator() {
       action: newTask.action!,
       verificationType: newTask.verificationType!,
       targetPlatform: newTask.targetPlatform,
-      targetHandle: newTask.handle, 
+      targetHandle: (newTask as any).handle, 
       targetContractAddress: newTask.targetContractAddress,
       targetChainId: newTask.targetChainId,
     }
@@ -195,13 +349,16 @@ export default function QuestCreator() {
   // --- Web3 Logic: Faucet Deployment ---
 
   const handleCreateCustomFaucet = async (questName: string, token: string) => {
-    // Crucial check: User MUST be connected to sign the transaction
     if (!address || !isConnected) {
         setError("You must connect your wallet to deploy the smart contract.");
         return null;
     }
     
     try {
+        if (!window.ethereum) {
+             throw new Error("Ethereum provider (like Metamask) is not detected.");
+        }
+
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
 
@@ -213,7 +370,6 @@ export default function QuestCreator() {
         
         console.log(`Deploying Faucet for Quest: ${questName} on Factory: ${FAUCET_FACTORY_ADDRESS}`);
         
-        // Call createCustomFaucet(string _name, address _token, address _backend)
         const tx = await factoryContract.createCustomFaucet(
             questName, 
             token, 
@@ -221,7 +377,6 @@ export default function QuestCreator() {
         );
 
         const receipt = await tx.wait();
-
         let newFaucetAddress: string | null = null;
         for (const log of receipt.logs) {
             try {
@@ -230,9 +385,7 @@ export default function QuestCreator() {
                     newFaucetAddress = event.args.faucet;
                     break;
                 }
-            } catch (e) {
-                // Ignore logs that don't match the Factory ABI
-            }
+            } catch (e) { /* Ignore logs */ }
         }
         
         if (newFaucetAddress) {
@@ -244,15 +397,19 @@ export default function QuestCreator() {
 
     } catch (error) {
         console.error('Error deploying custom faucet:', error);
-        // Provide user-friendly feedback on common Metamask errors
-        setError(`Deployment failed. Check your wallet for signature requests and ensure you have enough ${network?.nativeCurrency.symbol} for gas.`);
+        setError(`Deployment failed. Check your wallet for signature requests and ensure you have enough ${network?.nativeCurrency.symbol || 'native currency'} for gas. Details: ${(error as any).message || 'Unknown error'}`);
         return null;
     }
   };
 
-  // --- Main Save/Launch Handler ---
+  // --- Main Save/Launch Handler (No change to core logic) ---
 
   const handleCreateQuest = async () => {
+    if (!selectedToken) {
+        setError("Please select a valid reward token.");
+        return;
+    }
+
     if (!address || !isConnected) {
         setError("You must connect your wallet to deploy the smart contract and create the quest.");
         return;
@@ -262,21 +419,14 @@ export default function QuestCreator() {
         return;
     }
     if (!isFactoryAvailable) {
-        setError(`Cannot deploy: No Custom Faucet Factory configured for ${network?.name} (Chain ID: ${chainId}). Please switch networks.`);
-        return;
-    }
-    if (newQuest.rewardTokenType === 'erc20' && !ethers.isAddress(newQuest.tokenAddress)) {
-        setError('Please enter a valid ERC20 token address for rewards.');
+        setError(`Cannot deploy: No Custom Faucet Factory configured for ${network?.name || 'this network'} (Chain ID: ${chainId}). Please switch networks.`);
         return;
     }
     
     setError(null);
     setIsSaving(true);
     
-    // --- STEP 1: DEPLOY FAUCET CONTRACT ---
-    const tokenToDeploy = newQuest.rewardTokenType === 'native' 
-        ? ethers.ZeroAddress 
-        : newQuest.tokenAddress;
+    const tokenToDeploy = selectedToken.address;
 
     const faucetAddress = await handleCreateCustomFaucet(
         newQuest.title, 
@@ -288,13 +438,13 @@ export default function QuestCreator() {
         return;
     }
 
-    // --- STEP 2: BUILD AND SAVE QUEST DATA TO BACKEND ---
     const questData: Quest = {
-        id: Date.now().toString(), // Temp ID, backend should generate final ID
+        id: Date.now().toString(), 
         creatorAddress: address!,
         ...newQuest,
         faucetAddress: faucetAddress, 
         tokenAddress: tokenToDeploy, 
+        rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
     };
 
     try {
@@ -306,7 +456,6 @@ export default function QuestCreator() {
 
         if (response.ok) {
             alert(`Quest created on ${network?.name} and Faucet deployed successfully at ${faucetAddress}! Remember to fund the Faucet.`);
-            // Reset form/state on success
             setNewQuest(initialNewQuest); 
             setNewTask(initialNewTaskForm);
         } else {
@@ -316,7 +465,6 @@ export default function QuestCreator() {
     } catch (e: any) {
         console.error('Quest save failed:', e);
         setError(`Backend Error saving quest details: ${e.message}`);
-        // NOTE: In a production app, you'd want a separate admin flow to delete the already deployed faucet if this backend call fails.
     } finally {
         setIsSaving(false);
     }
@@ -325,7 +473,6 @@ export default function QuestCreator() {
 
   // --- Render Logic ---
   
-  // Show loading state while network context is resolving
   if (isNetworkConnecting) {
      return (
       <Card className="max-w-md mx-auto mt-8">
@@ -337,12 +484,30 @@ export default function QuestCreator() {
     )
   }
 
-  // Disable save button based on validation
+  if (!isFactoryAvailable && isConnected) {
+    return (
+        <div className="max-w-6xl mx-auto p-6 space-y-6">
+            <Header pageTitle='Create New Quest Campaign' />
+            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+                <strong className="font-bold">Warning!</strong>
+                <span className="block sm:inline ml-2">
+                    No Custom Faucet Factory found for **{network?.name || 'this network'}** (Chain ID: {chainId}). Quest deployment requires switching to a supported chain (e.g., Celo, Base, Arbitrum).
+                </span>
+            </div>
+            <Card className="max-w-md mx-auto">
+                <CardContent className="py-6 text-center">
+                    <p className="text-sm text-red-500">Please switch your wallet network to a supported chain to enable quest deployment.</p>
+                </CardContent>
+            </Card>
+        </div>
+    )
+  }
+  
   const isSaveDisabled = isSaving 
     || newQuest.tasks.length === 0 
     || !isFactoryAvailable 
-    || !isConnected // Must be connected to sign TX
-    || (newQuest.rewardTokenType === 'erc20' && !ethers.isAddress(newQuest.tokenAddress));
+    || !isConnected 
+    || !selectedToken; 
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -355,15 +520,7 @@ export default function QuestCreator() {
             <span className="block sm:inline ml-2">{error}</span>
         </div>
       )}
-
-      {/* FACTORY UNAVAILABLE WARNING (If connected to an unsupported chain) */}
-      {!isFactoryAvailable && isConnected && (
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
-            <strong className="font-bold">Warning!</strong>
-            <span className="block sm:inline ml-2">No Custom Faucet Factory found for **{network?.name || 'this network'}** (Chain ID: {chainId}). Quest deployment requires switching to a supported chain (e.g., Celo, Lisk).</span>
-        </div>
-      )}
-
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Quest Configuration Panel */}
         <Card>
@@ -414,37 +571,111 @@ export default function QuestCreator() {
                     This faucet will be deployed on **{network?.name || 'the connected chain'}**.
                 </div>
 
+                {/* REWARD TOKEN SELECTOR */}
                 <div className="space-y-2">
-                    <Label htmlFor="rewardTokenType">Reward Currency Type</Label>
+                    <Label htmlFor="rewardToken">Reward Token ({network?.name || 'Unknown Chain'})</Label>
                     <Select
-                        value={newQuest.rewardTokenType}
-                        onValueChange={(value: 'native' | 'erc20') => {
-                            setNewQuest({
-                                ...newQuest, 
-                                rewardTokenType: value,
-                                tokenAddress: value === 'native' ? ethers.ZeroAddress : ""
-                            })
+                        value={isCustomToken ? "custom" : (selectedToken ? selectedToken.address : undefined)}
+                        onValueChange={(value) => {
+                            if (value === "custom") {
+                                setIsCustomToken(true);
+                                setSelectedToken(null);
+                            } else {
+                                const token = availableTokens.find(t => t.address === value);
+                                if (token) {
+                                    setSelectedToken(token);
+                                    setIsCustomToken(false);
+                                    setCustomTokenAddress('');
+                                    setNewQuest(prev => ({
+                                        ...prev, 
+                                        rewardTokenType: token.isNative ? 'native' : 'erc20',
+                                        tokenAddress: token.address,
+                                    }));
+                                }
+                            }
                         }}
+                        disabled={availableTokens.length === 0}
                     >
                         <SelectTrigger>
-                            <SelectValue placeholder="Select currency type" />
+                            <SelectValue>
+                                {isCustomToken ? (
+                                    "Custom Token"
+                                ) : selectedToken ? (
+                                    <span className="flex items-center gap-2">
+                                        {selectedToken.logoUrl && (
+                                            <img 
+                                                src={selectedToken.logoUrl} 
+                                                alt={`${selectedToken.symbol} logo`} 
+                                                className="h-4 w-4 rounded-full"
+                                            />
+                                        )}
+                                        {selectedToken.name} ({selectedToken.symbol})
+                                    </span>
+                                ) : (
+                                    availableTokens.length > 0 ? "Select reward token" : "No tokens available on this chain"
+                                )}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="native">Native Currency ({network?.nativeCurrency.symbol || 'ETH'})</SelectItem>
-                            <SelectItem value="erc20">Custom ERC20 Token</SelectItem>
+                            {availableTokens.map((token) => (
+                                <SelectItem key={token.address} value={token.address}>
+                                    <div className="flex items-center gap-2">
+                                        {token.logoUrl && (
+                                            <img 
+                                                src={token.logoUrl} 
+                                                alt={`${token.symbol} logo`} 
+                                                className="h-4 w-4 rounded-full"
+                                            />
+                                        )}
+                                        {token.name} ({token.symbol}) {token.isNative && <Badge variant="secondary" className="text-xs">Native</Badge>}
+                                    </div>
+                                </SelectItem>
+                            ))}
+                            <SelectItem value="custom">+ Custom Token</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
-                
-                {newQuest.rewardTokenType === 'erc20' && (
-                    <div className="space-y-2">
-                        <Label htmlFor="tokenAddress">ERC20 Token Address</Label>
-                        <Input
-                            id="tokenAddress"
-                            value={newQuest.tokenAddress}
-                            onChange={(e) => setNewQuest({...newQuest, tokenAddress: e.target.value})}
-                            placeholder="0x...TokenContractAddress"
-                        />
+
+                {/* CUSTOM TOKEN INPUTS */}
+                {isCustomToken && (
+                    <div className="space-y-3 p-3 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                        <h4 className="text-sm font-medium">Custom Token Address</h4>
+                        <div className="space-y-2">
+                            <Label className="text-xs">Token Contract Address</Label>
+                            <Input
+                                value={customTokenAddress}
+                                onChange={(e) => setCustomTokenAddress(e.target.value)}
+                                placeholder="0x..."
+                            />
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                if (customTokenAddress && ethers.isAddress(customTokenAddress)) {
+                                    const fullCustom: TokenConfiguration = {
+                                        address: customTokenAddress,
+                                        name: 'Custom Token',
+                                        symbol: 'CUST',
+                                        decimals: 18,
+                                        isNative: false,
+                                    };
+                                    setSelectedToken(fullCustom);
+                                    setIsCustomToken(false);
+                                    setNewQuest(prev => ({
+                                        ...prev,
+                                        rewardTokenType: 'erc20',
+                                        tokenAddress: fullCustom.address,
+                                    }));
+                                } else {
+                                    setError("Please enter a valid token contract address.");
+                                }
+                            }}
+                            disabled={!customTokenAddress || !ethers.isAddress(customTokenAddress)}
+                            className="w-full"
+                        >
+                            Set Custom Token
+                        </Button>
                     </div>
                 )}
 
@@ -491,7 +722,7 @@ export default function QuestCreator() {
           </CardContent>
         </Card>
 
-        {/* Add/Edit Task Panel (Full implementation retained for completeness) */}
+        {/* Add/Edit Task Panel */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">

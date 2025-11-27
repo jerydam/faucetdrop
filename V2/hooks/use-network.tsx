@@ -30,7 +30,7 @@ export interface Network {
   isTestnet?: boolean
 }
 
-const networks: Network[] = [
+export const networks: Network[] = [
   {
     name: "Celo",
     symbol: "CELO",

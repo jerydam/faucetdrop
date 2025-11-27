@@ -1,8 +1,39 @@
 "use client";
 
 import Link from 'next/link';
-import { Twitter, Github, Linkedin, Mail } from 'lucide-react'
+import { siX, siGithub, siTelegram, siGmail } from 'simple-icons/icons'
 import Image from 'next/image';
+
+interface IconProps {
+  path: string;
+  title?: string;
+}
+
+interface SimpleIconProps {
+  icon: IconProps;
+  size?: number | string;
+  className?: string;
+}
+
+const SimpleIcon: React.FC<SimpleIconProps> = ({ 
+  icon, 
+  size = 24, 
+  className = 'text-white' 
+}) => {
+  return (
+    <svg
+      role="img"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d={icon.path} />
+    </svg>
+  );
+};
 
 const Footer = () => {
 
@@ -37,16 +68,16 @@ const Footer = () => {
   ];
 
   const socialLinks = [
-    { icon: <Twitter size={20} />, href: 'https://twitter.com', label: 'Twitter' },
-    { icon: <Github size={20} />, href: 'https://github.com', label: 'GitHub' },
-    { icon: <Linkedin size={20} />, href: 'https://linkedin.com', label: 'LinkedIn' },
-    { icon: <Mail size={20} />, href: 'mailto:contact@example.com', label: 'Email' },
+    { icon: <SimpleIcon icon={siX} size={20} />, href: 'https://twitter.com', label: 'Twitter' },
+    { icon: <SimpleIcon icon={siGithub} size={20} />, href: 'https://github.com', label: 'GitHub' },
+    { icon: <SimpleIcon icon={siTelegram} size={20} />, href: 'https://linkedin.com', label: 'LinkedIn' },
+    { icon: <SimpleIcon icon={siGmail} size={20} />, href: 'mailto:contact@example.com', label: 'Email' },
   ];
 
   return (
     <footer className={`w-full bg-linear-to-b from-0% to-[#020817] text-[#94A3B8]`}>
-      <div className="container mx-auto px-4 py-12 md:py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8">
+      <div className="container mx-auto px-4 py-12 md:py-16 md:px-20">
+        <div className="flex flex-col md:flex-row justify-between gap-12">
           {/* Logo and description */}
           <div className="lg:col-span-4">
             <div className="flex items-center space-x-2 mb-4">
@@ -83,7 +114,7 @@ const Footer = () => {
           </div>
 
           {/* Footer links */}
-          <div className="lg:col-span-5 grid grid-cols-2 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-12">
             {footerLinks.map((section, index) => (
               <div key={index}>
                 <h3 className={`text-sm font-semibold mb-4 uppercase tracking-wider text-white`}>
@@ -109,7 +140,7 @@ const Footer = () => {
         {/* Bottom bar */}
         <div className={`border-t mt-12 pt-8 flex flex-col md:flex-row justify-between items-center border-gray-800`}>
           <p className="text-sm">
-            {new Date().getFullYear()} Finna. All rights reserved.
+            &copy; {new Date().getFullYear()} FaucetDrops. All rights reserved.
           </p>
           <div className="flex flex-wrap justify-center md:justify-end gap-4 mt-4 md:mt-0">
             <Link href="/privacy" className="text-sm hover:text-[#2563EB] transition-colors">

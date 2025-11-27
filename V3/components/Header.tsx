@@ -8,13 +8,13 @@ const Header = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     const navLinks = [
-        { name: 'Products', href: '/products' },
-        { name: 'Developer', href: '/developer' },
+        { name: 'Product', href: '/products' },
+        { name: 'Developers', href: '/developer' },
         { name: 'Company', href: '/company' },
     ];
 
     return (
-        <header className={`fixed w-full z-50 transition-colors duration-300 text-white`}>
+        <header className={`fixed w-full z-50 transition-colors duration-300 text-white mx-auto max-w-full px-0`}>
             <div className="container mx-auto px-4 py-4">
                 <div className="flex items-center justify-between">
                     {/* Logo */}

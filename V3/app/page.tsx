@@ -1,5 +1,6 @@
 import HeroSection from "@/components/landingPage/Hero";
 import Networks from "@/components/Networks";
+import OfferTabs from "@/components/landingPage/OfferTabs"
 
 export default function Home() {
   return (
@@ -7,7 +8,7 @@ export default function Home() {
       <div className="container">
         <HeroSection />
         <Networks />
-        FAUCET LANDING PAGE HERE
+        <OfferTabs />
       </div>
     </div>
   );

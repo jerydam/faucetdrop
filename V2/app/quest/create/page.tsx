@@ -150,7 +150,7 @@ const FAUCET_ABI_CUSTOM: any[] = [
 
 // --- CONSTANTS ---
 const PLATFORM_BACKEND_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"; // Trusted backend address (Platform Owner)
-const API_BASE_URL = "http://127.0.0.1:8000"
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 // --- Data Structures (omitted for brevity, assume consistency) ---
 type VerificationType = 'auto_social' | 'auto_tx' | 'manual_link' | 'manual_upload' | 'none';

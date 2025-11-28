@@ -48,6 +48,7 @@ export default function QuestDetailsPage() {
     const slugAndId = params.faucetAddress as string | undefined; 
     
     // FIX 1: Safely extract faucetAddress. It remains string | undefined.
+    // NOTE: This logic now expects slug-address format, matching the updated HomePage logic.
     const faucetAddress: string | undefined = slugAndId?.split('-').pop()?.startsWith('0x') ? slugAndId.split('-').pop() : undefined;
 
     const { address: userWalletAddress } = useWallet(); 
@@ -58,16 +59,7 @@ export default function QuestDetailsPage() {
     const [pendingSubmissions, setPendingSubmissions] = useState<Submission[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-if (!questData) {
-        // This handles the case where loading is done, but data returned null (404 scenario).
-        return <Card className="max-w-6xl mx-auto p-4 mt-8 text-center text-muted-foreground">Quest data could not be loaded or found.</Card>;
-    }
-    if (isLoading || !faucetAddress) {
-        if (error) {
-             return <Card className="max-w-6xl mx-auto p-4 mt-8 border-red-500 bg-red-50 text-red-700">Error loading quest: {error}</Card>;
-        }
-        return <Card className="max-w-6xl mx-auto p-8 mt-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Loading Quest Details...</Card>;
-    }
+
     // --- Data Fetching ---
 
     useEffect(() => {
@@ -87,6 +79,8 @@ if (!questData) {
     const fetchQuestData = async () => {
         // FIX 3: Use non-null assertion (!) since we checked for 'undefined' in useEffect.
         const address = faucetAddress!; 
+        setIsLoading(true); // Reset loading state for every fetch attempt
+        setError(null);
         try {
             await new Promise(resolve => setTimeout(resolve, 500)); 
             
@@ -101,7 +95,7 @@ if (!questData) {
             };
             setQuestData(mockData);
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || "An unknown error occurred while fetching data.");
             console.error(err);
         } finally {
             setIsLoading(false);
@@ -163,6 +157,9 @@ if (!questData) {
         if (error) {
             return <Card className="max-w-6xl mx-auto p-4 mt-8 border-red-500 bg-red-50 text-red-700">Error loading quest: {error}</Card>;
         }
+         if (!questData && !isLoading) { // Handles case where data loaded null/404
+             return <Card className="max-w-6xl mx-auto p-4 mt-8 text-center text-muted-foreground">Quest data could not be loaded or found.</Card>;
+        }
         return <Card className="max-w-6xl mx-auto p-8 mt-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Loading Quest Details...</Card>;
     }
     
@@ -171,13 +168,16 @@ if (!questData) {
 
     return (
         <div className="max-w-6xl mx-auto p-6 space-y-6">
-            <Header pageTitle={questData.title} />
+            {/* FIX 1: Add ! assertion */}
+            <Header pageTitle={questData!.title} />
 
             <Card>
                 <CardHeader className='flex flex-row justify-between items-start'>
                     <div className='space-y-1'>
-                        <CardTitle className="text-2xl">{questData.title}</CardTitle>
-                        <CardDescription>{questData.description}</CardDescription>
+                        {/* FIX 2: Add ! assertion */}
+                        <CardTitle className="text-2xl">{questData!.title}</CardTitle>
+                        {/* FIX 3: Add ! assertion */}
+                        <CardDescription>{questData!.description}</CardDescription>
                     </div>
                     {isCreator && (
                         <Button onClick={handleFinalizeRewards} className='bg-purple-600 hover:bg-purple-700'>
@@ -289,7 +289,8 @@ if (!questData) {
                             </p>
                             <p>
                                 <strong>Active:</strong> 
-                                {questData.isActive 
+                                {/* FIX 4: Add ! assertion */}
+                                {questData!.isActive 
                                     ? <CheckCircle className='h-4 w-4 inline text-green-500 ml-2' /> 
                                     : 'No'
                                 }

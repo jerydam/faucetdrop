@@ -9,7 +9,7 @@ import { Header } from '@/components/header';
 import { Plus, Settings, TrendingUp, Users, ArrowRight, Badge, Coins, Loader2 } from 'lucide-react';
 
 // Backend API URL
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // Simplified Quest Interface (matches what the backend will return)
 interface QuestOverview {

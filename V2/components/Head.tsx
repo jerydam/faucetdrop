@@ -9,6 +9,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { useToast } from "@/hooks/use-toast"
 import { appendDivviReferralData, reportTransactionToDivvi } from "../lib/divvi-integration"
 import { Contract } from "ethers"
+import Link from 'next/link'
 
 // Smart contract details
 const DROPLIST_CONTRACT_ADDRESS = "0xB8De8f37B263324C44FD4874a7FB7A0C59D8C58E"
@@ -251,8 +252,10 @@ export default function Head() {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
         {/* Logo and Title with Mobile Menu Button */}
         <div className="flex justify-between items-center w-full lg:w-auto">
+          <Link href="/">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="flex-shrink-0">
+             
               <Image
                 src="/logo.png"
                 alt="FaucetDrops Logo"
@@ -260,6 +263,7 @@ export default function Head() {
                 height={32}
                 className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-md object-contain"
               />
+             
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-slate-100">
@@ -275,7 +279,7 @@ export default function Head() {
               </div>
             </div>
           </div>
-          
+           </Link> 
           {/* Mobile menu button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}

@@ -30,7 +30,7 @@ export interface Network {
   isTestnet?: boolean
 }
 
-const networks: Network[] = [
+export const networks: Network[] = [
   {
     name: "Celo",
     symbol: "CELO",
@@ -126,7 +126,7 @@ const networks: Network[] = [
     name: "Base",
     symbol: "BASE",
     chainId: 8453,
-    rpcUrl: "https://base-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
+    rpcUrl: "https://base-mainnet.infura.io/v3/5198f7f01bba4634ba6966cddfe50523",
     blockExplorerUrls: "https://basescan.org",
     explorerUrl: "https://basescan.org",
     color: "#0052FF",

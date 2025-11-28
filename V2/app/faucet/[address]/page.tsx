@@ -11,8 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-// import { Header } from "@/components/header"
-import Head from "@/components/Head"
+import { Header } from "@/components/header"
 import {
   getFaucetDetails,
   isWhitelisted,
@@ -408,7 +407,7 @@ const loadCustomXPostTemplate = async (): Promise<void> => {
         console.log("📝 No custom X post template found, using default template")
         // PRE-FILL with default template so owner can edit it
         setCustomXPostTemplate(
-          `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+          `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
         )
         return
       }
@@ -424,7 +423,7 @@ const loadCustomXPostTemplate = async (): Promise<void> => {
       console.log("📝 No custom template set, pre-filling with default")
       // PRE-FILL with default template so owner can edit it
       setCustomXPostTemplate(
-        `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+        `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
       )
     }
     
@@ -432,7 +431,7 @@ const loadCustomXPostTemplate = async (): Promise<void> => {
     console.error('❌ Error loading X post template:', error)
     // PRE-FILL with default template even on error
     setCustomXPostTemplate(
-      `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+      `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
     )
     toast({
       title: "Could not load custom template",
@@ -1141,7 +1140,7 @@ const generateXPostContent = (amount: string, txHash: string | null): string => 
   
   // Default template (fallback)
   console.log("📱 Using default X post template")
-  return `I just received a drop of ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
+  return `I just dripped ${amount} ${tokenSymbol} from @FaucetDrops on ${selectedNetwork?.name || "the network"}. Verify Drop 💧: ${
     txHash
       ? `${selectedNetwork?.blockExplorerUrls || "https://explorer.unknown"}/tx/${txHash}` // FIXED: use blockExplorerUrls
       : "Transaction not available"
@@ -1406,11 +1405,26 @@ const handleShareOnX = (): void => {
   }
 
   useEffect(() => {
+    // 1. Initial check for missing faucet details
     if (!faucetDetails) return
+
+    // 2. Check for unconfigured parameters: Assuming a new faucet has startTime = 0.
+    // Adjust this check based on what value 'faucetDetails.startTime' holds for a new, unconfigured faucet.
+    const isUnconfigured = Number(faucetDetails.startTime) === 0 && Number(faucetDetails.endTime) === 0;
+
+    if (isUnconfigured) {
+        setStartCountdown("Please Update your parameter")
+        setEndCountdown("Please Update your parameter")
+        return // Stop execution if unconfigured
+    }
+
     const updateCountdown = () => {
       const now = Date.now()
+      // Convert seconds (from contract/details) to milliseconds
       const start = Number(faucetDetails.startTime) * 1000
       const end = Number(faucetDetails.endTime) * 1000
+
+      // --- START COUNTDOWN LOGIC ---
       if (start > now) {
         const diff = start - now
         const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -1419,8 +1433,10 @@ const handleShareOnX = (): void => {
         const seconds = Math.floor((diff % (1000 * 60)) / 1000)
         setStartCountdown(`${days}d ${hours}h ${minutes}m ${seconds}s until active`)
       } else {
-        setStartCountdown("Already Active")
+        setStartCountdown("")
       }
+
+      // --- END COUNTDOWN LOGIC ---
       if (end > now && faucetDetails.isClaimActive) {
         const diff = end - now
         const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -1431,13 +1447,17 @@ const handleShareOnX = (): void => {
       } else if (end > 0 && end <= now) {
         setEndCountdown("Ended")
       } else {
+        // This covers cases where end time is 0 or less than 0, or not active
+        // NOTE: If you want to show 'N/A' for active faucets without an end time,
+        // you might adjust the `end > 0` condition.
         setEndCountdown("N/A")
       }
     }
+
     updateCountdown()
     const interval = setInterval(updateCountdown, 1000)
     return () => clearInterval(interval)
-  }, [faucetDetails])
+}, [faucetDetails]) // Ensure setStartCountdown/setEndCountdown are in the dependencies if they are not defined outside the component.
 
   // ✅ Refresh custom claim amounts when address changes or faucet type is detected
   useEffect(() => {
@@ -2011,7 +2031,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
 
     // Save custom X post template only if it's been modified from default
 if (customXPostTemplate && customXPostTemplate.trim()) {
-  const defaultTemplate = `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+  const defaultTemplate = `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
   
   // Only save if it's different from the default
   if (customXPostTemplate !== defaultTemplate) {
@@ -2521,8 +2541,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
     <main className="min-h-screen bg-background">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="flex flex-col gap-6 sm:gap-8 max-w-3xl sm:max-w-4xl mx-auto">
-          {/* <Header pageTitle="Faucet Details" /> */}
-          <Head />
+          <Header pageTitle="Faucet Details" />
           
           {/* ✅ NEW: Navigation and action buttons */}
           <div className="flex flex-row  justify-between items-start sm:items-center gap-4">
@@ -2710,7 +2729,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                   </div>
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
-                      <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                      
                       <span className="text-xs sm:text-sm">{startCountdown}</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -3142,7 +3161,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
     <>
       <div className="space-y-2">
         <Textarea
-          placeholder="I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}"
+          placeholder="I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}"
           value={customXPostTemplate}
           onChange={(e) => setCustomXPostTemplate(e.target.value)}
           rows={4}
@@ -3210,7 +3229,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
           size="sm"
           onClick={() => {
             // Reset to default template
-            const defaultTemplate = `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+            const defaultTemplate = `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
             setCustomXPostTemplate(defaultTemplate)
             toast({
               title: "Template Reset",
@@ -3222,7 +3241,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
           Reset to Default
         </Button>
         
-        {customXPostTemplate !== `I just received a drop of {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}` && (
+        {customXPostTemplate !== `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}` && (
           <Button
             type="button"
             variant="ghost"
@@ -3505,7 +3524,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
                                 </Button>
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                Note: Owner and factory owner cannot be modified through this interface.
+                                Note: Owner cannot be modified through this interface.
                               </p>
                             </div>
                           )}
@@ -3788,7 +3807,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              You have successfully received a drop of{" "}
+              You have successfully dripped{" "}
               {faucetType === 'custom' && hasCustomAmount
                 ? formatUnits(userCustomClaimAmount, tokenDecimals)
                 : faucetDetails?.claimAmount 

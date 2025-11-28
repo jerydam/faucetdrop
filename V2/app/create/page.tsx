@@ -285,23 +285,14 @@ const FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING: Record<FaucetType, FactoryType> = {
 const SUPPORTED_CHAIN_IDS = [42220, 1135, 42161, 8453] as const
 
 const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
-  42220: [
-    {
-      address: "0x471EcE3750Da237f93B8E339c536989b8978a438",
+   42220: [
+    { // Native Token
+      address: "0x471EcE3750Da237f93B8E339c536989b8978a438", 
       name: "Celo",
       symbol: "CELO",
       decimals: 18,
       isNative: true,
-      logoUrl: "/celo.jpeg",
-      description: "Native Celo token for governance and staking",
-    },
-    {
-      address: "0xE2702Bd97ee33c88c8f6f92DA3B733608aa76F71",
-      name: "Celo Nigerian Naira",
-      symbol: "cNGN",
-      decimals: 18,
-      logoUrl: "/cngn.png",
-      description: "Naira-pegged stablecoin on Celo",
+      logoUrl: "/celo.png", 
     },
     {
       address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
@@ -309,40 +300,81 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "cUSD",
       decimals: 18,
       logoUrl: "/cusd.png",
-      description: "USD-pegged stablecoin on Celo",
     },
-  ],
-  1135: [
     {
-      address: zeroAddress,
-      name: "Ethereum",
-      symbol: "ETH",
+      address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
+      name: "Celo Euro",
+      symbol: "cEUR",
       decimals: 18,
-      isNative: true,
-      logoUrl: "/ether.jpeg",
-      description: "Native Ethereum for transaction fees",
+      logoUrl: "/ceur.png",
+    },
+    {
+      address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+      name: "Glo Dollar",
+      symbol: "USDGLO",
+      decimals: 18,
+      logoUrl: "/glo.jpg",
+    },
+    {
+      address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
+      name: "Good dollar",
+      symbol: "G$",
+      decimals: 18,
+      logoUrl: "/gd.jpg",
     },
   ],
+  // Arbitrum (42161)
   42161: [
-    {
+    { // Native Token
       address: zeroAddress,
       name: "Ethereum",
       symbol: "ETH",
       decimals: 18,
       isNative: true,
       logoUrl: "/ether.jpeg",
-      description: "Native Ethereum for transaction fees",
+    },
+    {
+      address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // Placeholder for ARB USDC
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg",
     },
   ],
-  8453: [
-    {
+  // Lisk Mainnet (1135)
+  1135: [
+    { // Native Token
       address: zeroAddress,
       name: "Ethereum",
       symbol: "ETH",
       decimals: 18,
       isNative: true,
       logoUrl: "/ether.jpeg",
-      description: "Native Ethereum for transaction fees",
+    },
+    {
+      address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // Placeholder for Lisk USDC
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg",
+    },
+  ],
+  // Base Mainnet (8453)
+  8453: [
+    { // Native Token
+      address: zeroAddress,
+      name: "Ethereum",
+      symbol: "ETH",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/ether.jpeg",
+    },
+    {
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg",
     },
   ],
 }

@@ -68,7 +68,6 @@ export function FaucetsCreatedChart() {
   const [isRefreshing, setIsRefreshing] = useState(false) 
   const [totalFaucets, setTotalFaucets] = useState(0)
 
-  // Memoize the function with useCallback
   const fetchAndStoreFaucetData = useCallback(async (isManualRefresh = false) => {
     if (!isManualRefresh) {
       setLoading(true);
@@ -129,7 +128,6 @@ export function FaucetsCreatedChart() {
   }, [networks]) 
 
   const loadStoredData = async () => {
-    // ... (logic remains the same)
     if (isCacheValid()) {
       const cachedData = loadFromLocalStorage<ChartData[]>(FAUCET_STORAGE_KEYS.CHART_DATA);
       const cachedTotal = loadFromLocalStorage<number>(FAUCET_STORAGE_KEYS.TOTAL_FAUCETS);
@@ -140,41 +138,31 @@ export function FaucetsCreatedChart() {
         return true;
       }
     }
-
+    
     try {
-      const supabaseData = await DataService.loadFaucetData();
-      if (supabaseData.length > 0 && DataService.isDataFresh(supabaseData[0].updated_at)) {
-        const chartData = supabaseData.map(item => ({
-          network: item.network,
-          faucets: item.faucets
-        }));
-        const total = chartData.reduce((sum, item) => sum + item.faucets, 0);
-        
-        setData(chartData);
-        setTotalFaucets(total);
-        
-        saveToLocalStorage(FAUCET_STORAGE_KEYS.CHART_DATA, chartData);
-        saveToLocalStorage(FAUCET_STORAGE_KEYS.TOTAL_FAUCETS, total);
-        saveToLocalStorage(FAUCET_STORAGE_KEYS.LAST_UPDATED, Date.now());
-        
-        setLoading(false);
-        return true;
-      }
+        const supabaseData = await DataService.loadFaucetData();
+        if (supabaseData.length > 0) {
+            const chartData = supabaseData.map(item => ({
+                network: item.network,
+                faucets: item.faucets
+            }));
+            const total = chartData.reduce((sum, item) => sum + item.faucets, 0);
+            setData(chartData);
+            setTotalFaucets(total);
+            setLoading(false);
+            return true;
+        }
     } catch (error) {
-      console.error('Error loading data from Supabase:', error);
+        console.error('Error loading data from Supabase:', error);
     }
 
     return false;
   }
 
-  // Initial load effect
+  // Initial load effect (forces refresh on page load)
   useEffect(() => {
     if (networks.length > 0) {
-      loadStoredData().then((dataLoaded) => {
-        if (!dataLoaded) {
-          fetchAndStoreFaucetData();
-        }
-      });
+      fetchAndStoreFaucetData(false); 
     }
   }, [networks, fetchAndStoreFaucetData]) 
 
@@ -205,38 +193,49 @@ export function FaucetsCreatedChart() {
 
   return (
     <div className="space-y-4 relative p-4 border rounded-lg shadow-sm">
-      <div className="flex items-center justify-between">
+      {/* 🌟 Mobile Responsive Header Changes 🌟 */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+        
         {/* Title/Metric Section */}
         <div>
             <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Faucet Distribution</h3>
             <p className="text-xs text-muted-foreground">Across all supported networks</p>
         </div>
         
-        {/* Total Faucets and Refresh Button */}
-        <div className="flex items-center space-x-3">
-          <div className="text-right">
-            <p className="text-2xl font-bold text-primary">{totalFaucets}</p>
+        {/* Total Faucets and Refresh Button - This group stays inline */}
+        <div className="flex items-center justify-between sm:justify-end">
+          {/* Metric (Moved to the left on small screen for better flow) */}
+          <div className="text-left sm:text-right mr-4">
+            <p className="text-2xl font-bold text-white">{totalFaucets}</p>
             <p className="text-xs text-muted-foreground">Total Faucets</p>
           </div>
 
-          {/* 🌟 STYLED REFRESH BUTTON 🌟 */}
+          {/* Refresh Button (Now aligned to the right on small screens) */}
           <Button 
             onClick={handleRefresh} 
             disabled={isRefreshing} 
-            variant="ghost" // Use ghost for a cleaner look that doesn't dominate
-            size="icon"
-            className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
+            variant="outline" 
+            size="sm"
+            className="transition-colors duration-200"
             title="Refresh Faucet Data"
           >
-            <RefreshCw 
-              className={isRefreshing ? "h-5 w-5 animate-spin text-blue-500" : "h-5 w-5 text-gray-500 hover:text-blue-500"} 
-            />
+            {isRefreshing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh
+              </>
+            )}
           </Button>
         </div>
       </div>
       
       <div className="pt-4">
-        {/* Overlay loading indicator for manual refresh, ensuring it covers the chart area */}
+        {/* Overlay loading indicator for manual refresh */}
         {isRefreshing && (
           <div className="absolute inset-0 bg-white/50 dark:bg-gray-900/50 flex items-center justify-center z-10 rounded-lg">
               <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
@@ -255,7 +254,7 @@ export function FaucetsCreatedChart() {
             <Bar 
               dataKey="faucets" 
               fill="#0052FF" 
-              radius={[4, 4, 0, 0]} // Rounded corners on the bars
+              radius={[4, 4, 0, 0]} 
             />
           </BarChart>
         </ResponsiveContainer>

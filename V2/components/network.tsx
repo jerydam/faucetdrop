@@ -166,12 +166,9 @@ export function NetworkGrid({ className = "" }: NetworkGridProps) {
       {/* --- CONNECTED NETWORK CARD (Enhanced) --- */}
       {currentNetwork ? (
         <div className="w-full">
-          <h2 className="text-xl font-semibold mb-3 flex items-center gap-2">
-            <Zap className="h-5 w-5 text-primary" />
-            Active Connection
-          </h2>
+          
           <Link href={`/network/${currentNetwork.chainId}`}>
-            <Card className="overflow-hidden shadow-lg border-2 border-primary/50 transition-all duration-300 ease-in-out hover:shadow-xl hover:border-primary cursor-pointer">
+            <Card className="overflow-hidden shadow-lg border-2 transition-all duration-300 ease-in-out hover:shadow-xl cursor-pointer">
               <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
                 <div className="flex items-center gap-3">
                   {/* ⭐️ LOGO IMPLEMENTATION: Replaced LayoutGrid with <img> */}
@@ -210,7 +207,7 @@ export function NetworkGrid({ className = "" }: NetworkGridProps) {
                   </p>
                 </div>
               </CardContent>
-              <div className="bg-primary/5 dark:bg-primary/10 p-2 text-center text-xs text-primary/80 font-medium">
+              <div className=" p-2 text-center text-xs text-primary/80 font-medium">
                 Click to explore available faucets on this network →
               </div>
             </Card>

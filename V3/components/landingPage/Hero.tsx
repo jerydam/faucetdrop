@@ -1,12 +1,31 @@
 import { Rocket } from 'lucide-react';
 import Image from 'next/image';
 
+// const Drops: React.FC = () => {
+//   return (
+//       <Image src="/dripin.png" alt="DripIn Icon" width={300} height={300} className="w-full h-full object-contain blended-img3" />
+
+//   );
+// };
+
 const Drops: React.FC = () => {
   return (
-    // <div className="bg-linear-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-sm rounded-3xl p-8 border border-gray-700/50 shadow-2xl max-w-md w-full">
-      <Image src="/dripin.png" alt="DripIn Icon" width={300} height={300} className="w-full h-full object-contain rounded-4xl" />
-    
-    // </div>
+    <div className="relative w-[500px] h-[500px]">
+      {/* BASE IMAGE */}
+      <Image
+        src="/dripin.png"
+        alt="DripIn Icon"
+        width={1000}
+        height={1000}
+        className="object-contain blended-img3"
+      />
+
+      {/* CORNER GRADIENTS */}
+      <div className="corner top-left"></div>
+      <div className="corner top-right"></div>
+      <div className="corner bottom-left"></div>
+      <div className="corner bottom-right"></div>
+    </div>
   );
 };
 

@@ -28,10 +28,7 @@ type FactoryType = 'dropcode' | 'droplist' | 'custom'
 // Faucet type definitions (matches factory types)
 type FaucetType = 'dropcode' | 'droplist' | 'custom'
 
-interface FactoryConfig {
-  abi: any[]
-  createFunction: string
-}
+
 
 interface FaucetConfig {
   abi: any[]
@@ -51,15 +48,36 @@ function getFaucetConfig(faucetType: FaucetType): FaucetConfig {
   }
 }
 
+
+
+// Assuming these interfaces exist
+interface FactoryConfig {
+  abi: any; // Factory ABI
+  faucetAbi: any; // 💡 NEW: Faucet ABI
+  createFunction: string;
+}
+
 // Helper function to get the appropriate ABI and function based on factory type
 function getFactoryConfig(factoryType: FactoryType): FactoryConfig {
   switch (factoryType) {
     case 'dropcode':
-      return { abi: FACTORY_ABI_DROPCODE, createFunction: 'createBackendFaucet' }
+      return { 
+        abi: FACTORY_ABI_DROPCODE, 
+        faucetAbi: FAUCET_ABI_DROPCODE, // 💡 ADDED
+        createFunction: 'createBackendFaucet' 
+      }
     case 'droplist':
-      return { abi: FACTORY_ABI_DROPLIST, createFunction: 'createWhitelistFaucet' }
+      return { 
+        abi: FACTORY_ABI_DROPLIST, 
+        faucetAbi: FAUCET_ABI_DROPLIST, // 💡 ADDED
+        createFunction: 'createWhitelistFaucet' 
+      }
     case 'custom':
-      return { abi: FACTORY_ABI_CUSTOM, createFunction: 'createCustomFaucet' }
+      return { 
+        abi: FACTORY_ABI_CUSTOM, 
+        faucetAbi: FAUCET_ABI_CUSTOM, // 💡 ADDED
+        createFunction: 'createCustomFaucet' 
+      }
     default:
       throw new Error(`Unknown factory type: ${factoryType}`)
   }
@@ -72,7 +90,43 @@ function determineFactoryType(useBackend: boolean, isCustom: boolean = false): F
   }
   return useBackend ? 'dropcode' : 'droplist'
 }
+// 1. Define the specific type for the 'deleted' method
+type DeletedMethod = () => Promise<boolean>;
 
+// The helper function to check the on-chain 'deleted' state variable
+async function isFaucetDeleted(
+    provider: JsonRpcProvider,
+    faucetAddress: string,
+    factoryType: FactoryType // Assuming FaucetType is equivalent to FactoryType here
+): Promise<boolean> {
+    try {
+        const config = getFactoryConfig(factoryType);
+        // We need the FAUCET_ABI here, which is assumed to be in config.faucetAbi
+        // Note: I will update getFactoryConfig definition to include faucetAbi
+        const faucetContract = new Contract(faucetAddress, config.faucetAbi, provider);
+        
+        // 2. Safely cast the contract method using Type Assertion
+        const deletedFn = faucetContract['deleted'] as DeletedMethod;
+
+        // 3. Call the function
+        const isDeleted = await deletedFn();
+        
+        return isDeleted;
+    } catch (error) {
+        // Fallback logic remains: if RPC call fails, check if contract code exists.
+        // This handles cases where the contract was truly self-destructed.
+        console.warn(`Error checking deleted status for ${faucetAddress}. Checking bytecode fallback.`, error);
+
+        try {
+            const code = await provider.getCode(faucetAddress);
+            if (code === "0x") return true; 
+        } catch (e) {
+            // Ignore code check error
+        }
+        
+        return false;
+    }
+}
 // Helper function to detect factory type by trying different function calls
 async function detectFactoryType(provider: BrowserProvider | JsonRpcProvider, factoryAddress: string): Promise<FactoryType> {
   const factoryTypes: FactoryType[] = ['dropcode', 'droplist', 'custom']
@@ -1397,8 +1451,6 @@ export async function getFaucetDetails(
   }
 }
 
-
-
 export async function getFaucetsForNetwork(
     network: Network,
     provider: JsonRpcProvider
@@ -1411,37 +1463,39 @@ export async function getFaucetsForNetwork(
             if (!isAddress(factoryAddress)) return [];
             
             try {
-                // Detect factory type to get the correct ABI
                 const factoryType = await detectFactoryType(provider, factoryAddress);
                 const config = getFactoryConfig(factoryType);
                 const factoryContract = new Contract(factoryAddress, config.abi, provider);
 
-                const code = await provider.getCode(factoryAddress);
-                if (code === "0x") return [];
+                const factoryCode = await provider.getCode(factoryAddress);
+                if (factoryCode === "0x") return [];
 
-                // 1. Fetch all faucet addresses (fast, minimal call)
+                // 1. Fetch all faucet addresses
                 const faucetAddresses: string[] = await factoryContract.getAllFaucets();
 
-                // 2. For lightweight meta: We MUST get the isClaimActive, isEther, etc.
-                // Since there is no batch-details function, we rely on the contract 
-                // having a simple mapping to get minimal info, OR an off-chain index.
-                
-                // FALLBACK: To avoid many RPC calls, we fetch minimal details 
-                // using parallel calls to `getFaucetDetails`. 
-                // NOTE: If you have an off-chain index, use that here instead!
-                
+                // 2. Fetch all necessary details in parallel, INCLUDING deleted status.
                 const metaPromises = faucetAddresses.map(async (addr) => {
                     if (!addr || addr === ZeroAddress) return null;
                     
-                    // We call getFaucetDetails, but only map the fields needed for FaucetMeta.
-                    // This is still a set of parallel calls, but it's the fastest way without Multicall/Graph.
-                    const details = await getFaucetDetails(provider, addr, factoryType as FaucetType);
+                    // Call the two necessary view functions: details + deleted status
+                    const [details, isDeleted] = await Promise.all([
+                        // Function 1: Get the FaucetMeta fields
+                        getFaucetDetails(provider, addr, factoryType as FaucetType),
+                        
+                        // ⭐️ Function 2: Check the on-chain 'deleted' state variable
+                        isFaucetDeleted(provider, addr, factoryType as FaucetType),
+                    ]);
+
+                    // 🛑 NEW FILTER CONDITION
+                    if (isDeleted) {
+                        return null; // Skip this faucet
+                    }
 
                     return {
                         faucetAddress: details.faucetAddress,
                         isClaimActive: details.isClaimActive,
                         isEther: details.isEther,
-                        createdAt: BigInt(details.startTime).toString(), // Using startTime as a stand-in for creation time
+                        createdAt: BigInt(details.startTime).toString(), 
                         tokenSymbol: details.tokenSymbol,
                         name: details.name,
                         owner: details.owner,
@@ -1449,6 +1503,7 @@ export async function getFaucetsForNetwork(
                     } as FaucetMeta;
                 });
                 
+                // Filter out the null results (the deleted faucets)
                 const metaResults = (await Promise.all(metaPromises)).filter(m => m !== null) as FaucetMeta[];
                 
                 return metaResults;

@@ -150,6 +150,7 @@ export async function checkFaucetNameExists(
         };
     }
 }
+
 // -------------------------------------------------------------
 
 // Define Zero Address 
@@ -344,27 +345,62 @@ export default function QuestCreator() {
   // At the top of your component, add this derived state
 const shouldShowNameValidation = isConnected && provider && network;
 
-// Update your validateFaucetNameAcrossFactories function
+// Add this debugging useEffect at the top of your component to see what's happening
+useEffect(() => {
+    console.log('🔍 Connection Debug:', {
+        isConnected,
+        hasProvider: !!provider,
+        hasNetwork: !!network,
+        address,
+        chainId,
+        networkName: network?.name
+    });
+}, [isConnected, provider, network, address, chainId]);
+
+// Update your validation function with better logging
 const validateFaucetNameAcrossFactories = useCallback(async (nameToValidate: string) => {
+    console.log('🔍 Validation called with:', {
+        nameToValidate,
+        isConnected,
+        hasProvider: !!provider,
+        hasNetwork: !!network,
+        providerType: provider?.constructor?.name
+    });
+
     if (!nameToValidate.trim()) {
         setNameError(null);
         return;
     }
     
-    // Don't show error if we're not connected - just skip silently
-    if (!provider || !network || !isConnected) {
-        console.log('Validation skipped - waiting for connection');
-        setNameError(null); // Clear error instead of setting one
+    // Check if we have what we need
+    if (!isConnected) {
+        console.log('❌ Not connected');
+        setNameError(null);
         return;
     }
 
+    if (!provider) {
+        console.log('❌ No provider');
+        setNameError(null);
+        return;
+    }
+
+    if (!network) {
+        console.log('❌ No network');
+        setNameError(null);
+        return;
+    }
+
+    console.log('✅ All checks passed, starting validation...');
     setIsCheckingName(true);
     setNameError(null);
 
     try {
-        console.log(`Validating name "${nameToValidate}" against Custom Factory on ${network?.name}...`);
+        console.log(`Validating name "${nameToValidate}" against Custom Factory on ${network.name}...`);
         
         const result = await checkFaucetNameExists(provider, network, nameToValidate);
+        
+        console.log('Validation result:', result);
         
         if (result.exists) {
             const conflictingName = result.existingFaucet?.name || nameToValidate;
@@ -373,6 +409,7 @@ const validateFaucetNameAcrossFactories = useCallback(async (nameToValidate: str
             setNameError(`Warning: ${result.warning}`);
         } else {
             setNameError(null);
+            console.log('✅ Name is available!');
         }
     } catch (e) {
         console.error("Name check failed:", e);
@@ -382,6 +419,40 @@ const validateFaucetNameAcrossFactories = useCallback(async (nameToValidate: str
     }
 }, [provider, network, isConnected]);
 
+// Update the useEffect with better logging
+useEffect(() => {
+    const title = newQuest.title.trim();
+    
+    console.log('📝 Title changed:', {
+        title,
+        length: title.length,
+        isConnected,
+        hasProvider: !!provider,
+        hasNetwork: !!network
+    });
+    
+    if (title.length < 3) {
+        setNameError(null);
+        return;
+    }
+    
+    if (!isConnected || !provider || !network) {
+        console.log('⏸️ Skipping validation - not fully connected');
+        setNameError(null);
+        return;
+    }
+    
+    console.log('⏰ Setting up validation timer...');
+    const delayCheck = setTimeout(() => {
+        console.log('⏰ Timer fired, calling validation...');
+        validateFaucetNameAcrossFactories(title);
+    }, 500);
+
+    return () => {
+        console.log('🧹 Cleaning up timer');
+        clearTimeout(delayCheck);
+    };
+}, [newQuest.title, isConnected, provider, network, validateFaucetNameAcrossFactories]);
 // Update the useEffect that triggers validation
 useEffect(() => {
     const title = newQuest.title.trim();
@@ -482,7 +553,52 @@ useEffect(() => {
     }
     return true;
   }
-  
+  // Add this debugging useEffect at the top of your component to see what's happening
+useEffect(() => {
+    console.log('🔍 Connection Debug:', {
+        isConnected,
+        hasProvider: !!provider,
+        hasNetwork: !!network,
+        address,
+        chainId,
+        networkName: network?.name
+    });
+}, [isConnected, provider, network, address, chainId]);
+
+// Update the useEffect with better logging
+useEffect(() => {
+    const title = newQuest.title.trim();
+    
+    console.log('📝 Title changed:', {
+        title,
+        length: title.length,
+        isConnected,
+        hasProvider: !!provider,
+        hasNetwork: !!network
+    });
+    
+    if (title.length < 3) {
+        setNameError(null);
+        return;
+    }
+    
+    if (!isConnected || !provider || !network) {
+        console.log('⏸️ Skipping validation - not fully connected');
+        setNameError(null);
+        return;
+    }
+    
+    console.log('⏰ Setting up validation timer...');
+    const delayCheck = setTimeout(() => {
+        console.log('⏰ Timer fired, calling validation...');
+        validateFaucetNameAcrossFactories(title);
+    }, 500);
+
+    return () => {
+        console.log('🧹 Cleaning up timer');
+        clearTimeout(delayCheck);
+    };
+}, [newQuest.title, isConnected, provider, network, validateFaucetNameAcrossFactories]);
   // Function to be called in handleCreateQuest (SETS setError)
   const validateStagePassPoints = (): boolean => {
     let isValid = true;

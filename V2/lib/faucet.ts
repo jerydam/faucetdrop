@@ -12,7 +12,16 @@ interface Network {
   color: string
   storageAddress?: string // Optional, defaults to FAUCET_STORAGE_ADDRESS
 }
-
+interface FaucetMeta {
+    faucetAddress: string;
+    isClaimActive: boolean;
+    isEther: boolean;
+    createdAt: number | string;
+    tokenSymbol?: string;
+    name?: string;
+    owner?: string;
+    factoryAddress: string; // CRITICAL for step 2
+}
 // Factory type definitions
 type FactoryType = 'dropcode' | 'droplist' | 'custom'
 
@@ -89,6 +98,33 @@ async function detectFactoryType(provider: BrowserProvider | JsonRpcProvider, fa
   // Default to dropcode if detection fails
   console.warn(`Could not detect factory type for ${factoryAddress}, defaulting to dropcode`)
   return 'dropcode'
+}
+
+export async function getFaucetDetailsFromFactory(
+    factoryAddress: string, // Needed to determine type/ABI later if not cached
+    faucetAddress: string,
+    provider: BrowserProvider | JsonRpcProvider
+): Promise<any> {
+    try {
+        console.log(`[getFaucetDetailsFromFactory] Fetching full details for ${faucetAddress} from factory ${factoryAddress}`);
+
+        // 1. Detect faucet type using the known factory address (this is a shortcut)
+        const factoryType = await detectFactoryType(provider, factoryAddress);
+        const faucetType = factoryType as FaucetType;
+
+        // 2. Call the existing getFaucetDetails function, passing the detected type
+        const details = await getFaucetDetails(provider, faucetAddress, faucetType);
+
+        // 3. Return the full details, including the factory address for context
+        return {
+            ...details,
+            factoryAddress: factoryAddress,
+            faucetType: faucetType,
+        };
+    } catch (error) {
+        console.error(`Error in getFaucetDetailsFromFactory for ${faucetAddress}:`, error);
+        throw error;
+    }
 }
 
 // Helper function to detect faucet type by trying different ABIs
@@ -1363,92 +1399,81 @@ export async function getFaucetDetails(
 
 
 
-export async function getFaucetsForNetwork(network: Network): Promise<any[]> {
-  try {
-    const provider = new JsonRpcProvider(network.rpcUrl)
-    let allFaucets: any[] = []
+export async function getFaucetsForNetwork(
+    network: Network,
+    provider: JsonRpcProvider
+): Promise<FaucetMeta[]> {
+    try {
+        let allFaucetsMeta: FaucetMeta[] = [];
 
-    // Fetch faucets from all factory addresses
-    for (const factoryAddress of network.factoryAddresses) {
-      if (!isAddress(factoryAddress)) {
-        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`);
-        continue;
-      }
-
-      // Detect factory type and get appropriate ABI
-      let factoryType: FactoryType;
-      let config: FactoryConfig;
-      
-      try {
-        factoryType = await detectFactoryType(provider, factoryAddress);
-        config = getFactoryConfig(factoryType);
-        console.log(`Detected factory type for ${factoryAddress}: ${factoryType}`);
-      } catch (error) {
-        console.warn(`Could not detect factory type for ${factoryAddress}, skipping:`, error);
-        continue;
-      }
-
-      const factoryContract = new Contract(factoryAddress, config.abi, provider)
-
-      // Check if factory contract exists
-      const code = await provider.getCode(factoryAddress)
-      if (code === "0x") {
-        console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`)
-        continue
-      }
-
-      // Fetch all faucet addresses for this factory
-      let faucetAddresses: string[] = []
-      try {
-        faucetAddresses = await factoryContract.getAllFaucets()
-      } catch (error) {
-        console.error(`Error calling getAllFaucets for ${factoryAddress} on ${network.name}:`, error)
-        continue
-      }
-
-      // Process each faucet address to get full details
-      const results = await Promise.all(
-        faucetAddresses.map(async (faucetAddress: string) => {
-          if (!faucetAddress || faucetAddress === ZeroAddress) return null
-          try {
-            // Use the factory type to determine faucet type (they should match)
-            const faucetType = factoryType as FaucetType
-            const faucetConfig = getFaucetConfig(faucetType)
-            const faucetContract = new Contract(faucetAddress, faucetConfig.abi, provider)
+        // Fetch faucets from all factory addresses in parallel
+        const resultsPromises = network.factoryAddresses.map(async (factoryAddress) => {
+            if (!isAddress(factoryAddress)) return [];
             
-            const isDeleted = await faucetContract.deleted()
-            if (isDeleted) {
-              console.log(`Faucet ${faucetAddress} is deleted, skipping`)
-              return null
-            }
+            try {
+                // Detect factory type to get the correct ABI
+                const factoryType = await detectFactoryType(provider, factoryAddress);
+                const config = getFactoryConfig(factoryType);
+                const factoryContract = new Contract(factoryAddress, config.abi, provider);
 
-            const details = await getFaucetDetails(provider, faucetAddress, faucetType)
-            return {
-              ...details,
-              network: {
-                chainId: network.chainId,
-                name: network.name,
-                color: network.color,
-                blockExplorer: network.blockExplorer,
-              },
-              factoryAddress, // Include factory address for reference
-              factoryType, // Include factory type for reference
-            }
-          } catch (error) {
-            console.warn(`Error getting details for faucet ${faucetAddress} on ${network.name}:`, error)
-            return null
-          }
-        }),
-      )
+                const code = await provider.getCode(factoryAddress);
+                if (code === "0x") return [];
 
-      allFaucets.push(...results.filter((result) => result !== null))
+                // 1. Fetch all faucet addresses (fast, minimal call)
+                const faucetAddresses: string[] = await factoryContract.getAllFaucets();
+
+                // 2. For lightweight meta: We MUST get the isClaimActive, isEther, etc.
+                // Since there is no batch-details function, we rely on the contract 
+                // having a simple mapping to get minimal info, OR an off-chain index.
+                
+                // FALLBACK: To avoid many RPC calls, we fetch minimal details 
+                // using parallel calls to `getFaucetDetails`. 
+                // NOTE: If you have an off-chain index, use that here instead!
+                
+                const metaPromises = faucetAddresses.map(async (addr) => {
+                    if (!addr || addr === ZeroAddress) return null;
+                    
+                    // We call getFaucetDetails, but only map the fields needed for FaucetMeta.
+                    // This is still a set of parallel calls, but it's the fastest way without Multicall/Graph.
+                    const details = await getFaucetDetails(provider, addr, factoryType as FaucetType);
+
+                    return {
+                        faucetAddress: details.faucetAddress,
+                        isClaimActive: details.isClaimActive,
+                        isEther: details.isEther,
+                        createdAt: BigInt(details.startTime).toString(), // Using startTime as a stand-in for creation time
+                        tokenSymbol: details.tokenSymbol,
+                        name: details.name,
+                        owner: details.owner,
+                        factoryAddress: factoryAddress, // CRITICAL
+                    } as FaucetMeta;
+                });
+                
+                const metaResults = (await Promise.all(metaPromises)).filter(m => m !== null) as FaucetMeta[];
+                
+                return metaResults;
+
+            } catch (error) {
+                console.error(`Error during lightweight fetch for factory ${factoryAddress}:`, error);
+                return [];
+            }
+        });
+
+        const allResults = await Promise.all(resultsPromises);
+        allFaucetsMeta = allResults.flat();
+        
+        // Remove duplicates in case two factories point to the same faucet address
+        const uniqueFaucets = allFaucetsMeta.filter((faucet, index, self) =>
+            index === self.findIndex((t) => (
+                t.faucetAddress === faucet.faucetAddress
+            ))
+        );
+
+        return uniqueFaucets;
+    } catch (error) {
+        console.error(`Error in getFaucetsForNetwork (lightweight aggregation):`, error);
+        return [];
     }
-
-    return allFaucets
-  } catch (error) {
-    console.error(`Error fetching faucets for ${network.name}:`, error)
-    return []
-  }
 }
 
 // Fetch transaction history for a specific faucet (admin only)

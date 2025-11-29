@@ -1,13 +1,12 @@
 import { Rocket } from 'lucide-react';
-import React from 'react';
+import Image from 'next/image';
 
 const Drops: React.FC = () => {
   return (
-    <div className="bg-linear-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-sm rounded-3xl p-8 border border-gray-700/50 shadow-2xl max-w-md w-full">
-      <h2 className="text-white text-xl font-semibold mb-6">Find The Best Rates</h2>
-      
+    // <div className="bg-linear-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-sm rounded-3xl p-8 border border-gray-700/50 shadow-2xl max-w-md w-full">
+      <Image src="/dripin.png" alt="DripIn Icon" width={300} height={300} className="w-full h-full object-contain rounded-4xl" />
     
-    </div>
+    // </div>
   );
 };
 

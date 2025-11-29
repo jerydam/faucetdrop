@@ -2,7 +2,7 @@ import { BrowserProvider } from 'ethers';
 import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
 import { FAUCET_ABI_CUSTOM } from './abis';
 
-//const API_URL = "http://127.0.0.1:8000"; // Update with your backend URL
+//const API_URL = "https://fauctdrop-backend.onrender.com"; // Update with your backend URL
 const API_URL = "https://fauctdrop-backend.onrender.com"; // Uncomment for production
 const ENABLE_DIVVI_REFERRAL = true;
 const DEBUG_MODE = process.env.NODE_ENV === 'development';

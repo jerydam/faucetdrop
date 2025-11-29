@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { WalletConnectButton } from "@/components/wallet-connect";
 import { NetworkSelector } from "@/components/network-selector";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { ArrowBigLeft, ArrowLeft, Menu, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { JoinDroplistButton } from "./droplist";
@@ -57,16 +57,17 @@ export function Header({ pageTitle }: { pageTitle: string }) {
       >
         <div className="flex flex-col gap-2">
           <NetworkSelector />
-          <Button
-            onClick={() => router.push('/create')}
-            size="sm"
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Create Faucet</span>
-          </Button>
+          
           <JoinDroplistButton/>
           <WalletConnectButton />
+          <Button
+            onClick={() => router.push('/')}
+            size="sm"
+            className="w-full flex items-center justify-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Home</span>
+          </Button>
         </div>
       </div>
 
@@ -74,16 +75,17 @@ export function Header({ pageTitle }: { pageTitle: string }) {
       <div className="hidden sm:flex items-center gap-2 sm:gap-3">
         <NetworkSelector />
         
-        <Button
-          onClick={() => router.push('/create')}
-          size="sm"
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Create Faucet</span>
-        </Button>
+        
         <JoinDroplistButton/>
         <WalletConnectButton />
+        <Button
+          onClick={() => router.push('/')}
+          size="sm"
+          className="w-full flex items-center justify-center gap-2"
+        >
+           <ArrowLeft className="h-4 w-4" />
+          <span>Back to Home</span>
+        </Button>
       </div>
     </header>
   );

@@ -59,7 +59,7 @@ import Image from "next/image";
 
 export default function OfferTabs() {
     return (
-        <div className="w-full flex justify-center">
+        <div className="min-h-screen w-full flex justify-center items-center">
             <div className="w-full max-w-4xl flex flex-col gap-10">
                 {/* Tabs */}
                 <Tabs defaultValue="faucets" className="w-full">

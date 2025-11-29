@@ -1,9 +1,15 @@
-import Image from "next/image";
+import HeroSection from "@/components/landingPage/Hero";
+import Networks from "@/components/Networks";
+import OfferTabs from "@/components/landingPage/OfferTabs"
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-     FAUCET LANDING PAGE HERE
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="container">
+        <HeroSection />
+        <Networks />
+        <OfferTabs />
+      </div>
     </div>
   );
 }

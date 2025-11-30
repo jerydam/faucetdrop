@@ -1,12 +1,7 @@
+'use client'
 import { Rocket } from 'lucide-react';
 import Image from 'next/image';
-
-// const Drops: React.FC = () => {
-//   return (
-//       <Image src="/dripin.png" alt="DripIn Icon" width={300} height={300} className="w-full h-full object-contain blended-img3" />
-
-//   );
-// };
+import { useRouter } from 'next/navigation';
 
 const Drops: React.FC = () => {
   return (
@@ -31,6 +26,12 @@ const Drops: React.FC = () => {
 
 // Main Hero Component
 const HeroSection: React.FC = () => {
+  const router = useRouter();
+
+  const handleLaunchApp = () => {
+    router.push('/coming-soon');
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
       {/* Decorative Elements */}
@@ -68,7 +69,7 @@ const HeroSection: React.FC = () => {
             FaucetDrops helps web3 Projects, DAOs, Protocols, and Communities automate token distribution, run interactive campaigns and onboard real users at scale - all in one powerful platfoarm.
             </p>
 
-            <button className="group flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-semibold px-6 py-3 rounded-full transition-all duration-200 mt-8">
+            <button onClick={handleLaunchApp} className="group flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-semibold px-6 py-3 rounded-full transition-all duration-200 mt-8">
               Launch App
               <Rocket className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>

@@ -82,7 +82,7 @@ const Footer = () => {
           <div className="lg:col-span-4">
             <div className="flex items-center space-x-2 mb-4">
               <Image 
-                src='/FaucetDrops_Logo1.png'
+                src='/white_FaucetDrops.png'
                 alt='Logo'
                 className='w-fit h-16'
                 width={1000}

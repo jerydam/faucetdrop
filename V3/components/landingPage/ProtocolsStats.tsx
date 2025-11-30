@@ -8,21 +8,16 @@ export default function ProtocolsStats() {
         {/* Left Content */}
         <div className="space-y-6">
           <div className="text-[#2563EB] text-sm font-semibold tracking-wide uppercase">
-            Trusted by Top Protocols
+            Smarter Data, Better Decisions
           </div>
           
           <h1 className="text-5xl md:text-6xl font-bold leading-tight">
-            Smarter Data, Better Decisions
+          Trusted by Top Protocols
           </h1>
           
           <p className="text-gray-400 text-lg leading-relaxed max-w-lg">
             Companies like Celo, Lisk, & Self Protocol, use Faucet Drops to drive Onchain Growth at scale.
           </p>
-{/*           
-          <button className="group flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-semibold px-6 py-3 rounded-full transition-all duration-200 mt-8">
-            Work with us
-            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-          </button> */}
         </div>
         
         {/* Right Stats Grid */}

@@ -11,6 +11,7 @@ export default function SplashScreen() {
     const splashShown = sessionStorage.getItem('splashShown');
     
     if (splashShown) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsVisible(false);
       return;
     }

@@ -274,16 +274,16 @@ export default function OfferTabs() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-2 gap-10">
-                                    <div className="flex items-center justify-center">
+                                    <div className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg">
                                         <Image
                                             src="/celo.svg"
                                             alt=""
                                             width={200}
                                             height={200}
-                                            className=""
+                                            className="transition-all duration-300 ease-out group-hover:scale-110"
                                         />
                                     </div>
-                                    <div className="text-left">
+                                    {/* <div className="text-left">
                                         <div className="flex flex-col gap-5">
                                             <div className="space-y-2">
                                                 <p className="bold flex flex-row items-center gap-2 text-base">
@@ -297,6 +297,16 @@ export default function OfferTabs() {
                                             className="flex items-center gap-2 cursor-pointer mt-5 bg-[#F8FAFC] text-[#0052FF] hover:bg-[#0052FF] hover:text-[#F8FAFC]"
                                         >
                                             Learn more <ExternalLink className="h-5 w-5" />
+                                        </Button>
+                                    </div> */}
+                                    <div className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer" >
+                                        <h3 className="text-xl font-semibold relative bottom-0">Engagements</h3>
+                                        <p className="text-base leading-relaxed opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300">
+                                            Set up interactive, time-based, AI-Powered Web3 quizzes, tied directly to onchain rewards
+                                        </p>
+
+                                        <Button className="flex items-center justify-end w-fit text-right gap-2 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300 mt-4 bg-[#2563EB] py-3 px-5 cursor-pointer rounded">
+                                            Learn more <ExternalLink className="h-4 w-4" />
                                         </Button>
                                     </div>
                                 </CardContent>
@@ -316,16 +326,16 @@ export default function OfferTabs() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-2 gap-10">
-                                    <div className="flex items-center justify-center">
+                                    <div className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg">
                                         <Image
                                             src="/celo.svg"
                                             alt=""
                                             width={200}
                                             height={200}
-                                            className=""
+                                            className="transition-all duration-300 ease-out group-hover:scale-110"
                                         />
                                     </div>
-                                    <div className="text-left">
+                                    {/* <div className="text-left">
                                         <div className="text-left">
                                             <div className="flex flex-col gap-5">
                                                 <div className="space-y-2">
@@ -342,6 +352,16 @@ export default function OfferTabs() {
                                                 Learn more <ExternalLink className="h-5 w-5" />
                                             </Button>
                                         </div>
+                                    </div> */}
+                                    <div className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer" >
+                                        <h3 className="text-xl font-semibold relative bottom-0">White Label Solutions</h3>
+                                        <p className="text-base leading-relaxed opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300">
+                                            For Protocols and large ecosystems running massive Airdrops or global onboarding campaigns
+                                        </p>
+
+                                        <Button className="flex items-center justify-end w-fit text-right gap-2 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300 mt-4 bg-[#2563EB] py-3 px-5 cursor-pointer rounded">
+                                            Learn more <ExternalLink className="h-4 w-4" />
+                                        </Button>
                                     </div>
                                 </CardContent>
                             </Card>

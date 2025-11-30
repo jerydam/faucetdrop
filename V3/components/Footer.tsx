@@ -82,15 +82,12 @@ const Footer = () => {
           <div className="lg:col-span-4">
             <div className="flex items-center space-x-2 mb-4">
               <Image 
-                src='/favicon.png'
+                src='/FaucetDrops_Logo1.png'
                 alt='Logo'
-                className='w-15 h-15'
+                className='w-fit h-16'
                 width={1000}
                 height={1000}
               />
-              <span className="text-2xl font-bold text-[#0052FF]">
-                FaucetDrops
-              </span>
             </div>
             <p className={`mb-6 text-[#94A3B8]`}>
               The all-in-one platform for building modern web applications with ease.

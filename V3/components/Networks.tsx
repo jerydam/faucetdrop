@@ -2,7 +2,7 @@ import Image from "next/image";
 
 export default function Networks() {
   return (
-    <div className="mx-auto max-w-full px-0 w-[1280px] py-20 max-md:py-10">
+    <div className="mx-auto max-w-full px-0 w-[1280px] py-14 max-md:py-5">
       <div className="flex flex-col items-center justify-center gap-10 px-4 text-center">
         <h2 className="text-xl font-bold text-white">The future of Web3 user acquisition is automated, verifiable and fun. We&apos;re building it!</h2>
 

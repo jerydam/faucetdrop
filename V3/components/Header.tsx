@@ -18,15 +18,14 @@ const Header = () => {
             <div className="container mx-auto px-4 py-4">
                 <div className="flex items-center justify-between">
                     {/* Logo */}
-                    <Link href="/" className="text-2xl font-bold text-[#94A3B8] flex items-center space-x-2">
+                    <Link href="/" className="font-bold text-[#94A3B8] flex items-center space-x-2">
                         <Image 
-                            src="/favicon.png" 
+                            src="/FaucetDrops_Logo1.png" 
                             alt="Logo" 
                             width={1000} 
                             height={1000}
-                            className='w-15 h-15'
+                            className='h-16 w-fit'
                         />
-                        FaucetDrops
                     </Link>
 
                     {/* Desktop Navigation */}

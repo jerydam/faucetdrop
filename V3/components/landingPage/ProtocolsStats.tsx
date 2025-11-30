@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
+// import { ArrowRight } from 'lucide-react';
 
 export default function ProtocolsStats() {
   return (
@@ -18,37 +18,37 @@ export default function ProtocolsStats() {
           <p className="text-gray-400 text-lg leading-relaxed max-w-lg">
             Companies like Celo, Lisk, & Self Protocol, use Faucet Drops to drive Onchain Growth at scale.
           </p>
-          
+{/*           
           <button className="group flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-semibold px-6 py-3 rounded-full transition-all duration-200 mt-8">
             Work with us
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-          </button>
+          </button> */}
         </div>
         
         {/* Right Stats Grid */}
         <div className="grid grid-cols-2 gap-4">
           {/* Users Card */}
           <div className="bg-linear-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-800">
-            <div className="text-gray-400 text-sm mb-2">Users</div>
-            <div className="text-5xl font-bold">3M+</div>
+            <div className="text-gray-400 text-sm mb-2">Faucets</div>
+            <div className="text-5xl font-bold">100+</div>
           </div>
           
           {/* Transactions Card */}
           <div className="bg-linear-to-br from-[#2563EB]/30 to-[#2563EB]/20 rounded-2xl p-8 border border-[#2563EB]/50">
             <div className="text-gray-400 text-sm mb-2">Transactions</div>
-            <div className="text-5xl font-bold">500M+</div>
+            <div className="text-5xl font-bold">5k+</div>
           </div>
           
           {/* Chains Card */}
           <div className="bg-linear-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-800">
-            <div className="text-gray-400 text-sm mb-2">Chains</div>
-            <div className="text-5xl font-bold">40+</div>
+            <div className="text-gray-400 text-sm mb-2">Active users</div>
+            <div className="text-5xl font-bold">2k+</div>
           </div>
           
           {/* Apps Card */}
           <div className="bg-linear-to-br from-gray-900 to-gray-800 rounded-2xl p-8 border border-gray-800">
-            <div className="text-gray-400 text-sm mb-2">Apps</div>
-            <div className="text-5xl font-bold">500+</div>
+            <div className="text-gray-400 text-sm mb-2">Total Drops</div>
+            <div className="text-5xl font-bold">2k+</div>
           </div>
         </div>
       </div>

@@ -57,7 +57,12 @@ const NetworkGroup = ({ networks, delay = 0 }: { networks: { src: string; alt: s
       animate="show"
     >
       {networks.map((network, i) => (
-        <motion.div key={i} variants={item}>
+        <motion.div 
+        key={i} 
+        // variants={item}
+        initial="hidden"
+        animate="show"
+        >
           <NetworkLogo src={network.src} alt={network.alt} />
         </motion.div>
       ))}
@@ -111,7 +116,7 @@ export default function Networks() {
       >
         <motion.h2 
           className="text-xl font-bold text-white"
-          variants={item}
+          // variants={item}
         >
           The future of Web3 user acquisition is automated, verifiable and fun. We&apos;re building it!
         </motion.h2>

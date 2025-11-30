@@ -55,7 +55,12 @@ export function AnimatedText({
       animate="visible"
     >
       {letters.map((letter, index) => (
-        <motion.span key={index} variants={child}>
+        <motion.span 
+        key={index} 
+        // variants={child}
+        initial="hidden"
+        animate="visible"
+        >
           {letter === ' ' ? '\u00A0' : letter}
         </motion.span>
       ))}

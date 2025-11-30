@@ -2,6 +2,7 @@ import HeroSection from "@/components/landingPage/Hero";
 import Networks from "@/components/Networks";
 import OfferTabs from "@/components/landingPage/OfferTabs"
 import FaucetChats from "@/components/landingPage/FaucetChats";
+import ProtocolsStats from "@/components/landingPage/ProtocolsStats";
 
 export default function Home() {
   return (
@@ -11,6 +12,7 @@ export default function Home() {
         <Networks />
         <FaucetChats />
         <OfferTabs />
+        <ProtocolsStats />
       </div>
     </div>
   );

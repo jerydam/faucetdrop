@@ -24,7 +24,7 @@ export default function FaucetChat() {
   ];
 
   return (
-    <div className="flex items-center justify-center p-4 sm:p-8 mb-10">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 mb-10">
       <div className="w-full max-w-4xl">
         {/* Chat Container */}
         <div className="rounded-3xl border border-white/10 shadow-2xl p-6 sm:p-8 space-y-6">

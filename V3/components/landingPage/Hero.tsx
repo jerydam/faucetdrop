@@ -1,12 +1,30 @@
 import { Rocket } from 'lucide-react';
-import React from 'react';
+import Image from 'next/image';
+
+// const Drops: React.FC = () => {
+//   return (
+//       <Image src="/dripin.png" alt="DripIn Icon" width={300} height={300} className="w-full h-full object-contain blended-img3" />
+
+//   );
+// };
 
 const Drops: React.FC = () => {
   return (
-    <div className="bg-linear-to-br from-gray-900/90 to-gray-800/90 backdrop-blur-sm rounded-3xl p-8 border border-gray-700/50 shadow-2xl max-w-md w-full">
-      <h2 className="text-white text-xl font-semibold mb-6">Find The Best Rates</h2>
-      
-    
+    <div className="relative w-[500px] h-[500px]">
+      {/* BASE IMAGE */}
+      <Image
+        src="/dripin.png"
+        alt="DripIn Icon"
+        width={1000}
+        height={1000}
+        className="object-contain blended-img3"
+      />
+
+      {/* CORNER GRADIENTS */}
+      <div className="corner top-left"></div>
+      <div className="corner top-right"></div>
+      <div className="corner bottom-left"></div>
+      <div className="corner bottom-right"></div>
     </div>
   );
 };
@@ -37,26 +55,26 @@ const HeroSection: React.FC = () => {
         </defs>
       </svg>
 
-      {/* Main Content */}
-      <div className="container mx-auto px-6 py-16 relative z-10">
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-16">
-          {/* Left Content */}
-          <div className="flex-1 max-w-2xl">
-            <h1 className="text-2xl lg:text-4xl font-bold text-white mb-5 leading-none">
-              Unify Your Onchain Growth, Automate Your Rewards, Scale Engagement
-
+      {/* New Pattern */}
+      <div className="min-h-screen text-white flex items-center justify-center p-8">
+        <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <div className="">
+            <h1 className="text-5xl md:text-6xl font-bold leading-16">
+              Unify Your Onchain Growth, <br/>
+              <span className='text-xl md:text-2xl'>Automate Your Rewards, Scale Engagement</span>
             </h1>
-            <p className="text-[#94A3B8] text-md mb-8">
+
+            <p className="text-gray-400 text-lg leading-relaxed max-w-lg">
             FaucetDrops helps web3 Projects, DAOs, Protocols, and Communities automate token distribution, run interactive campaigns and onboard real users at scale - all in one powerful platfoarm.
             </p>
-            <button className="flex items-center gap-2 px-6 py-3 bg-[#020817]/50 hover:bg-[#020817] border border-gray-700/50 rounded-2xl transition-colors group">
-              <span className="text-white font-medium">Launch App</span>
-              <Rocket className="h-5 w-5 text-white" />
+
+            <button className="group flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-semibold px-6 py-3 rounded-full transition-all duration-200 mt-8">
+              Launch App
+              <Rocket className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
 
-          {/* Right Content - Exchange Card */}
-          <div className="shrink-0">
+          <div className="">
             <Drops />
           </div>
         </div>

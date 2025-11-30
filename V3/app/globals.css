@@ -183,3 +183,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+.blended-img3 {
+  /* width: 650px; */
+  border-radius: 12px;
+
+  /* Fade on all four corners */
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 1) 20%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 1) 20%,
+    rgba(0, 0, 0, 0) 100%
+  );
+
+  /* Optional smoothing */
+  filter: blur(0.5px);
+}

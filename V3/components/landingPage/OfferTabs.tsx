@@ -16,6 +16,47 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 
+// const flipCardStyle = `
+//   .flip-card {
+//     perspective: 1000px;
+//     height: 240px;
+//   }
+//   .flip-card-inner {
+//     position: relative;
+//     width: 100%;
+//     height: 100%;
+//     text-align: center;
+//     transition: transform 0.6s;
+//     transform-style: preserve-3d;
+//   }
+//   .flip-card:hover .flip-card-inner {
+//     transform: rotateY(180deg);
+//   }
+//   .flip-card-front, .flip-card-back {
+//     position: absolute;
+//     width: 100%;
+//     height: 100%;
+//     -webkit-backface-visibility: hidden;
+//     backface-visibility: hidden;
+//     border-radius: 0.75rem;
+//     padding: 1.25rem;
+//     display: flex;
+//     flex-direction: column;
+//   }
+//   .flip-card-front {
+//     background-color: #2563EB;
+//     }
+//     .flip-card-back {
+//         // background-color: #2563EB;
+//     border: 2px solid #2563EB;
+//     color: white;
+//     transform: rotateY(180deg);
+//     justify-content: center;
+//     align-items: center;
+//     text-align: center;
+//   }
+// `;
+
 export default function OfferTabs() {
     return (
         <div className="w-full flex justify-center">
@@ -74,47 +115,102 @@ export default function OfferTabs() {
                                         </span>
                                     </CardTitle>
                                 </CardHeader>
-                                <CardContent className="grid grid-cols-3 gap-10">
-                                    <div className="space-y-2 border-2 border-[#2563EB] p-5 rounded-xl">
-                                        <h3 className="font-bold gap-2 text-base">
-                                            Open Drop
-                                        </h3>
-                                        <p className="text-left leading-6">
+                                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {/* <style>{flipCardStyle}</style> */}
+                                    {/* <div className="flip-card">
+                                        <div className="flip-card-inner">
+                                            <div className="flip-card-front flex items-center justify-center">
+                                                <h3 className="font-bold gap-2 text-4xl">
+                                                    Open Drop
+                                                </h3>
+                                            </div>
+                                            <div className="flip-card-back">
+                                                <p className="text-left leading-7 mt-2 text-xl">
+                                                    Open-access distribution secured with a unique 6-character drop-code
+                                                </p>
+                                                <Button
+                                                    onClick={() => { "/"; }}
+                                                    className="flex items-center float-right gap-2 cursor-pointer mt-auto bg-[#F8FAFC] text-[#0052FF] hover:bg-[#0052FF] hover:text-[#F8FAFC]"
+                                                >
+                                                    Learn more <ExternalLink className="h-5 w-5" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div> */}
+
+                                    <div className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer" >
+                                        <h3 className="text-xl font-semibold relative bottom-0">Open Drop</h3>
+                                        <p className="text-base leading-relaxed opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300">
                                             Open-access distribution secured with a unique 6-character drop-code
                                         </p>
-                                        <Button
-                                            onClick={() => { "/"; }}
-                                            className="flex items-center float-right gap-2 cursor-pointer mt-5 bg-[#F8FAFC] text-[#0052FF] hover:bg-[#0052FF] hover:text-[#F8FAFC]"
-                                        >
-                                            Learn more <ExternalLink className="h-5 w-5" />
+
+                                        <Button className="flex items-center justify-end w-fit text-right gap-2 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300 mt-4 bg-[#2563EB] py-3 px-5 cursor-pointer rounded">
+                                            Learn more <ExternalLink className="h-4 w-4" />
                                         </Button>
                                     </div>
-                                    <div className="space-y-2 border-2 border-[#2563EB] p-5 rounded-xl">
-                                        <h3 className="font-bold gap-2 text-base">
-                                            Whitelist Drop
-                                        </h3>
-                                        <p className="text-left leading-6">
-                                            Reward Specific wallets with pricision. Only approved addresses can claim.
+
+                                    {/* <div className="flip-card">
+                                        <div className="flip-card-inner">
+                                            <div className="flip-card-front flex items-center justify-center">
+                                                <h3 className="font-bold gap-2 text-4xl">
+                                                    Whitelist Drop
+                                                </h3>
+                                            </div>
+                                            <div className="flip-card-back">
+                                                <p className="text-left leading-7 mt-2 text-xl">
+                                                    Reward specific wallets with precision. Only approved addresses can claim.
+                                                </p>
+                                                <Button
+                                                    onClick={() => { "/"; }}
+                                                    className="flex items-center float-right gap-2 cursor-pointer mt-auto bg-[#F8FAFC] text-[#0052FF] hover:bg-[#0052FF] hover:text-[#F8FAFC]"
+                                                >
+                                                    Learn more <ExternalLink className="h-5 w-5" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div> */}
+
+                                    <div className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer" >
+                                        <h3 className="text-xl font-semibold relative bottom-0">Whitelist Drop</h3>
+                                        <p className="text-base leading-relaxed opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300">
+                                            Reward specific wallets with precision. Only approved addresses can claim.
                                         </p>
-                                        <Button
-                                            onClick={() => { "/"; }}
-                                            className="flex items-center float-right gap-2 cursor-pointer mt-5 bg-[#F8FAFC] text-[#0052FF] hover:bg-[#0052FF] hover:text-[#F8FAFC]"
-                                        >
-                                            Learn more <ExternalLink className="h-5 w-5" />
+
+                                        <Button className="flex items-center justify-end w-fit text-right gap-2 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300 mt-4 bg-[#2563EB] py-3 px-5 cursor-pointer rounded">
+                                            Learn more <ExternalLink className="h-4 w-4" />
                                         </Button>
                                     </div>
-                                    <div className="space-y-2 border-2 border-[#2563EB] p-5 rounded-xl">
-                                        <h3 className="font-bold gap-2 text-base">
-                                            Custom Drop
-                                        </h3>
-                                        <p className="text-left leading-6">
+
+                                    {/* <div className="flip-card">
+                                        <div className="flip-card-inner">
+                                            <div className="flip-card-front flex items-center justify-center">
+                                                <h3 className="font-bold gap-2 text-4xl">
+                                                    Custom Drop
+                                                </h3>
+
+                                            </div>
+                                            <div className="flip-card-back">
+                                                <p className="text-left leading-7 mt-2 text-xl">
+                                                    Advanced fully customizable distribution engine with complex logic
+                                                </p>
+                                                <Button
+                                                    onClick={() => { "/"; }}
+                                                    className="flex items-center float-right gap-2 cursor-pointer mt-auto bg-[#F8FAFC] text-[#0052FF] hover:bg-[#0052FF] hover:text-[#F8FAFC]"
+                                                >
+                                                    Learn more <ExternalLink className="h-5 w-5" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div> */}
+
+                                    <div className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer" >
+                                        <h3 className="text-xl font-semibold relative bottom-0">Custom Drop</h3>
+                                        <p className="text-base leading-relaxed opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300">
                                             Advanced fully customizable distribution engine with complex logic
                                         </p>
-                                        <Button
-                                            onClick={() => { "/"; }}
-                                            className="flex items-center float-right gap-2 cursor-pointer mt-5 bg-[#F8FAFC] text-[#0052FF] hover:bg-[#0052FF] hover:text-[#F8FAFC]"
-                                        >
-                                            Learn more <ExternalLink className="h-5 w-5" />
+
+                                        <Button className="flex items-center justify-end w-fit text-right gap-2 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300 mt-4 bg-[#2563EB] py-3 px-5 cursor-pointer rounded">
+                                            Learn more <ExternalLink className="h-4 w-4" />
                                         </Button>
                                     </div>
                                 </CardContent>
@@ -134,29 +230,23 @@ export default function OfferTabs() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="grid grid-cols-2 gap-10">
-                                    <div className="flex items-center justify-center">
+                                    <div className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg">
                                         <Image
                                             src="/celo.svg"
                                             alt=""
                                             width={200}
                                             height={200}
-                                            className=""
+                                            className="transition-all duration-300 ease-out group-hover:scale-110"
                                         />
                                     </div>
-                                    <div className="text-left">
-                                        <div className="flex flex-col gap-5">
-                                            <div className="space-y-2">
-                                                <p className="bold flex flex-row items-center gap-2 text-base">
-                                                    <CircleCheckBig className="h-auto w-10 text-[#0052FF] bg-[#F8FAFC] rounded-full p-1 font-extrabold stroke-3" />
-                                                    Create task-based quests with points and automatically distribute rewards upon completion
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <Button
-                                            onClick={() => { "/"; }}
-                                            className="flex items-center gap-2 cursor-pointer mt-5 bg-[#F8FAFC] text-[#0052FF] hover:bg-[#0052FF] hover:text-[#F8FAFC]"
-                                        >
-                                            Learn more <ExternalLink className="h-5 w-5" />
+                                    <div className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer" >
+                                        <h3 className="text-xl font-semibold relative bottom-0">Gamified Progress + Automated Rewards</h3>
+                                        <p className="text-base leading-relaxed opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300">
+                                            Incentivize users who lend or borrow assets on Aave, Morpho, Euler, and more protocols.
+                                        </p>
+
+                                        <Button className="flex items-center justify-end w-fit text-right gap-2 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300 mt-4 bg-[#2563EB] py-3 px-5 cursor-pointer rounded">
+                                            Learn more <ExternalLink className="h-4 w-4" />
                                         </Button>
                                     </div>
                                 </CardContent>

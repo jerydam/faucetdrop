@@ -183,3 +183,57 @@
     @apply bg-background text-foreground;
   }
 }
+
+.blended-img {
+  /* width: 650px; */
+  border-radius: 12px;
+
+  /* Smooth fade-out edges */
+  -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);
+  mask-image: radial-gradient(circle, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 100%);
+
+  /* Optional soft blur on the image */
+  filter: blur(2px);
+}
+
+.blended-img2 {
+  /* width: 650px; */
+  border-radius: 12px;
+
+  mask-image: linear-gradient(
+    rgba(0,0,0,0) 0%,
+    rgba(0,0,0,1) 20%,
+    rgba(0,0,0,1) 80%,
+    rgba(0,0,0,0) 100%
+  );
+
+  -webkit-mask-image: linear-gradient(
+    rgba(0,0,0,0) 0%,
+    rgba(0,0,0,1) 20%,
+    rgba(0,0,0,1) 80%,
+    rgba(0,0,0,0) 100%
+  );
+
+  box-shadow: 0 0 80px rgba(255, 30, 30, 0.7);
+
+}
+
+.blended-img3 {
+  /* width: 650px; */
+  border-radius: 12px;
+
+  /* Fade on all four corners */
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 1) 20%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 1) 20%,
+    rgba(0, 0, 0, 0) 100%
+  );
+
+  /* Optional smoothing */
+  filter: blur(0.5px);
+}

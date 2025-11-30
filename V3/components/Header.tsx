@@ -20,7 +20,7 @@ const Header = () => {
                     {/* Logo */}
                     <Link href="/" className="font-bold text-[#94A3B8] flex items-center space-x-2">
                         <Image 
-                            src="/FaucetDrops_Logo1.png" 
+                            src="/white_FaucetDrops.png" 
                             alt="Logo" 
                             width={1000} 
                             height={1000}

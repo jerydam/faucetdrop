@@ -107,7 +107,7 @@ export default function QuestHomePage() {
 
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold">Active Quests ({quests.length})</h2>
-                <Button onClick={() => router.push('/quest/create')}>
+                <Button onClick={() => router.push('/quest/create-quest')} className="flex items-center gap-2 bg-green-600 hover:bg-green-700">
                     <Plus className="h-4 w-4 mr-2" />
                     Create New Quest
                 </Button>

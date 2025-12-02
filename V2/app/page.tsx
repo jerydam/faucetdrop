@@ -157,7 +157,7 @@ export default function Home() {
     
     try {
       await new Promise(resolve => setTimeout(resolve, 100)) // Small delay for UX
-      router.push('/create')
+      router.push('/create-faucet')
     } catch (error) {
       console.error('Navigation error:', error)
       setIsNavigatingToCreate(false)

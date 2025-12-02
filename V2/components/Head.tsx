@@ -301,7 +301,7 @@ export default function Head() {
           <div className="pt-4 space-y-4">
             <div className="flex flex-col space-y-3">
               <Button
-                onClick={() => router.push('/create')}
+                onClick={() => router.push('/create-faucet')}
                 size="sm"
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
               >
@@ -338,7 +338,7 @@ export default function Head() {
         <div className="hidden lg:flex items-center gap-4">
           <div className="flex items-center gap-3">
             <Button
-              onClick={() => router.push('/create')}
+              onClick={() => router.push('/create-faucet')}
               size="sm"
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
             >

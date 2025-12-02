@@ -110,7 +110,7 @@ const HeroSection: React.FC = () => {
       </svg>
 
       {/* New Pattern */}
-      <div className="min-h-screen text-white flex items-center justify-center p-8">
+      <div className="min-h-screen text-white flex flex-col-reverse md:flex-row items-center justify-center p-8">
         <motion.div 
           className="max-w-7xl w-full  gap-12 items-center"
           initial={{ opacity: 0, y: 20 }}

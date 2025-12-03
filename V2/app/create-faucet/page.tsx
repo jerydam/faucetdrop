@@ -285,6 +285,7 @@ const FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING: Record<FaucetType, FactoryType> = {
 const SUPPORTED_CHAIN_IDS = [42220, 1135, 42161, 8453] as const
 
 const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
+  // Celo Mainnet (42220)
   42220: [
     {
       address: "0x471EcE3750Da237f93B8E339c536989b8978a438",
@@ -292,7 +293,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "CELO",
       decimals: 18,
       isNative: true,
-      logoUrl: "/celo.jpeg",
+      logoUrl: "/celo.jpeg", // ✅ Local path
       description: "Native Celo token for governance and staking",
     },
     {
@@ -300,16 +301,8 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Nigerian Naira",
       symbol: "cNGN",
       decimals: 18,
-      logoUrl: "/cngn.png",
+      logoUrl: "/cngn.png", // ✅ Local path
       description: "Naira-pegged stablecoin on Celo",
-    },
-    {
-      address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
-      name: "Celo Dollar",
-      symbol: "cUSD",
-      decimals: 18,
-      logoUrl: "/cusd.png",
-      description: "USD-pegged stablecoin on Celo",
     },
     {
       address: "0x8A567e2aE79CA692Bd748aB832081C45de4041eA",
@@ -320,7 +313,73 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "colombian peso-pegged stablecoin on Celo",
 
     },
+    {
+      address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
+      name: "Celo Dollar",
+      symbol: "cUSD",
+      decimals: 18,
+      logoUrl: "/cusd.png", // ✅ Local path
+      description: "USD-pegged stablecoin on Celo",
+    },
+    {
+      address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e",
+      name: "Tether",
+      symbol: "USDT",
+      decimals: 6,
+      logoUrl: "/usdt.jpg", // ✅ Local path
+      description: "Tether USD stablecoin",
+    },
+    {
+      address: "0x639A647fbe20b6c8ac19E48E2de44ea792c62c5C",
+      name: "Celo Brazilian Real",
+      symbol: "cREAL",
+      decimals: 18,
+      logoUrl: "/creal.jpg", // ✅ Local path
+      description: "Brazilian Real-pegged stablecoin on Celo",
+    },
+    {
+      address: "0x32A9FE697a32135BFd313a6Ac28792DaE4D9979d",
+      name: "Celo Kenyan Shilling",
+      symbol: "cKES",
+      decimals: 18,
+      logoUrl: "/ckes.jpg", // ✅ Local path
+      description: "Kenyan Shilling-pegged stablecoin on Celo",
+    },
+    {
+      address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg", // ✅ Local path
+      description: "USD Coin stablecoin",
+    },
+    {
+      address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
+      name: "Celo Euro",
+      symbol: "cEUR",
+      decimals: 18,
+      logoUrl: "/ceur.png", // ✅ Local path
+      description: "Euro-pegged stablecoin on Celo",
+    },
+    {
+      address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+      name: "Glo Dollar",
+      symbol: "USDGLO",
+      decimals: 18,
+      logoUrl: "/glo.jpg", // ✅ Local path
+      description: "Philanthropic dollar that funds global poverty relief",
+    },
+    {
+      address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
+      name: "GoodDollar",
+      symbol: "G$",
+      decimals: 18,
+      logoUrl: "/gd.jpg", // ✅ Local path
+      description: "Universal basic income token",
+    },
   ],
+
+  // Lisk Mainnet (1135)
   1135: [
     {
       address: zeroAddress,
@@ -328,10 +387,36 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg",
+      logoUrl: "/ether.jpeg", // ✅ Local path
       description: "Native Ethereum for transaction fees",
     },
+    {
+      address: "0xac485391EB2d7D88253a7F1eF18C37f4242D1A24",
+      name: "Lisk",
+      symbol: "LSK",
+      decimals: 18,
+      logoUrl: "/lsk.png", // ✅ Local path
+      description: "Lisk native token",
+    },
+    {
+      address: "0x05D032ac25d322df992303dCa074EE7392C117b9",
+      name: "Tether USD",
+      symbol: "USDT",
+      decimals: 6,
+      logoUrl: "/usdt.jpg", // ✅ Local path
+      description: "Tether USD stablecoin",
+    },
+    {
+      address: "0xF242275d3a6527d877f2c927a82D9b057609cc71",
+      name: "Bridged USDC",
+      symbol: "USDC.e",
+      decimals: 6,
+      logoUrl: "/usdc.jpg", // ✅ Local path
+      description: "Bridged USD Coin from Ethereum",
+    },
   ],
+
+  // Arbitrum One (42161)
   42161: [
     {
       address: zeroAddress,
@@ -339,10 +424,36 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg",
+      logoUrl: "/ether.jpeg", // ✅ Local path
       description: "Native Ethereum for transaction fees",
     },
+    {
+      address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg", // ✅ Local path
+      description: "Native USD Coin on Arbitrum",
+    },
+    {
+      address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+      name: "Tether USD",
+      symbol: "USDT",
+      decimals: 6,
+      logoUrl: "/usdt.jpg", // ✅ Local path
+      description: "Tether USD stablecoin",
+    },
+    {
+      address: "0x912CE59144191C1204E64559FE8253a0e49E6548",
+      name: "Arbitrum",
+      symbol: "ARB",
+      decimals: 18,
+      logoUrl: "/arb.jpeg", // ✅ Local path
+      description: "Arbitrum governance token",
+    },
   ],
+
+  // Base Mainnet (8453)
   8453: [
     {
       address: zeroAddress,
@@ -350,8 +461,32 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg",
+      logoUrl: "/ether.jpeg", // ✅ Local path
       description: "Native Ethereum for transaction fees",
+    },
+    {
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg", // ✅ Local path
+      description: "Native USD Coin on Base",
+    },
+    {
+      address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+      name: "Bridged Tether USD",
+      symbol: "USDT",
+      decimals: 6,
+      logoUrl: "/usdt.jpg", // ✅ Local path
+      description: "Bridged Tether USD from Ethereum",
+    },
+    {
+      address: "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed",
+      name: "Degen",
+      symbol: "DEGEN",
+      decimals: 18,
+      logoUrl: "/degen.png", // ✅ Local path
+      description: "Degen community token",
     },
   ],
 }

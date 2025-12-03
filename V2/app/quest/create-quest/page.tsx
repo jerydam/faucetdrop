@@ -33,201 +33,72 @@ import {
 } from "lucide-react"
 // --- LIVE EXTERNAL DEPENDENCIES ---
 import { useWallet } from "@/hooks/use-wallet"
-// NOTE: useNetwork import and usage removed/replaced below
+import {Header} from "@/components/header"; // Assuming default export, check your header file
+// If Header is a named export (export const Header):
+// import { Header } from "@/components/header"; 
 
-// --- Ethers v6 Imports (Essential for Web3 interaction) ---
+// --- Ethers v6 Imports ---
 import { Contract, BrowserProvider, ZeroAddress, Interface } from 'ethers';
 const isAddress = (addr: string) => addr.startsWith('0x') && addr.length === 42;
 
+// --- ⚙️ IMPORTED FAUCET/NETWORK UTILITIES (from lib/faucet) ---
+import { 
+    checkFaucetNameExists, 
+    createCustomFaucet, // Keeping createCustomFaucet for now, assuming it's exported
+    type Network, 
+    type NameValidationResult, 
+    type FactoryType, 
+    
+} from "@/lib/faucet"; 
+// ----------------------------------------------------------
 
-// --- 💰 NETWORK & FAUCET CONFIGURATION (MOVED HERE) --------------------------------
-export interface Network {
-    name: string
-    symbol: string
-    chainId: number
-    rpcUrl: string
-    blockExplorerUrls: string
-    explorerUrl?: string
-    color: string
-    logoUrl: string
-    iconUrl?: string
-    factoryAddresses: string[]
-    factories: {
-        dropcode?: string
-        droplist?: string
-        custom?: string
-    }
-    tokenAddress: string
-    nativeCurrency: {
-        name: string
-        symbol: string
-        decimals: number
-    }
-    isTestnet?: boolean
-}
+// --- LOCAL NETWORK & TOKEN CONFIGURATION ---
+const FAUCET_TYPE_CUSTOM = 'custom' as const;
 
 export const networks: Network[] = [
     {
-        name: "Celo",
-        symbol: "CELO",
-        chainId: 42220,
-        rpcUrl: "https://forno.celo.org",
-        blockExplorerUrls: "https://celoscan.io",
-        color: "#35D07F",
-        logoUrl: "/celo.png",
-        iconUrl: "/celo.png",
-        factoryAddresses: [
-            "0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB",
-            "0xB8De8f37B263324C44FD4874a7FB7A0C59D8C58E",
-            "0xc26c4Ea50fd3b63B6564A5963fdE4a3A474d4024",
-            "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-            "0xE3Ac30fa32E727386a147Fe08b4899Da4115202f",
-            "0xF8707b53a2bEc818E96471DDdb34a09F28E0dE6D",
-            "0x8D1306b3970278b3AB64D1CE75377BDdf00f61da",
-            "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5",
-            "0xc9c89f695C7fa9D9AbA3B297C9b0d86C5A74f534"
-        ],
-        factories: {
-            droplist: "0xF8707b53a2bEc818E96471DDdb34a09F28E0dE6D",
-            dropcode: "0x8D1306b3970278b3AB64D1CE75377BDdf00f61da",
-            custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"
-        },
-        tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
-        nativeCurrency: {
-            name: "Celo",
-            symbol: "CELO",
-            decimals: 18,
-        },
-        isTestnet: false,
+        name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png",
+        factoryAddresses: ["0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"], // Simplified array
+        factories: { custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18, }, isTestnet: false,
     },
     {
-        name: "Lisk",
-        symbol: "LSK",
-        chainId: 1135,
-        rpcUrl: "https://rpc.api.lisk.com",
-        blockExplorerUrls: "https://blockscout.lisk.com",
-        explorerUrl: "https://blockscout.lisk.com",
-        color: "#0D4477",
-        logoUrl: "/lsk.png",
-        iconUrl: "/lsk.png",
-        factoryAddresses: [
-            "0x96E9911df17e94F7048cCbF7eccc8D9b5eDeCb5C",
-            "0x4F5Cf906b9b2Bf4245dba9F7d2d7F086a2a441C2",
-            "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7",
-            "0xd6Cb67dF496fF739c4eBA2448C1B0B44F4Cf0a7C",
-            "0x0837EACf85472891F350cba74937cB02D90E60A4"
-        ],
-        factories: {
-            droplist: "0x0837EACf85472891F350cba74937cB02D90E60A4",
-            dropcode: "0xd6Cb67dF496fF739c4eBA2448C1B0B44F4Cf0a7C",
-            custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7"
-        },
-        tokenAddress: ZeroAddress,
-        nativeCurrency: {
-            name: "Ether",
-            symbol: "ETH",
-            decimals: 18,
-        },
-        isTestnet: false,
+        name: "Lisk", symbol: "LSK", chainId: BigInt(1135), rpcUrl: "https://rpc.api.lisk.com", blockExplorer: "https://blockscout.lisk.com", explorerUrl: "https://blockscout.lisk.com", color: "#0D4477", logoUrl: "/lsk.png", iconUrl: "/lsk.png",
+        factoryAddresses: ["0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7"],
+        factories: { custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18, }, isTestnet: false,
     },
     {
-        name: "Arbitrum",
-        symbol: "ARB",
-        chainId: 42161,
-        rpcUrl: "https://arb1.arbitrum.io/rpc",
-        blockExplorerUrls: "https://arbiscan.io",
-        explorerUrl: "https://arbiscan.io",
-        color: "#28A0F0",
-        logoUrl: "/arb.jpeg",
-        iconUrl: "/arb.jpeg",
-        factoryAddresses: [
-            "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
-            "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
-            "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
-        ],
-        factories: {
-            droplist: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
-            dropcode: "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
-            custom: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
-        },
-        tokenAddress: ZeroAddress,
-        nativeCurrency: {
-            name: "Ether",
-            symbol: "ETH",
-            decimals: 18,
-        },
-        isTestnet: false,
+        name: "Arbitrum", symbol: "ARB", chainId: BigInt(42161), rpcUrl: "https://arb1.arbitrum.io/rpc", blockExplorer: "https://arbiscan.io", explorerUrl: "https://arbiscan.io", color: "#28A0F0", logoUrl: "/arb.jpeg", iconUrl: "/arb.jpeg",
+        factoryAddresses: ["0x9D6f441b31FBa22700bb3217229eb89b13FB49de"],
+        factories: { custom: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18, }, isTestnet: false,
     },
     {
-        name: "Base",
-        symbol: "BASE",
-        chainId: 8453,
-        rpcUrl: "https://base.publicnode.com",
-        blockExplorerUrls: "https://basescan.org",
-        explorerUrl: "https://basescan.org",
-        color: "#0052FF",
-        logoUrl: "/base.png",
-        iconUrl: "/base.png",
-        factoryAddresses: [
-            "0x945431302922b69D500671201CEE62900624C6d5",
-            "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
-            "0x587b840140321DD8002111282748acAdaa8fA206"
-        ],
-        factories: {
-            droplist: "0x945431302922b69D500671201CEE62900624C6d5",
-            dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
-            custom: "0x587b840140321DD8002111282748acAdaa8fA206"
-        },
-        tokenAddress: ZeroAddress,
-        nativeCurrency: {
-            name: "Ether",
-            symbol: "ETH",
-            decimals: 18,
-        },
-        isTestnet: false,
+        name: "Base", symbol: "BASE", chainId: BigInt(8453), rpcUrl: "https://base.publicnode.com", blockExplorer: "https://basescan.org", explorerUrl: "https://basescan.org", color: "#0052FF", logoUrl: "/base.png", iconUrl: "/base.png",
+        factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"],
+        factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18, }, isTestnet: false,
     }
-]
+];
 
-type FactoryType = 'dropcode' | 'droplist' | 'custom';
-
-// Local utility function to replace getNetworkByChainId from use-network
+// Local utility functions (adapted from use-network)
 const getNetworkByChainId = (chainId: number | null): Network | null => {
     if (!chainId) return null;
-    return networks.find(n => n.chainId === chainId) || null;
+    const bigIntChainId = BigInt(chainId);
+    return networks.find(n => n.chainId === bigIntChainId) || null;
 }
-
-// Local utility function to replace getFactoryAddress from use-network
-const getFactoryAddress = (factoryType: FactoryType, targetNetwork: Network | null): string | null => {
+const getFactoryAddress = (factoryType: 'custom', targetNetwork: Network | null): string | null => {
     if (!targetNetwork) return null;
     return targetNetwork.factories[factoryType] || null;
 }
-// -----------------------------------------------------------------------------------
+// --------------------------------------------------
 
-
-// --- FAUCET.TS LOGIC & INTERFACES --------------------------------------------------
+// --- FAUCET.TS LOGIC & INTERFACES (CRITICAL FOR UI) ---
 const FACTORY_TYPE_CUSTOM = 'custom' as const;
-interface NameValidationResult {
-    exists: boolean;
-    warning?: string;
-    existingFaucet?: { name: string, faucetAddress?: string };
-    conflictingFaucets?: Array<{
-        address: string
-        name: string
-        owner: string
-        factoryAddress: string
-        factoryType: typeof FACTORY_TYPE_CUSTOM
-    }>
-}
-interface CheckFaucetNameExistsResult extends NameValidationResult {}
+// NOTE: NameValidationResult is imported above
 interface FaucetDetail {
     faucetAddress: string;
     name: string;
     owner: string;
     token: string;
 }
-const CUSTOM_FACTORY_NAME_CHECK_ABI = [
-    "function getAllFaucetDetails() view returns (tuple(address faucetAddress, string name, address owner, address token)[] faucetDetails)",
-];
 
 const zeroAddress = ZeroAddress;
 const getTodayDateString = () => new Date().toISOString().split('T')[0];
@@ -244,23 +115,215 @@ interface TokenConfiguration {
     decimals: number;
     isNative?: boolean;
     logoUrl?: string;
+    description?: string;
 }
 
 const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
+    // Celo Mainnet (42220)
     42220: [
-        { address: "0x471EcE3750Da237f93B8E339c536989b8978a438", name: "Celo", symbol: "CELO", decimals: 18, isNative: true, logoUrl: "/celo.png" },
-        { address: "0x765DE816845861e75A25fCA122bb6898B8B1282a", name: "Celo Dollar", symbol: "cUSD", decimals: 18, logoUrl: "/cusd.png" }
-    ],
-    42161: [
-        { address: zeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg" },
-        { address: "0x2791Bca1f2de4661ED88A30C99A7a94449Aa84174", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg" }
-    ],
-    8453: [
-        { address: zeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg" },
-        { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg" }
-    ],
-};
+        {
+            address: "0x471EcE3750Da237f93B8E339c536989b8978a438",
+            name: "Celo",
+            symbol: "CELO",
+            decimals: 18,
+            isNative: true,
+            logoUrl: "/celo.jpeg", // ✅ Local path
+            description: "Native Celo token for governance and staking",
+        },
+        {
+            address: "0xE2702Bd97ee33c88c8f6f92DA3B733608aa76F71",
+            name: "Celo Nigerian Naira",
+            symbol: "cNGN",
+            decimals: 18,
+            logoUrl: "/cngn.png", // ✅ Local path
+            description: "Naira-pegged stablecoin on Celo",
+        },
+        {
+            address: "0x8A567e2aE79CA692Bd748aB832081C45de4041eA",
+            name: "Celo Colombian Peso",
+            symbol: "cCOP",
+            decimals: 18,
+            logoUrl: "/ccop.png",
+            description: "colombian peso-pegged stablecoin on Celo",
 
+        },
+        {
+            address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
+            name: "Celo Dollar",
+            symbol: "cUSD",
+            decimals: 18,
+            logoUrl: "/cusd.png", // ✅ Local path
+            description: "USD-pegged stablecoin on Celo",
+        },
+        {
+            address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e",
+            name: "Tether",
+            symbol: "USDT",
+            decimals: 6,
+            logoUrl: "/usdt.jpg", // ✅ Local path
+            description: "Tether USD stablecoin",
+        },
+        {
+            address: "0x639A647fbe20b6c8ac19E48E2de44ea792c62c5C",
+            name: "Celo Brazilian Real",
+            symbol: "cREAL",
+            decimals: 18,
+            logoUrl: "/creal.jpg", // ✅ Local path
+            description: "Brazilian Real-pegged stablecoin on Celo",
+        },
+        {
+            address: "0x32A9FE697a32135BFd313a6Ac28792DaE4D9979d",
+            name: "Celo Kenyan Shilling",
+            symbol: "cKES",
+            decimals: 18,
+            logoUrl: "/ckes.jpg", // ✅ Local path
+            description: "Kenyan Shilling-pegged stablecoin on Celo",
+        },
+        {
+            address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
+            name: "USD Coin",
+            symbol: "USDC",
+            decimals: 6,
+            logoUrl: "/usdc.jpg", // ✅ Local path
+            description: "USD Coin stablecoin",
+        },
+        {
+            address: "0xD8763CBa276a3738E6DE85b4b3bF5FDed6D6cA73",
+            name: "Celo Euro",
+            symbol: "cEUR",
+            decimals: 18,
+            logoUrl: "/ceur.png", // ✅ Local path
+            description: "Euro-pegged stablecoin on Celo",
+        },
+        {
+            address: "0x4f604735c1cf31399c6e711d5962b2b3e0225ad3",
+            name: "Glo Dollar",
+            symbol: "USDGLO",
+            decimals: 18,
+            logoUrl: "/glo.jpg", // ✅ Local path
+            description: "Philanthropic dollar that funds global poverty relief",
+        },
+        {
+            address: "0x62b8b11039fcfe5ab0c56e502b1c372a3d2a9c7a",
+            name: "GoodDollar",
+            symbol: "G$",
+            decimals: 18,
+            logoUrl: "/gd.jpg", // ✅ Local path
+            description: "Universal basic income token",
+        },
+    ],
+
+    // Lisk Mainnet (1135)
+    1135: [
+        {
+            address: zeroAddress,
+            name: "Ethereum",
+            symbol: "ETH",
+            decimals: 18,
+            isNative: true,
+            logoUrl: "/ether.jpeg", // ✅ Local path
+            description: "Native Ethereum for transaction fees",
+        },
+        {
+            address: "0xac485391EB2d7D88253a7F1eF18C37f4242D1A24",
+            name: "Lisk",
+            symbol: "LSK",
+            decimals: 18,
+            logoUrl: "/lsk.png", // ✅ Local path
+            description: "Lisk native token",
+        },
+        {
+            address: "0x05D032ac25d322df992303dCa074EE7392C117b9",
+            name: "Tether USD",
+            symbol: "USDT",
+            decimals: 6,
+            logoUrl: "/usdt.jpg", // ✅ Local path
+            description: "Tether USD stablecoin",
+        },
+        {
+            address: "0xF242275d3a6527d877f2c927a82D9b057609cc71",
+            name: "Bridged USDC",
+            symbol: "USDC.e",
+            decimals: 6,
+            logoUrl: "/usdc.jpg", // ✅ Local path
+            description: "Bridged USD Coin from Ethereum",
+        },
+    ],
+
+    // Arbitrum One (42161)
+    42161: [
+        {
+            address: zeroAddress,
+            name: "Ethereum",
+            symbol: "ETH",
+            decimals: 18,
+            isNative: true,
+            logoUrl: "/ether.jpeg", // ✅ Local path
+            description: "Native Ethereum for transaction fees",
+        },
+        {
+            address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+            name: "USD Coin",
+            symbol: "USDC",
+            decimals: 6,
+            logoUrl: "/usdc.jpg", // ✅ Local path
+            description: "Native USD Coin on Arbitrum",
+        },
+        {
+            address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+            name: "Tether USD",
+            symbol: "USDT",
+            decimals: 6,
+            logoUrl: "/usdt.jpg", // ✅ Local path
+            description: "Tether USD stablecoin",
+        },
+        {
+            address: "0x912CE59144191C1204E64559FE8253a0e49E6548",
+            name: "Arbitrum",
+            symbol: "ARB",
+            decimals: 18,
+            logoUrl: "/arb.jpeg", // ✅ Local path
+            description: "Arbitrum governance token",
+        },
+    ],
+
+    // Base Mainnet (8453)
+    8453: [
+        {
+            address: zeroAddress,
+            name: "Ethereum",
+            symbol: "ETH",
+            decimals: 18,
+            isNative: true,
+            logoUrl: "/ether.jpeg", // ✅ Local path
+            description: "Native Ethereum for transaction fees",
+        },
+        {
+            address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+            name: "USD Coin",
+            symbol: "USDC",
+            decimals: 6,
+            logoUrl: "/usdc.jpg", // ✅ Local path
+            description: "Native USD Coin on Base",
+        },
+        {
+            address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+            name: "Bridged Tether USD",
+            symbol: "USDT",
+            decimals: 6,
+            logoUrl: "/usdt.jpg", // ✅ Local path
+            description: "Bridged Tether USD from Ethereum",
+        },
+        {
+            address: "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed",
+            name: "Degen",
+            symbol: "DEGEN",
+            decimals: 18,
+            logoUrl: "/degen.png", // ✅ Local path
+            description: "Degen community token",
+        },
+    ],
+}
 export type TaskStage = 'Beginner' | 'Intermediate' | 'Advance' | 'Legend' | 'Ultimate';
 export const TASK_STAGES: TaskStage[] = ['Beginner', 'Intermediate', 'Advance', 'Legend', 'Ultimate'];
 const MAX_PASS_POINT_RATIO = 0.7;
@@ -297,6 +360,15 @@ interface QuestTask {
     minReferrals?: number
 }
 
+// NOTE: This interface MUST be manually kept in sync with the FastAPI Pydantic model
+interface StagePassRequirements {
+    Beginner: number;
+    Intermediate: number;
+    Advance: number;
+    Legend: number;
+    Ultimate: number;
+}
+
 interface Quest {
     id: string
     creatorAddress: string
@@ -310,11 +382,11 @@ interface Quest {
     faucetAddress?: string;
     rewardTokenType: 'native' | 'erc20';
     tokenAddress: string;
-    stagePassRequirements: Record<TaskStage, number>;
+    stagePassRequirements: StagePassRequirements; // UPDATED
     imageUrl: string;
 }
 
-const initialStagePassRequirements: Record<TaskStage, number> = {
+const initialStagePassRequirements: StagePassRequirements = {
     Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0,
 }
 
@@ -329,7 +401,7 @@ const initialNewQuest: Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequireme
     faucetAddress: undefined,
     rewardTokenType: 'native',
     tokenAddress: ZeroAddress,
-    imageUrl: "https://placehold.co/100x100/3b82f6/ffffff?text=Quest+Logo",
+    imageUrl: "https://placehold.co/1024x1024/3b82f6/ffffff?text=Quest+Logo", // UPDATED default image size
 }
 
 const initialNewTaskForm: Partial<QuestTask> = {
@@ -347,31 +419,9 @@ const initialNewTaskForm: Partial<QuestTask> = {
 }
 
 const FACTORY_ABI_CUSTOM: any[] = [
-    ...CUSTOM_FACTORY_NAME_CHECK_ABI,
-    { "inputs": [], "stateMutability": "nonpayable", "type": "constructor" },
-    {
-        "inputs": [
-            { "internalType": "string", "name": "_name", "type": "string" },
-            { "internalType": "address", "name": "_token", "type": "address" },
-            { "internalType": "address", "name": "_backend", "type": "address" }
-        ],
-        "name": "createCustomFaucet",
-        "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            { "indexed": true, "internalType": "address", "name": "faucet", "type": "address" },
-            { "indexed": false, "internalType": "address", "name": "owner", "type": "address" },
-            { "indexed": false, "internalType": "string", "name": "name", "type": "string" },
-            { "indexed": false, "internalType": "address", "name": "token", "type": "address" },
-            { "indexed": false, "internalType": "address", "name": "backend", "type": "address" }
-        ],
-        "name": "FaucetCreated",
-        "type": "event"
-    }
+    // Assuming this ABI segment is defined in faucet.ts now
+    // Only keeping this definition if it's strictly needed outside of imported functions
+    "function getAllFaucetDetails() view returns (tuple(address faucetAddress, string name, address owner, address token)[] faucetDetails)",
 ];
 
 const PLATFORM_BACKEND_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
@@ -380,6 +430,7 @@ const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 // Suggested Tasks by Stage (kept as is)
 const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
     Beginner: [
+        { title: "Visit our Website", category: "social", action: "visit", targetPlatform: "Website", points: 30, verificationType: "manual_link" },
         { title: "Follow us on Twitter", category: "social", action: "follow", targetPlatform: "Twitter", points: 50, verificationType: "manual_link" },
         { title: "Join our Discord Server", category: "social", action: "join", targetPlatform: "Discord", points: 50, verificationType: "manual_link" },
         { title: "Like our Facebook Page", category: "social", action: "like", targetPlatform: "Facebook", points: 40, verificationType: "manual_link" },
@@ -436,14 +487,153 @@ const generateSocialTaskTitle = (platform: string, action: string): string => {
 };
 
 
+// --- NEW COMPONENT: Image Upload and Preview ---
+interface ImageUploadFieldProps {
+    imageUrl: string;
+    onImageUrlChange: (url: string) => void;
+    onFileUpload: (file: File) => Promise<void>;
+    isUploading: boolean;
+    uploadError: string | null;
+    requiredResolution?: { width: number; height: number };
+}
+
+const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
+    imageUrl, onImageUrlChange, onFileUpload, isUploading, uploadError, requiredResolution
+}) => {
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [previewUrl, setPreviewUrl] = useState(imageUrl);
+    const [resolutionError, setResolutionError] = useState<string | null>(null);
+    const requiredWidth = requiredResolution?.width || 1024;
+    const requiredHeight = requiredResolution?.height || 1024;
+
+    useEffect(() => {
+        setPreviewUrl(imageUrl);
+    }, [imageUrl]);
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setResolutionError(null);
+
+        // 1. Client-side Resolution Check
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                if (img.width !== requiredWidth || img.height !== requiredHeight) {
+                    setResolutionError(`Resolution must be ${requiredWidth}x${requiredHeight} pixels. Found ${img.width}x${img.height}.`);
+                    setPreviewUrl(null);
+                    if (fileInputRef.current) fileInputRef.current.value = ""; // Clear file input
+                    return;
+                }
+                // 2. Set preview and trigger upload
+                setPreviewUrl(e.target?.result as string);
+                onFileUpload(file);
+            };
+            img.src = e.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleRemoveImage = () => {
+        onImageUrlChange("");
+        setPreviewUrl(null);
+        setResolutionError(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const displayImageUrl = imageUrl || previewUrl;
+
+    return (
+        <div className="space-y-2">
+            <Label htmlFor="fileUpload">Quest Image/Logo (Max 5MB, {requiredWidth}x{requiredHeight} required)</Label>
+            
+            <div className="flex items-center space-x-3">
+                {/* File Input Trigger */}
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading || !!resolutionError}
+                    className="flex-grow"
+                >
+                    {isUploading ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    {isUploading ? "Uploading..." : imageUrl ? "Change Image" : "Upload Image (1024x1024)"}
+                </Button>
+                
+                {/* Remove Button */}
+                {imageUrl && (
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        onClick={handleRemoveImage}
+                        disabled={isUploading}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                )}
+                
+                {/* Hidden File Input */}
+                <Input
+                    id="fileUpload"
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="hidden"
+                    onChange={handleFileChange}
+                    disabled={isUploading}
+                />
+            </div>
+
+            {/* Preview and Error */}
+            {(displayImageUrl || uploadError || resolutionError) && (
+                <div className="flex items-start space-x-3 mt-2 border p-3 rounded-lg bg-white dark:bg-gray-800">
+                    <div className="h-16 w-16 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden border">
+                        {displayImageUrl ? (
+                            <img src={displayImageUrl} alt="Preview" className="h-full w-full object-cover" />
+                        ) : (
+                            <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
+                                No Preview
+                            </div>
+                        )}
+                    </div>
+                    {(uploadError || resolutionError) && (
+                        <p className="text-xs text-red-500 flex-grow pt-1">
+                            <AlertTriangle className="h-3 w-3 inline mr-1" />
+                            {resolutionError || uploadError}
+                        </p>
+                    )}
+                     {(!uploadError && !resolutionError && imageUrl) && (
+                        <p className="text-xs text-green-500 flex-grow pt-1">
+                            <Check className="h-3 w-3 inline mr-1" />
+                            Image URL saved successfully.
+                        </p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+
 // --- STEP 1: QUEST DETAILS ---
+// Updated StepOneProps to include new image handling props
 interface StepOneProps {
     newQuest: Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'>;
     setNewQuest: React.Dispatch<React.SetStateAction<Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'>>>;
     nameError: string | null;
     isCheckingName: boolean;
+    isUploadingImage: boolean;
+    uploadImageError: string | null;
+    handleImageUpload: (file: File) => Promise<void>;
 }
-const StepOneDetails: React.FC<StepOneProps> = ({ newQuest, setNewQuest, nameError, isCheckingName }) => (
+const StepOneDetails: React.FC<StepOneProps> = ({ newQuest, setNewQuest, nameError, isCheckingName, isUploadingImage, uploadImageError, handleImageUpload }) => (
     <Card>
         <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -490,22 +680,17 @@ const StepOneDetails: React.FC<StepOneProps> = ({ newQuest, setNewQuest, nameErr
                     <p className="text-xs text-red-500">{nameError}</p>
                 )}
             </div>
-            <div className="space-y-2">
-                <Label htmlFor="imageUrl">Quest Image/Logo URL</Label>
-                <div className="flex items-center space-x-2">
-                    <Input
-                        id="imageUrl"
-                        value={newQuest.imageUrl}
-                        onChange={(e) => setNewQuest({...newQuest, imageUrl: e.target.value})}
-                        placeholder="https://i.imgur.com/quest-logo.png"
-                    />
-                    <Button variant="outline" size="icon" disabled>
-                        <ImageIcon className="h-4 w-4" />
-                    </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">URL to a campaign image (e.g., logo, banner).</p>
-            </div>
-
+            
+            {/* NEW IMAGE UPLOAD FIELD */}
+            <ImageUploadField
+                imageUrl={newQuest.imageUrl}
+                onImageUrlChange={(url) => setNewQuest({...newQuest, imageUrl: url})}
+                onFileUpload={handleImageUpload}
+                isUploading={isUploadingImage}
+                uploadError={uploadImageError}
+                requiredResolution={{ width: 1024, height: 1024 }} // Set required resolution
+            />
+            
             <div className="space-y-2">
                 <Label htmlFor="description">Quest Description</Label>
                 <Textarea
@@ -525,7 +710,7 @@ interface StepTwoProps {
     newQuest: Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'>;
     setNewQuest: React.Dispatch<React.SetStateAction<Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'>>>;
     chainId: number | null;
-    network: Network | null; // Changed from useNetwork return type
+    network: Network | null; // Updated type
     selectedToken: TokenConfiguration | null;
     setSelectedToken: React.Dispatch<React.SetStateAction<TokenConfiguration | null>>;
     error: string | null;
@@ -662,8 +847,8 @@ interface StepThreeProps {
     initialNewTaskForm: Partial<QuestTask>;
     error: string | null;
     setError: React.Dispatch<React.SetStateAction<string | null>>;
-    stagePassRequirements: Record<TaskStage, number>;
-    setStagePassRequirements: React.Dispatch<React.SetStateAction<Record<TaskStage, number>>>;
+    stagePassRequirements: StagePassRequirements; // UPDATED
+    setStagePassRequirements: React.Dispatch<React.SetStateAction<StagePassRequirements>>; // UPDATED
     stageTotals: Record<TaskStage, number>;
     stageTaskCounts: Record<TaskStage, number>;
     validateTask: () => boolean;
@@ -686,9 +871,9 @@ interface StepThreeProps {
 const StepThreeTasks: React.FC<StepThreeProps> = ({
     newQuest, setNewQuest, initialNewTaskForm, error, setError, stagePassRequirements,
     setStagePassRequirements, stageTotals, stageTaskCounts, validateTask, handleAddTask, handleEditTask,
-    handleUpdateTask, handleRemoveTask, handleStagePassRequirementChange, isStageSelectable,
+    handleUpdateTask, handleUpdateTask: handleRemoveTask, handleStagePassRequirementChange, isStageSelectable,
     editingTask, setNewTask, newTask, checkStagePassPointsValidity, getStageColor, getCategoryColor, getVerificationIcon,
-    setEditingTask, handleUseSuggestedTask
+    setEditingTask, handleUseSuggestedTask, handleRemoveTask: handleRemoveTaskFromProps // Renamed to avoid collision
 }) => {
     const getStageSelectStatus = (stage: TaskStage) => {
         const stageIndex = TASK_STAGES.indexOf(stage);
@@ -781,7 +966,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                         <div className="space-y-2">
                             <Label htmlFor="category">Category</Label>
                             <Select
-                                value={newTask.category || "social"}
+                                value={newTask.category}
                                 onValueChange={(value: any) => {
                                     const newCategory = value as QuestTask['category']; setNewTask(prev => ({
                                         ...prev,
@@ -874,7 +1059,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                 <div className="space-y-2">
                                     <Label>Platform</Label>
                                     <Select
-                                        value={newTask.targetPlatform || "Twitter"}
+                                        value={newTask.targetPlatform}
                                         onValueChange={(value: SocialPlatform) => {
                                             setNewTask(prev => ({
                                                 ...prev,
@@ -884,7 +1069,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                             }));
                                         }}
                                     >
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder="select platform"/></SelectTrigger>
                                         <SelectContent>
                                             {SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
                                         </SelectContent>
@@ -893,7 +1078,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                 <div className="space-y-2">
                                     <Label>Action</Label>
                                     <Select
-                                        value={newTask.action || "follow"}
+                                        value={newTask.action}
                                         onValueChange={(value: string) => {
                                             setNewTask(prev => ({
                                                 ...prev,
@@ -902,7 +1087,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                             }));
                                         }}
                                     >
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder="select action" /></SelectTrigger>
                                         <SelectContent>
                                             {SOCIAL_ACTIONS.map(a => <SelectItem key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</SelectItem>)}
                                         </SelectContent>
@@ -964,18 +1149,18 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                     </div>
                     {newTask.category === 'referral' && (
                                <div className="space-y-2 p-3 border rounded-lg bg-orange-50 dark:bg-orange-900/50">
-                                <div className="flex items-center gap-2 text-sm font-medium text-orange-800 dark:text-orange-200">
-                                    <Share2 className="h-4 w-4" /> Referral Settings
-                                </div>
-                                <Label className="text-xs">Minimum Required Referrals</Label>
-                                <Input
-                                  type="number"
-                                  value={newTask.minReferrals || 1}
-                                  onChange={(e) => setNewTask({...newTask, minReferrals: parseInt(e.target.value)})}
-                                  min="1"
-                                  placeholder="e.g. 5"
-                                />
-                            </div>
+                               <div className="flex items-center gap-2 text-sm font-medium text-orange-800 dark:text-orange-200">
+                                   <Share2 className="h-4 w-4" /> Referral Settings
+                               </div>
+                               <Label className="text-xs">Minimum Required Referrals</Label>
+                               <Input
+                                   type="number"
+                                   value={newTask.minReferrals || 1}
+                                   onChange={(e) => setNewTask({...newTask, minReferrals: parseInt(e.target.value)})}
+                                   min="1"
+                                   placeholder="e.g. 5"
+                               />
+                           </div>
                     )}
                     {newTask.verificationType === 'auto_social' && (
                         <div className="grid grid-cols-2 gap-3 p-3 border rounded-lg bg-gray-50 dark:bg-gray-900">
@@ -1139,7 +1324,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                                         <Badge variant="secondary" className={`text-xs ${getCategoryColor(task.category)}`}>{task.category}</Badge>
                                                         <span className="text-green-600 font-semibold">{task.points} Pts</span>
                                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditTask(task)}><Settings className="h-3 w-3" /></Button>
-                                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500" onClick={() => handleRemoveTask(task.id)}><Trash2 className="h-3 w-3" /></Button>
+                                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500" onClick={() => handleRemoveTaskFromProps(task.id)}><Trash2 className="h-3 w-3" /></Button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -1158,9 +1343,9 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
 interface StepFourProps {
     newQuest: Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'>;
     stageTotals: Record<TaskStage, number>;
-    stagePassRequirements: Record<TaskStage, number>;
+    stagePassRequirements: StagePassRequirements; // UPDATED
     selectedToken: TokenConfiguration | null;
-    network: Network | null; // Changed from useNetwork return type
+    network: Network | null;
     isConnected: boolean;
     isSaving: boolean;
     isSaveDisabled: boolean;
@@ -1266,10 +1451,10 @@ const StepFourPreview: React.FC<StepFourProps> = ({
 // --- MAIN COMPONENT: QuestCreator ---
 export default function QuestCreator() {
     // --- LIVE HOOKS ---
-    const { address, isConnected, chainId, isConnecting: isWalletConnecting } = useWallet();
+    const { address, isConnected, chainId, isConnecting: isWalletConnecting, provider: walletProvider } = useWallet();
     
     // Use local network lookup instead of a separate provider hook
-    const network = getNetworkByChainId(chainId); 
+    const network = useMemo(() => getNetworkByChainId(chainId), [chainId]); 
 
     // --- WIZARD STATE ---
     const [step, setStep] = useState(1);
@@ -1282,9 +1467,13 @@ export default function QuestCreator() {
     const [error, setError] = useState<string | null>(null);
     const [nameError, setNameError] = useState<string | null>(null);
     const [isCheckingName, setIsCheckingName] = useState(false);
-    const [stagePassRequirements, setStagePassRequirements] = useState<Record<TaskStage, number>>(initialStagePassRequirements);
+    const [stagePassRequirements, setStagePassRequirements] = useState<StagePassRequirements>(initialStagePassRequirements); // UPDATED type
     // --- TOKEN STATE ---
     const [selectedToken, setSelectedToken] = useState<TokenConfiguration | null>(null);
+    // --- NEW IMAGE UPLOAD STATE ---
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const [uploadImageError, setUploadImageError] = useState<string | null>(null);
+
 
     const availableTokens = chainId ? ALL_TOKENS_BY_CHAIN[chainId] || [] : [];
 
@@ -1303,8 +1492,8 @@ export default function QuestCreator() {
         }
     }, [chainId, selectedToken, availableTokens]);
 
-    const FAUCET_FACTORY_ADDRESS = getFactoryAddress('custom', network);
-    const isFactoryAvailableOnChain = !!FAUCET_FACTORY_ADDRESS;
+    const FAUCET_FACTORY_ADDRESS = getFactoryAddress(FAUCET_TYPE_CUSTOM, network);
+    const isFactoryAvailableOnChain = !!FAUCET_FACTORY_ADDRESS && !!network;
 
     // --- DYNAMIC CALCULATION: Stage Total Points & Task Counts ---
     const stageTotals = useMemo(() => {
@@ -1319,65 +1508,62 @@ export default function QuestCreator() {
         return counts;
     }, [newQuest.tasks]);
 
-    // --- Name Validation with LIVE Contract Read ---
+    // --- Name Validation: Updated to use imported function ---
     const validateFaucetNameAcrossFactories = useCallback(async (nameToValidate: string) => {
         console.log(`[QuestCreator: validateFaucetNameAcrossFactories] Checking name: "${nameToValidate}"`)
-        // Ensure FAUCET_FACTORY_ADDRESS and network are available before running
-        if (!nameToValidate.trim() || !isConnected || !chainId || !FAUCET_FACTORY_ADDRESS || typeof window === 'undefined' || !window.ethereum) {
-            console.log('[QuestCreator: validateFaucetNameAcrossFactories] Skipping check (Missing dependencies: FAUCET_FACTORY_ADDRESS, etc.)', {
-                isConnected,
-                chainId,
-                FAUCET_FACTORY_ADDRESS: FAUCET_FACTORY_ADDRESS || 'NULL' 
-            })
+
+        if (!nameToValidate.trim() || !isConnected || !chainId || !network || !walletProvider) {
+            console.log('[QuestCreator: validateFaucetNameAcrossFactories] Skipping check (Missing connection/network data)')
             setNameError(null); return;
         }
 
         setIsCheckingName(true); setNameError(null);
 
         try {
-            console.log(`[QuestCreator: validateFaucetNameAcrossFactories] Fetching faucet details from ${FAUCET_FACTORY_ADDRESS}...`)
-            const ethersProvider = new BrowserProvider(window.ethereum as any);
-            const factoryContract = new Contract(FAUCET_FACTORY_ADDRESS, CUSTOM_FACTORY_NAME_CHECK_ABI, ethersProvider);
-            const faucetDetails: FaucetDetail[] = await factoryContract.getAllFaucetDetails();
-            const conflictingFaucet = faucetDetails.find(
-                (detail: FaucetDetail) => detail.name.toLowerCase() === nameToValidate.toLowerCase()
+            console.log(`[QuestCreator: validateFaucetNameAcrossFactories] Calling external checkFaucetNameExists...`);
+            
+            const result: NameValidationResult = await checkFaucetNameExists(
+                walletProvider as BrowserProvider, 
+                network,       
+                nameToValidate
             );
 
-            if (conflictingFaucet) {
-                console.log(`[QuestCreator: validateFaucetNameAcrossFactories] ❌ Conflict found: ${conflictingFaucet.name}`)
-                setNameError(`The name "${conflictingFaucet.name}" is already in use by a deployed Faucet.`);
+            if (result.exists && result.existingFaucet) {
+                console.log(`[QuestCreator: validateFaucetNameAcrossFactories] ❌ Conflict found: ${result.existingFaucet.name}`);
+                setNameError(`The name "${result.existingFaucet.name}" is already in use by a deployed Faucet.`);
+            } else if (result.warning) {
+                console.warn(`[QuestCreator: validateFaucetNameAcrossFactories] Warning during check: ${result.warning}`);
+                setNameError(`Validation check returned a warning: ${result.warning}.`);
             } else {
-                console.log(`[QuestCreator: validateFaucetNameAcrossFactories] ✅ Name is unique.`)
+                console.log(`[QuestCreator: validateFaucetNameAcrossFactories] ✅ Name is unique.`);
                 setNameError(null);
             }
-        } catch (e) {
-            console.error("❌ [QuestCreator: validateFaucetNameAcrossFactories] Error checking name uniqueness:", e);
-            setNameError("Error checking name uniqueness on-chain. Check network/provider connectivity.");
+        } catch (e: any) {
+            console.error("❌ [QuestCreator: validateFaucetNameAcrossFactories] Error checking name uniqueness:", e.message);
+            setNameError("Error checking name uniqueness on-chain. Try again or check wallet network.");
         } finally {
             setIsCheckingName(false);
             console.log('[QuestCreator: validateFaucetNameAcrossFactories] Check finished.')
         }
-    }, [isConnected, chainId, FAUCET_FACTORY_ADDRESS]);
+    }, [isConnected, chainId, network, walletProvider]);
 
     useEffect(() => {
         const title = newQuest.title.trim();
-        // Guard against running if essential data (connection, network object) is missing
         if (title.length < 3 || !isConnected || !network) { 
             setNameError(null); 
             return; 
         }
-
         const delayCheck = setTimeout(() => { validateFaucetNameAcrossFactories(title); }, 500);
         return () => clearTimeout(delayCheck);
     }, [newQuest.title, isConnected, network, validateFaucetNameAcrossFactories]);
 
     // --- Validation Helpers (implementation kept short for review) ---
-    const validateTask = useCallback((): boolean => {
+    const validateTask = useCallback((): boolean => { 
         const isDuplicate = newQuest.tasks.some(t => {
             if (editingTask && t.id === editingTask.id) return false;
             return (newTask.title && t.title.toLowerCase() === newTask.title.trim().toLowerCase())
                 || (newTask.url && t.url.toLowerCase() === newTask.url.trim().toLowerCase())
-                || (newTask.description && t.description.toLowerCase() === newTask.description.trim().toLowerCase());
+                || (newTask.description && t.description?.toLowerCase() === newTask.description?.trim().toLowerCase());
         });
         if (isDuplicate) { setError("A task already has the same Title, Description, or URL. Quest tasks must be unique."); return false; }
         if (!newTask.title || !newTask.url || newTask.points === undefined || newTask.points <= 0 || !newTask.stage) { setError("Please fill in all required task fields: Title, URL, Points (must be > 0), and Stage."); return false; }
@@ -1390,8 +1576,8 @@ export default function QuestCreator() {
         }
         setError(null); return true;
     }, [newQuest.tasks, editingTask, newTask, stageTaskCounts]);
-
-    const checkStagePassPointsValidity = useCallback((): boolean => {
+    
+    const checkStagePassPointsValidity = useCallback((): boolean => { 
         for (const stage of TASK_STAGES) {
             const totalPoints = stageTotals[stage]; const requiredPass = stagePassRequirements[stage];
             if (totalPoints > 0) {
@@ -1402,7 +1588,7 @@ export default function QuestCreator() {
         return true;
     }, [stageTotals, stagePassRequirements]);
 
-    const validateStagePassPoints = useCallback((): boolean => {
+    const validateStagePassPoints = useCallback((): boolean => { 
         let isValid = true;
         for (const stage of TASK_STAGES) {
             const totalPoints = stageTotals[stage]; const requiredPass = stagePassRequirements[stage];
@@ -1415,17 +1601,22 @@ export default function QuestCreator() {
             }
         }
         if (isValid) setError(null); return isValid;
-    }, [stageTotals, stagePassRequirements]);
+    }, [stageTotals, stagePassRequirements, setError]);
 
-    const validateStageTaskRequirements = useCallback((): boolean => {
+    const validateStageTaskRequirements = useCallback((): boolean => { 
+        let isValid = true;
         for (const stage of TASK_STAGES) {
             const taskCount = stageTaskCounts[stage]; const requirement = STAGE_TASK_REQUIREMENTS[stage];
-            if (taskCount > 0 && taskCount < requirement.min) { setError(`Stage "${stage}" requires at least ${requirement.min} tasks. Currently has ${taskCount}.`); return false; }
+            if (taskCount > 0 && taskCount < requirement.min) { 
+                setError(`Stage "${stage}" requires at least ${requirement.min} tasks. Currently has ${taskCount}.`); 
+                isValid = false; 
+                break;
+            }
         }
-        setError(null); return true;
-    }, [stageTaskCounts]);
-
-    const isStageSelectable = useCallback((targetStage: TaskStage): boolean => {
+        if (isValid) setError(null); return isValid;
+    }, [stageTaskCounts, setError]);
+    
+    const isStageSelectable = useCallback((targetStage: TaskStage): boolean => { 
         const targetIndex = TASK_STAGES.indexOf(targetStage);
         if (targetIndex === 0 || (editingTask && editingTask.stage === targetStage)) { return true; }
         for (let i = 0; i < targetIndex; i++) {
@@ -1437,11 +1628,11 @@ export default function QuestCreator() {
         return true;
     }, [stageTaskCounts, editingTask]);
 
-    // --- Task Handlers (implementation kept short for review) ---
-    const handleUseSuggestedTask = (suggestedTask: Partial<QuestTask>) => {
+    // --- Task Handlers (omitted implementation for brevity, assumed correct) ---
+    const handleUseSuggestedTask = (suggestedTask: Partial<QuestTask>) => { 
         setNewTask({ ...initialNewTaskForm, ...suggestedTask, stage: newTask.stage || 'Beginner', id: undefined, });
     };
-    const handleAddTask = () => {
+   const handleAddTask = () => {
         if (!validateTask()) return
         const task: QuestTask = {
             ...initialNewTaskForm,
@@ -1464,10 +1655,6 @@ export default function QuestCreator() {
         setNewQuest(prev => ({ ...prev, tasks: [...prev.tasks, task] }))
         setNewTask(initialNewTaskForm)
     }
-    const handleEditTask = (task: QuestTask) => {
-        setEditingTask(task)
-        setNewTask({ ...task, minReferrals: task.category === 'referral' ? task.minReferrals : undefined, });
-    }
     const handleUpdateTask = () => {
         if (!editingTask) return;
         if (!validateTask()) return;
@@ -1484,129 +1671,18 @@ export default function QuestCreator() {
         setEditingTask(null)
         setNewTask(initialNewTaskForm)
     }
-    const handleRemoveTask = (taskId: string) => {
-        setNewQuest(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) }))
-    }
-    const handleStagePassRequirementChange = (stage: TaskStage, value: number) => {
-        setStagePassRequirements(prev => ({ ...prev, [stage]: value, }));
-    }
-
-    // --- Web3 Logic: Faucet Deployment (implementation kept short for review) ---
-    const handleCreateCustomFaucet = async (questName: string, token: string) => {
-        console.log(`[QuestCreator: handleCreateCustomFaucet] Deploying Faucet for name: ${questName}, token: ${token}`)
-        if (!address || !isConnected || !FAUCET_FACTORY_ADDRESS || typeof window === 'undefined' || !window.ethereum) {
-            console.error("[QuestCreator: handleCreateCustomFaucet] ❌ Wallet not ready for deployment.")
-            setError("Wallet not connected or provider unavailable."); return null;
-        }
-
-        try {
-            const ethersProvider = new BrowserProvider(window.ethereum as any);
-            const signer = await ethersProvider.getSigner();
-
-            const factoryContract = new Contract(FAUCET_FACTORY_ADDRESS, FACTORY_ABI_CUSTOM, signer);
-
-            console.log('[QuestCreator: handleCreateCustomFaucet] Sending deployment transaction...')
-            const tx = await factoryContract.createCustomFaucet(questName, token, PLATFORM_BACKEND_ADDRESS, { gasLimit: 500000 });
-            console.log(`[QuestCreator: handleCreateCustomFaucet] Transaction sent. Hash: ${tx.hash}. Waiting for confirmation...`)
-            const receipt = await tx.wait();
-            console.log(`[QuestCreator: handleCreateCustomFaucet] Transaction confirmed. Status: ${receipt.status}`)
-
-            let newFaucetAddress: string | null = null;
-            const factoryInterface = new Interface(FACTORY_ABI_CUSTOM);
-
-            if (receipt && receipt.logs) {
-                 for (const log of receipt.logs) {
-                     try {
-                         const parsedLog = factoryInterface.parseLog(log as any);
-                         if (parsedLog && parsedLog.name === 'FaucetCreated') {
-                             newFaucetAddress = parsedLog.args.faucet; break;
-                         }
-                     } catch (e) { /* ignore */ }
-                 }
-            }
-            if (newFaucetAddress) {
-                console.log(`[QuestCreator: handleCreateCustomFaucet] ✅ Faucet deployed at: ${newFaucetAddress}`);
-                return newFaucetAddress;
-            }
-            throw new Error("Faucet deployment successful, but failed to find FaucetCreated event in logs.");
-        } catch (error: any) {
-            console.error('❌ [QuestCreator: handleCreateCustomFaucet] Error deploying custom faucet:', error);
-            setError(`Deployment failed: ${error.message || 'Unknown transaction error'}`); return null;
+    
+    const handleEditTask = (task: QuestTask) => { setEditingTask(task); setNewTask({ ...task, minReferrals: task.category === 'referral' ? task.minReferrals : undefined, }); };
+    const handleRemoveTask = (taskId: string) => { 
+        setNewQuest(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) })) 
+        if (editingTask && editingTask.id === taskId) {
+            setEditingTask(null);
+            setNewTask(initialNewTaskForm);
         }
     };
-
-    // --- Main Save/Launch Handler (implementation kept short for review) ---
-    const handleCreateQuest = async () => {
-        console.log('[QuestCreator: handleCreateQuest] Attempting to launch quest.')
-        if (!selectedToken) { setError("Please select a valid reward token (Step 2)."); setStep(2); return; }
-        if (!address || !isConnected) { setError("You must connect your wallet to deploy the smart contract and create the quest."); return; }
-        if (newQuest.tasks.length === 0) { setError("Please add at least one task to the quest (Step 3)."); setStep(3); return; }
-        if (!isFactoryAvailableOnChain) { setError(`Cannot deploy: No Custom Faucet Factory configured for ${network?.name || 'this network'}.`); return; }
-        if (isCheckingName || nameError || newQuest.title.trim().length < 3) { setError(nameError || "Title must be valid and checked (Step 1)."); setStep(1); return; }
-        if (!validateStagePassPoints()) { setStep(3); return; }
-        if (!validateStageTaskRequirements()) { setStep(3); return; }
-
-        setError(null); setIsSaving(true);
-        const tokenToDeploy = selectedToken.address;
-
-        const faucetAddress = await handleCreateCustomFaucet(newQuest.title, tokenToDeploy);
-
-        if (!faucetAddress) { setIsSaving(false); return; }
-
-        console.log('[QuestCreator: handleCreateQuest] Faucet deployed. Saving quest metadata to backend...')
-
-        const questData: Quest = {
-            id: Date.now().toString(), creatorAddress: address, ...newQuest, faucetAddress: faucetAddress,
-            tokenAddress: tokenToDeploy, rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
-            stagePassRequirements: stagePassRequirements,
-            imageUrl: newQuest.imageUrl, // Ensure imageUrl is included
-        };
-
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/quests/create`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(questData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to save quest metadata.');
-            }
-            console.log(`[QuestCreator: handleCreateQuest] ✅ Quest metadata saved to backend.`)
-            alert(`Quest created on ${network?.name} and Faucet deployed successfully at ${faucetAddress}! Remember to fund the Faucet.`);
-            setNewQuest(initialNewQuest); setNewTask(initialNewTaskForm); setStagePassRequirements(initialStagePassRequirements); setStep(1);
-        } catch (e: any) {
-            console.error('❌ [QuestCreator: handleCreateQuest] Quest save failed:', e);
-            setError(`Backend Error saving quest details: ${e.message}. Faucet deployed at ${faucetAddress}.`);
-        } finally {
-            setIsSaving(false);
-        }
-    }
-
-    // --- Wizard Navigation Logic (implementation kept short for review) ---
-    const handleNext = () => {
-        if (step === 1) {
-            if (!newQuest.title.trim() || newQuest.title.trim().length < 3 || isCheckingName || nameError) { setError(nameError || "Step 1: Please ensure the Title is valid and checked."); return; }
-            setError(null);
-        }
-        if (step === 2) {
-            if (!selectedToken) { setError("Step 2: Please select a reward token."); return; }
-            setError(null);
-        }
-        if (step === 3) {
-            if (newQuest.tasks.length === 0) { setError("Step 3: Please add at least one task to the quest."); return; }
-            if (!validateStagePassPoints()) { return; }
-            if (!validateStageTaskRequirements()) { return; }
-            setError(null);
-        }
-        setStep(prev => Math.min(prev + 1, maxSteps));
-    }
-
-    const handleBack = () => {
-        setStep(prev => Math.max(prev - 1, 1));
-        setError(null);
-    }
-
-    // --- Render Logic Helpers (implementation kept short for review) ---
+    const handleStagePassRequirementChange = (stage: TaskStage, value: number) => { setStagePassRequirements(prev => ({ ...prev, [stage]: value, })); };
+    
+    // --- Render Logic Helpers (REQUIRED FIX) ---
     const getStageColor = (stage: TaskStage) => {
         switch (stage) {
             case 'Beginner': return 'bg-green-500 hover:bg-green-600'; case 'Intermediate': return 'bg-blue-500 hover:bg-blue-600';
@@ -1628,111 +1704,296 @@ export default function QuestCreator() {
             default: return <Settings className="h-4 w-4 text-gray-500" />;
         }
     }
+    // --- End Render Logic Helpers ---
+
+
+    // --- NEW IMAGE UPLOAD HANDLER ---
+    const handleImageUpload = useCallback(async (file: File) => {
+        setIsUploadingImage(true);
+        setUploadImageError(null);
+        
+        const formData = new FormData();
+        formData.append("file", file);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/upload-image`, {
+                method: 'POST',
+                // Content-Type header for FormData is omitted; the browser sets it automatically.
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to upload image.');
+            }
+
+            const data = await response.json();
+            
+            // Set the new URL from the backend response
+            setNewQuest(prev => ({ ...prev, imageUrl: data.imageUrl }));
+            setUploadImageError(null);
+            
+            // Do not show an alert, let the visual cue handle it
+        } catch (e: any) {
+            console.error('❌ Image upload failed:', e);
+            setUploadImageError(e.message || "Failed to upload image. Check console for details.");
+            setNewQuest(prev => ({ ...prev, imageUrl: initialNewQuest.imageUrl }));
+        } finally {
+            setIsUploadingImage(false);
+        }
+    }, [setNewQuest]);
+
+
+    // --- Web3 Logic: Faucet Deployment - Updated to use imported function ---
+    const handleCreateCustomFaucet = async (questName: string, token: string) => {
+        if (!address || !isConnected || !FAUCET_FACTORY_ADDRESS || !walletProvider) {
+            setError("Wallet or provider is not ready for deployment."); return null;
+        }
+
+        try {
+            const newFaucetAddress = await createCustomFaucet(
+                walletProvider as BrowserProvider,
+                FAUCET_FACTORY_ADDRESS,
+                questName,
+                token
+            );
+            
+            if (newFaucetAddress) { return newFaucetAddress; }
+            throw new Error("Deployment successful, but address retrieval failed.");
+
+        } catch (error: any) {
+            console.error('❌ Error deploying custom faucet:', error);
+            setError(`Deployment failed: ${error.message || 'Unknown transaction error'}`); return null;
+        }
+    };
     
-    // 1. Show Loading State if wallet is connecting (formerly used isNetworkConnecting)
+    // --- Main Save/Launch Handler (updated to use new deployment logic) ---
+    const handleCreateQuest = async () => {
+        console.log('[QuestCreator: handleCreateQuest] Attempting to launch quest.')
+        
+        if (!selectedToken) { setError("Please select a valid reward token (Step 2)."); setStep(2); return; }
+        if (!address || !isConnected) { setError("You must connect your wallet to deploy the smart contract and create the quest."); return; }
+        if (newQuest.tasks.length === 0) { setError("Please add at least one task to the quest (Step 3)."); setStep(3); return; }
+        if (!isFactoryAvailableOnChain) { setError(`Cannot deploy: No Custom Faucet Factory configured for ${network?.name || 'this network'}.`); return; }
+        if (isCheckingName || nameError || newQuest.title.trim().length < 3) { setError(nameError || "Title must be valid and checked (Step 1)."); setStep(1); return; }
+        if (!validateStagePassPoints()) { setStep(3); return; }
+        if (!validateStageTaskRequirements()) { setStep(3); return; }
+        if (isUploadingImage || uploadImageError) { setError(uploadImageError || "Please wait for image upload to complete or fix upload error."); setStep(1); return; }
+
+        setError(null); setIsSaving(true);
+        const tokenToDeploy = selectedToken.address;
+
+        const faucetAddress = await handleCreateCustomFaucet(newQuest.title, tokenToDeploy);
+
+        if (!faucetAddress) { setIsSaving(false); return; }
+
+        // Final Quest structure for the backend
+        const questData: Quest = {
+            id: Date.now().toString(), creatorAddress: address, ...newQuest, faucetAddress: faucetAddress,
+            tokenAddress: tokenToDeploy, rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
+            stagePassRequirements: stagePassRequirements, // UPDATED: Pass the state value
+            imageUrl: newQuest.imageUrl,
+        };
+        
+        // IMPORTANT: The backend API endpoint is '/api/quests', not '/api/quests/create'
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/quests`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(questData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to save quest metadata.');
+            }
+            console.log(`[QuestCreator: handleCreateQuest] ✅ Quest metadata saved to backend.`)
+            alert(`Quest created on ${network?.name} and Faucet deployed successfully at ${faucetAddress}! Remember to fund the Faucet.`);
+            // Reset state
+            setNewQuest(initialNewQuest); 
+            setNewTask(initialNewTaskForm); 
+            setStagePassRequirements(initialStagePassRequirements); 
+            setSelectedToken(null);
+            setStep(1);
+        } catch (e: any) {
+            console.error('❌ [QuestCreator: handleCreateQuest] Quest save failed:', e);
+            setError(`Backend Error saving quest details: ${e.message}. Faucet deployed at ${faucetAddress}.`);
+        } finally {
+            setIsSaving(false);
+        }
+    }
+    
+    // --- 2. FIX: Next Button Handler ---
+    const handleNext = () => {
+        let isStepValid = true;
+
+        if (step === 1) {
+            if (!newQuest.title.trim() || newQuest.title.trim().length < 3) {
+                setError("Step 1: Quest Title must be at least 3 characters long.");
+                isStepValid = false;
+            } else if (isCheckingName || nameError) {
+                setError(nameError || "Step 1: Please wait for name check to complete or resolve the error.");
+                isStepValid = false;
+            } else if (!newQuest.imageUrl) {
+                setError("Step 1: Please upload a Quest Image.");
+                isStepValid = false;
+            } else if (isUploadingImage || uploadImageError) {
+                setError(uploadImageError || "Step 1: Please wait for image upload to complete or fix upload error.");
+                isStepValid = false;
+            }
+        }
+        
+        if (step === 2) {
+            if (!selectedToken) {
+                setError("Step 2: Please select a reward token.");
+                isStepValid = false;
+            }
+        }
+        
+        if (step === 3) {
+            // Note: validateStagePassPoints and validateStageTaskRequirements
+            // set the global 'error' state internally if they return false.
+            if (newQuest.tasks.length === 0) {
+                setError("Step 3: Please add at least one task to the quest.");
+                isStepValid = false;
+            } else if (!validateStagePassPoints()) {
+                isStepValid = false;
+            } else if (!validateStageTaskRequirements()) {
+                isStepValid = false;
+            }
+        }
+
+        if (isStepValid) {
+            setError(null); // Clear overall error only on success
+            setStep(prev => Math.min(prev + 1, maxSteps));
+        }
+    }
+    
+    const handleBack = () => {
+        setStep(prev => Math.max(prev - 1, 1));
+        setError(null);
+    }
+    
+    
+    // 1. Show Loading State if wallet is connecting
     if (isWalletConnecting) {
         return (
-            <Card className="max-w-md mx-auto mt-8">
-                <CardContent className="flex items-center justify-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin mr-2" />
-                    <span>Connecting wallet and loading network data...</span>
-                </CardContent>
-            </Card>
+            <>
+                <Header pageTitle="Quest creator page" />
+                <Card className="max-w-md mx-auto mt-8">
+                    <CardContent className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin mr-2" />
+                        <span>Connecting wallet and loading network data...</span>
+                    </CardContent>
+                </Card>
+            </>
         )
     }
 
     // 2. Show Connect Wallet State if not connected
     if (!isConnected) {
         return (
-            <div className="max-w-6xl mx-auto p-6 space-y-6">
-                <h1 className="text-2xl font-bold mb-4">Create New Quest Campaign</h1>
-                <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative" role="alert">
-                    <strong className="font-bold">Info:</strong>
-                    <span className="block sm:inline ml-2">Please connect your wallet to create a quest campaign.</span>
+            <>
+                <Header pageTitle="Quest creator page" />
+                <div className="max-w-6xl mx-auto p-6 space-y-6">
+                    <h1 className="text-2xl font-bold mb-4">Create New Quest Campaign</h1>
+                    <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative" role="alert">
+                        <strong className="font-bold">Info:</strong>
+                        <span className="block sm:inline ml-2">Please connect your wallet to create a quest campaign.</span>
+                    </div>
                 </div>
-            </div>
+            </>
         )
     }
     
     // 3. Define the main disable flag (includes the Factory check)
-    const isSaveDisabled = isSaving || newQuest.tasks.length === 0 || !isFactoryAvailableOnChain || !isConnected || !selectedToken || !checkStagePassPointsValidity() || !!nameError || isCheckingName || newQuest.title.trim().length < 3;
+    const isSaveDisabled = isSaving || newQuest.tasks.length === 0 || !isFactoryAvailableOnChain || !isConnected || !selectedToken || !checkStagePassPointsValidity() || !!nameError || isCheckingName || newQuest.title.trim().length < 3 || isUploadingImage || !newQuest.imageUrl;
 
     return (
-        <div className="max-w-6xl mx-auto p-6 space-y-6">
-            <h1 className="text-2xl font-bold mb-4">Create New Quest Campaign</h1>
-            
-            {/* Inline Error/Warning Messages */}
-            {isConnected && error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-                    <strong className="font-bold">Error!</strong>
-                    <span className="block sm:inline ml-2">{error}</span>
-                </div>
-            )}
-            
-            {/* INLINE WARNING: Show non-blocking warning if factory is missing (Replaces the old blocking return) */}
-            {isConnected && !isFactoryAvailableOnChain && (
-                <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
-                    <strong className="font-bold">Warning:</strong>
-                    <span className="block sm:inline ml-2">
-                        The current network **({network?.name || 'Unknown'})** is not configured for Quest Deployment. Please switch to Celo, Lisk, Arbitrum, or Base. The Launch button is disabled.
-                    </span>
-                </div>
-            )}
-            
-            {/* Step Indicator */}
-            <div className="flex justify-between items-center max-w-xl mx-auto border-b pb-4 mb-4">
-                {[1, 2, 3, 4].map(s => (
-                    <div key={s} className="flex flex-col items-center">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors ${
-                            s === step ? 'bg-primary text-primary-foreground scale-110' : s < step ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
-                            }`}>
-                            {s < step ? <Check className="h-5 w-5" /> : s}
-                        </div>
-                        <span className={`text-xs mt-1 ${s === step ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
-                            {s === 1 ? 'Details' : s === 2 ? 'Rewards' : s === 3 ? 'Tasks' : 'Launch'}
+        <>
+            <Header pageTitle="Quest creator page" /> {/* 1. ADDED HEADER */}
+            <div className="max-w-6xl mx-auto p-6 space-y-6">
+                <h1 className="text-2xl font-bold mb-4">Create New Quest Campaign</h1>
+                
+                {/* Inline Error/Warning Messages */}
+                {isConnected && error && (
+                    <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                        <strong className="font-bold">Error!</strong>
+                        <span className="block sm:inline ml-2">{error}</span>
+                    </div>
+                )}
+                
+                {/* INLINE WARNING: Show non-blocking warning if factory is missing */}
+                {isConnected && !isFactoryAvailableOnChain && (
+                    <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+                        <strong className="font-bold">Warning:</strong>
+                        <span className="block sm:inline ml-2">
+                            The current network **({network?.name || 'Unknown'})** is not configured for Quest Deployment. Please switch to Celo, Lisk, Arbitrum, or Base. The Launch button is disabled.
                         </span>
                     </div>
-                ))}
-            </div>
+                )}
+                
+                {/* Step Indicator */}
+                <div className="flex justify-between items-center max-w-xl mx-auto border-b pb-4 mb-4">
+                    {[1, 2, 3, 4].map(s => (
+                        <div key={s} className="flex flex-col items-center">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors ${
+                                s === step ? 'bg-primary text-primary-foreground scale-110' : s < step ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
+                                }`}>
+                                {s < step ? <Check className="h-5 w-5" /> : s}
+                            </div>
+                            <span className={`text-xs mt-1 ${s === step ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
+                                {s === 1 ? 'Details' : s === 2 ? 'Rewards' : s === 3 ? 'Tasks' : 'Launch'}
+                            </span>
+                        </div>
+                    ))}
+                </div>
 
-            <div className="min-h-[400px]">
-                {step === 1 && (
-                    <StepOneDetails newQuest={newQuest} setNewQuest={setNewQuest} nameError={nameError} isCheckingName={isCheckingName} />
-                )}
-                {step === 2 && (
-                    <StepTwoRewards newQuest={newQuest} setNewQuest={setNewQuest} chainId={chainId} network={network} selectedToken={selectedToken} setSelectedToken={setSelectedToken} error={error} setError={setError} />
-                )}
-                {step === 3 && (
-                    <StepThreeTasks
-                        newQuest={newQuest} setNewQuest={setNewQuest} initialNewTaskForm={initialNewTaskForm} error={error} setError={setError}
-                        stagePassRequirements={stagePassRequirements} setStagePassRequirements={setStagePassRequirements}
-                        stageTotals={stageTotals} stageTaskCounts={stageTaskCounts} validateTask={validateTask} handleAddTask={handleAddTask}
-                        handleEditTask={handleEditTask} handleUpdateTask={handleUpdateTask} handleRemoveTask={handleRemoveTask}
-                        handleStagePassRequirementChange={handleStagePassRequirementChange} isStageSelectable={isStageSelectable}
-                        editingTask={editingTask} setEditingTask={setEditingTask} newTask={newTask} setNewTask={setNewTask}
-                        checkStagePassPointsValidity={checkStagePassPointsValidity} getStageColor={getStageColor} getCategoryColor={getCategoryColor}
-                        getVerificationIcon={getVerificationIcon} handleUseSuggestedTask={handleUseSuggestedTask}
-                    />
-                )}
-                {step === 4 && (
-                    <StepFourPreview
-                        newQuest={newQuest} stageTotals={stageTotals} stagePassRequirements={stagePassRequirements}
-                        selectedToken={selectedToken} network={network} isConnected={isConnected} isSaving={isSaving}
-                        isSaveDisabled={isSaveDisabled} handleCreateQuest={handleCreateQuest} getStageColor={getStageColor}
-                    />
-                )}
-            </div>
-            {/* Navigation Buttons */}
-            <div className="flex justify-between pt-4 max-w-xl mx-auto">
-                <Button onClick={handleBack} disabled={step === 1} variant="outline">
-                    <ArrowLeft className="h-4 w-4 mr-2" /> Back
-                </Button>
-                {step < maxSteps && (
-                    <Button onClick={handleNext}>
-                        Next Step <ArrowRight className="h-4 w-4 ml-2" />
+                <div className="min-h-[400px]">
+                    {step === 1 && (
+                        <StepOneDetails 
+                            newQuest={newQuest} 
+                            setNewQuest={setNewQuest} 
+                            nameError={nameError} 
+                            isCheckingName={isCheckingName}
+                            isUploadingImage={isUploadingImage}
+                            uploadImageError={uploadImageError}
+                            handleImageUpload={handleImageUpload}
+                        />
+                    )}
+                    {step === 2 && (
+                        <StepTwoRewards newQuest={newQuest} setNewQuest={setNewQuest} chainId={chainId} network={network} selectedToken={selectedToken} setSelectedToken={setSelectedToken} error={error} setError={setError} />
+                    )}
+                    {step === 3 && (
+                        <StepThreeTasks
+                            newQuest={newQuest} setNewQuest={setNewQuest} initialNewTaskForm={initialNewTaskForm} error={error} setError={setError}
+                            stagePassRequirements={stagePassRequirements} setStagePassRequirements={setStagePassRequirements}
+                            stageTotals={stageTotals} stageTaskCounts={stageTaskCounts} validateTask={validateTask} handleAddTask={handleAddTask}
+                            handleEditTask={handleEditTask} handleUpdateTask={handleUpdateTask} handleRemoveTask={handleRemoveTask}
+                            handleStagePassRequirementChange={handleStagePassRequirementChange} isStageSelectable={isStageSelectable}
+                            editingTask={editingTask} setEditingTask={setEditingTask} newTask={newTask} setNewTask={setNewTask}
+                            checkStagePassPointsValidity={checkStagePassPointsValidity} getStageColor={getStageColor} getCategoryColor={getCategoryColor}
+                            getVerificationIcon={getVerificationIcon} handleUseSuggestedTask={handleUseSuggestedTask}
+                        />
+                    )}
+                    {step === 4 && (
+                        <StepFourPreview
+                            newQuest={newQuest} stageTotals={stageTotals} stagePassRequirements={stagePassRequirements}
+                            selectedToken={selectedToken} network={network} isConnected={isConnected} isSaving={isSaving}
+                            isSaveDisabled={isSaveDisabled} handleCreateQuest={handleCreateQuest} getStageColor={getStageColor}
+                        />
+                    )}
+                </div>
+                {/* Navigation Buttons */}
+                <div className="flex justify-between pt-4 max-w-xl mx-auto">
+                    <Button onClick={handleBack} disabled={step === 1} variant="outline">
+                        <ArrowLeft className="h-4 w-4 mr-2" /> Back
                     </Button>
-                )}
+                    {step < maxSteps && (
+                        <Button onClick={handleNext}>
+                            Next Step <ArrowRight className="h-4 w-4 ml-2" />
+                        </Button>
+                    )}
+                </div>
             </div>
-        </div>
+        </>
     )
 }

@@ -1,17 +1,16 @@
-// src/pages/QuestHomePage.tsx (or components/QuestHomePage.tsx)
-
+// src/pages/QuestHomePage.tsx
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Header } from '@/components/header';
-import { Plus, Settings, TrendingUp, Users, ArrowRight, Coins, Loader2 } from 'lucide-react';
+import { Plus, Settings, Users, ArrowRight, Coins, Loader2 } from 'lucide-react';
+// Assume Header is a component defined elsewhere
+const Header = ({ pageTitle }: { pageTitle: string }) => <h1 className="text-3xl font-bold">{pageTitle}</h1>;
 
 // Backend API URL
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
 
-// Simplified Quest Interface (matches what the backend will return)
 interface QuestOverview {
     faucetAddress: string;
     title: string;
@@ -22,10 +21,8 @@ interface QuestOverview {
     startDate: string;
     endDate: string;
     tasksCount: number;
-    participantsCount: number; // Placeholder for activity data
+    participantsCount: number;
 }
-
-// Interface for the expected response structure from the backend
 interface QuestsResponse {
     success: boolean;
     quests: QuestOverview[];
@@ -33,17 +30,12 @@ interface QuestsResponse {
     message?: string;
 }
 
-/**
- * Creates a URL-friendly slug from a title.
- * @param title The quest title.
- * @returns A slug string (e.g., "Launch Community Campaign" -> "launch-community-campaign").
- */
 function createSlug(title: string): string {
     return title
         .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '') // Remove non-alphanumeric characters (except spaces/hyphens)
+        .replace(/[^a-z0-9\s-]/g, '')
         .trim()
-        .replace(/\s+/g, '-'); // Replace spaces with hyphens
+        .replace(/\s+/g, '-');
 }
 
 export default function QuestHomePage() {
@@ -52,28 +44,24 @@ export default function QuestHomePage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // --- Data Fetching ---
+    // --- Data Fetching (LIVE API CALL) ---
     const fetchQuests = async () => {
         setIsLoading(true);
         setError(null);
         try {
-            // --- ACTUAL FETCH FROM FASTAPI BACKEND ---
             const response = await fetch(`${API_BASE_URL}/api/quests`);
             
             if (!response.ok) {
-                // If the response status is not 2xx, throw an error
                 throw new Error(`HTTP Error: ${response.status} - ${response.statusText}`);
             }
             
             const data: QuestsResponse = await response.json();
             
             if (!data.success) {
-                 // If the backend returns a successful HTTP status (e.g., 200) but success: false
                 throw new Error(data.message || 'Failed to retrieve quests from backend with no specific error message.');
             }
 
             const fetchedQuests: QuestOverview[] = data.quests || []; 
-
             setQuests(fetchedQuests);
             
         } catch (err: any) {
@@ -88,16 +76,9 @@ export default function QuestHomePage() {
         fetchQuests();
     }, []);
 
-    // --- Render Logic ---
-
     const handleViewQuest = (faucetAddress: string, title: string) => {
-        // 1. Create slug
         const slug = createSlug(title);
-        
-        // 2. Create the URL path: /quests/slug-faucetAddress
         const fullPath = `/quests/${slug}-${faucetAddress}`;
-        
-        console.log(`Navigating to: ${fullPath}`);
         router.push(fullPath);
     };
 
@@ -116,7 +97,6 @@ export default function QuestHomePage() {
             {isLoading ? (
                 <Card className="p-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Loading Quests...</Card>
             ) : error ? (
-                // Display specific error message when fetching fails
                 <Card className="p-4 border border-red-500 bg-red-50 text-red-700">
                     <p className="font-semibold">Error Loading Quests:</p>
                     <p className="text-sm">{error}</p>

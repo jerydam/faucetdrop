@@ -311,6 +311,15 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       logoUrl: "/cusd.png",
       description: "USD-pegged stablecoin on Celo",
     },
+    {
+      address: "0x8A567e2aE79CA692Bd748aB832081C45de4041eA",
+      name: "Celo Colombian Peso",
+      symbol: "cCOP",
+      decimals: 18,
+      logoUrl: "/ccop.png",
+      description: "colombian peso-pegged stablecoin on Celo",
+
+    },
   ],
   1135: [
     {

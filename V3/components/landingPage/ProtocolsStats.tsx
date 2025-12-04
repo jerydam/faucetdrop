@@ -143,7 +143,7 @@ export default function ProtocolsStats() {
           viewport={{ once: true, margin: "-50px" }}
         >
           <motion.div 
-            className="text-[#2563EB] text-sm font-semibold tracking-wide uppercase"
+            className="text-4xl sm:text-5xl md:text-6xl font-bold leading-tight"
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -153,7 +153,7 @@ export default function ProtocolsStats() {
           </motion.div>
           
           <motion.h1 
-            className="text-4xl sm:text-5xl md:text-6xl font-bold leading-tight"
+            className="text-[#2563EB] text-sm font-semibold tracking-wide uppercase"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}

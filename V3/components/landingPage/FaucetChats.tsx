@@ -15,7 +15,7 @@ const messages = [
   {
     type: 'receiver',
     text: 'Are you launching a new token, rewarding contributors, onboarding first time users, or running a large-scale marketing Campaign?',
-    sender: 'Faucet Team',
+    sender: 'FaucetDrops Team',
     avatar: '/favicon.png',
     delay: 1.5
   },
@@ -29,7 +29,7 @@ const messages = [
   {
     type: 'receiver',
     text: 'Faucet Drops gives you everything you need to distribute rewards safely, transparently, and at scale.',
-    sender: 'Faucet Team',
+    sender: 'FaucetDrops Team',
     avatar: '/favicon.png',
     delay: 3.5
   }
@@ -86,9 +86,9 @@ const MessageBubble = ({ message, index }: { message: typeof messages[0], index:
           </motion.div>
 
           {/* Message Bubble */}
-          <div className={`flex flex-col max-w-[75%] ${isSender ? 'items-end' : 'items-start'}`}>
+          <div className={`flex flex-col max-w-[85%] ${isSender ? 'items-end' : 'items-start'}`}>
             <motion.span 
-              className="text-white/60 text-xs mb-1 px-2"
+              className="text-white/70 text-sm mb-1 px-2"
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: message.delay + 0.1 }}
@@ -96,17 +96,17 @@ const MessageBubble = ({ message, index }: { message: typeof messages[0], index:
               {message.sender}
             </motion.span>
             <motion.div
-              className={`rounded-2xl px-4 py-3 ${
+              className={`rounded-2xl px-5 py-4 text-base ${
                 isSender 
-                  ? 'bg-primary text-white rounded-br-none' 
-                  : 'bg-white/5 text-white rounded-bl-none'
+                  ? 'bg-linear-to-br from-blue-500 to-blue-600 text-white' 
+                  : 'bg-white/10 text-white'
               }`}
               whileHover={{ 
                 scale: 1.02,
                 transition: { duration: 0.2 }
               }}
             >
-              <p className="text-sm leading-relaxed">{message.text}</p>
+              <p className="text-base leading-relaxed">{message.text}</p>
               <motion.div 
                 className="text-right mt-1 text-xs opacity-50"
                 initial={{ opacity: 0 }}

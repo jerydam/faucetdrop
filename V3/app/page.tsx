@@ -4,6 +4,7 @@ import OfferTabs from "@/components/landingPage/OfferTabs"
 import FaucetChats from "@/components/landingPage/FaucetChats";
 import ProtocolsStats from "@/components/landingPage/ProtocolsStats";
 import CTA from "@/components/landingPage/CTA";
+import FaucetFlow from "@/components/landingPage/FaucetFlow";
 
 export default function Home() {
   return (
@@ -13,6 +14,7 @@ export default function Home() {
         <Networks />
         <FaucetChats />
         <OfferTabs />
+        <FaucetFlow />
         <ProtocolsStats />
         <CTA />
       </div>

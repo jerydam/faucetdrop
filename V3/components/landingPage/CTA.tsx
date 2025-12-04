@@ -1,20 +1,35 @@
+'use client'
 import React from 'react'
-import { Button } from '../ui/button'
+import ScrollReveal from '@/components/ScrollReveal'
+import MagneticButton from '@/components/MagneticButton'
 
 export default function CTA() {
   return (
-    <section className="py-10">
-        <h2 className="text-xl md:text-2xl font-bold leading-tight tracking-[-0.015em] px-4 pb-3 pt-5 text-center text-white">Ready to build your web3 growth engine?</h2>
-        <div className="">
-          <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4">
-            <Button className="bg-[--color-dark] text-white font-bold px-6 py-2 rounded-md hover:bg-opacity-90 hover:bg-[--color-dark]/90 cursor-pointer transition">
-              Launch App
-            </Button>
-            <Button className="bg-gray-200 text-[--color-dark] border border-[--color-dark] px-6 py-2 rounded-md font-bold hover:bg-gray-100 cursor-pointer transition">
-              Talk to Our Team
-            </Button>
-          </div>
+    <section className="py-20">
+      {/* Banner */}
+      {/* <ScrollReveal direction='down' delay={200}>
+        <div className="w-full h-[400px] bg-[url('/banner.png')] bg-cover bg-center rounded-4xl"></div>
+      </ScrollReveal> */}
+      <ScrollReveal direction="up" delay={200}>
+        <h2 className="text-3xl md:text-4xl font-bold leading-tight tracking-[-0.015em] px-4 py-20 text-center text-white">
+          Ready to build your web3 growth engine?
+        </h2>
+      </ScrollReveal>
+      
+      <ScrollReveal direction="up" delay={400}>
+        <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
+          <MagneticButton 
+            className="bg-linear-to-r from-[#0052FF] to-[#2563EB] hover:from-[#2563EB] hover:to-[#0052FF] text-black font-bold px-8 py-4 rounded-full cursor-pointer transition-all shadow-lg shadow-[#94A3B8]/20 hover:shadow-xl hover:shadow-[#94A3B8]/30"
+          >
+            Launch App
+          </MagneticButton>
+          <MagneticButton 
+            className="bg-transparent text-white border-2 border-[#0052FF] px-8 py-4 rounded-full font-bold hover:bg-[#0052FF]/10 cursor-pointer transition-all"
+          >
+            Talk to Our Team
+          </MagneticButton>
         </div>
-      </section>
+      </ScrollReveal>
+    </section>
   )
 }

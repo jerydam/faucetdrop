@@ -75,7 +75,7 @@ const HeroSection: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center py-10 w-full">
       {/* Animated Background Elements */}
       <svg className="absolute inset-0 overflow-hidden">
         <motion.div
@@ -113,7 +113,7 @@ const HeroSection: React.FC = () => {
       </svg>
 
       {/* New Pattern */}
-      <div className="min-h-screen text-white flex flex-col-reverse md:flex-row items-center justify-center p-8">
+      <div className="min-h-screen text-white flex flex-col-reverse md:flex-row items-center justify-center p-8 w-full">
         <motion.div 
           className="max-w-7xl w-full  gap-12 items-center"
           initial={{ opacity: 0, y: 20 }}
@@ -130,7 +130,9 @@ const HeroSection: React.FC = () => {
               direction="up" 
               delay={500}
             >
-              <h2 className="text-5xl md:text-6xl font-bold leading-tight">Unify Your Onchain Growth, Automate Your Rewards, Scale Engagement</h2>
+              <h2 className="text-2xl md:text-3xl lg:text-4xl mx:text-5xl font-bold leading-tight">
+                Unify Your Onchain Growth, Automate Your Rewards, Scale Engagement
+              </h2>
             </ScrollReveal>
             {/* <ScrollReveal 
               direction="up" 
@@ -140,12 +142,12 @@ const HeroSection: React.FC = () => {
             </ScrollReveal> */}
 
             <motion.p 
-              className="text-gray-400 text-lg leading-relaxed max-w-lg mt-6"
+              className="text-gray-400 text-base lg:text-lg leading-relaxed max-w-2xl mt-6"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 2, duration: 1 }}
             >
-              FaucetDrops helps web3 Projects, DAOs, Protocols, and Communities automate token distribution, run interactive campaigns and onboard real users at scale - all in one powerful platfoarm.
+              FaucetDrops helps web3 Projects, DAOs, Protocols, and Communities automate token distribution, run interactive campaigns and onboard real users at scale - all in one powerful platform.
             </motion.p>
 
             <motion.div

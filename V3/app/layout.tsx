@@ -4,6 +4,9 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SplashScreen from "@/components/SplashScreen";
+import AnimatedBackground from "@/components/AnimatedBackground";
+import FloatingElements from "@/components/FloatingElements";
+import CursorFollower from "@/components/CursorFollower";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,12 +23,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.className} antialiased`}
+        className={`${inter.className} antialiased relative`}
       >
-        <SplashScreen />
-        <Header />
-        {children}
-        <Footer />
+        <AnimatedBackground />
+        <FloatingElements />
+        <CursorFollower />
+        <div className="relative z-20">
+          <SplashScreen />
+          <Header />
+          {children}
+          <Footer />
+        </div>
       </body>
     </html>
   );

@@ -15,7 +15,7 @@ const messages = [
   {
     type: 'receiver',
     text: 'Are you launching a new token, rewarding contributors, onboarding first time users, or running a large-scale marketing Campaign?',
-    sender: 'Faucet Team',
+    sender: 'FaucetDrops Team',
     avatar: '/favicon.png',
     delay: 1.5
   },
@@ -29,7 +29,7 @@ const messages = [
   {
     type: 'receiver',
     text: 'Faucet Drops gives you everything you need to distribute rewards safely, transparently, and at scale.',
-    sender: 'Faucet Team',
+    sender: 'FaucetDrops Team',
     avatar: '/favicon.png',
     delay: 3.5
   }

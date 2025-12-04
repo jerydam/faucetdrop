@@ -3,9 +3,7 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  ExternalLink
-} from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 

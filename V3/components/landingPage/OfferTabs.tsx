@@ -15,7 +15,7 @@ export default function OfferTabs() {
         <Tabs defaultValue="faucets" className="w-full">
           {/* Top Tab Bar */}
           <TabsList className="w-full flex justify-center bg-transparent p-0">
-            <div className="flex w-full md:w-fit bg-[#020817]/50 border border-white/5 rounded-full p-1 backdrop-blur-sm">
+            <div className="flex w-fit md:w-fit bg-[#020817]/50 border border-white/5 rounded-full p-1 backdrop-blur-sm overflow-x-auto">
               <TabsTrigger
                 value="faucets"
                 className="rounded-full px-10 py-2.5 text-lg text-gray-300 data-[state=active]:bg-[#2563EB]/10 data-[state=active]:text-white data-[state=active]:ring-1 data-[state=active]:ring-[#0052FF] transition-all"
@@ -146,14 +146,14 @@ export default function OfferTabs() {
                     </span>
                   </motion.div>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-10">
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-10 grid-template-columns">
                   <motion.div
                     whileHover={{ scale: 1.08 }}
                     initial={{ opacity: 0 }}
                     whileInView={{ opacity: 1 }}
                     transition={{ duration: 0.5 }}
                     viewport={{ once: true }}
-                    className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg"
+                    className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg order-2 md:order-1"
                   >
                     <Image
                       src="/networks/celo.svg"
@@ -170,7 +170,7 @@ export default function OfferTabs() {
                     whileInView={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, ease: "easeOut" }}
                     viewport={{ once: true }}
-                    className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer"
+                    className="order-1 md:order-2 text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer"
                   >
                     <h3 className="text-3xl font-semibold relative bottom-0">
                       Reward Participants
@@ -204,14 +204,14 @@ export default function OfferTabs() {
                     </span>
                   </motion.div>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-10">
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-10">
                   <motion.div
                     whileHover={{ scale: 1.08 }}
                     initial={{ opacity: 0 }}
                     whileInView={{ opacity: 1 }}
                     transition={{ duration: 0.5 }}
                     viewport={{ once: true }}
-                    className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg"
+                    className="order-2 md:order-1 flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg"
                   >
                     <Image
                       src="/networks/celo.svg"
@@ -227,7 +227,7 @@ export default function OfferTabs() {
                     whileInView={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, ease: "easeOut" }}
                     viewport={{ once: true }}
-                    className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer"
+                    className="order-1 md:order-2 text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer"
                   >
                     <h3 className="text-3xl font-semibold relative bottom-0">
                       Engagements
@@ -262,14 +262,14 @@ export default function OfferTabs() {
                     </span>
                   </motion.div>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-10">
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-10">
                   <motion.div
                     whileHover={{ scale: 1.08 }}
                     initial={{ opacity: 0 }}
                     whileInView={{ opacity: 1 }}
                     transition={{ duration: 0.5 }}
                     viewport={{ once: true }}
-                    className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg"
+                    className="order-2 md:order-1 flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg"
                   >
                     <Image
                       src="/networks/celo.svg"
@@ -285,7 +285,7 @@ export default function OfferTabs() {
                     whileInView={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, ease: "easeOut" }}
                     viewport={{ once: true }}
-                    className="text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer"
+                    className="order-1 md:order-2 text-left flex flex-col justify-center space-y-4 group relative p-6 bg-[#2563EB] text-white rounded-lg border-0 transition-all duration-300 ease-out hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer"
                   >
                     <h3 className="text-3xl font-semibold relative bottom-0">
                       White Label Solutions

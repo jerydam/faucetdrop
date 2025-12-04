@@ -115,7 +115,7 @@ export default function Networks() {
         animate={isInView ? "show" : "hidden"}
       >
         <motion.h2 
-          className="text-4xl font-bold text-white leading-relaxed"
+          className="text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold text-white leading-relaxed"
           // variants={item}
         >
           The future of Web3 user acquisition is automated, verifiable and fun. We&apos;re building it!

@@ -14,8 +14,8 @@ export default function Home() {
         <Networks />
         <FaucetChats />
         <OfferTabs />
-        <ProtocolsStats />
         <FaucetFlow />
+        <ProtocolsStats />
         <CTA />
       </div>
     </div>

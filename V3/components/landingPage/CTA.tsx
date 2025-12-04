@@ -6,8 +6,12 @@ import MagneticButton from '@/components/MagneticButton'
 export default function CTA() {
   return (
     <section className="py-20">
+      {/* Banner */}
+      {/* <ScrollReveal direction='down' delay={200}>
+        <div className="w-full h-[400px] bg-[url('/banner.png')] bg-cover bg-center rounded-4xl"></div>
+      </ScrollReveal> */}
       <ScrollReveal direction="up" delay={200}>
-        <h2 className="text-3xl md:text-4xl font-bold leading-tight tracking-[-0.015em] px-4 pb-8 text-center text-white">
+        <h2 className="text-3xl md:text-4xl font-bold leading-tight tracking-[-0.015em] px-4 py-20 text-center text-white">
           Ready to build your web3 growth engine?
         </h2>
       </ScrollReveal>

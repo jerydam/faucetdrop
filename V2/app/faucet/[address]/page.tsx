@@ -3805,7 +3805,7 @@ if (customXPostTemplate && customXPostTemplate.trim()) {
       <Dialog open={showClaimPopup} onOpenChange={setShowClaimPopup}>
         <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Drop Successful!</DialogTitle>
+            <DialogTitle className="text-lg sm:text-xl">Drip Successful!</DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
               You have successfully dripped{" "}
               {faucetType === 'custom' && hasCustomAmount

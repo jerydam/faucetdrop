@@ -22,6 +22,11 @@ interface FaucetMeta {
     owner?: string;
     factoryAddress: string; // CRITICAL for step 2
 }
+interface DeletedFaucetResponse {
+    success: boolean;
+    count: number;
+    deletedAddresses: string[];
+}
 // Factory type definitions
 export type FactoryType = 'dropcode' | 'droplist' | 'custom'
 
@@ -90,43 +95,8 @@ function determineFactoryType(useBackend: boolean, isCustom: boolean = false): F
   }
   return useBackend ? 'dropcode' : 'droplist'
 }
-// 1. Define the specific type for the 'deleted' method
-type DeletedMethod = () => Promise<boolean>;
 
-// The helper function to check the on-chain 'deleted' state variable
-async function isFaucetDeleted(
-    provider: JsonRpcProvider,
-    faucetAddress: string,
-    factoryType: FactoryType // Assuming FaucetType is equivalent to FactoryType here
-): Promise<boolean> {
-    try {
-        const config = getFactoryConfig(factoryType);
-        // We need the FAUCET_ABI here, which is assumed to be in config.faucetAbi
-        // Note: I will update getFactoryConfig definition to include faucetAbi
-        const faucetContract = new Contract(faucetAddress, config.faucetAbi, provider);
-        
-        // 2. Safely cast the contract method using Type Assertion
-        const deletedFn = faucetContract['deleted'] as DeletedMethod;
 
-        // 3. Call the function
-        const isDeleted = await deletedFn();
-        
-        return isDeleted;
-    } catch (error) {
-        // Fallback logic remains: if RPC call fails, check if contract code exists.
-        // This handles cases where the contract was truly self-destructed.
-        console.warn(`Error checking deleted status for ${faucetAddress}. Checking bytecode fallback.`, error);
-
-        try {
-            const code = await provider.getCode(faucetAddress);
-            if (code === "0x") return true; 
-        } catch (e) {
-            // Ignore code check error
-        }
-        
-        return false;
-    }
-}
 // Helper function to detect factory type by trying different function calls
 async function detectFactoryType(provider: BrowserProvider | JsonRpcProvider, factoryAddress: string): Promise<FactoryType> {
   const factoryTypes: FactoryType[] = ['dropcode', 'droplist', 'custom']
@@ -600,6 +570,8 @@ export async function fetchStorageData(): Promise<
         }
       }),
     )
+
+
 
     // Cache the data
     saveToStorage(STORAGE_KEYS.STORAGE_DATA, formattedClaims)
@@ -1542,13 +1514,14 @@ export async function getFaucetDetails(
   }
 }
 
+
 export async function getFaucetsForNetwork(
     network: Network,
     provider: JsonRpcProvider
 ): Promise<FaucetMeta[]> {
     try {
         let allFaucetsMeta: FaucetMeta[] = [];
-
+        
         // Fetch faucets from all factory addresses in parallel
         const resultsPromises = network.factoryAddresses.map(async (factoryAddress) => {
             if (!isAddress(factoryAddress)) return [];
@@ -1557,31 +1530,20 @@ export async function getFaucetsForNetwork(
                 const factoryType = await detectFactoryType(provider, factoryAddress);
                 const config = getFactoryConfig(factoryType);
                 const factoryContract = new Contract(factoryAddress, config.abi, provider);
-
                 const factoryCode = await provider.getCode(factoryAddress);
                 if (factoryCode === "0x") return [];
-
+                
                 // 1. Fetch all faucet addresses
                 const faucetAddresses: string[] = await factoryContract.getAllFaucets();
-
-                // 2. Fetch all necessary details in parallel, INCLUDING deleted status.
+                
+                // 2. Fetch minimal details in parallel for ALL returned addresses
                 const metaPromises = faucetAddresses.map(async (addr) => {
                     if (!addr || addr === ZeroAddress) return null;
                     
-                    // Call the two necessary view functions: details + deleted status
-                    const [details, isDeleted] = await Promise.all([
-                        // Function 1: Get the FaucetMeta fields
-                        getFaucetDetails(provider, addr, factoryType as FaucetType),
-                        
-                        // ⭐️ Function 2: Check the on-chain 'deleted' state variable
-                        isFaucetDeleted(provider, addr, factoryType as FaucetType),
-                    ]);
-
-                    // 🛑 NEW FILTER CONDITION
-                    if (isDeleted) {
-                        return null; // Skip this faucet
-                    }
-
+                    // Fetch details using the general purpose faucet details getter
+                    const details = await getFaucetDetails(provider, addr, factoryType as FaucetType);
+                    
+                    // Return the lightweight structure required by FaucetMeta
                     return {
                         faucetAddress: details.faucetAddress,
                         isClaimActive: details.isClaimActive,
@@ -1594,11 +1556,10 @@ export async function getFaucetsForNetwork(
                     } as FaucetMeta;
                 });
                 
-                // Filter out the null results (the deleted faucets)
+                // Filter out any null results if getFaucetDetails failed
                 const metaResults = (await Promise.all(metaPromises)).filter(m => m !== null) as FaucetMeta[];
                 
                 return metaResults;
-
             } catch (error) {
                 console.error(`Error during lightweight fetch for factory ${factoryAddress}:`, error);
                 return [];
@@ -1608,13 +1569,12 @@ export async function getFaucetsForNetwork(
         const allResults = await Promise.all(resultsPromises);
         allFaucetsMeta = allResults.flat();
         
-        // Remove duplicates in case two factories point to the same faucet address
+        // Remove duplicates and return
         const uniqueFaucets = allFaucetsMeta.filter((faucet, index, self) =>
             index === self.findIndex((t) => (
                 t.faucetAddress === faucet.faucetAddress
             ))
         );
-
         return uniqueFaucets;
     } catch (error) {
         console.error(`Error in getFaucetsForNetwork (lightweight aggregation):`, error);
@@ -2116,16 +2076,28 @@ function decodeRevertError(data: string): string {
 }
 
 
+async function deleteFaucetMetadata(faucetAddress: string, userAddress: string, chainId: number): Promise<void> {
+    try {
+        const response = await fetch("https://fauctdrop-backend.onrender.com/delete-faucet-metadata", { // Replace with your actual backend URL
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                faucetAddress,
+                userAddress,
+                chainId,
+            }),
+        });
 
-
-
-
-
-
-
-
-
-
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.warn(`Failed to delete metadata from backend: ${errorData.detail || 'Unknown error'}`);
+        } else {
+            console.log(`✅ Faucet metadata successfully removed from backend for ${faucetAddress}`);
+        }
+    } catch (error) {
+        console.error(`Error communicating with backend for metadata deletion:`, error);
+    }
+}
 
 export async function createFaucet(
   provider: BrowserProvider,
@@ -2782,53 +2754,80 @@ export async function updateFaucetName(
   }
 }
 
+// Replace your existing deleteFaucet export function in faucet.ts with this version
+
 export async function deleteFaucet(
-  provider: BrowserProvider,
-  faucetAddress: string,
-  chainId: bigint,
-  networkId: bigint,
-  faucetType?: FaucetType
+    provider: BrowserProvider,
+    faucetAddress: string,
+    chainId: bigint,
+    networkId: bigint,
+    faucetType?: FaucetType
 ): Promise<`0x${string}`> {
-  try {
-    if (!checkNetwork(chainId, networkId)) {
-      throw new Error("Switch to the correct network to perform this operation");
-    }
+    try {
+        if (!checkNetwork(chainId, networkId)) {
+            throw new Error("Switch to the correct network to perform this operation");
+        }
 
-    const signer = await provider.getSigner();
-    const signerAddress = await signer.getAddress();
-    const permissions = await checkPermissions(provider, faucetAddress, signerAddress, faucetType);
-    if (permissions.isPaused) {
-      throw new Error("Faucet is paused and cannot be deleted");
-    }
-    if (!permissions.isOwner && !permissions.isAdmin) {
-      throw new Error("Only the owner or admin can delete the faucet");
-    }
+        const signer = await provider.getSigner();
+        const signerAddress = await signer.getAddress();
+        const permissions = await checkPermissions(provider, faucetAddress, signerAddress, faucetType);
+        if (permissions.isPaused) {
+            throw new Error("Faucet is paused and cannot be deleted");
+        }
+        // Note: The original code allowed admins to delete; ensure this is the desired permission level.
+        if (!permissions.isOwner && !permissions.isAdmin) {
+            throw new Error("Only the owner or admin can delete the faucet");
+        }
 
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
-    const config = getFaucetConfig(detectedFaucetType)
-    const faucetContract = new Contract(faucetAddress, config.abi, signer);
+        const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
+        const config = getFaucetConfig(detectedFaucetType)
+        const faucetContract = new Contract(faucetAddress, config.abi, signer);
 
-    // Simplified transaction
-    const tx = await faucetContract.deleteFaucet();
+        // Simplified transaction
+        const tx = await faucetContract.deleteFaucet();
 
-    console.log(`Delete faucet transaction sent: ${tx.hash}`);
-    const receipt = await tx.wait();
-    if (!receipt) {
-      throw new Error("Transaction receipt is null");
+        console.log(`Delete faucet transaction sent: ${tx.hash}`);
+        const receipt = await tx.wait();
+        if (!receipt) {
+            throw new Error("Transaction receipt is null");
+        }
+
+        // --- NEW STEP: Call backend to record the deletion off-chain ---
+        await deleteFaucetMetadata(
+            faucetAddress,
+            signerAddress, // Use the actual user who signed the transaction
+            Number(chainId)
+        );
+        // --- END NEW STEP ---
+
+        await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
+        faucetDetailsCache.delete(faucetAddress);
+        return tx.hash as `0x${string}`;
+    } catch (error: any) {
+        console.error("Error deleting faucet:", error);
+        if (error.data && typeof error.data === "string") {
+            throw new Error(decodeRevertError(error.data));
+        }
+        throw new Error(error.reason || error.message || "Failed to delete faucet");
     }
-
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
-    faucetDetailsCache.delete(faucetAddress);
-    return tx.hash as `0x${string}`;
-  } catch (error: any) {
-    console.error("Error deleting faucet:", error);
-    if (error.data && typeof error.data === "string") {
-      throw new Error(decodeRevertError(error.data));
-    }
-    throw new Error(error.reason || error.message || "Failed to delete faucet");
-  }
 }
 
+
+async function fetchDeletedFaucetsList(): Promise<string[]> {
+    try {
+        const response = await fetch("https://fauctdrop-backend.onrender.com/deleted-faucets");
+        const result: DeletedFaucetResponse = await response.json();
+        
+        if (result.success) {
+            // Convert to a Set for faster lookup/filtering
+            return result.deletedAddresses;
+        }
+        return [];
+    } catch (error) {
+        console.error("Failed to fetch deleted faucet list:", error);
+        return [];
+    }
+}
 export async function addAdmin(
   provider: BrowserProvider,
   faucetAddress: string,

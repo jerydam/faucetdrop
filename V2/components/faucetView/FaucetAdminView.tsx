@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea"
-import { Upload, Coins, Users, FileUp, RotateCcw, History, Edit, Trash2, Key, Copy, Menu, Clock, ExternalLink, Download, Eye } from "lucide-react";
+import { Upload, Coins, Users, FileUp, RotateCcw, History, Edit, Trash2, Key, Copy, Clock, ExternalLink, Download, Eye, Link, CheckCircle, Share2, DollarSign, Zap } from "lucide-react";
 import { formatUnits, parseUnits, type BrowserProvider } from 'ethers';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -149,7 +149,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     const [showFundPopup, setShowFundPopup] = useState(false);
     const [adjustedFundAmount, setAdjustedFundAmount] = useState("");
     const [showEditNameDialog, setShowEditNameDialog] = useState(false);
-    const [newFaucetName, setNewFaucetName] = useState(faucetDetails?.name || "");
+    // Initialize with prop value
+    const [newFaucetName, setNewFaucetName] = useState(faucetDetails?.name || ""); 
     const [isUpdatingName, setIsUpdatingName] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [isDeletingFaucet, setIsDeletingFaucet] = useState(false);
@@ -169,7 +170,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     const shouldShowWhitelistTab = faucetType === 'droplist';
     const shouldShowCustomTab = faucetType === 'custom';
     const shouldShowSecretCodeButton = faucetType === 'dropcode' && backendMode;
-    const isOwnerOrAdmin = isOwner || adminList.some(a => a.toLowerCase() === address?.toLowerCase())
+    const isOwnerOrAdmin = isOwner || adminList.some(a => address && a.toLowerCase() === address.toLowerCase())
 
     const calculateFee = (amount: string) => {
         try {
@@ -201,6 +202,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     const loadTransactionHistory = useCallback(async () => {
         if (!selectedNetwork || !provider) return;
         try {
+            // Activity Log Fix: This already fetches all transactions, ensuring all events are loaded.
             const txs = await getFaucetTransactionHistory(provider as BrowserProvider, faucetAddress, selectedNetwork, faucetType || undefined);
             const sortedTxs = txs.sort((a, b) => b.timestamp - a.timestamp);
             setTransactions(sortedTxs);
@@ -228,6 +230,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             if (faucetDetails.endTime) {
                 setEndTime(new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16))
             }
+            if (faucetDetails.name) {
+                setNewFaucetName(faucetDetails.name) // Sync local state with loaded name
+            }
         }
     }, [faucetDetails, faucetType, tokenDecimals]);
     
@@ -239,9 +244,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             setIsUpdatingName(true);
             await updateFaucetName(provider as BrowserProvider, faucetAddress, newFaucetName, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
             toast({ title: "Faucet name updated", description: `Faucet name has been updated to ${newFaucetName}`, });
-            setNewFaucetName("");
             setShowEditNameDialog(false);
-            await loadFaucetDetails();
+            // Wait for parent component to refresh details to avoid state mismatch
+            await loadFaucetDetails(); 
         } catch (error: any) {
             console.error("Error updating faucet name:", error);
             toast({ title: "Failed to update faucet name", description: error.message || "Unknown error occurred", variant: "destructive", });
@@ -321,8 +326,25 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
             const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
             
-            const tasksToSend = newSocialLinks.filter(link => link.url.trim() && link.handle.trim());
-            console.log(`Simulating saving ${tasksToSend.length} tasks and X template.`);
+            // FIX: Combine existing dynamicTasks with newSocialLinks to prevent overwriting
+            const combinedTasks = [
+                ...dynamicTasks,
+                ...newSocialLinks
+            ].filter(link => link.url.trim() && link.handle.trim());
+
+            // Map the combined list for the backend payload
+            const tasksToSend = combinedTasks.map(link => ({
+                title: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} ${link.handle}`,
+                description: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} our ${link.platform} account: ${link.handle}`,
+                url: link.url.trim(),
+                required: true,
+                platform: link.platform,
+                handle: link.handle,
+                action: link.action
+            }));
+
+            console.log(`Sending combined tasks: ${tasksToSend.length}`);
+
 
             // Simulation of blockchain tx
             await setClaimParameters(provider as BrowserProvider, faucetAddress, claimAmountBN, startTimestamp, endTimestamp, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
@@ -393,7 +415,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                 await addAdmin(provider as BrowserProvider, faucetAddress, newAdminAddress, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
                 toast({ title: "Admin added", description: `Address ${newAdminAddress} has been added as an admin`, });
             } else {
-                await removeAdmin(provider as BrowserProvider, faucetAddress, newAdminAddress, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
+                removeAdmin(provider as BrowserProvider, faucetAddress, newAdminAddress, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
                 toast({ title: "Admin removed", description: `Address ${newAdminAddress} has been removed as an admin`, });
             }
             setNewAdminAddress("");
@@ -486,15 +508,36 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     };
 
     // Construct simulated faucet details for the preview
+    // This merges current saved state (dynamicTasks) with unsaved changes (newSocialLinks)
+    const combinedPreviewTasks = [
+        ...dynamicTasks.map(task => ({ ...task, status: 'Current' })),
+        ...newSocialLinks.filter(link => link.handle.trim()).map(task => ({ ...task, status: 'New' }))
+    ];
+
     const simulatedFaucetDetails = {
         ...faucetDetails,
         name: newFaucetName || faucetDetails.name,
         claimAmount: faucetType === 'custom' ? BigInt(0) : parseUnits(claimAmount || '0', tokenDecimals),
-        // Simplification: Time/Active status is based on loaded details for preview consistency
+        // Pass a dummy balance/active status that reflects configuration state
+        isClaimActive: new Date(endTime).getTime() > Date.now() && new Date(startTime).getTime() <= Date.now(),
+        // Mock faucet metadata (you might need to fetch this from parent or lib if it changes)
+        faucetMetadata: {
+            description: faucetDetails.faucetMetadata?.description || `Preview of ${newFaucetName} Faucet`,
+            imageUrl: faucetDetails.faucetMetadata?.imageUrl || "/default.jpeg"
+        }
     };
 
-    // Determine the active tasks for the preview (just the loaded ones for now)
-    const previewDynamicTasks = dynamicTasks.length > 0 ? dynamicTasks : [];
+    const renderCountdown = (timestamp: number, prefix: string): string => {
+        if (timestamp === 0) return "N/A"
+        const diff = timestamp * 1000 - Date.now()
+        if (diff <= 0) return prefix === "Start" ? "Active" : "Ended"
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+        return `${days}d ${hours}h ${minutes}m ${seconds}s`
+    }
 
 
     return (
@@ -504,11 +547,11 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     <div>
                         <CardTitle className="text-lg sm:text-xl">Admin Controls 👑</CardTitle>
                         <CardDescription className="text-xs sm:text-sm">
-                            Manage your {faucetType || 'unknown'} faucet settings - Mode: **{backendMode ? "Automatic" : "Manual"}**
+                            Manage your {faucetType || 'unknown'} faucet settings and monitor activity here.
                         </CardDescription>
                     </div>
                     <Button onClick={handlePreview} variant="secondary" size="sm" className="text-xs">
-                        <Eye className="h-3 w-3 mr-1" /> View Setup Preview
+                        <Eye className="h-3 w-3 mr-1" /> View User Preview
                     </Button>
                 </div>
                 {isOwner && (
@@ -522,9 +565,63 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     </div>
                 )}
             </CardHeader>
+
+            {/* --- ADMIN DATA AT A GLANCE (New Section) --- */}
+            <CardContent className="px-4 sm:px-6 pb-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border p-4 rounded-lg bg-muted/20">
+                    
+                    {/* Faucet Balance */}
+                    <div className="flex flex-col">
+                        <span className="text-xs font-medium text-muted-foreground flex items-center">
+                            <Zap className="h-3 w-3 mr-1 text-yellow-600" /> Current Balance
+                        </span>
+                        <span className="text-sm sm:text-lg font-bold truncate">
+                            {faucetDetails.balance ? formatUnits(faucetDetails.balance, tokenDecimals) : "0"} {tokenSymbol}
+                        </span>
+                    </div>
+
+                    {/* Drip Amount */}
+                    <div className="flex flex-col">
+                        <span className="text-xs font-medium text-muted-foreground flex items-center">
+                            <Coins className="h-3 w-3 mr-1 text-green-600" /> Current Drip
+                        </span>
+                        <span className="text-sm sm:text-lg font-bold truncate">
+                            {faucetType === 'custom' ? 'Custom' : faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {faucetType !== 'custom' ? tokenSymbol : ''}
+                        </span>
+                    </div>
+                    
+                    {/* Live Status */}
+                    <div className="flex flex-col">
+                        <span className="text-xs font-medium text-muted-foreground flex items-center">
+                            <Clock className="h-3 w-3 mr-1 text-blue-600" /> Live Status
+                        </span>
+                        <span className="text-sm sm:text-lg font-bold truncate">
+                             {faucetDetails.isClaimActive ? 
+                                <Badge variant="default" className='bg-green-500'>Active</Badge> : 
+                                <Badge variant="destructive">Inactive</Badge>
+                             }
+                        </span>
+                    </div>
+
+                    {/* Next Claim Window */}
+                    <div className="flex flex-col">
+                        <span className="text-xs font-medium text-muted-foreground flex items-center">
+                            <Clock className="h-3 w-3 mr-1 text-purple-600" /> Ends In
+                        </span>
+                        <span className="text-sm sm:text-lg font-bold truncate">
+                            {faucetDetails.isClaimActive && Number(faucetDetails.endTime) > 0 
+                                ? renderCountdown(Number(faucetDetails.endTime), "End")
+                                : "N/A"
+                            }
+                        </span>
+                    </div>
+                </div>
+            </CardContent>
+            {/* --- END ADMIN DATA AT A GLANCE --- */}
+
             <CardContent className="px-4 sm:px-6">
                 <Tabs defaultValue="fund" value={activeTab} onValueChange={setActiveTab}>
-                    {/* Simplified TabsList for smaller screen by using Menu/Dropdown is handled in the original code, keeping desktop TabsList here */}
+                    {/* TabsList remains the same */}
                     <TabsList className={`hidden sm:grid gap-2 w-full ${
                         shouldShowWhitelistTab && shouldShowCustomTab ? 'grid-cols-6' : 
                         shouldShowWhitelistTab || shouldShowCustomTab ? 'grid-cols-5' : 
@@ -538,221 +635,293 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                         <TabsTrigger value="history" className="text-xs sm:text-sm"><History className="h-4 w-4 mr-2" />Activity Log</TabsTrigger>
                     </TabsList>
 
-                    {/* --- Fund Tab --- */}
-                    <TabsContent value="fund" className="space-y-4 mt-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="fund-amount" className="text-xs sm:text-sm">Fund Amount</Label>
-                                <div className="flex gap-2">
-                                    <Input id="fund-amount" placeholder="0.0" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} className="text-xs sm:text-sm" />
-                                    <Button onClick={handleFund} disabled={isFunding || !fundAmount} className="text-xs sm:text-sm">
-                                        {isFunding ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Funding...</span> : <><Upload className="h-4 w-4 mr-1" /> Fund</>}
-                                    </Button>
+                    {/* --- Fund Tab --- (Cleaned up UI) */}
+                    <TabsContent value="fund" className="space-y-6 mt-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            {/* Fund Section */}
+                            <Card className="p-4 border shadow-sm">
+                                <CardTitle className="text-base font-semibold mb-3 flex items-center"><Upload className="h-4 w-4 mr-2" /> Fund Faucet</CardTitle>
+                                <div className="space-y-3">
+                                    <Label htmlFor="fund-amount" className="text-xs sm:text-sm">Amount to Deposit</Label>
+                                    <div className="flex gap-2">
+                                        <Input id="fund-amount" placeholder="0.0" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} className="text-xs sm:text-sm" />
+                                        <Button onClick={handleFund} disabled={isFunding || !fundAmount} className="text-xs sm:text-sm">
+                                            {isFunding ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Funding...</span> : `Fund ${tokenSymbol}`}
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                        Includes a 3% platform fee. Net amount: {calculateFee(fundAmount).netAmount} {tokenSymbol}
+                                    </p>
                                 </div>
-                                <p className="text-xs text-muted-foreground">Add {tokenSymbol} to the faucet (3% platform fee applies)</p>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="withdraw-amount" className="text-xs sm:text-sm">Withdraw Amount</Label>
-                                <div className="flex gap-2">
-                                    <Input id="withdraw-amount" placeholder="0.0" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="text-xs sm:text-sm" />
-                                    <Button onClick={handleWithdraw} disabled={isWithdrawing || !withdrawAmount} variant="outline" className="text-xs sm:text-sm">
-                                        {isWithdrawing ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Withdrawing...</span> : <><Download className="h-4 w-4 mr-1" /> Withdraw</>}
-                                    </Button>
+                            </Card>
+
+                            {/* Withdraw Section */}
+                            <Card className="p-4 border shadow-sm">
+                                <CardTitle className="text-base font-semibold mb-3 flex items-center"><Download className="h-4 w-4 mr-2" /> Withdraw Tokens</CardTitle>
+                                <div className="space-y-3">
+                                    <Label htmlFor="withdraw-amount" className="text-xs sm:text-sm">Amount to Withdraw</Label>
+                                    <div className="flex gap-2">
+                                        <Input id="withdraw-amount" placeholder="0.0" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="text-xs sm:text-sm" />
+                                        <Button onClick={handleWithdraw} disabled={isWithdrawing || !withdrawAmount} variant="outline" className="text-xs sm:text-sm">
+                                            {isWithdrawing ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Withdrawing...</span> : `Withdraw ${tokenSymbol}`}
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                        Withdraw available {tokenSymbol} from the faucet balance.
+                                    </p>
                                 </div>
-                                <p className="text-xs text-muted-foreground">Withdraw {tokenSymbol} from the faucet</p>
-                            </div>
+                            </Card>
                         </div>
                     </TabsContent>
 
-                    {/* --- Parameters Tab --- */}
-                    <TabsContent value="parameters" className="space-y-4 mt-4">
-                        <div className="space-y-4">
-                            {faucetType !== 'custom' && (
-                                <div className="space-y-2">
-                                    <Label htmlFor="claim-amount" className="text-xs sm:text-sm">Drip Amount</Label>
-                                    <Input id="claim-amount" placeholder="0.0" value={claimAmount} onChange={(e) => setClaimAmount(e.target.value)} className="text-xs sm:text-sm" />
-                                    <p className="text-xs text-muted-foreground">Amount of {tokenSymbol} users can drip</p>
-                                </div>
-                            )}
+                    {/* --- Parameters Tab --- (Cleaned up UI) */}
+                    <TabsContent value="parameters" className="space-y-6 mt-6">
+                        <Card className="p-4 border shadow-sm space-y-4">
+                            <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                                <Coins className="h-4 w-4 mr-2" /> Drop & Timing Parameters
+                            </CardTitle>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* Claim Amount */}
+                                {faucetType !== 'custom' && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="claim-amount" className="text-xs sm:text-sm">Drip Amount ({tokenSymbol})</Label>
+                                        <Input id="claim-amount" placeholder="0.0" value={claimAmount} onChange={(e) => setClaimAmount(e.target.value)} className="text-xs sm:text-sm" />
+                                        <p className="text-xs text-muted-foreground">Amount each user can drip per claim.</p>
+                                    </div>
+                                )}
+                                {/* Filler for layout consistency */}
+                                {faucetType !== 'custom' ? <div></div> : <></>} 
+
+                                {/* Start Time */}
                                 <div className="space-y-2">
                                     <Label htmlFor="start-time" className="text-xs sm:text-sm">Start Time</Label>
                                     <Input id="start-time" type="datetime-local" value={startTime} min={getCurrentDateTime()} onChange={handleStartTimeChange} className={`text-xs sm:text-sm ${startTimeError ? 'border-red-500' : ''}`} />
                                     {startTimeError && (<p className="text-red-600 text-xs mt-1">{startTimeError}</p>)}
                                 </div>
+                                {/* End Time */}
                                 <div className="space-y-2">
                                     <Label htmlFor="end-time" className="text-xs sm:text-sm">End Time</Label>
                                     <Input id="end-time" type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="text-xs sm:text-sm" />
                                 </div>
                             </div>
-                            
-                            {/* Social Media Tasks Section */}
-                            <div className="space-y-4 border-t pt-4">
-                                <div className="flex items-center justify-between">
-                                    <div><Label className="text-xs sm:text-sm font-medium">Social Media Tasks (Optional)</Label><p className="text-xs text-muted-foreground mt-1">Add social media tasks for verification</p></div>
-                                    <Button type="button" variant="outline" size="sm" onClick={addNewSocialLink} className="text-xs"><ExternalLink className="h-3 w-3 mr-1" />Add Task</Button>
-                                </div>
-                                {dynamicTasks.length > 0 && (
-                                    <div className="space-y-2"><Label className="text-xs font-medium">Current Tasks ({dynamicTasks.length})</Label>
-                                        <div className="space-y-1">{dynamicTasks.map((task, index) => (<div key={index} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
-                                                <span>{getPlatformIcon(task.platform)} {getActionText(task.platform)} {task.handle}</span><Badge variant="outline" className="text-xs">{task.platform}</Badge>
-                                            </div>))}
-                                        </div>
-                                    </div>
-                                )}
-                                {newSocialLinks.length > 0 && (
-                                    <div className="space-y-3">
-                                         <Label className="text-xs font-medium">New Tasks</Label>
-                                         {/* Simplified New Tasks Input Area */}
-                                         {newSocialLinks.map((link, index) => (
-                                            <div key={index} className="border rounded-lg p-3 space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                     <Label className="text-xs font-medium">Task {index + 1}</Label>
-                                                     <Button type="button" variant="ghost" size="sm" onClick={() => removeNewSocialLink(index)} className="text-xs text-red-600"><Trash2 className="h-3 w-3" /></Button>
-                                                </div>
-                                                <Select value={link.platform} onValueChange={(value) => updateNewSocialLink(index, 'platform', value)}><SelectTrigger className="text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="𝕏">Twitter/𝕏</SelectItem></SelectContent></Select>
-                                                <Input placeholder="URL" value={link.url} onChange={(e) => updateNewSocialLink(index, 'url', e.target.value)} className="text-xs" />
-                                                <Input placeholder="@handle" value={link.handle} onChange={(e) => updateNewSocialLink(index, 'handle', e.target.value)} className="text-xs" />
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                            
-                            {/* Custom X Post Template Section (Simplified) */}
-                            <div className="space-y-4 border-t pt-4">
-                                <div><Label className="text-xs sm:text-sm font-medium">Custom Share on 𝕏 Post</Label>
-                                <p className="text-xs text-muted-foreground mt-1">Customize what users share. Use {"{amount}"}, {"{token}"}, {"{network}"}, {"{explorer}"}</p></div>
-                                <Textarea placeholder="..." value={customXPostTemplate} onChange={(e) => setCustomXPostTemplate(e.target.value)} rows={4} className="text-xs font-mono" />
+                        </Card>
+                        
+                        {/* Social Media Tasks Section */}
+                        <Card className="p-4 border shadow-sm space-y-4">
+                            <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                                <Link className="h-4 w-4 mr-2" /> Required Social Tasks
+                            </CardTitle>
+                            <div className="flex items-center justify-between">
+                                <div><p className="text-xs text-muted-foreground">Add links users must {dynamicTasks.length > 0 ? "complete/verify" : "complete"} before claiming.</p></div>
+                                <Button type="button" variant="outline" size="sm" onClick={addNewSocialLink} className="text-xs"><ExternalLink className="h-3 w-3 mr-1" />Add Task</Button>
                             </div>
 
-                            <Button onClick={handleUpdateClaimParameters} className="text-xs sm:text-sm w-full" disabled={isUpdatingParameters}>
-                                {isUpdatingParameters ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Updating...</span> : "Update Parameters"}
-                            </Button>
-
-                            {shouldShowSecretCodeButton && (
-                                <div className="flex flex-col sm:flex-row gap-3 w-full pt-4">
-                                    <Button onClick={handleRetrieveSecretCode} variant="outline" className="text-xs sm:text-sm w-full" disabled={isRetrievingSecret}>
-                                        {isRetrievingSecret ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Retrieving...</span> : <><Key className="h-4 w-4 mr-1" /> Get Current Code</>}
-                                    </Button>
-                                    <Button onClick={handleGenerateNewDropCode} variant="outline" className="text-xs sm:text-sm w-full" disabled={isGeneratingNewCode}>
-                                        {isGeneratingNewCode ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Generating...</span> : <><RotateCcw className="h-4 w-4 mr-1" /> Generate New Code</>}
-                                    </Button>
+                            {dynamicTasks.length > 0 && (
+                                <div className="space-y-2 border-t pt-3"><Label className="text-xs font-medium text-muted-foreground">Currently Saved Tasks ({dynamicTasks.length})</Label>
+                                    <div className="space-y-1">{dynamicTasks.map((task, index) => (<div key={index} className="flex items-center justify-between p-2 bg-muted rounded text-xs">
+                                            <span className="truncate">{getPlatformIcon(task.platform)} {getActionText(task.platform)} {task.handle}</span><Badge variant="outline" className="text-xs">{task.platform}</Badge>
+                                        </div>))}
+                                    </div>
                                 </div>
                             )}
-                        </div>
+
+                            {newSocialLinks.length > 0 && (
+                                <div className="space-y-3 border-t pt-3">
+                                     <Label className="text-xs font-medium text-blue-600">New (Unsaved) Tasks</Label>
+                                     {newSocialLinks.map((link, index) => (
+                                        <div key={index} className="border rounded-lg p-3 space-y-2 bg-blue-50/50 dark:bg-blue-900/10">
+                                            <div className="flex items-center justify-between">
+                                                 <Label className="text-xs font-medium">Task {index + 1}</Label>
+                                                 <Button type="button" variant="ghost" size="sm" onClick={() => removeNewSocialLink(index)} className="text-xs text-red-600"><Trash2 className="h-3 w-3" /></Button>
+                                            </div>
+                                            <Select value={link.platform} onValueChange={(value) => updateNewSocialLink(index, 'platform', value)}><SelectTrigger className="text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="𝕏">Twitter/𝕏</SelectItem></SelectContent></Select>
+                                            <Input placeholder="URL" value={link.url} onChange={(e) => updateNewSocialLink(index, 'url', e.target.value)} className="text-xs" />
+                                            <Input placeholder="@handle" value={link.handle} onChange={(e) => updateNewSocialLink(index, 'handle', e.target.value)} className="text-xs" />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </Card>
+                        
+                        {/* Custom X Post Template Section */}
+                        <Card className="p-4 border shadow-sm space-y-4">
+                            <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                                <Share2 className="h-4 w-4 mr-2" /> Custom Share Post
+                            </CardTitle>
+                            <div>
+                                <p className="text-xs text-muted-foreground">Customize the message users share after a successful drop.</p>
+                                <p className="text-xs font-mono text-blue-500 mt-1">Placeholders: {"{amount}"}, {"{token}"}, {"{network}"}, {"{explorer}"}</p>
+                            </div>
+                            <Textarea placeholder="..." value={customXPostTemplate} onChange={(e) => setCustomXPostTemplate(e.target.value)} rows={4} className="text-xs font-mono" />
+                        </Card>
+
+
+                        <Button onClick={handleUpdateClaimParameters} className="text-xs sm:text-sm w-full" disabled={isUpdatingParameters}>
+                            {isUpdatingParameters ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Updating Parameters...</span> : "Save & Update Parameters"}
+                        </Button>
+
+                        {shouldShowSecretCodeButton && (
+                            <div className="flex flex-col sm:flex-row gap-3 w-full pt-4">
+                                <Button onClick={handleRetrieveSecretCode} variant="outline" className="text-xs sm:text-sm w-full" disabled={isRetrievingSecret}>
+                                    {isRetrievingSecret ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Retrieving...</span> : <><Key className="h-4 w-4 mr-1" /> Get Current Code</>}
+                                </Button>
+                                <Button onClick={handleGenerateNewDropCode} variant="outline" className="text-xs sm:text-sm w-full" disabled={isGeneratingNewCode}>
+                                    {isGeneratingNewCode ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Generating...</span> : <><RotateCcw className="h-4 w-4 mr-1" /> Generate New Code</>}
+                                </Button>
+                            </div>
+                        )}
                     </TabsContent>
 
                     {/* --- Drop-list Tab (Conditional) --- */}
                     {shouldShowWhitelistTab && (
                         <TabsContent value="whitelist" className="space-y-4 mt-4">
-                            <div className="space-y-4">
+                             <Card className="p-4 border shadow-sm space-y-4">
+                                <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                                    <Users className="h-4 w-4 mr-2" /> Manage Drop-list
+                                </CardTitle>
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
-                                        <Label className="text-xs sm:text-sm">{isWhitelistEnabled ? "Add to Drop-list" : "Remove from Drop-list"}</Label>
+                                        <Label className="text-xs sm:text-sm font-medium">{isWhitelistEnabled ? "Batch Add Addresses" : "Batch Remove Addresses"}</Label>
                                         <Switch checked={isWhitelistEnabled} onCheckedChange={setIsWhitelistEnabled} />
                                     </div>
-                                    <Label htmlFor="whitelist-addresses" className="text-xs sm:text-sm">Addresses (one per line or comma-separated)</Label>
+                                    <Label htmlFor="whitelist-addresses" className="text-xs sm:text-sm text-muted-foreground">Addresses (one per line or comma-separated)</Label>
                                     <Textarea id="whitelist-addresses" value={whitelistAddresses} onChange={(e) => setWhitelistAddresses(e.target.value)} rows={5} className="text-xs sm:text-sm" />
                                 </div>
                                 <Button onClick={handleUpdateWhitelist} className="text-xs sm:text-sm w-full" disabled={isUpdatingWhitelist}>
                                     {isUpdatingWhitelist ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Updating...</span> : "Update Drop-list"}
                                 </Button>
-                            </div>
+                            </Card>
                         </TabsContent>
                     )}
 
                     {/* --- Custom Tab (Conditional) --- */}
                     {shouldShowCustomTab && (
                         <TabsContent value="custom" className="space-y-4 mt-4">
-                            <CustomClaimUploader
-                                tokenSymbol={tokenSymbol}
-                                tokenDecimals={tokenDecimals}
-                                onDataParsed={async (addresses, amounts) => {
-                                    if (!address || !provider || !chainId || !checkNetwork()) return;
-                                    try {
-                                        console.log(`Simulating setting custom amounts for ${addresses.length} addresses`);
-                                        await setCustomClaimAmountsBatch(provider as BrowserProvider, faucetAddress, addresses, amounts, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
-                                        toast({ title: "Custom claim amounts set", description: `Successfully set custom amounts for ${addresses.length} addresses`, });
-                                        await loadFaucetDetails();
-                                        await loadTransactionHistory();
-                                    } catch (error: any) {
-                                        toast({ title: "Failed to set custom claim amounts", description: error.message || "Unknown error occurred", variant: "destructive", });
-                                    }
-                                }}
-                                onCancel={() => {}}
-                            />
+                            <Card className="p-4 border shadow-sm space-y-4">
+                                <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                                    <FileUp className="h-4 w-4 mr-2" /> Upload Custom Claim Amounts
+                                </CardTitle>
+                                <CustomClaimUploader
+                                    tokenSymbol={tokenSymbol}
+                                    tokenDecimals={tokenDecimals}
+                                    onDataParsed={async (addresses, amounts) => {
+                                        if (!address || !provider || !chainId || !checkNetwork()) return;
+                                        try {
+                                            console.log(`Simulating setting custom amounts for ${addresses.length} addresses`);
+                                            await setCustomClaimAmountsBatch(provider as BrowserProvider, faucetAddress, addresses, amounts, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
+                                            toast({ title: "Custom claim amounts set", description: `Successfully set custom amounts for ${addresses.length} addresses`, });
+                                            await loadFaucetDetails();
+                                            await loadTransactionHistory();
+                                        } catch (error: any) {
+                                            toast({ title: "Failed to set custom claim amounts", description: error.message || "Unknown error occurred", variant: "destructive", });
+                                        }
+                                    }}
+                                    onCancel={() => {}}
+                                />
+                            </Card>
                         </TabsContent>
                     )}
 
                     {/* --- Admin Power Tab --- */}
-                    <TabsContent value="admin-power" className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs sm:text-sm">All Admins</Label>
+                    <TabsContent value="admin-power" className="space-y-6 mt-6">
+                        <Card className="p-4 border shadow-sm space-y-4">
+                            <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                                <Users className="h-4 w-4 mr-2" /> Admin List
+                            </CardTitle>
                             <div className="space-y-2">
-                                {/* Only display admins that are NOT the FACTORY_OWNER_ADDRESS */}
-                                {adminList.filter(admin => admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase()).map((admin) => (
-                                    <div key={admin} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                                        <span className="font-mono break-all text-xs sm:text-sm">{admin}</span>
-                                        <div className="flex gap-2">
-                                            {admin.toLowerCase() === faucetDetails?.owner.toLowerCase() && (<Badge variant="secondary" className="text-xs">Owner</Badge>)}
-                                            {admin.toLowerCase() !== faucetDetails?.owner.toLowerCase() && (<Badge variant="outline" className="text-xs">Admin</Badge>)}
+                                <Label className="text-xs sm:text-sm">Active Admins (excluding Backend)</Label>
+                                <div className="space-y-2">
+                                    {/* Only display admins that are NOT the FACTORY_OWNER_ADDRESS */}
+                                    {adminList.filter(admin => admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase()).map((admin) => (
+                                        <div key={admin} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                                            <span className="font-mono break-all text-xs sm:text-sm">{admin}</span>
+                                            <div className="flex gap-2">
+                                                {admin.toLowerCase() === faucetDetails?.owner.toLowerCase() && (<Badge variant="secondary" className="text-xs">Owner</Badge>)}
+                                                {admin.toLowerCase() !== faucetDetails?.owner.toLowerCase() && (<Badge variant="outline" className="text-xs">Admin</Badge>)}
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        {isOwner && (
-                            <div className="space-y-2 pt-4">
-                                <Label htmlFor="new-admin" className="text-xs sm:text-sm">{isAddingAdmin ? "Add Admin" : "Remove Admin"}</Label>
-                                <div className="flex gap-2">
-                                    <Input id="new-admin" placeholder="0x..." value={newAdminAddress} onChange={(e) => { setNewAdminAddress(e.target.value); checkAdminStatus(e.target.value); }} className="text-xs sm:text-sm font-mono" />
-                                    <Button onClick={() => setShowAddAdminDialog(true)} disabled={isManagingAdmin || !newAdminAddress.trim()} className="text-xs sm:text-sm">
-                                        {isManagingAdmin ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>{isAddingAdmin ? "Adding..." : "Removing..."}</span> : (isAddingAdmin ? "Add Admin" : "Remove Admin")}
-                                    </Button>
+                                    ))}
                                 </div>
-                                <p className="text-xs text-muted-foreground">Note: Owner cannot be modified through this interface.</p>
                             </div>
-                        )}
-                        <div className="space-y-2 pt-4">
-                            <Label className="text-xs sm:text-sm">Reset All Claims</Label>
-                            <p className="text-xs text-muted-foreground">Allow all users to claim again</p>
-                            <Button onClick={handleResetAllClaims} variant="destructive" className="text-xs sm:text-sm" disabled={isResettingClaims}>
-                                {isResettingClaims ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Resetting...</span> : <><RotateCcw className="h-4 w-4 mr-1" /> Reset All Claims</>}
-                            </Button>
-                        </div>
+                            {isOwner && (
+                                <div className="space-y-2 pt-4 border-t">
+                                    <Label htmlFor="new-admin" className="text-xs sm:text-sm font-medium">{isAddingAdmin ? "Add New Admin" : "Remove Admin"}</Label>
+                                    <div className="flex gap-2">
+                                        <Input id="new-admin" placeholder="0x..." value={newAdminAddress} onChange={(e) => { setNewAdminAddress(e.target.value); checkAdminStatus(e.target.value); }} className="text-xs sm:text-sm font-mono" />
+                                        <Button onClick={() => setShowAddAdminDialog(true)} disabled={isManagingAdmin || !newAdminAddress.trim()} className="text-xs sm:text-sm">
+                                            {isManagingAdmin ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>{isAddingAdmin ? "Adding..." : "Removing..."}</span> : (isAddingAdmin ? "Add Admin" : "Remove Admin")}
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Note: Owner and protected backend addresses cannot be modified here.</p>
+                                </div>
+                            )}
+                        </Card>
+                        
+                        <Card className="p-4 border shadow-sm space-y-4">
+                            <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                                <RotateCcw className="h-4 w-4 mr-2" /> Reset Claims
+                            </CardTitle>
+                            <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground">Wipe the claim history for all users, allowing everyone to claim tokens again.</p>
+                                <Button onClick={handleResetAllClaims} variant="destructive" className="text-xs sm:text-sm" disabled={isResettingClaims}>
+                                    {isResettingClaims ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Resetting...</span> : <><RotateCcw className="h-4 w-4 mr-1" /> Reset All Claims</>}
+                                </Button>
+                            </div>
+                        </Card>
                     </TabsContent>
 
                     {/* --- Activity Log Tab --- */}
                     <TabsContent value="history" className="space-y-4 mt-4">
-                        <Label className="text-xs sm:text-sm">Activity Log</Label>
-                        {transactions.length > 0 ? (
-                            <>
-                                <Table>
-                                    <TableHeader><TableRow><TableHead className="text-xs sm:text-sm">Type</TableHead><TableHead className="text-xs sm:text-sm">Initiator</TableHead><TableHead className="text-xs sm:text-sm">Amount</TableHead><TableHead className="text-xs sm:text-sm">Token</TableHead><TableHead className="text-xs sm:text-sm">Date</TableHead></TableRow></TableHeader>
-                                    <TableBody>
-                                        {currentTransactions.map((tx, index) => (<TableRow key={`${tx.timestamp}-${index}`}><TableCell className="text-xs sm:text-sm capitalize">{tx.transactionType}</TableCell><TableCell className="text-xs sm:text-sm font-mono truncate max-w-[150px]">{tx.initiator.slice(0, 6)}...{tx.initiator.slice(-4)}</TableCell><TableCell className="text-xs sm:text-sm">{formatUnits(tx.amount, tokenDecimals)}</TableCell><TableCell className="text-xs sm:text-sm">{getTokenName(tx.isEther)}</TableCell><TableCell className="text-xs sm:text-sm">{new Date(tx.timestamp * 1000).toLocaleString()}</TableCell></TableRow>))}
-                                    </TableBody>
-                                </Table>
-                                {/* ... Pagination UI removed for brevity ... */}
-                            </>
-                        ) : (<p className="text-xs sm:text-sm text-muted-foreground">No transactions found</p>)}
+                         <Card className="p-4 border shadow-sm space-y-4">
+                            <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                                <History className="h-4 w-4 mr-2" /> Activity Log (Last 100 Events)
+                            </CardTitle>
+                            <Label className="text-xs sm:text-sm">Recent Faucet Transactions</Label>
+                            {transactions.length > 0 ? (
+                                <>
+                                    <Table>
+                                        <TableHeader><TableRow><TableHead className="text-xs sm:text-sm">Type</TableHead><TableHead className="text-xs sm:text-sm">Initiator</TableHead><TableHead className="text-xs sm:text-sm">Amount</TableHead><TableHead className="text-xs sm:text-sm">Token</TableHead><TableHead className="text-xs sm:text-sm">Date</TableHead></TableRow></TableHeader>
+                                        <TableBody>
+                                            {currentTransactions.map((tx, index) => (<TableRow key={`${tx.timestamp}-${index}`}><TableCell className="text-xs sm:text-sm capitalize">{tx.transactionType}</TableCell><TableCell className="text-xs sm:text-sm font-mono truncate max-w-[150px]">{tx.initiator.slice(0, 6)}...{tx.initiator.slice(-4)}</TableCell><TableCell className="text-xs sm:text-sm">{formatUnits(tx.amount, tokenDecimals)}</TableCell><TableCell className="text-xs sm:text-sm">{getTokenName(tx.isEther)}</TableCell><TableCell className="text-xs sm:text-sm">{new Date(tx.timestamp * 1000).toLocaleString()}</TableCell></TableRow>))}
+                                        </TableBody>
+                                    </Table>
+                                    {/* ... Pagination UI removed for brevity ... */}
+                                </>
+                            ) : (<p className="text-xs sm:text-sm text-muted-foreground">No transactions found</p>)}
+                        </Card>
                     </TabsContent>
                 </Tabs>
             </CardContent>
             
             {/* --- Dialogs --- */}
 
-            {/* PREVIEW DIALOG: Shows a simulated FaucetUserView */}
+            {/* PREVIEW DIALOG: Shows a simulated FaucetUserView (Smart Preview) */}
             <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
                 <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-xl max-h-[95vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="text-xl">User View Preview (Simulated)</DialogTitle>
+                        <DialogTitle className="text-xl flex items-center text-blue-600">
+                            <Eye className="h-5 w-5 mr-2" /> User View Preview (Simulated)
+                        </DialogTitle>
                         <DialogDescription className="text-sm">
-                            This shows the user interface based on the **currently saved parameters** and social tasks. Claim status is simulated.
+                            This preview uses the latest saved and unsaved parameter values (Name, Drop Amount, Tasks) to show the user interface.
                         </DialogDescription>
+                        
+                        {combinedPreviewTasks.length > 0 && (
+                            <div className="mt-3 p-3 bg-muted rounded-lg space-y-1">
+                                <p className="text-xs font-semibold flex items-center">
+                                    <CheckCircle className="h-4 w-4 mr-1 text-green-600" /> Total Tasks Configured: {combinedPreviewTasks.length}
+                                </p>
+                                <ul className="text-xs text-muted-foreground list-disc pl-5">
+                                    {combinedPreviewTasks.map((task, index) => (
+                                        <li key={index}>
+                                            {task.platform}: {getActionText(task.platform)} {task.handle} ({task.status})
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                     </DialogHeader>
-                    <div className="py-4">
+                    <div className="py-4 border-t">
                         <FaucetUserView 
                             faucetAddress={faucetAddress}
                             faucetDetails={simulatedFaucetDetails}
@@ -763,10 +932,10 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                             address={null} // Simulate unconnected user
                             isConnected={false}
                             hasClaimed={false} // Simulate first-time claim
-                            userIsWhitelisted={true} // Simulate user passes whitelist check (if applicable)
-                            hasCustomAmount={true} // Simulate user has allocation (if applicable)
+                            userIsWhitelisted={faucetType === 'droplist' ? true : false} // Assume success for preview
+                            hasCustomAmount={faucetType === 'custom' ? true : false} // Assume success for preview
                             userCustomClaimAmount={parseUnits('100', tokenDecimals)} // Dummy amount for custom preview
-                            dynamicTasks={previewDynamicTasks} // Show the currently set tasks
+                            dynamicTasks={combinedPreviewTasks} // Pass the combined task list
                             allAccountsVerified={false} // Force showing tasks verification area
                             secretCode={""}
                             setSecretCode={() => {}}
@@ -775,10 +944,10 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                             verificationStates={{}}
                             setVerificationStates={() => {}}
                             isVerifying={false}
-                            faucetMetadata={faucetDetails?.faucetMetadata || {}} // Use loaded metadata
+                            faucetMetadata={simulatedFaucetDetails.faucetMetadata} // Use loaded metadata
                             customXPostTemplate={customXPostTemplate}
                             // Dummy handlers to prevent errors/actions during preview
-                            handleBackendClaim={() => Promise.resolve()} 
+                            handleBackendClaim={() => {toast({title: "Action Disabled", description: "This is a non-functional preview.", variant: "destructive"}); return Promise.resolve()}} 
                             handleFollowAll={() => toast({ title: "Preview Mode", description: "Tasks are disabled in preview.", variant: "default" })}
                             generateXPostContent={(a) => `Preview: ${a} ${tokenSymbol}`}
                             txHash={null}
@@ -829,7 +998,18 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     <Input id="new-faucet-name" value={newFaucetName} onChange={(e) => setNewFaucetName(e.target.value)} placeholder="Enter new faucet name" className="text-xs sm:text-sm" />
                     </div></div>
                     <DialogFooter className="flex flex-col sm:flex-row gap-2">
-                        <Button variant="outline" onClick={() => setShowEditNameDialog(false)} className="text-xs sm:text-sm">Cancel</Button>
+                        <Button 
+                            variant="outline" 
+                            onClick={() => {
+                                setShowEditNameDialog(false);
+                                // Reset the input field to the last saved name on cancel/close
+                                if (faucetDetails?.name) {
+                                    setNewFaucetName(faucetDetails.name);
+                                }
+                            }} 
+                            className="text-xs sm:text-sm">
+                            Cancel
+                        </Button>
                         <Button onClick={handleUpdateFaucetName} className="text-xs sm:text-sm" disabled={isUpdatingName || !newFaucetName.trim()}>
                             {isUpdatingName ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Updating...</span> : "Update Name"}
                         </Button>

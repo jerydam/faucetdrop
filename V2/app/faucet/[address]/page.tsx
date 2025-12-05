@@ -511,18 +511,74 @@ export default function FaucetDetails() {
         <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">Admin Controls Guide</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">Learn how to manage your {faucetType || 'unknown'} faucet as an admin.</DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm">
+              Learn how to manage your {faucetType || 'unknown'} faucet as an admin.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* Simplified Admin popup content UI */}
-             <p className="text-xs text-muted-foreground">This dialog appears because you are the owner or an admin. Use the Admin Controls tab below to manage the faucet.</p>
+            <div className="space-y-2">
+              <h3 className="text-sm sm:text-base font-semibold">Admin Privileges</h3>
+              <div className="text-xs sm:text-sm text-muted-foreground space-y-2">
+                <p>
+                  <strong>Faucet Type:</strong> {
+                    faucetType === 'dropcode' 
+                      ? 'Drop Code - Users need a 6-character code to claim tokens'
+                      : faucetType === 'droplist'
+                      ? 'Drop List - Only whitelisted addresses can claim tokens'
+                      : faucetType === 'custom'
+                      ? 'Custom - Each address has individual claim amounts set by admin'
+                      : 'Unknown type'
+                  }
+                </p>
+                <p>As an admin, you can perform the following actions on this {faucetType || 'unknown'} faucet:</p>
+              </div>
+              <ul className="list-disc pl-5 text-xs sm:text-sm text-muted-foreground">
+                <li><strong>Fund:</strong> Add tokens to the faucet to enable claims.</li>
+                <li><strong>Withdraw:</strong> Retrieve tokens from the faucet.</li>
+                <li><strong>Parameters:</strong> Set {
+                  faucetType === 'custom' 
+                    ? 'timing parameters (start/end times) and social media tasks'
+                    : faucetType === 'dropcode'
+                    ? 'claim amount, start/end times, social media tasks, and retrieve drop codes (for Auto mode)'
+                    : 'claim amount, timing parameters, and social media tasks'
+                }.</li>
+                {faucetType === 'droplist' && (
+                  <li><strong>Drop-list:</strong> Add or remove addresses for restricted claims.</li>
+                )}
+                {faucetType === 'custom' && (
+                  <li><strong>Custom:</strong> Upload a CSV to set specific claim amounts for individual addresses.</li>
+                )}
+                <li><strong>Admin Power:</strong> Add or remove other admins and reset all claims to allow users to claim again.</li>
+                <li><strong>Activity Log:</strong> View the faucet's transaction history.</li>
+                {isOwner && (
+                  <>
+                    <li><strong>Edit Name:</strong> Change the faucet's display name.</li>
+                    <li><strong>Delete Faucet:</strong> Permanently remove the faucet (irreversible).</li>
+                  </>
+                )}
+              </ul>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Use the tabs in the Admin Controls section to access these features. Ensure your wallet is connected to the correct network ({selectedNetwork?.name || "Unknown Network"}) to perform these actions.
+            </p>
             <div className="flex items-center space-x-2">
-              <Checkbox id="dont-show-again" checked={dontShowAdminPopupAgain} onCheckedChange={(checked) => setDontShowAdminPopupAgain(checked === true)} />
-              <Label htmlFor="dont-show-again" className="text-xs sm:text-sm">Don't show this again for this faucet</Label>
+              <Checkbox
+                id="dont-show-again"
+                checked={dontShowAdminPopupAgain}
+                onCheckedChange={(checked) => setDontShowAdminPopupAgain(checked === true)}
+              />
+              <Label htmlFor="dont-show-again" className="text-xs sm:text-sm">
+                Don't show this again for this faucet
+              </Label>
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleCloseAdminPopup} className="text-xs sm:text-sm w-full">Got It</Button>
+            <Button
+              onClick={handleCloseAdminPopup}
+              className="text-xs sm:text-sm w-full hover:bg-accent hover:text-accent-foreground"
+            >
+              Got It
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

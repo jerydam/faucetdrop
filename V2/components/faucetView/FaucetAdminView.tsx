@@ -67,8 +67,8 @@ interface FaucetAdminViewProps {
     canAccessAdminControls: boolean;
     loadFaucetDetails: () => Promise<void>;
     checkNetwork: (skipToast?: boolean) => boolean;
-    dynamicTasks: SocialMediaLink[];
-    newSocialLinks: SocialMediaLink[];
+    dynamicTasks: SocialMediaLink[]; // Saved tasks from parent (fetched from backend)
+    newSocialLinks: SocialMediaLink[]; // Unsaved tasks being added
     setNewSocialLinks: React.Dispatch<React.SetStateAction<SocialMediaLink[]>>;
     customXPostTemplate: string;
     setCustomXPostTemplate: React.Dispatch<React.SetStateAction<string>>;
@@ -77,8 +77,8 @@ interface FaucetAdminViewProps {
     address: string | null;
     chainId: number | null;
     provider: any; // BrowserProvider or JsonRpcProvider
-    handleGoBack: () => void; // <-- ADDED: Router fix
-    router: any; // Next Router instance (passed as prop)
+    handleGoBack: () => void;
+    router: any;
 }
 
 // Helper functions (could be moved to a separate utils file)
@@ -249,6 +249,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
         try {
             console.log(`📝 Saving ${tasksToSend.length} tasks via dedicated backend endpoint.`);
+            // NOTE: This call is assumed to save the entire task list, replacing the old one.
             const response = await fetch("https://fauctdrop-backend.onrender.com/add-faucet-tasks", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -284,6 +285,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             await updateFaucetName(provider as BrowserProvider, faucetAddress, newFaucetName, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
             toast({ title: "Faucet name updated", description: `Faucet name has been updated to ${newFaucetName}`, });
             setShowEditNameDialog(false);
+            // Wait for parent component to refresh details to avoid state mismatch
             await loadFaucetDetails(); 
         } catch (error: any) {
             console.error("Error updating faucet name:", error);
@@ -355,13 +357,18 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     const handleUpdateClaimParameters = async (): Promise<void> => {
         if (!address || !provider || !chainId || !checkNetwork()) return;
         
-        // --- 1. Separate Task Logic ---
+        // --- 1. Determine changes ---
         const hasTaskChanges = newSocialLinks.length > 0;
         
+        // Convert current contract values to strings for comparison
+        const currentClaimAmountStr = faucetType !== 'custom' ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : '0';
+        const currentStartTimeStr = faucetDetails.startTime ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16) : '';
+        const currentEndTimeStr = faucetDetails.endTime ? new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16) : '';
+
         // Identify if there are any *blockchain* changes (claim amount or time)
-        const isClaimAmountChanged = faucetType !== 'custom' && claimAmount !== formatUnits(faucetDetails.claimAmount, tokenDecimals);
-        const isStartTimeChanged = startTime !== new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16);
-        const isEndTimeChanged = endTime !== new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16);
+        const isClaimAmountChanged = faucetType !== 'custom' && claimAmount !== currentClaimAmountStr;
+        const isStartTimeChanged = startTime !== currentStartTimeStr;
+        const isEndTimeChanged = endTime !== currentEndTimeStr;
         const hasBlockchainChanges = isClaimAmountChanged || isStartTimeChanged || isEndTimeChanged;
         
         // Validation checks
@@ -371,7 +378,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         }
 
         if (!hasBlockchainChanges && hasTaskChanges) {
-            // Case 1: Only tasks changed -> Save only to backend
+            // Case 1: Only tasks changed -> Save only to backend (NO BLOCKCHAIN TX)
             const combinedTasks = [ ...dynamicTasks, ...newSocialLinks ].filter(link => link.url.trim() && link.handle.trim());
             const tasksToSend = combinedTasks.map(link => ({
                 title: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} ${link.handle}`,
@@ -397,7 +404,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
             const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
             
-            // Handle tasks if they exist (sends to backend)
+            // Handle tasks if they exist (sends combined list to backend)
             if (hasTaskChanges) {
                 const combinedTasks = [ ...dynamicTasks, ...newSocialLinks ].filter(link => link.url.trim() && link.handle.trim());
                 const tasksToSend = combinedTasks.map(link => ({
@@ -647,7 +654,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     {/* Faucet Balance */}
                     <div className="flex flex-col">
                         <span className="text-xs font-medium text-muted-foreground flex items-center">
-                            <Zap className="h-3 w-3 mr-1 " /> Faucet Balance
+                            <Zap className="h-3 w-3 mr-1 " /> Current Balance
                         </span>
                         <span className="text-sm sm:text-lg font-bold truncate">
                             {faucetDetails.balance ? formatUnits(faucetDetails.balance, tokenDecimals) : "0"} {tokenSymbol}

@@ -44,7 +44,7 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
   }
   return (
     <div className="flex items-center text-xs text-green-500">
-      <Zap className="mr-1 h-3 w-3 fill-green-500/20" />
+      <Zap className="mr-1 h-3 w-3 " />
       Online
     </div>
   );

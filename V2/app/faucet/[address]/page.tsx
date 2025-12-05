@@ -180,13 +180,48 @@ const loadCustomXPostTemplate = async (faucetAddress: string): Promise<string> =
 }
 
 const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {
-    // Simulate saving preference to backend
-    return true
+    try {
+        const response = await fetch("https://fauctdrop-backend.onrender.com/admin-popup-preference", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                userAddress: userAddr,
+                faucetAddress: faucetAddr,
+                dontShowAgain: dontShow,
+            }),
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to save preference: ${response.statusText}`)
+        }
+
+        const result = await response.json()
+        return result.success
+    } catch (error) {
+        console.error("Error saving admin popup preference:", error)
+        return false
+    }
 }
 
 const getAdminPopupPreference = async (userAddr: string, faucetAddr: string): Promise<boolean> => {
-    // Simulate checking preference from backend
-    return false
+    try {
+        const response = await fetch(
+            `https://fauctdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+        )
+
+        if (!response.ok) {
+            // If not found or error, default to false (show popup)
+            return false
+        }
+
+        const result = await response.json()
+        return result.dontShowAgain || false
+    } catch (error) {
+        console.error("Error getting admin popup preference:", error)
+        return false
+    }
 }
 
 // --- Main Component ---
@@ -247,7 +282,7 @@ export default function FaucetDetails() {
     // Use unique task identifier (URL) for verification state lookups
     const getTaskKey = (task: SocialMediaLink) => task.url; 
     
-    // FIX 1: Correctly use .test() method for regex check, added missing dot
+    // FIX 1: Correctly use .test() method for regex check
     const isSecretCodeValid = secretCode.length === 6 && /^[A-Z0-9]{6}$/.test(secretCode)
 
     const allAccountsVerified = dynamicTasks.length === 0 ? true : dynamicTasks.every(task => verificationStates[getTaskKey(task)])

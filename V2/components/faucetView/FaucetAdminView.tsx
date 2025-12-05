@@ -1,26 +1,40 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea"
-import { Upload, Coins, Users, FileUp, RotateCcw, History, Edit, Trash2, Key, Copy, Menu, Clock, ExternalLink, Download } from "lucide-react";
+import { Upload, Coins, Users, FileUp, RotateCcw, History, Edit, Trash2, Key, Copy, Menu, Clock, ExternalLink, Download, Eye } from "lucide-react";
 import { formatUnits, parseUnits, type BrowserProvider } from 'ethers';
 import { useToast } from "@/hooks/use-toast";
-
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CustomClaimUploader } from "@/components/customClaim"
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { fundFaucet, withdrawTokens, setClaimParameters, setWhitelistBatch, resetAllClaims, addAdmin, removeAdmin, retrieveSecretCode, getFaucetTransactionHistory,setCustomClaimAmountsBatch
-} from "@/lib/faucet";
-import { Pagination } from "@/components/ui/pagination"
+import FaucetUserView from './FaucetUserView'; // Import the User View for simulation
+
+// Importing necessary lib functions for admin actions
+import {
+    setWhitelistBatch,
+    setCustomClaimAmountsBatch,
+    resetAllClaims,
+    fundFaucet,
+    withdrawTokens,
+    setClaimParameters,
+    addAdmin,
+    removeAdmin,
+    getFaucetTransactionHistory,
+    updateFaucetName,
+    deleteFaucet,
+} from "@/lib/faucet"
+import { retrieveSecretCode } from '@/lib/backend-service';
 
 // Assuming types are imported or defined elsewhere
 type FaucetType = 'dropcode' | 'droplist' | 'custom'
@@ -56,7 +70,8 @@ interface FaucetAdminViewProps {
     address: string | null;
     chainId: number | null;
     provider: any; // BrowserProvider or JsonRpcProvider
-    // Handlers/functions passed from parent/lib (simulated by names)
+    handleGoBack: () => void; // <-- ADDED: Router fix
+    router: any; // Next Router instance (passed as prop)
 }
 
 // Helper functions (could be moved to a separate utils file)
@@ -108,9 +123,14 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     address,
     chainId,
     provider,
+    handleGoBack,
+    router,
 }) => {
     const { toast } = useToast();
 
+    // --- NEW PREVIEW STATE ---
+    const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+    
     // --- Local Admin State ---
     const [activeTab, setActiveTab] = useState("fund");
     const [fundAmount, setFundAmount] = useState("");
@@ -129,7 +149,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     const [showFundPopup, setShowFundPopup] = useState(false);
     const [adjustedFundAmount, setAdjustedFundAmount] = useState("");
     const [showEditNameDialog, setShowEditNameDialog] = useState(false);
-    const [newFaucetName, setNewFaucetName] = useState("");
+    const [newFaucetName, setNewFaucetName] = useState(faucetDetails?.name || "");
     const [isUpdatingName, setIsUpdatingName] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [isDeletingFaucet, setIsDeletingFaucet] = useState(false);
@@ -156,7 +176,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             const parsedAmount = parseUnits(amount, tokenDecimals);
             const fee = (parsedAmount * BigInt(3)) / BigInt(100);
             const netAmount = parsedAmount - fee;
-            const recommendedInput = (parsedAmount * BigInt(100)) / BigInt(97); // Corrected formula to fund 100 net
+            const recommendedInput = (parsedAmount * BigInt(100)) / BigInt(97);
             const recommendedInputStr = Number(formatUnits(recommendedInput, tokenDecimals)).toFixed(3);
             return { fee: formatUnits(fee, tokenDecimals), netAmount: formatUnits(netAmount, tokenDecimals), recommendedInput: recommendedInputStr };
         } catch {
@@ -179,7 +199,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     };
 
     const loadTransactionHistory = useCallback(async () => {
-        if (!selectedNetwork) return;
+        if (!selectedNetwork || !provider) return;
         try {
             const txs = await getFaucetTransactionHistory(provider as BrowserProvider, faucetAddress, selectedNetwork, faucetType || undefined);
             const sortedTxs = txs.sort((a, b) => b.timestamp - a.timestamp);
@@ -212,6 +232,39 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     }, [faucetDetails, faucetType, tokenDecimals]);
     
     // --- Admin Handlers (Refactored to Admin View) ---
+
+    const handleUpdateFaucetName = async (): Promise<void> => {
+        if (!address || !provider || !newFaucetName.trim() || !chainId || !checkNetwork()) return;
+        try {
+            setIsUpdatingName(true);
+            await updateFaucetName(provider as BrowserProvider, faucetAddress, newFaucetName, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
+            toast({ title: "Faucet name updated", description: `Faucet name has been updated to ${newFaucetName}`, });
+            setNewFaucetName("");
+            setShowEditNameDialog(false);
+            await loadFaucetDetails();
+        } catch (error: any) {
+            console.error("Error updating faucet name:", error);
+            toast({ title: "Failed to update faucet name", description: error.message || "Unknown error occurred", variant: "destructive", });
+        } finally {
+            setIsUpdatingName(false);
+        }
+    }
+
+    const handleDeleteFaucet = async (): Promise<void> => {
+        if (!address || !provider || !chainId || !checkNetwork()) return;
+        try {
+            setIsDeletingFaucet(true);
+            await deleteFaucet(provider as BrowserProvider, faucetAddress, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
+            toast({ title: "Faucet deleted", description: "Faucet has been successfully deleted", });
+            setShowDeleteDialog(false);
+            router.push("/"); // Use the router prop from parent
+        } catch (error: any) {
+            console.error("Error deleting faucet:", error);
+            toast({ title: "Failed to delete faucet", description: error.message || "Unknown error occurred", variant: "destructive", });
+        } finally {
+            setIsDeletingFaucet(false);
+        }
+    }
 
     const handleFund = async (): Promise<void> => {
         if (!checkNetwork()) return;
@@ -268,7 +321,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
             const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
             
-            // Simplified API call simulation for saving tasks
             const tasksToSend = newSocialLinks.filter(link => link.url.trim() && link.handle.trim());
             console.log(`Simulating saving ${tasksToSend.length} tasks and X template.`);
 
@@ -428,13 +480,37 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         return selectedNetwork?.name ? selectedNetwork.nativeCurrency.symbol : "ETH";
     }
 
+    // --- Preview Logic ---
+    const handlePreview = () => {
+        setShowPreviewDialog(true);
+    };
+
+    // Construct simulated faucet details for the preview
+    const simulatedFaucetDetails = {
+        ...faucetDetails,
+        name: newFaucetName || faucetDetails.name,
+        claimAmount: faucetType === 'custom' ? BigInt(0) : parseUnits(claimAmount || '0', tokenDecimals),
+        // Simplification: Time/Active status is based on loaded details for preview consistency
+    };
+
+    // Determine the active tasks for the preview (just the loaded ones for now)
+    const previewDynamicTasks = dynamicTasks.length > 0 ? dynamicTasks : [];
+
+
     return (
         <Card className="w-full mx-auto">
             <CardHeader className="px-4 sm:px-6">
-                <CardTitle className="text-lg sm:text-xl">Admin Controls 👑</CardTitle>
-                <CardDescription className="text-xs sm:text-sm">
-                    Manage your {faucetType || 'unknown'} faucet settings - Mode: **{backendMode ? "Automatic" : "Manual"}**
-                </CardDescription>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <CardTitle className="text-lg sm:text-xl">Admin Controls 👑</CardTitle>
+                        <CardDescription className="text-xs sm:text-sm">
+                            Manage your {faucetType || 'unknown'} faucet settings - Mode: **{backendMode ? "Automatic" : "Manual"}**
+                        </CardDescription>
+                    </div>
+                    <Button onClick={handlePreview} variant="secondary" size="sm" className="text-xs">
+                        <Eye className="h-3 w-3 mr-1" /> View Setup Preview
+                    </Button>
+                </div>
                 {isOwner && (
                     <div className="flex gap-2 pt-2">
                         <Button variant="outline" size="sm" onClick={() => setShowEditNameDialog(true)} className="text-xs">
@@ -524,9 +600,23 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                                         </div>
                                     </div>
                                 )}
-                                {newSocialLinks.map((link, index) => (
-                                    <div key={index} className="border rounded-lg p-3 space-y-2">{/* ... (Input fields for new links) ... */}</div>
-                                ))}
+                                {newSocialLinks.length > 0 && (
+                                    <div className="space-y-3">
+                                         <Label className="text-xs font-medium">New Tasks</Label>
+                                         {/* Simplified New Tasks Input Area */}
+                                         {newSocialLinks.map((link, index) => (
+                                            <div key={index} className="border rounded-lg p-3 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                     <Label className="text-xs font-medium">Task {index + 1}</Label>
+                                                     <Button type="button" variant="ghost" size="sm" onClick={() => removeNewSocialLink(index)} className="text-xs text-red-600"><Trash2 className="h-3 w-3" /></Button>
+                                                </div>
+                                                <Select value={link.platform} onValueChange={(value) => updateNewSocialLink(index, 'platform', value)}><SelectTrigger className="text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="𝕏">Twitter/𝕏</SelectItem></SelectContent></Select>
+                                                <Input placeholder="URL" value={link.url} onChange={(e) => updateNewSocialLink(index, 'url', e.target.value)} className="text-xs" />
+                                                <Input placeholder="@handle" value={link.handle} onChange={(e) => updateNewSocialLink(index, 'handle', e.target.value)} className="text-xs" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             
                             {/* Custom X Post Template Section (Simplified) */}
@@ -579,7 +669,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                                 tokenSymbol={tokenSymbol}
                                 tokenDecimals={tokenDecimals}
                                 onDataParsed={async (addresses, amounts) => {
-                                    // Simulated logic for setCustomClaimAmountsBatch
                                     if (!address || !provider || !chainId || !checkNetwork()) return;
                                     try {
                                         console.log(`Simulating setting custom amounts for ${addresses.length} addresses`);
@@ -601,6 +690,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                         <div className="space-y-2">
                             <Label className="text-xs sm:text-sm">All Admins</Label>
                             <div className="space-y-2">
+                                {/* Only display admins that are NOT the FACTORY_OWNER_ADDRESS */}
                                 {adminList.filter(admin => admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase()).map((admin) => (
                                     <div key={admin} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                                         <span className="font-mono break-all text-xs sm:text-sm">{admin}</span>
@@ -610,10 +700,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                                         </div>
                                     </div>
                                 ))}
-                                <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                                    <span className="font-mono break-all text-xs sm:text-sm">{FACTORY_OWNER_ADDRESS}</span>
-                                    <Badge variant="destructive" className="text-xs">Backend</Badge>
-                                </div>
                             </div>
                         </div>
                         {isOwner && (
@@ -648,15 +734,71 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                                         {currentTransactions.map((tx, index) => (<TableRow key={`${tx.timestamp}-${index}`}><TableCell className="text-xs sm:text-sm capitalize">{tx.transactionType}</TableCell><TableCell className="text-xs sm:text-sm font-mono truncate max-w-[150px]">{tx.initiator.slice(0, 6)}...{tx.initiator.slice(-4)}</TableCell><TableCell className="text-xs sm:text-sm">{formatUnits(tx.amount, tokenDecimals)}</TableCell><TableCell className="text-xs sm:text-sm">{getTokenName(tx.isEther)}</TableCell><TableCell className="text-xs sm:text-sm">{new Date(tx.timestamp * 1000).toLocaleString()}</TableCell></TableRow>))}
                                     </TableBody>
                                 </Table>
-                                {totalPages > 1 && (<Pagination>{/* ... Pagination UI ... */}</Pagination>)}
+                                {/* ... Pagination UI removed for brevity ... */}
                             </>
                         ) : (<p className="text-xs sm:text-sm text-muted-foreground">No transactions found</p>)}
                     </TabsContent>
                 </Tabs>
             </CardContent>
             
-            {/* --- Admin Dialogs --- */}
-            
+            {/* --- Dialogs --- */}
+
+            {/* PREVIEW DIALOG: Shows a simulated FaucetUserView */}
+            <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+                <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-xl max-h-[95vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl">User View Preview (Simulated)</DialogTitle>
+                        <DialogDescription className="text-sm">
+                            This shows the user interface based on the **currently saved parameters** and social tasks. Claim status is simulated.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <FaucetUserView 
+                            faucetAddress={faucetAddress}
+                            faucetDetails={simulatedFaucetDetails}
+                            faucetType={faucetType}
+                            tokenSymbol={tokenSymbol}
+                            tokenDecimals={tokenDecimals}
+                            selectedNetwork={selectedNetwork}
+                            address={null} // Simulate unconnected user
+                            isConnected={false}
+                            hasClaimed={false} // Simulate first-time claim
+                            userIsWhitelisted={true} // Simulate user passes whitelist check (if applicable)
+                            hasCustomAmount={true} // Simulate user has allocation (if applicable)
+                            userCustomClaimAmount={parseUnits('100', tokenDecimals)} // Dummy amount for custom preview
+                            dynamicTasks={previewDynamicTasks} // Show the currently set tasks
+                            allAccountsVerified={false} // Force showing tasks verification area
+                            secretCode={""}
+                            setSecretCode={() => {}}
+                            usernames={{}}
+                            setUsernames={() => {}}
+                            verificationStates={{}}
+                            setVerificationStates={() => {}}
+                            isVerifying={false}
+                            faucetMetadata={faucetDetails?.faucetMetadata || {}} // Use loaded metadata
+                            customXPostTemplate={customXPostTemplate}
+                            // Dummy handlers to prevent errors/actions during preview
+                            handleBackendClaim={() => Promise.resolve()} 
+                            handleFollowAll={() => toast({ title: "Preview Mode", description: "Tasks are disabled in preview.", variant: "default" })}
+                            generateXPostContent={(a) => `Preview: ${a} ${tokenSymbol}`}
+                            txHash={null}
+                            showFollowDialog={false} 
+                            setShowFollowDialog={() => {}}
+                            showVerificationDialog={false}
+                            setShowVerificationDialog={() => {}}
+                            showClaimPopup={false}
+                            setShowClaimPopup={() => {}}
+                            handleVerifyAllTasks={() => Promise.resolve()}
+                            handleGoBack={() => setShowPreviewDialog(false)} // Close on back
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={() => setShowPreviewDialog(false)}>Close Preview</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+
             {/* Fund Confirmation Dialog */}
             <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
                 <DialogContent className="w-11/12 max-w-md">
@@ -688,7 +830,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     </div></div>
                     <DialogFooter className="flex flex-col sm:flex-row gap-2">
                         <Button variant="outline" onClick={() => setShowEditNameDialog(false)} className="text-xs sm:text-sm">Cancel</Button>
-                        <Button onClick={() => { console.log('Simulating update name'); setIsUpdatingName(true); setTimeout(() => { loadFaucetDetails(); setIsUpdatingName(false); setShowEditNameDialog(false); }, 1500) }} className="text-xs sm:text-sm" disabled={isUpdatingName || !newFaucetName.trim()}>
+                        <Button onClick={handleUpdateFaucetName} className="text-xs sm:text-sm" disabled={isUpdatingName || !newFaucetName.trim()}>
                             {isUpdatingName ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Updating...</span> : "Update Name"}
                         </Button>
                     </DialogFooter>
@@ -701,7 +843,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     <DialogHeader><DialogTitle className="text-lg sm:text-xl">Delete Faucet</DialogTitle><DialogDescription className="text-xs sm:text-sm">Are you sure you want to delete this faucet? This action cannot be undone.</DialogDescription></DialogHeader>
                     <DialogFooter className="flex flex-col sm:flex-row gap-2">
                         <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="text-xs sm:text-sm">Cancel</Button>
-                        <Button variant="destructive" onClick={() => { console.log('Simulating delete'); setIsDeletingFaucet(true); setTimeout(() => { setIsDeletingFaucet(false); setShowDeleteDialog(false); window.location.href = "/" }, 1500) }} className="text-xs sm:text-sm" disabled={isDeletingFaucet}>
+                        <Button variant="destructive" onClick={handleDeleteFaucet} className="text-xs sm:text-sm" disabled={isDeletingFaucet}>
                             {isDeletingFaucet ? <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>Deleting...</span> : "Delete Faucet"}
                         </Button>
                     </DialogFooter>

@@ -1,5 +1,4 @@
 import React from 'react';
-import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { TokenBalance } from "@/components/token-balance";
 import { formatUnits } from 'ethers';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"; // Necessary for handleCopyFaucetLink
 
 // Helper functions (could be moved to a separate utils file)
 const getPlatformIcon = (platform: string): string => {
@@ -88,6 +88,7 @@ interface FaucetUserViewProps {
     showClaimPopup: boolean;
     setShowClaimPopup: (open: boolean) => void;
     handleVerifyAllTasks: () => Promise<void>;
+    handleGoBack: () => void; // <-- ADDED: Router fix
 }
 
 const FaucetUserView: React.FC<FaucetUserViewProps> = ({
@@ -97,7 +98,6 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     tokenDecimals,
     selectedNetwork,
     address,
-    isConnected,
     hasClaimed,
     userIsWhitelisted,
     hasCustomAmount,
@@ -111,7 +111,6 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     verificationStates,
     isVerifying,
     faucetMetadata,
-    customXPostTemplate,
     handleBackendClaim,
     handleFollowAll,
     generateXPostContent,
@@ -123,9 +122,9 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     showClaimPopup,
     setShowClaimPopup,
     handleVerifyAllTasks,
+    handleGoBack, // <-- ADDED: Destructure new prop
 }) => {
     const { toast } = useToast();
-    const router = useRouter();
 
     const canClaim = (() => {
         if (!faucetDetails?.isClaimActive || hasClaimed || !allAccountsVerified) {
@@ -181,7 +180,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
             <div className="flex flex-row justify-between items-start sm:items-center gap-4">
                 <Button
                     variant="outline"
-                    onClick={() => (window as any).history.length > 1 ? router.back() : router.push("/")}
+                    onClick={handleGoBack} // <-- USED PROP
                     className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                 >
                     <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
@@ -202,7 +201,6 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div className="flex items-center gap-4">
                             <CardTitle className="text-lg sm:text-xl">{faucetDetails.name || tokenSymbol} Faucet</CardTitle>
-                            {/* Admin controls removed, only badges remain */}
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
                             {selectedNetwork && (<Badge style={{ backgroundColor: selectedNetwork.color }} className="text-white text-xs px-2 py-1">{selectedNetwork.name}</Badge>)}

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea"
-import { Upload, Coins, Users, FileUp, RotateCcw, History, Edit, Trash2, Key, Copy, Clock, ExternalLink, Download, Eye, Link, CheckCircle, Share2, DollarSign, Zap } from "lucide-react";
+import { Upload, Coins, Users, FileUp, RotateCcw, History, Edit, Trash2, Key, Copy, Clock, ExternalLink, Download, Eye, Link, CheckCircle, Share2, DollarSign, Zap, Menu } from "lucide-react";
 import { formatUnits, parseUnits, type BrowserProvider } from 'ethers';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -19,6 +19,13 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import FaucetUserView from './FaucetUserView'; // Import the User View for simulation
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
 
 // Importing necessary lib functions for admin actions
 import {
@@ -236,7 +243,39 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         }
     }, [faucetDetails, faucetType, tokenDecimals]);
     
-    // --- Admin Handlers (Refactored to Admin View) ---
+    // --- Separate Task Saving Function (Decoupled from Blockchain TX) ---
+    const saveSocialMediaTasks = async (tasksToSend: any[]): Promise<boolean> => {
+        if (!address || !chainId) return false;
+
+        try {
+            console.log(`📝 Saving ${tasksToSend.length} tasks via dedicated backend endpoint.`);
+            const response = await fetch("https://fauctdrop-backend.onrender.com/add-faucet-tasks", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    faucetAddress,
+                    tasks: tasksToSend,
+                    userAddress: address,
+                    chainId: Number(chainId)
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || "Failed to save social media tasks.");
+            }
+            
+            toast({ title: "Tasks Saved", description: "Social media tasks updated successfully (Backend only).", });
+            setNewSocialLinks([]); // Clear new links upon successful backend save
+            await loadFaucetDetails(); // Refresh dynamicTasks
+            return true;
+        } catch (error: any) {
+            console.error("Error saving social media tasks:", error);
+            toast({ title: "Task Save Failed", description: error.message || "Could not save tasks to backend.", variant: "destructive" });
+            return false;
+        }
+    }
+
 
     const handleUpdateFaucetName = async (): Promise<void> => {
         if (!address || !provider || !newFaucetName.trim() || !chainId || !checkNetwork()) return;
@@ -245,7 +284,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             await updateFaucetName(provider as BrowserProvider, faucetAddress, newFaucetName, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
             toast({ title: "Faucet name updated", description: `Faucet name has been updated to ${newFaucetName}`, });
             setShowEditNameDialog(false);
-            // Wait for parent component to refresh details to avoid state mismatch
             await loadFaucetDetails(); 
         } catch (error: any) {
             console.error("Error updating faucet name:", error);
@@ -316,23 +354,25 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
     const handleUpdateClaimParameters = async (): Promise<void> => {
         if (!address || !provider || !chainId || !checkNetwork()) return;
-        if (faucetType !== 'custom' && !claimAmount) { toast({ title: "Invalid Input", description: "Please fill in the drop amount", variant: "destructive", }); return }
-        if (!startTime || !endTime) { toast({ title: "Invalid Input", description: "Please fill in the start and end times", variant: "destructive", }); return }
-        if (startTimeError) { toast({ title: "Invalid Start Time", description: startTimeError, variant: "destructive", }); return }
+        
+        // --- 1. Separate Task Logic ---
+        const hasTaskChanges = newSocialLinks.length > 0;
+        
+        // Identify if there are any *blockchain* changes (claim amount or time)
+        const isClaimAmountChanged = faucetType !== 'custom' && claimAmount !== formatUnits(faucetDetails.claimAmount, tokenDecimals);
+        const isStartTimeChanged = startTime !== new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16);
+        const isEndTimeChanged = endTime !== new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16);
+        const hasBlockchainChanges = isClaimAmountChanged || isStartTimeChanged || isEndTimeChanged;
+        
+        // Validation checks
+        if (!hasTaskChanges && !hasBlockchainChanges) {
+             toast({ title: "No Changes", description: "No parameters or tasks were modified.", variant: "default" });
+             return;
+        }
 
-        try {
-            setIsUpdatingParameters(true);
-            const claimAmountBN = faucetType === 'custom' ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
-            const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
-            const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
-            
-            // FIX: Combine existing dynamicTasks with newSocialLinks to prevent overwriting
-            const combinedTasks = [
-                ...dynamicTasks,
-                ...newSocialLinks
-            ].filter(link => link.url.trim() && link.handle.trim());
-
-            // Map the combined list for the backend payload
+        if (!hasBlockchainChanges && hasTaskChanges) {
+            // Case 1: Only tasks changed -> Save only to backend
+            const combinedTasks = [ ...dynamicTasks, ...newSocialLinks ].filter(link => link.url.trim() && link.handle.trim());
             const tasksToSend = combinedTasks.map(link => ({
                 title: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} ${link.handle}`,
                 description: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} our ${link.platform} account: ${link.handle}`,
@@ -342,15 +382,40 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                 handle: link.handle,
                 action: link.action
             }));
+            await saveSocialMediaTasks(tasksToSend);
+            return;
+        }
 
-            console.log(`Sending combined tasks: ${tasksToSend.length}`);
+        // Case 2: Blockchain parameters changed (or tasks changed too) -> Perform TX
+        if (faucetType !== 'custom' && !claimAmount) { toast({ title: "Invalid Input", description: "Please fill in the drop amount", variant: "destructive", }); return }
+        if (!startTime || !endTime) { toast({ title: "Invalid Input", description: "Please fill in the start and end times", variant: "destructive", }); return }
+        if (startTimeError) { toast({ title: "Invalid Start Time", description: startTimeError, variant: "destructive", }); return }
+        
+        try {
+            setIsUpdatingParameters(true);
+            const claimAmountBN = faucetType === 'custom' ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
+            const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
+            const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
+            
+            // Handle tasks if they exist (sends to backend)
+            if (hasTaskChanges) {
+                const combinedTasks = [ ...dynamicTasks, ...newSocialLinks ].filter(link => link.url.trim() && link.handle.trim());
+                const tasksToSend = combinedTasks.map(link => ({
+                    title: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} ${link.handle}`,
+                    description: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} our ${link.platform} account: ${link.handle}`,
+                    url: link.url.trim(),
+                    required: true,
+                    platform: link.platform,
+                    handle: link.handle,
+                    action: link.action
+                }));
+                await saveSocialMediaTasks(tasksToSend);
+            }
 
-
-            // Simulation of blockchain tx
+            // Perform Blockchain Transaction
             await setClaimParameters(provider as BrowserProvider, faucetAddress, claimAmountBN, startTimestamp, endTimestamp, BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined);
 
-            toast({ title: "Drop parameters updated", description: `Parameters updated successfully. ${tasksToSend.length} social media tasks saved.`, });
-            setNewSocialLinks([]);
+            toast({ title: "Drop parameters updated", description: `Parameters updated successfully on chain and backend.`, });
             await loadFaucetDetails();
             await loadTransactionHistory();
         } catch (error: any) {
@@ -539,13 +604,22 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         return `${days}d ${hours}h ${minutes}m ${seconds}s`
     }
 
+    const adminTabs = [
+        { value: "fund", label: "Fund", icon: Upload },
+        { value: "parameters", label: "Parameters", icon: Coins },
+        ...(shouldShowWhitelistTab ? [{ value: "whitelist", label: "Drop-list", icon: Users }] : []),
+        ...(shouldShowCustomTab ? [{ value: "custom", label: "Custom", icon: FileUp }] : []),
+        { value: "admin-power", label: "Admin Power", icon: RotateCcw },
+        { value: "history", label: "Activity Log", icon: History },
+    ];
+
 
     return (
         <Card className="w-full mx-auto">
             <CardHeader className="px-4 sm:px-6">
                 <div className="flex justify-between items-start">
                     <div>
-                        <CardTitle className="text-lg sm:text-xl">Admin Controls 👑</CardTitle>
+                        <CardTitle className="text-lg sm:text-xl">Admin Controls </CardTitle>
                         <CardDescription className="text-xs sm:text-sm">
                             Manage your {faucetType || 'unknown'} faucet settings and monitor activity here.
                         </CardDescription>
@@ -566,14 +640,14 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                 )}
             </CardHeader>
 
-            {/* --- ADMIN DATA AT A GLANCE (New Section) --- */}
+            {/* --- ADMIN DATA AT A GLANCE --- */}
             <CardContent className="px-4 sm:px-6 pb-2">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border p-4 rounded-lg bg-muted/20">
                     
                     {/* Faucet Balance */}
                     <div className="flex flex-col">
                         <span className="text-xs font-medium text-muted-foreground flex items-center">
-                            <Zap className="h-3 w-3 mr-1 text-yellow-600" /> Current Balance
+                            <Zap className="h-3 w-3 mr-1 " /> Faucet Balance
                         </span>
                         <span className="text-sm sm:text-lg font-bold truncate">
                             {faucetDetails.balance ? formatUnits(faucetDetails.balance, tokenDecimals) : "0"} {tokenSymbol}
@@ -583,7 +657,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     {/* Drip Amount */}
                     <div className="flex flex-col">
                         <span className="text-xs font-medium text-muted-foreground flex items-center">
-                            <Coins className="h-3 w-3 mr-1 text-green-600" /> Current Drip
+                            <Coins className="h-3 w-3 mr-1 " /> Current Drip
                         </span>
                         <span className="text-sm sm:text-lg font-bold truncate">
                             {faucetType === 'custom' ? 'Custom' : faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"} {faucetType !== 'custom' ? tokenSymbol : ''}
@@ -593,7 +667,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     {/* Live Status */}
                     <div className="flex flex-col">
                         <span className="text-xs font-medium text-muted-foreground flex items-center">
-                            <Clock className="h-3 w-3 mr-1 text-blue-600" /> Live Status
+                            <Clock className="h-3 w-3 mr-1 " /> Live Status
                         </span>
                         <span className="text-sm sm:text-lg font-bold truncate">
                              {faucetDetails.isClaimActive ? 
@@ -606,7 +680,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     {/* Next Claim Window */}
                     <div className="flex flex-col">
                         <span className="text-xs font-medium text-muted-foreground flex items-center">
-                            <Clock className="h-3 w-3 mr-1 text-purple-600" /> Ends In
+                            <Clock className="h-3 w-3 mr-1 " /> Ends In
                         </span>
                         <span className="text-sm sm:text-lg font-bold truncate">
                             {faucetDetails.isClaimActive && Number(faucetDetails.endTime) > 0 
@@ -621,18 +695,38 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
             <CardContent className="px-4 sm:px-6">
                 <Tabs defaultValue="fund" value={activeTab} onValueChange={setActiveTab}>
-                    {/* TabsList remains the same */}
+                    
+                    {/* --- Mobile Tabs Dropdown (Fix) --- */}
+                    <div className="sm:hidden mb-4">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="w-full justify-between">
+                                    {adminTabs.find(tab => tab.value === activeTab)?.label || 'Menu'}
+                                    <Menu className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-60">
+                                {adminTabs.map(tab => (
+                                    <DropdownMenuItem key={tab.value} onClick={() => setActiveTab(tab.value)}>
+                                        <tab.icon className="h-4 w-4 mr-2" />
+                                        {tab.label}
+                                    </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+
+                    {/* --- Desktop Tabs List --- */}
                     <TabsList className={`hidden sm:grid gap-2 w-full ${
                         shouldShowWhitelistTab && shouldShowCustomTab ? 'grid-cols-6' : 
                         shouldShowWhitelistTab || shouldShowCustomTab ? 'grid-cols-5' : 
                         'grid-cols-4'
                     }`}>
-                        <TabsTrigger value="fund" className="text-xs sm:text-sm"><Upload className="h-4 w-4 mr-2" />Fund</TabsTrigger>
-                        <TabsTrigger value="parameters" className="text-xs sm:text-sm"><Coins className="h-4 w-4 mr-2" />Parameters</TabsTrigger>
-                        {shouldShowWhitelistTab && <TabsTrigger value="whitelist" className="text-xs sm:text-sm"><Users className="h-4 w-4 mr-2" />Drop-list</TabsTrigger>}
-                        {shouldShowCustomTab && <TabsTrigger value="custom" className="text-xs sm:text-sm"><FileUp className="h-4 w-4 mr-2" />Custom</TabsTrigger>}
-                        <TabsTrigger value="admin-power" className="text-xs sm:text-sm"><RotateCcw className="h-4 w-4 mr-2" />Admin Power</TabsTrigger>
-                        <TabsTrigger value="history" className="text-xs sm:text-sm"><History className="h-4 w-4 mr-2" />Activity Log</TabsTrigger>
+                        {adminTabs.map(tab => (
+                            <TabsTrigger key={tab.value} value={tab.value} className="text-xs sm:text-sm">
+                                <tab.icon className="h-4 w-4 mr-2" />{tab.label}
+                            </TabsTrigger>
+                        ))}
                     </TabsList>
 
                     {/* --- Fund Tab --- (Cleaned up UI) */}
@@ -829,7 +923,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                                 <Users className="h-4 w-4 mr-2" /> Admin List
                             </CardTitle>
                             <div className="space-y-2">
-                                <Label className="text-xs sm:text-sm">Active Admins (excluding Backend)</Label>
+                                <Label className="text-xs sm:text-sm">Active Admins</Label>
                                 <div className="space-y-2">
                                     {/* Only display admins that are NOT the FACTORY_OWNER_ADDRESS */}
                                     {adminList.filter(admin => admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase()).map((admin) => (
@@ -876,7 +970,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                             <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
                                 <History className="h-4 w-4 mr-2" /> Activity Log (Last 100 Events)
                             </CardTitle>
-                            <Label className="text-xs sm:text-sm">Recent Faucet Transactions</Label>
+                            <Label className="text-xs sm:text-sm">Recent Faucet Transactions (All Admins)</Label>
                             {transactions.length > 0 ? (
                                 <>
                                     <Table>

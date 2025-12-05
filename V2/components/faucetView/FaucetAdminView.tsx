@@ -827,21 +827,84 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                             )}
 
                             {newSocialLinks.length > 0 && (
-                                <div className="space-y-3 border-t pt-3">
-                                     <Label className="text-xs font-medium text-blue-600">New (Unsaved) Tasks</Label>
-                                     {newSocialLinks.map((link, index) => (
-                                        <div key={index} className="border rounded-lg p-3 space-y-2 bg-blue-50/50 dark:bg-blue-900/10">
-                                            <div className="flex items-center justify-between">
-                                                 <Label className="text-xs font-medium">Task {index + 1}</Label>
-                                                 <Button type="button" variant="ghost" size="sm" onClick={() => removeNewSocialLink(index)} className="text-xs text-red-600"><Trash2 className="h-3 w-3" /></Button>
-                                            </div>
-                                            <Select value={link.platform} onValueChange={(value) => updateNewSocialLink(index, 'platform', value)}><SelectTrigger className="text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="𝕏">Twitter/𝕏</SelectItem></SelectContent></Select>
-                                            <Input placeholder="URL" value={link.url} onChange={(e) => updateNewSocialLink(index, 'url', e.target.value)} className="text-xs" />
-                                            <Input placeholder="@handle" value={link.handle} onChange={(e) => updateNewSocialLink(index, 'handle', e.target.value)} className="text-xs" />
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+    <div className="space-y-3">
+      <Label className="text-xs font-medium">New Tasks</Label>
+      {newSocialLinks.map((link, index) => (
+        <div key={index} className="border rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-medium">Task {index + 1}</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => removeNewSocialLink(index)}
+              className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Platform</Label>
+              <Select
+                value={link.platform}
+                onValueChange={(value) => updateNewSocialLink(index, 'platform', value)}
+              >
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Select platform" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="𝕏">Twitter/𝕏</SelectItem>
+                  <SelectItem value="telegram">Telegram</SelectItem>
+                  <SelectItem value="discord">Discord</SelectItem>
+                  <SelectItem value="youtube">YouTube</SelectItem>
+                  <SelectItem value="instagram">Instagram</SelectItem>
+                  <SelectItem value="tiktok">TikTok</SelectItem>
+                  <SelectItem value="facebook">Facebook</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Action</Label>
+              <Select
+                value={link.action}
+                onValueChange={(value) => updateNewSocialLink(index, 'action', value)}
+              >
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Select action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="follow">Follow</SelectItem>
+                  <SelectItem value="subscribe">Subscribe</SelectItem>
+                  <SelectItem value="join">Join</SelectItem>
+                  <SelectItem value="like">Like</SelectItem>
+                  <SelectItem value="retweet">Retweet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">URL</Label>
+            <Input
+              placeholder="https://x.com/username"
+              value={link.url}
+              onChange={(e) => updateNewSocialLink(index, 'url', e.target.value)}
+              className="text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Handle/Username</Label>
+            <Input
+              placeholder="@username"
+              value={link.handle}
+              onChange={(e) => updateNewSocialLink(index, 'handle', e.target.value)}
+              className="text-xs"
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
                         </Card>
                         
                         {/* Custom X Post Template Section */}

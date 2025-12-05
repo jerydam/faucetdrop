@@ -7,10 +7,16 @@ import Image from 'next/image';
 const Header = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+    // const navLinks = [
+    //     { name: 'Product', href: '/products' },
+    //     { name: 'Developers', href: '/developer' },
+    //     { name: 'Company', href: '/company' },
+    // ];
+
     const navLinks = [
-        { name: 'Product', href: '/products' },
-        { name: 'Developers', href: '/developer' },
-        { name: 'Company', href: '/company' },
+        { name: 'Product', href: '/coming-soon' },
+        { name: 'Developers', href: '/coming-soon' },
+        { name: 'Company', href: '/coming-soon' },
     ];
 
     return (
@@ -44,13 +50,13 @@ const Header = () => {
                     {/* Auth Buttons and Theme Toggle - Desktop */}
                     <div className="hidden md:flex items-center space-x-4">
                         <Link
-                            href="/login"
+                            href="/coming-soon"
                             className={`px-4 py-2 rounded-xl text-white hover:bg-gray-800 ring-1 ring-gray-700`}
                         >
                             Login
                         </Link>
                         <Link
-                            href="/signup"
+                            href="/coming-soon"
                             className="px-4 py-2 bg-[#0052FF] text-white rounded-xl hover:bg-[#2563EB] transition-colors"
                         >
                             Sign Up

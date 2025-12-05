@@ -4,7 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ExternalLink } from "lucide-react";
-import Image from "next/image";
+// import Image from "next/image";
 import { motion } from "framer-motion";
 
 export default function OfferTabs() {
@@ -153,17 +153,17 @@ export default function OfferTabs() {
                     whileInView={{ opacity: 1 }}
                     transition={{ duration: 0.5 }}
                     viewport={{ once: true }}
-                    className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg order-2 md:order-1"
-                  >
-                    <Image
-                      src="/networks/celo.svg"
+                    className="flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg order-2 md:order-1 bg-[url('/111.png')] bg-cover"
+                  />
+                    {/* <Image
+                      src="/111.png"
                       alt=""
                       width={200}
                       height={200}
                       className="transition-all duration-300 ease-out group-hover:scale-110"
-                    />
+                    /> */}
                     
-                  </motion.div>
+                  {/* </motion.div> */}
                   <motion.div
                     whileHover={{ scale: 1.05, y: -6 }}
                     initial={{ opacity: 0, y: 20 }}
@@ -211,16 +211,16 @@ export default function OfferTabs() {
                     whileInView={{ opacity: 1 }}
                     transition={{ duration: 0.5 }}
                     viewport={{ once: true }}
-                    className="order-2 md:order-1 flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg"
-                  >
-                    <Image
+                    className="order-2 md:order-1 flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg bg-[url('/222.png')] bg-cover"
+                  />
+                    {/* <Image
                       src="/networks/celo.svg"
                       alt=""
                       width={200}
                       height={200}
                       className="transition-all duration-300 ease-out group-hover:scale-110"
                     />
-                  </motion.div>
+                  </motion.div> */}
                   <motion.div
                     whileHover={{ scale: 1.05, y: -6 }}
                     initial={{ opacity: 0, y: 20 }}
@@ -269,16 +269,16 @@ export default function OfferTabs() {
                     whileInView={{ opacity: 1 }}
                     transition={{ duration: 0.5 }}
                     viewport={{ once: true }}
-                    className="order-2 md:order-1 flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg"
-                  >
-                    <Image
+                    className="order-2 md:order-1 flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg bg-[url('/333.png')] bg-cover"
+                  />
+                    {/* <Image
                       src="/networks/celo.svg"
                       alt=""
                       width={200}
                       height={200}
                       className="transition-all duration-300 ease-out group-hover:scale-110"
                     />
-                  </motion.div>
+                  </motion.div> */}
                   <motion.div
                     whileHover={{ scale: 1.05, y: -6 }}
                     initial={{ opacity: 0, y: 20 }}

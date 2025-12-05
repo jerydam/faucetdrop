@@ -26,12 +26,12 @@ const FaucetFlow = () => {
     }, []);
 
     const nodes = [
-        { id: 1, title: 'Create a faucet', x: isMobile ? 200 : 150, y: isMobile ? 100 : 80, color: '#f97316', icon: '/favicon.png'  },
-        { id: 2, title: 'Choose a distribution type', x: isMobile ? 200 : 550, y: isMobile ? 250 : 180, color: '#10b981', icon: '/favicon.png' },
-        { id: 3, title: 'Add tasks, quests or quizzes', x: isMobile ? 200 : 150, y: isMobile ? 400 : 280, color: '#ef4444', icon: '/favicon.png' },
-        { id: 4, title: 'Fund your faucet', x: isMobile ? 200 : 550, y: isMobile ? 550 : 380, color: '#f59e0b', icon: '/favicon.png' },
-        { id: 5, title: 'Share your compaign link', x: isMobile ? 200 : 150, y: isMobile ? 700 : 480, color: '#8b5cf6', icon: '/favicon.png' },
-        { id: 6, title: 'Users participate -> Qualify -> Drip', x: isMobile ? 200 : 550, y: isMobile ? 850 : 580, color: '#ec4899', icon: '/favicon.png' }
+        { id: 1, title: 'Create a faucet', x: isMobile ? 200 : 150, y: isMobile ? 100 : 80, color: '#f97316', icon: '/flow/1.png'  },
+        { id: 2, title: 'Choose a distribution type', x: isMobile ? 200 : 550, y: isMobile ? 250 : 180, color: '#10b981', icon: '/flow/2.png' },
+        { id: 3, title: 'Add tasks, quests or quizzes', x: isMobile ? 200 : 150, y: isMobile ? 400 : 280, color: '#ef4444', icon: '/flow/3.png' },
+        { id: 4, title: 'Fund your faucet', x: isMobile ? 200 : 550, y: isMobile ? 550 : 380, color: '#f59e0b', icon: '/flow/4.png' },
+        { id: 5, title: 'Share your compaign link', x: isMobile ? 200 : 150, y: isMobile ? 700 : 480, color: '#8b5cf6', icon: '/flow/5.png' },
+        { id: 6, title: 'Users participate -> Qualify -> Drip', x: isMobile ? 200 : 550, y: isMobile ? 850 : 580, color: '#ec4899', icon: '/flow/6.png' }
     ];
 
     // Create path segments with angular bends
@@ -266,18 +266,18 @@ const FaucetFlow = () => {
 
                                 {/* Icon */}
                                 <foreignObject
-                                    x={node.x - 20} 
-                                    y={node.y - 20} 
-                                    width="40" 
-                                    height="40"
+                                    x={node.x - 40} 
+                                    y={node.y - 40} 
+                                    width="80" 
+                                    height="80"
                                 >
                                     <div className="flex items-center justify-center w-full h-full">
                                         <Image 
                                             src={node.icon} 
                                             alt="Step icon" 
-                                            width={50} 
-                                            height={50}
-                                            className="object-contain"
+                                            width={100} 
+                                            height={100}
+                                            className="object-contain rounded-2xl"
                                         />
                                     </div>
                                 </foreignObject>

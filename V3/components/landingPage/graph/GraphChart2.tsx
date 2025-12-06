@@ -1,54 +1,144 @@
 'use client'
-import { Pie, PieChart } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
-// #region Sample data
-const data01 = [
-  { name: 'Group A', value: 400 },
-  { name: 'Group B', value: 300 },
-  { name: 'Group C', value: 300 },
-  { name: 'Group D', value: 200 },
-];
-const data02 = [
-  { name: 'A1', value: 100 },
-  { name: 'A2', value: 300 },
-  { name: 'B1', value: 100 },
-  { name: 'B2', value: 80 },
-  { name: 'B3', value: 40 },
-  { name: 'B4', value: 30 },
-  { name: 'B5', value: 50 },
-  { name: 'C1', value: 100 },
-  { name: 'C2', value: 200 },
-  { name: 'D1', value: 150 },
-  { name: 'D2', value: 50 },
-];
+type PieData = {
+  networkData: { name: string; value: number }[];
+  timeData: { name: string; value: number }[];
+};
 
-// #endregion
-export default function TwoLevelPieChart({ isAnimationActive = true }: { isAnimationActive?: boolean }) {
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+
+const RADIAN = Math.PI / 180;
+const renderCustomizedLabel = ({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent,
+  index,
+  name
+}: any) => {
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN) * 1.3;
+  const y = cy + radius * Math.sin(-midAngle * RADIAN) * 1.3;
+
   return (
-    <PieChart
-      style={{ width: '100%', height: '100%', maxWidth: '500px', maxHeight: '80vh', aspectRatio: 1 }}
-      responsive
+    <text
+      x={x}
+      y={y}
+      fill="white"
+      textAnchor="middle"
+      dominantBaseline="central"
+      className="text-xs font-medium"
     >
-      <Pie
-        data={data01}
-        dataKey="value"
-        cx="50%"
-        cy="50%"
-        outerRadius="50%"
-        fill="#8884d8"
-        isAnimationActive={isAnimationActive}
-      />
-      <Pie
-        data={data02}
-        dataKey="value"
-        cx="50%"
-        cy="50%"
-        innerRadius="60%"
-        outerRadius="80%"
-        fill="#82ca9d"
-        label
-        isAnimationActive={isAnimationActive}
-      />
-    </PieChart>
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
   );
-}
+};
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-3 border border-gray-200 rounded shadow-lg">
+        <p className="font-semibold">{payload[0].name}</p>
+        <p className="text-sm">
+          Claims: <span className="font-medium">{payload[0].value}</span>
+        </p>
+        <p className="text-sm">
+          {`${((payload[0].value / payload[0].payload.total) * 100).toFixed(1)}% of total`}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
+// In GraphChart2.tsx
+const TwoLevelPieChart = ({ 
+  data = { networkData: [], timeData: [] } 
+}: { 
+  data: PieData 
+}) => {
+  // Ensure we have valid data
+  const { networkData = [], timeData = [] } = data || {};
+  
+
+
+// const TwoLevelPieChart = ({ data }: { data: PieData }) => {
+//   const { networkData = [], timeData = [] } = data;
+
+  // Calculate total for percentage calculations
+  const networkTotal = networkData.reduce((sum, item) => sum + item.value, 0);
+  const timeTotal = timeData.reduce((sum, item) => sum + item.value, 0);
+
+  // Add percentage and total to each data point
+  const enhancedNetworkData = networkData.map(item => ({
+    ...item,
+    percent: (item.value / networkTotal) * 100,
+    total: networkTotal
+  }));
+
+  const enhancedTimeData = timeData.map(item => ({
+    ...item,
+    percent: (item.value / timeTotal) * 100,
+    total: timeTotal
+  }));
+
+  return (
+    <div className="w-full h-[500px] flex flex-col md:flex-row gap-8 p-4">
+      <div className="w-full md:w-1/2 h-[400px]">
+        <h3 className="text-center font-medium mb-2">Distribution by Network</h3>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={enhancedNetworkData}
+              cx="50%"
+              cy="50%"
+              labelLine={false}
+              label={renderCustomizedLabel}
+              outerRadius={120}
+              fill="#8884d8"
+              dataKey="value"
+            >
+              {enhancedNetworkData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      
+      <div className="w-full md:w-1/2 h-[400px]">
+        <h3 className="text-center font-medium mb-2">Distribution by Time of Day</h3>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={enhancedTimeData}
+              cx="50%"
+              cy="50%"
+              labelLine={false}
+              label={renderCustomizedLabel}
+              outerRadius={120}
+              fill="#8884d8"
+              dataKey="value"
+            >
+              {enhancedTimeData.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={COLORS[(index + 3) % COLORS.length]} 
+                />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+export default TwoLevelPieChart;

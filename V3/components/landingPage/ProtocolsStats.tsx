@@ -153,7 +153,7 @@ export default function ProtocolsStats() {
           </motion.div>
           
           <motion.h1 
-            className="text-[#2563EB] text-sm font-semibold tracking-wide uppercase"
+            className="text-[#2563EB] text-2xl md:text-3xl font-semibold tracking-wide uppercase"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}

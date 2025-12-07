@@ -1,7 +1,14 @@
-import type { NextConfig } from "next";
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  webpack: (config) => {
+    // Skip test files inside node_modules
+    config.module.rules.push({
+      test: /\.test\.js$/,
+      use: 'null-loader',
+    })
 
-const nextConfig: NextConfig = {
-  /* config options here */
-};
+    return config
+  },
+}
 
-export default nextConfig;
+export default nextConfig

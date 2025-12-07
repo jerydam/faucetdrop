@@ -58,7 +58,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 // In GraphChart2.tsx
 const TwoLevelPieChart = ({ 
-  data = { networkData: [], timeData: [] } 
+  data = { networkData: [], timeData: [] } ,
 }: { 
   data: PieData 
 }) => {
@@ -88,9 +88,8 @@ const TwoLevelPieChart = ({
   }));
 
   return (
-    <div className="w-full h-[500px] flex flex-col md:flex-row gap-8 p-4">
+    <div className="w-full h-[500px] flex flex-col md:flex-row gap-8 p-4 justify-center items-center">
       <div className="w-full md:w-1/2 h-[400px]">
-        <h3 className="text-center font-medium mb-2">Distribution by Network</h3>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -113,7 +112,7 @@ const TwoLevelPieChart = ({
         </ResponsiveContainer>
       </div>
       
-      <div className="w-full md:w-1/2 h-[400px]">
+      {/* <div className="w-full md:w-1/2 h-[400px]">
         <h3 className="text-center font-medium mb-2">Distribution by Time of Day</h3>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -138,7 +137,7 @@ const TwoLevelPieChart = ({
             <Legend />
           </PieChart>
         </ResponsiveContainer>
-      </div>
+      </div> */}
     </div>
   );
 };

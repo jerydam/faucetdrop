@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState } from 'react'
-// import SimpleRadarChart from './graph/GraphChart1'
-// import TwoLevelPieChart from './graph/GraphChart2'
+import SimpleRadarChart from './graph/GraphChart1'
+import TwoLevelPieChart from './graph/GraphChart2'
 import StackedAreaChart from './graph/GraphChart3'
 import { AnalyticsService } from '@/services/analyticsService'
 
@@ -65,27 +65,25 @@ export default function GraphChart() {
       {/* Area Chart - Daily Trends */}
       {chartData.areaData.length > 0 && (
         <div className="rounded-lg shadow p-4">
-      <h3 className="text-center text-white text-2xl font-semibold mb-4">Daily Claim Trends by Network</h3>
-      <StackedAreaChart data={chartData.areaData} />
+          <h3 className="text-center text-white text-2xl font-semibold mb-2">Daily Claim Trends by Network</h3>
+          <StackedAreaChart data={chartData.areaData} />
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Radar Chart - Network Performance */}
-        {/* <div className="rounded-lg shadow p-4">
-          <h2 className="text-xl font-semibold mb-4">Network Performance</h2>
+        <div className="rounded-lg shadow p-4 flex flex-col items-center">
+          <h3 className="text-center text-white text-2xl font-semibold mb-2">Network Performance</h3>
           <SimpleRadarChart data={chartData.radarData} />
-        </div> */}
+        </div>
 
         {/* Pie Charts - Distribution */}
-        {/* <div className="rounded-lg shadow p-4">
-          <h2 className="text-xl font-semibold mb-4">Claim Distribution</h2>
+        <div className="rounded-lg shadow p-4 flex flex-col items-center">
+          <h2 className="text-center text-white text-2xl font-semibold mb-4">Claim Distribution by Network</h2>         
           <TwoLevelPieChart 
-            isAnimationActive={true} 
-            networkData={chartData.pieData.networkData}
-            timeData={chartData.pieData.timeData}
+            data={chartData.pieData}
           />
-        </div> */}
+        </div>
       </div>
     </div>
   );

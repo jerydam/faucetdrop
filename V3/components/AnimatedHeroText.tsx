@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { animate, Timeline } from 'animejs';
+import { Timeline } from 'animejs';
 
 interface AnimatedHeroTextProps {
   text: string;
@@ -37,6 +37,7 @@ export default function AnimatedHeroText({ text, className = '', delay = 0 }: An
       opacity: [0, 1],
       translateY: [20, 0],
       duration: 1000,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delay: (el: any, i: number) => delay + i * 30,
       easing: 'easeOutExpo'
     });

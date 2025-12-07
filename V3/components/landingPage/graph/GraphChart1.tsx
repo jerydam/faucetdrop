@@ -46,6 +46,7 @@ const SimpleRadarChart = ({ data = [] }: SimpleRadarChartProps) => {
   ];
 
   // Custom tooltip formatter
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const renderTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;

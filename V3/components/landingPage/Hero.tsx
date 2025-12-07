@@ -3,10 +3,10 @@ import { Rocket } from 'lucide-react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
-import AnimatedHeroText from '@/components/AnimatedHeroText';
+// import AnimatedHeroText from '@/components/AnimatedHeroText';
 import MagneticButton from '@/components/MagneticButton';
 import { useRouter } from 'next/navigation';
-import ScrollReveal from '../ScrollReveal';
+import ScrollReveal from '@/components/ScrollReveal';
 
 const Drops: React.FC = () => {
   return (

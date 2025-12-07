@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
-import { useState, useMemo, useCallback} from 'react'
+import { useState, useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 type AreaData = {
@@ -7,18 +8,33 @@ type AreaData = {
   [network: string]: number | string;
 }[];
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
+        <p className="font-semibold mb-2">{label}</p>
+        {payload
+          .sort((a: any, b: any) => (b.value as number) - (a.value as number))
+          .map((entry: any, index: number) => (
+            <div key={`tooltip-${index}`} className="flex justify-between">
+              <div className="flex items-center">
+                <div 
+                  className="w-3 h-3 rounded-full mr-2" 
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-sm">{entry.name}:</span>
+              </div>
+              <span className="font-medium ml-2">{entry.value}</span>
+            </div>
+          ))}
+      </div>
+    );
+  }
+  return null;
+};
+
 const StackedAreaChart = ({ data }: { data: AreaData }) => {
   const [selectedMonths, setSelectedMonths] = useState<number>(2); // Default to last 2 months
-
-  // const filteredData = useMemo(() => {
-  //   if (!data || data.length === 0) return [];
-  //   const currentDate = new Date();
-  //   const filtered = data.filter(item => {
-  //     const itemDate = new Date(item.date);
-  //     return itemDate >= new Date(currentDate.setMonth(currentDate.getMonth() - selectedMonths));
-  //   });
-  //   return filtered;
-  // }, [data, selectedMonths]);
 
   const filteredData = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -44,31 +60,6 @@ const StackedAreaChart = ({ data }: { data: AreaData }) => {
 
   // Get all network names from the first data point (excluding 'date')
   const networkNames = Object.keys(data[0] || {}).filter(key => key !== 'date');
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
-          <p className="font-semibold mb-2">{label}</p>
-          {payload
-            .sort((a: any, b: any) => (b.value as number) - (a.value as number))
-            .map((entry: any, index: number) => (
-              <div key={`tooltip-${index}`} className="flex justify-between">
-                <div className="flex items-center">
-                  <div 
-                    className="w-3 h-3 rounded-full mr-2" 
-                    style={{ backgroundColor: entry.color }}
-                  />
-                  <span className="text-sm">{entry.name}:</span>
-                </div>
-                <span className="font-medium ml-2">{entry.value}</span>
-              </div>
-            ))}
-        </div>
-      );
-    }
-    return null;
-  };
 
   // Format date for better readability
   const formatXAxis = (date: string) => {

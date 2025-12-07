@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState } from 'react'
-import SimpleRadarChart from './graph/GraphChart1'
-import TwoLevelPieChart from './graph/GraphChart2'
+// import SimpleRadarChart from './graph/GraphChart1'
+// import TwoLevelPieChart from './graph/GraphChart2'
 import StackedAreaChart from './graph/GraphChart3'
 import { AnalyticsService } from '@/services/analyticsService'
 

@@ -3,7 +3,7 @@ import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { celo, lisk, base, arbitrum } from '@reown/appkit/networks'
 
 // Get projectId from https://dashboard.reown.com
-export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID
+export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID || "167c84b8ff4ffc62098acde7240bfa70"
 
 if (!projectId) {
   throw new Error('Project ID is not defined')

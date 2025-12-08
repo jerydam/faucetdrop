@@ -173,10 +173,11 @@ const loadSocialMediaLinks = async (faucetAddress: string): Promise<SocialMediaL
         return [];
     }
 }
-
+// Add this near your other constants
+const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
 const loadCustomXPostTemplate = async (faucetAddress: string): Promise<string> => {
-    // Simulate fetching a template
-    return `I just dripped {amount} {token} from @FaucetDrops on {network}. Verify Drop 💧: {explorer}`
+   
+    return `Verify Drop 💧: {explorer}`
 }
 
 const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {
@@ -436,12 +437,15 @@ export default function FaucetDetails() {
     }
     
     const generateXPostContent = (amount: string): string => {
-      let content = customXPostTemplate
+      let content = `${FIXED_TWEET_PREFIX} ${customXPostTemplate}`
+
+      // 2. Perform replacements on the FULL string
       content = content.replace(/\{amount\}/g, amount)
       content = content.replace(/\{token\}/g, tokenSymbol)
       content = content.replace(/\{network\}/g, selectedNetwork?.name || "the network")
       content = content.replace(/\{faucet\}/g, faucetDetails?.name || "this faucet")
       content = content.replace(/\{explorer\}/g, txHash ? `${selectedNetwork?.blockExplorerUrls || "https://explorer.unknown"}/tx/${txHash}` : "Transaction not available")
+      
       return content
     }
 

@@ -253,12 +253,6 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
                 <CardContent className="space-y-4 px-4 sm:px-6">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="flex flex-col p-3 sm:p-4 border rounded-lg">
-                            <span className="text-xs sm:text-sm text-muted-foreground">Faucet Balance</span>
-                            <span className="text-lg sm:text-2xl font-bold truncate">
-                                {faucetDetails.balance ? formatUnits(faucetDetails.balance, tokenDecimals) : "0"} {tokenSymbol}
-                            </span>
-                        </div>
-                        <div className="flex flex-col p-3 sm:p-4 border rounded-lg">
                             <span className="text-xs sm:text-sm text-muted-foreground">{faucetType === 'custom' ? 'Your Claim Amount' : 'Drip Amount'}</span>
                             <span className="text-lg sm:text-2xl font-bold truncate">
                                 {faucetType === 'custom' ? address ? hasCustomAmount ? `${formatUnits(userCustomClaimAmount, tokenDecimals)} ${tokenSymbol}` : "No allocation" : "Connect wallet" : faucetDetails.claimAmount ? `${formatUnits(faucetDetails.claimAmount, tokenDecimals)} ${tokenSymbol}` : `0 ${tokenSymbol}`}

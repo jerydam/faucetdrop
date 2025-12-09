@@ -779,7 +779,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     <TabsContent value="parameters" className="space-y-6 mt-6">
                         <Card className="p-4 border shadow-sm space-y-4">
                             <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                                <Coins className="h-4 w-4 mr-2" /> Drop & Timing Parameters
+                                <Coins className="h-4 w-4 mr-2" /> Drip & Timing Parameters
                             </CardTitle>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {/* Claim Amount */}
@@ -1064,7 +1064,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                 <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-xl max-h-[95vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="text-xl flex items-center text-blue-600">
-                            <Eye className="h-5 w-5 mr-2" /> User View Preview (Simulated)
+                            <Eye className="h-5 w-5 mr-2" /> User View Preview
                         </DialogTitle>
                         <DialogDescription className="text-sm">
                             This preview uses the latest saved and unsaved parameter values (Name, Drop Amount, Tasks) to show the user interface.

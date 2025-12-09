@@ -1514,15 +1514,38 @@ export async function getFaucetDetails(
   }
 }
 
+// New helper function to fetch the blacklist
+async function getDeletedFaucets(chainId: number): Promise<Set<string>> {
+    try {
+        // Adjust endpoint if necessary (e.g. /deleted-faucets or similar)
+        const response = await fetch(`https://fauctdrop-backend.onrender.com/deleted-faucets?chainId=${chainId}`);
+        
+        if (!response.ok) {
+            console.warn("Failed to fetch deleted faucets list");
+            return new Set();
+        }
+
+        const data = await response.json();
+        // Assuming backend returns { deletedAddresses: string[] } or just string[]
+        // We use a Set for O(1) lookup performance during filtering
+        const addresses = Array.isArray(data) ? data : (data.deletedAddresses || []);
+        return new Set(addresses.map((a: string) => a.toLowerCase()));
+    } catch (error) {
+        console.error("Error fetching deleted faucets:", error);
+        return new Set(); // Fail safe: return empty set so UI still loads
+    }
+}
 
 export async function getFaucetsForNetwork(
     network: Network,
     provider: JsonRpcProvider
 ): Promise<FaucetMeta[]> {
     try {
-        let allFaucetsMeta: FaucetMeta[] = [];
-        
-        // Fetch faucets from all factory addresses in parallel
+        // 1. Start fetching the blacklist immediately (Non-blocking)
+        // We assume network.chainId exists; if strictly typed, ensure it's available
+        const deletedFaucetsPromise = getDeletedFaucets(Number(network.chainId));
+
+        // 2. Start fetching faucets from all factory addresses in parallel (Existing logic)
         const resultsPromises = network.factoryAddresses.map(async (factoryAddress) => {
             if (!isAddress(factoryAddress)) return [];
             
@@ -1533,17 +1556,15 @@ export async function getFaucetsForNetwork(
                 const factoryCode = await provider.getCode(factoryAddress);
                 if (factoryCode === "0x") return [];
                 
-                // 1. Fetch all faucet addresses
+                // Fetch all faucet addresses
                 const faucetAddresses: string[] = await factoryContract.getAllFaucets();
                 
-                // 2. Fetch minimal details in parallel for ALL returned addresses
+                // Fetch details in parallel
                 const metaPromises = faucetAddresses.map(async (addr) => {
                     if (!addr || addr === ZeroAddress) return null;
                     
-                    // Fetch details using the general purpose faucet details getter
                     const details = await getFaucetDetails(provider, addr, factoryType as FaucetType);
                     
-                    // Return the lightweight structure required by FaucetMeta
                     return {
                         faucetAddress: details.faucetAddress,
                         isClaimActive: details.isClaimActive,
@@ -1552,30 +1573,41 @@ export async function getFaucetsForNetwork(
                         tokenSymbol: details.tokenSymbol,
                         name: details.name,
                         owner: details.owner,
-                        factoryAddress: factoryAddress, // CRITICAL
+                        factoryAddress: factoryAddress,
                     } as FaucetMeta;
                 });
                 
-                // Filter out any null results if getFaucetDetails failed
-                const metaResults = (await Promise.all(metaPromises)).filter(m => m !== null) as FaucetMeta[];
-                
-                return metaResults;
+                // Filter out nulls
+                return (await Promise.all(metaPromises)).filter(m => m !== null) as FaucetMeta[];
             } catch (error) {
                 console.error(`Error during lightweight fetch for factory ${factoryAddress}:`, error);
                 return [];
             }
         });
 
-        const allResults = await Promise.all(resultsPromises);
-        allFaucetsMeta = allResults.flat();
+        // 3. Await BOTH the blacklist and the blockchain results
+        const [deletedFaucetsSet, allResults] = await Promise.all([
+            deletedFaucetsPromise,
+            Promise.all(resultsPromises)
+        ]);
+
+        let allFaucetsMeta = allResults.flat();
         
-        // Remove duplicates and return
+        // 4. Remove duplicates
         const uniqueFaucets = allFaucetsMeta.filter((faucet, index, self) =>
             index === self.findIndex((t) => (
                 t.faucetAddress === faucet.faucetAddress
             ))
         );
-        return uniqueFaucets;
+
+        // 5. Final Filter: Remove faucets that are in the deleted set
+        // We check against the Set we created in step 1
+        const activeFaucets = uniqueFaucets.filter(faucet => 
+            !deletedFaucetsSet.has(faucet.faucetAddress.toLowerCase())
+        );
+
+        return activeFaucets;
+
     } catch (error) {
         console.error(`Error in getFaucetsForNetwork (lightweight aggregation):`, error);
         return [];

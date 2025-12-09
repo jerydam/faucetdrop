@@ -1,0 +1,9 @@
+{
+  "name": "Faucet Drops",
+  "description": "Create and claim from crypto faucets instantly.",
+  "iconUrl": "https://app.faucetdrops.io/icon.png", 
+  "splashImageUrl": "https://app.faucetdrops.io/splash.png",
+  "splashBackgroundColor": "#020817",
+  "homeUrl": "https://app.faucetdrops.io",
+  "requiredChains": [42220, 8453] 
+}

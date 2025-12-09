@@ -4,6 +4,7 @@
 import Link from "next/link"
 import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 import { Button } from "@/components/ui/button"
+import sdk from "@farcaster/miniapp-sdk";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,9 +31,10 @@ interface WalletConnectButtonProps {
 
 export function WalletConnectButton({ className }: WalletConnectButtonProps) {
   const { open } = useAppKit()
+  
   const { address, isConnected } = useAppKitAccount()
   const { toast } = useToast()
-
+  
   // Format address for display (e.g., 0x12...3456)
   const formatAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -47,7 +49,17 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
       })
     }
   }
+const isMiniApp = typeof window !== 'undefined' && !!sdk.wallet;
 
+  // If in MiniApp, you might want to show just the address or a different UI
+  // because "Connect Wallet" is redundant.
+  if (isMiniApp && address) {
+     return (
+        <Button variant="ghost" className="font-mono text-xs">
+           Farcaster Connected: {formatAddress(address)}
+        </Button>
+     );
+  }
   // 1. DISCONNECTED STATE: Show standard Connect Button
   if (!isConnected || !address) {
     return (

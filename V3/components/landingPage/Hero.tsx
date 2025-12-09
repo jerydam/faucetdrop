@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 // import AnimatedHeroText from '@/components/AnimatedHeroText';
 import MagneticButton from '@/components/MagneticButton';
-import { useRouter } from 'next/navigation';
+// import { useRouter } from 'next/navigation';
 import ScrollReveal from '@/components/ScrollReveal';
 
 const Drops: React.FC = () => {
@@ -68,10 +68,10 @@ const AnimatedGradient = () => {
 };
 
 const HeroSection: React.FC = () => {
-  const router = useRouter();
+  // const router = useRouter();
 
   const handleLaunchApp = () => {
-    router.push('/coming-soon');
+    window.open('https://app.faucetdrops.io/', '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -114,34 +114,28 @@ const HeroSection: React.FC = () => {
 
       {/* New Pattern */}
       <div className="min-h-screen text-white flex flex-col-reverse md:flex-row items-center justify-center p-8 w-full">
-        <motion.div 
+        <motion.div
           className="max-w-7xl w-full  gap-12 items-center"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.8 }}
         >
-          <motion.div 
+          <motion.div
             className=""
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.8 }}
           >
-            <ScrollReveal 
-              direction="up" 
+            <ScrollReveal
+              direction="up"
               delay={500}
             >
               <h2 className="text-2xl md:text-3xl lg:text-4xl mx:text-5xl font-bold leading-tight">
                 Unify Your Onchain Growth, Automate Your Rewards, Scale Engagement
               </h2>
             </ScrollReveal>
-            {/* <ScrollReveal 
-              direction="up" 
-              delay={1200}
-            >
-              <h2 className="text-2xl md:text-3xl font-bold leading-tight"></h2>
-            </ScrollReveal> */}
 
-            <motion.p 
+            <motion.p
               className="text-gray-400 text-base lg:text-lg leading-relaxed max-w-2xl mt-6"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -156,8 +150,8 @@ const HeroSection: React.FC = () => {
               transition={{ delay: 2.5, duration: 0.8 }}
               className="mt-8"
             >
-              <MagneticButton 
-                onClick={handleLaunchApp} 
+              <MagneticButton
+                onClick={handleLaunchApp}
                 className="group flex items-center gap-2 bg-linear-to-r from-[#0052FF] to-[#2563EB] hover:from-[#2563EB] hover:to-[#0052FF] text-black font-semibold px-8 py-4 rounded-full transition-all duration-200 shadow-lg shadow-[#94A3B8]/20 hover:shadow-xl hover:shadow-[#94A3B8]/30"
               >
                 Launch App

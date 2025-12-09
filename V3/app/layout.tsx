@@ -14,7 +14,8 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'FaucetDrops',
-  description: 'FaucetDrops - Get test tokens for your development needs'
+  description: 'FaucetDrops - Get test tokens for your development needs',
+  icons: '/favicon.ico'
 }
 
 export default async function RootLayout({

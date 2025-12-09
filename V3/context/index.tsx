@@ -17,10 +17,10 @@ if (!projectId) {
 
 // Set up metadata
 const metadata = {
-  name: 'appkit-example',
-  description: 'AppKit Example',
-  url: 'https://appkitexampleapp.com', // origin must match your domain & subdomain
-  icons: ['https://avatars.githubusercontent.com/u/179229932']
+  name: 'FaucetDrops',
+  description: 'FaucetDrops - Get test tokens for your development needs',
+  url: 'https://faucetdrops.com',
+  icons: ['/favicon.ico']
 }
 
 // Create the modal
@@ -31,7 +31,7 @@ const modal = createAppKit({
   defaultNetwork: celo,
   metadata: metadata,
   features: {
-    analytics: true // Optional - defaults to your Cloud configuration
+    analytics: true
   }
 })
 

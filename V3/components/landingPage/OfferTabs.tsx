@@ -1,9 +1,8 @@
-"use client";
-
+'use client'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, FingerprintPattern } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 
@@ -30,9 +29,7 @@ export default function OfferTabs() {
             </div>
           </TabsList>
 
-          {/* ------------------------------------------------------------------------------------------ */}
-          {/*                                        FAUCETS TAB                                         */}
-          {/* ------------------------------------------------------------------------------------------ */}
+          {/* ============================ FAUCETS TAB ============================ */}
           <TabsContent value="faucets" className="text-white mt-5">
             <TabHeader text="Smarter, Flexibility, Onchain Distribution" />
 
@@ -54,7 +51,7 @@ export default function OfferTabs() {
                   desc: "Advanced fully customizable distribution engine with complex logic",
                 },
               ].map((card) => (
-                <FaucetCard
+                <GeneralCard
                   key={card.id}
                   card={card}
                   openCard={openCard}
@@ -64,50 +61,59 @@ export default function OfferTabs() {
             </CardContent>
           </TabsContent>
 
-          {/* ------------------------------------------------------------------------------------------ */}
-          {/*                                      QUESTS TAB                                           */}
-          {/* ------------------------------------------------------------------------------------------ */}
+          {/* ============================ QUESTS TAB ============================ */}
           <TabsContent value="quests" className="text-white mt-5">
             <TabHeader text="Gamified Progress + Automated Rewards" />
 
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <ImgBox src="111.png" />
 
-              <HoverRevealCard
-                title="Reward Participants"
-                desc="Create task-based quests with points and automatically distribute rewards upon completion"
+              <GeneralCard
+                card={{
+                  id: 4,
+                  title: "Reward Participants",
+                  desc: "Create task-based quests with points and automatically distribute rewards upon completion",
+                }}
+                openCard={openCard}
+                setOpenCard={setOpenCard}
               />
             </CardContent>
           </TabsContent>
 
-          {/* ------------------------------------------------------------------------------------------ */}
-          {/*                                      QUIZZES TAB                                          */}
-          {/* ------------------------------------------------------------------------------------------ */}
+          {/* ============================ QUIZZES TAB ============================ */}
           <TabsContent value="quizzes" className="text-white mt-5">
             <TabHeader text="Fun, Interactive, AI-Powered Web3 Quiz Engine" />
 
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <ImgBox src="222.png" />
 
-              <HoverRevealCard
-                title="Engagements"
-                desc="Set up interactive, time-based, AI-powered Web3 quizzes tied directly to onchain rewards"
+              <GeneralCard
+                card={{
+                  id: 5,
+                  title: "Engagements",
+                  desc: "Set up interactive, time-based, AI-powered Web3 quizzes tied directly to onchain rewards",
+                }}
+                openCard={openCard}
+                setOpenCard={setOpenCard}
               />
             </CardContent>
           </TabsContent>
 
-          {/* ------------------------------------------------------------------------------------------ */}
-          {/*                                    ENTERPRISE TAB                                          */}
-          {/* ------------------------------------------------------------------------------------------ */}
+          {/* ============================ ENTERPRISE TAB ============================ */}
           <TabsContent value="enterprise" className="text-white mt-5">
             <TabHeader text="White Label Solutions" />
 
             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <ImgBox src="333.png" />
 
-              <HoverRevealCard
-                title="White Label Solutions"
-                desc="Designed for protocols and large ecosystems running massive airdrops or global onboarding campaigns"
+              <GeneralCard
+                card={{
+                  id: 6,
+                  title: "White Label Solutions",
+                  desc: "Designed for protocols and large ecosystems running massive airdrops or global onboarding campaigns",
+                }}
+                openCard={openCard}
+                setOpenCard={setOpenCard}
               />
             </CardContent>
           </TabsContent>
@@ -137,9 +143,9 @@ function TabHeader({ text }: { text: string }) {
   );
 }
 
-/* -------------------------- FAUCET CARD (Expandable + Hover) -------------------------- */
+/* --------------------------- GENERAL CARD (All Tabs) --------------------------- */
 
-function FaucetCard({
+function GeneralCard({
   card,
   openCard,
   setOpenCard,
@@ -161,24 +167,36 @@ function FaucetCard({
       viewport={{ once: true }}
       onClick={() => setOpenCard(isOpen ? null : card.id)}
       className={`
-        text-left flex flex-col justify-center space-y-4 group relative p-6 rounded-lg
+        relative text-left flex flex-col justify-center space-y-4 group p-6 rounded-lg
         transition-all duration-300 cursor-pointer
         ${isOpen ? "bg-transparent ring-1 ring-[#2563EB]" : "bg-[#2563EB] text-white"}
         md:bg-[#2563EB] md:text-white md:hover:bg-transparent md:hover:ring-1 md:hover:ring-[#2563EB]
       `}
     >
+      {/* MOBILE: Press indicator icon */}
+      <div className={`
+        flex items-center gap-2 absolute top-4 right-4 text-white opacity-100 md:hidden transition-all duration-300 
+        ${isOpen ? "opacity-0" : "opacity-100"}
+      `}>
+
+      <span className="md:hidden">Tap to open</span>
+      <FingerprintPattern className="h-5 w-5" />
+      </div>
+
       <h3 className="text-3xl font-semibold">{card.title}</h3>
 
+      {/* Description */}
       <p
         className={`
-        text-lg leading-relaxed transition-all duration-300
-        ${isOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}
-        md:opacity-0 md:translate-y-3 md:group-hover:opacity-100 md:group-hover:translate-y-0
-      `}
+          text-lg leading-relaxed transition-all duration-300
+          ${isOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}
+          md:opacity-0 md:translate-y-3 md:group-hover:opacity-100 md:group-hover:translate-y-0
+        `}
       >
         {card.desc}
       </p>
 
+      {/* Button */}
       <Button
         onClick={(e) => e.stopPropagation()}
         className={`
@@ -207,38 +225,5 @@ function ImgBox({ src }: { src: string }) {
       className="order-2 md:order-1 flex items-center justify-center ring-1 ring-[#2563EB] rounded-lg bg-cover bg-center"
       style={{ backgroundImage: `url('/${src}')`, minHeight: "260px" }}
     />
-  );
-}
-
-/* -------------------------- HOVER-REVEAL CARD -------------------------- */
-
-function HoverRevealCard({
-  title,
-  desc,
-}: {
-  title: string;
-  desc: string;
-}) {
-  return (
-    <motion.div
-      whileHover={{ scale: 1.05, y: -6 }}
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      viewport={{ once: true }}
-      className="order-1 md:order-2 text-left flex flex-col justify-center space-y-4 group relative p-6
-        bg-[#2563EB] text-white rounded-lg transition-all duration-300
-        hover:bg-transparent hover:ring-1 hover:ring-[#2563EB] hover:scale-[1.03] cursor-pointer"
-    >
-      <h3 className="text-3xl font-semibold">{title}</h3>
-
-      <p className="text-lg leading-relaxed opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300">
-        {desc}
-      </p>
-
-      <Button className="flex items-center justify-end w-fit gap-2 text-sm font-medium opacity-0 group-hover:opacity-100 translate-y-3 group-hover:translate-y-0 transition-all duration-300 mt-4 bg-[#2563EB] py-3 px-5 rounded">
-        Learn more <ExternalLink className="h-4 w-4" />
-      </Button>
-    </motion.div>
   );
 }

@@ -192,6 +192,7 @@ interface MediaProps {
   viewport: Viewport;
   bend: number;
   textColor: string;
+  backgroundColor: string;
   borderRadius?: number;
   font?: string;
 }
@@ -210,6 +211,7 @@ class Media {
   viewport: Viewport;
   bend: number;
   textColor: string;
+  backgroundColor: string;
   borderRadius: number;
   font?: string;
   program!: Program;
@@ -237,6 +239,7 @@ class Media {
     this.viewport = props.viewport;
     this.bend = props.bend;
     this.textColor = props.textColor;
+    this.backgroundColor = props.backgroundColor;
     this.borderRadius = props.borderRadius ?? 0;
     this.font = props.font;
     this.createShader();
@@ -410,6 +413,7 @@ interface AppConfig {
   items?: { image: string; text: string }[];
   bend?: number;
   textColor?: string;
+  backgroundColor?: string;
   borderRadius?: number;
   font?: string;
   scrollSpeed?: number;
@@ -436,6 +440,7 @@ class App {
   private running = false;
   private bend: number;
   private textColor: string;
+  private backgroundColor: string;
   private borderRadius: number;
   private font: string;
 
@@ -454,7 +459,8 @@ class App {
       bend = 3,
       textColor = "#fff",
       borderRadius = 0,
-      font = "bold 24px Figtree", // Reduced from 30px
+      backgroundColor = "#fff", // white color
+      font = "bold 30px Inter", // Reduced from 30px
       scrollSpeed = 2,
       scrollEase = 0.05,
       autoScrollSpeed = 0.02,
@@ -466,6 +472,7 @@ class App {
     this.autoScrollSpeed = autoScrollSpeed;
     this.bend = bend;
     this.textColor = textColor;
+    this.backgroundColor = backgroundColor;
     this.borderRadius = borderRadius;
     this.font = font;
     this.scroll = { ease: scrollEase, current: 0, target: 0, last: 0 };
@@ -533,12 +540,14 @@ class App {
 
   createMedias(items?: { image: string; text: string }[]) {
     const defaultItems = [      
-      { image: "/coin.png", text: "Tokenization"},
-      { image: "/contract.png", text: "Intelligent Contract"},
-      { image: "/crypto.png", text: "Crypto Engagement"},
-      { image: "/reward.png", text: "Reward Distribution"},
+      // { image: "/coin.png", text: "Tokenization"},
+      // { image: "/contract.png", text: "Intelligent Contract"},
+      // { image: "/crypto.png", text: "Crypto Engagement"},
+      // { image: "/reward.png", text: "Reward Distribution"},
 
-
+      { image: "/community.png", text: "Engage your community"},
+      { image: "/distribution.png", text: "Automate your distribution"},
+      { image: "/rewards.png", text: "Reward your users online"}
     ];
     const galleryItems = items && items.length ? items : defaultItems;
     this.mediasImages = galleryItems.concat(galleryItems);
@@ -555,6 +564,7 @@ class App {
       viewport: this.viewport!,
       bend: this.bend,
       textColor: this.textColor,
+      backgroundColor: this.backgroundColor,
       borderRadius: this.borderRadius,
       font: this.font
     }));

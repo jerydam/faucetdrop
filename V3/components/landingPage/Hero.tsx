@@ -71,7 +71,13 @@ const HeroSection: React.FC = () => {
   // const router = useRouter();
 
   const handleLaunchApp = () => {
-    window.open('https://app.faucetdrops.io/', '_blank', 'noopener,noreferrer');
+    if (navigator.userAgent.includes("MetaMask") || navigator.userAgent.includes("Trust")) {
+      window.location.href = "https://app.faucetdrops.io/";
+    } else {
+      window.open("https://app.faucetdrops.io/", "_blank", "noopener,noreferrer");
+    }
+    
+    // window.open('https://app.faucetdrops.io/', '_blank', 'noopener,noreferrer');
   };
 
   return (

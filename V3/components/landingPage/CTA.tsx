@@ -24,6 +24,14 @@ export default function CTA() {
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
+  const handleLaunch = () => {
+    if (navigator.userAgent.includes("MetaMask") || navigator.userAgent.includes("Trust")) {
+      window.location.href = "https://app.faucetdrops.io/";
+    } else {
+      window.open("https://app.faucetdrops.io/", "_blank", "noopener,noreferrer");
+    }    
+  }
+
   return (
     <section className="py-20">
       {/* Banner */}
@@ -49,9 +57,9 @@ export default function CTA() {
       <ScrollReveal direction="up" delay={400}>
         <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
           <MagneticButton
-            onClick={() => router.push('/coming-soon')}
+            onClick={handleLaunch}
             className="bg-linear-to-r from-[#0052FF] to-[#2563EB] hover:from-[#2563EB] hover:to-[#0052FF] text-black font-bold px-8 py-4 rounded-full cursor-pointer transition-all shadow-lg shadow-[#94A3B8]/20 hover:shadow-xl hover:shadow-[#94A3B8]/30"
-          >
+            >
             Launch App
           </MagneticButton>
           <MagneticButton

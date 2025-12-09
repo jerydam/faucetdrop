@@ -37,10 +37,10 @@ export default function OfferTabs() {
                 Quizzes
               </TabsTrigger>
               <TabsTrigger
-                value="enterprice"
+                value="enterprise"
                 className="rounded-full px-10 py-2.5 text-lg text-gray-300 data-[state=active]:bg-[#2563EB]/10 data-[state=active]:text-white data-[state=active]:ring-1 data-[state=active]:ring-[#0052FF] transition-all"
               >
-                Enterprice
+                Enterprise
               </TabsTrigger>
             </div>
           </TabsList>
@@ -246,7 +246,7 @@ export default function OfferTabs() {
             </div>
           </TabsContent>
 
-          <TabsContent value="enterprice" className="text-gray-300 mt-5">
+          <TabsContent value="enterprise" className="text-gray-300 mt-5">
             <div className="text-center text-sm opacity-60">
               <Card className="bg-transparent text-white border-0">
                 <CardHeader>

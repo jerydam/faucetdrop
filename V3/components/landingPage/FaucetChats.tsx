@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import AnimateOnScroll from '../common/AnimateOnScroll';
 
 const messages = [
   {
@@ -169,6 +170,7 @@ export default function FaucetChat() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 mb-10 text-lg">
       <div className="w-full max-w-4xl">
+        <AnimateOnScroll type="fadeIn" delay={100}>
         <motion.div 
           className="rounded-3xl border border-white/10 shadow-2xl p-6 sm:p-8 space-y-6 bg-linear-to-br from-white/5 to-transparent backdrop-blur-sm"
           initial={{ opacity: 0, y: 20 }}
@@ -204,6 +206,7 @@ export default function FaucetChat() {
             )}
           </div>
         </motion.div>
+        </AnimateOnScroll>
       </div>
     </div>
   );

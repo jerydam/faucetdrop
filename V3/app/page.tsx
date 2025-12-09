@@ -13,13 +13,13 @@ export default function Home() {
       <div className="container">
         <HeroSection />
         <Networks />
-        <FaucetChats />
-        <h1 className="text-3xl md:text-4xl font-bold leading-tight tracking-[-0.015em] px-4 py-5 text-center text-white">The Flow Start Here</h1>
+        <h1 className="text-3xl md:text-4xl font-bold leading-tight tracking-[-0.015em] px-4 py-5 text-center text-white">The Flow Starts Here</h1>
         <OfferTabs />
         <FaucetFlow />
         <ProtocolsStats />
         <GraphChart />
         <CTA />
+        <FaucetChats />
       </div>
     </div>
   );

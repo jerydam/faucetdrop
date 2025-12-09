@@ -144,7 +144,7 @@ const FaucetFlow = () => {
                     viewport={{ once: true }}
                     className="flex gap-4 md:gap-12 items-center justify-center mb-4 md:mb-0"
                 >
-                    <h1 className="flex items-center justify-center gap-1 text-3xl md:text-5xl text-white font-extrabold">Get Started</h1>
+                    <h1 className="flex items-center justify-center gap-1 text-3xl md:text-5xl text-white font-extrabold">Getting Started</h1>
                 </motion.div>
 
                 <div className="overflow-x-auto">

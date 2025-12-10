@@ -5,5 +5,5 @@
   "splashImageUrl": "https://app.faucetdrops.io/splash.png",
   "splashBackgroundColor": "#020817",
   "homeUrl": "https://app.faucetdrops.io",
-  "requiredChains": [42220, 8453] 
+  "requiredChains": [42220] 
 }

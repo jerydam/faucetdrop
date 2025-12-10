@@ -5,6 +5,7 @@ import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { arbitrum, mainnet, base, celo, type AppKitNetwork } from '@reown/appkit/networks'
 import { QueryClient } from '@tanstack/react-query'
+import { farcasterMiniApp as miniAppConnector } from '@farcaster/miniapp-wagmi-connector'
 
 // Your WalletConnect project ID from https://cloud.walletconnect.com
 export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '83d474a1874af18893a31155e04adad0'
@@ -35,11 +36,13 @@ export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   lisk
 ]
 
-// Set up the Wagmi Adapter
+// Set up the Wagmi Adapter with Farcaster MiniApp connector
 export const wagmiAdapter = new WagmiAdapter({
   networks,
   projectId,
-  ssr: true
+  ssr: true,
+  // Add Farcaster MiniApp connector
+  connectors: [miniAppConnector()]
 })
 
 // Set up metadata

@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useAppKit } from '@reown/appkit/react'
+import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
 import { Button } from "@/components/ui/button"
+import { useWallet } from "./wallet-provider"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,15 +23,18 @@ import {
   ExternalLink
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useWallet } from "@/components/wallet-provider" // Make sure this path is correct
 
-export function WalletConnectButton({ className }: { className?: string }) {
+interface WalletConnectButtonProps {
+  className?: string
+}
+
+export function WalletConnectButton({ className }: WalletConnectButtonProps) {
   const { open } = useAppKit()
+  const { address, isConnected } = useAppKitAccount()
+  const { isFarcaster } = useWallet()
   const { toast } = useToast()
   
-  // Get state from our custom provider
-  const { address, isConnected, isFarcaster } = useWallet() 
-  
+  // Format address for display (e.g., 0x12...3456)
   const formatAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
@@ -45,27 +49,72 @@ export function WalletConnectButton({ className }: { className?: string }) {
     }
   }
 
-  // --- 1. FARCASTER MODE ---
-  // If in Farcaster, we HIDE the connect button completely.
-  // We only display the connected wallet address as a static badge.
+  // FARCASTER MINIAPP: Show simplified UI
   if (isFarcaster) {
-     if (address) {
-       return (
-         <div className={`flex items-center gap-2 px-3 py-2 bg-secondary/30 rounded-full border border-border/50 ${className}`}>
-            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="font-mono text-xs font-medium text-foreground/80">
+    if (!isConnected || !address) {
+      return (
+        <Button 
+          onClick={() => open()}
+          size="sm"
+          variant="outline"
+          className="flex items-center gap-2 border-purple-500/30 hover:bg-purple-500/10"
+        >
+          <Wallet className="h-4 w-4" />
+          Connect
+        </Button>
+      )
+    }
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="flex items-center gap-2 border-purple-500/30 hover:bg-purple-500/10"
+          >
+            <div className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+            <span className="font-mono text-xs sm:text-sm">
               {formatAddress(address)}
             </span>
-         </div>
-       );
-     }
-     // If loading or not connected yet in Farcaster, return nothing (clean UI)
-     return null;
+            <ChevronDown className="h-3 w-3 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-purple-500/10 text-purple-600 rounded text-[10px] font-semibold">
+              FARCASTER
+            </span>
+            <span>Wallet</span>
+          </DropdownMenuLabel>
+          
+          <DropdownMenuGroup>
+            <DropdownMenuItem asChild>
+              <Link href="/faucet/dashboard" className="cursor-pointer flex items-center gap-2">
+                <LayoutDashboard className="h-4 w-4" />
+                <span>Dashboard</span>
+              </Link>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem onClick={handleCopyAddress} className="cursor-pointer flex items-center gap-2">
+              <Copy className="h-4 w-4" />
+              <span>Copy Address</span>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem asChild>
+              <Link href="/verify" className="cursor-pointer flex items-center gap-2">
+                <User2 className="h-4 w-4" />
+                <span>Verify</span>
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
   }
 
-  // --- 2. STANDARD WEB MODE ---
-  // (Your existing AppKit Logic)
-  
+  // STANDARD WEB: Show full UI with disconnect option
   if (!isConnected || !address) {
     return (
       <Button 
@@ -112,7 +161,8 @@ export function WalletConnectButton({ className }: { className?: string }) {
             <Copy className="h-4 w-4" />
             <span>Copy Address</span>
           </DropdownMenuItem>
-           <DropdownMenuItem asChild>
+
+          <DropdownMenuItem asChild>
             <Link href="/verify" className="cursor-pointer flex items-center gap-2">
               <User2 className="h-4 w-4" />
               <span>Verify</span>

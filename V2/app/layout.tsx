@@ -8,25 +8,25 @@ const inter = Inter({ subsets: ["latin"] })
 
 // Define the MiniApp metadata for the head tag
 // This tells Farcaster clients how to launch your frame
-const appUrl = process.env.NEXT_PUBLIC_URL || "https://faucetdrops.com";
+const appUrl = process.env.NEXT_PUBLIC_URL || "https://app.faucetdrops.io";
 
 const frameMetadata = JSON.stringify({
   version: "next",
   imageUrl: `${appUrl}/opengraph-image.png`, // Make sure this image exists
   button: {
-    title: "Launch FaucetDrops",
+    title: "Drip Token💧",
     action: {
       type: "launch_frame",
       name: "FaucetDrops",
       url: appUrl,
       splashImageUrl: `${appUrl}/splash.png`,
-      splashBackgroundColor: "#3b82f6",
+      splashBackgroundColor: "#0208176",
     },
   },
 });
 
 export const metadata: Metadata = {
-  title: "FaucetDrops | Free, Fast, Fair & Frictionless",
+  title: "FaucetDrops ",
   description: "Token Drops Made Easy 💧",
   icons: {
     icon: "/favicon.png",

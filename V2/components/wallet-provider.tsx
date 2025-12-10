@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { BrowserProvider, type JsonRpcSigner } from "ethers"
 import { useDisconnect, useSwitchChain, useAccount, useChainId, useConnect } from 'wagmi'
 import { useToast } from "@/hooks/use-toast"
+import sdk from "@farcaster/miniapp-sdk"
 
 interface WalletContextType {
   provider: BrowserProvider | null
@@ -43,7 +44,89 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   
   const { address, isConnected: wagmiConnected, isConnecting } = useAccount()
   const chainId = useChainId()
+  const [isFarcaster, setIsFarcaster] = useState(false);
 
+  useEffect(() => {
+    // Check if running in Farcaster frame
+    if (typeof window !== 'undefined') {
+       // Simple check provided by SDK
+       try {
+         sdk.actions.ready(); // Safe to call multiple times, ensures SDK is loaded
+         // There isn't a direct "isInMiniApp" boolean property, 
+         // but checking if sdk.wallet exists is a good proxy.
+         if (sdk.wallet) setIsFarcaster(true);
+       } catch (e) {
+         // Not in Farcaster
+       }
+    }
+  }, []);
+  
+  useEffect(() => {
+    const updateProviderAndSigner = async () => {
+      // LOGIC BRANCH: Farcaster vs Standard Web
+      
+      // 1. FARCASTER ENVIRONMENT
+      if (isFarcaster) {
+        try {
+          console.log('[WalletProvider] Detected Farcaster Environment');
+          const farcasterProvider = sdk.wallet.getEthereumProvider();
+          
+          // Wrap the Farcaster provider with Ethers
+          const ethersProvider = new BrowserProvider(farcasterProvider as any);
+          const ethersSigner = await ethersProvider.getSigner();
+
+          setProvider(ethersProvider);
+          setSigner(ethersSigner);
+          setIsReady(true);
+          
+          // In Farcaster, we are "always" connected via their wallet
+          return; 
+        } catch (error) {
+          console.error('[WalletProvider] Farcaster connection error', error);
+        }
+      }
+
+      // 2. STANDARD WEB ENVIRONMENT (Your existing logic)
+      if (wagmiConnected && address && typeof window !== 'undefined' && window.ethereum) {
+        try {
+          const ethersProvider = new BrowserProvider(window.ethereum);
+          const ethersSigner = await ethersProvider.getSigner();
+          
+          setProvider(ethersProvider);
+          setSigner(ethersSigner);
+          setIsReady(true);
+        } catch (error) {
+          setProvider(null);
+          setSigner(null);
+          setIsReady(false);
+        }
+      } else {
+        setProvider(null);
+        setSigner(null);
+        setIsReady(false);
+      }
+    }
+
+    updateProviderAndSigner();
+  }, [wagmiConnected, address, chainId, isFarcaster]);
+
+  // OVERRIDE: connect()
+  // If in Farcaster, connect is handled automatically, but we can trigger it explicitly if needed
+  const connect = async () => {
+    if (isFarcaster) {
+        // Farcaster handles connection, usually we just need to request accounts
+        const provider = sdk.wallet.getEthereumProvider();
+        await provider.request({ method: 'eth_requestAccounts' });
+        return;
+    }
+    
+    // Standard Wagmi connect
+    try {
+      await connectAsync();
+    } catch (error: any) {
+      toast({ title: "Connection failed", description: error.message, variant: "destructive" });
+    }
+  }
   // Stable connection state: only true when we have address AND provider/signer ready
   const isConnected = wagmiConnected && !!address && !!provider && !!signer
 
@@ -96,19 +179,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     })
   }, [isConnected, isConnecting, wagmiConnected, address, chainId, provider, signer, isReady])
 
-  const connect = async () => {
-    try {
-      console.log('Opening wallet connection modal...')
-      await connectAsync()
-    } catch (error: any) {
-      console.error("Error connecting wallet:", error)
-      toast({
-        title: "Connection failed",
-        description: error.message || "Failed to connect wallet",
-        variant: "destructive",
-      })
-    }
-  }
+ 
 
   const disconnect = () => {
     try {

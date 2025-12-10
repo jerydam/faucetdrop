@@ -1513,7 +1513,22 @@ export async function getFaucetDetails(
     };
   }
 }
+export const getUserFaucets = async (userAddress: string) => {
+  try {
+    const response = await fetch(`https://fauctdrop-backend.onrender.com/user-faucets/${userAddress}`);
+    
+    if (!response.ok) {
+        if(response.status === 404) return []; 
+        throw new Error("Failed to fetch user faucets");
+    }
 
+    const data = await response.json();
+    return data.faucets || []; 
+  } catch (error) {
+    console.error("Error fetching user faucets:", error);
+    return [];
+  }
+};
 // New helper function to fetch the blacklist
 async function getDeletedFaucets(chainId: number): Promise<Set<string>> {
     try {
@@ -2845,21 +2860,7 @@ export async function deleteFaucet(
 }
 
 
-async function fetchDeletedFaucetsList(): Promise<string[]> {
-    try {
-        const response = await fetch("https://fauctdrop-backend.onrender.com/deleted-faucets");
-        const result: DeletedFaucetResponse = await response.json();
-        
-        if (result.success) {
-            // Convert to a Set for faster lookup/filtering
-            return result.deletedAddresses;
-        }
-        return [];
-    } catch (error) {
-        console.error("Failed to fetch deleted faucet list:", error);
-        return [];
-    }
-}
+
 export async function addAdmin(
   provider: BrowserProvider,
   faucetAddress: string,

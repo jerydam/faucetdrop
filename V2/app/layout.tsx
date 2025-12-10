@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { useEffect } from "react" // Import useEffect
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -10,7 +11,8 @@ import { WalletProvider } from "@/components/wallet-provider"
 import { Footer } from "@/components/footer"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider } from 'wagmi'
-import { wagmiAdapter, queryClient, projectId } from '@/config/appkit'
+import { wagmiAdapter, queryClient } from '@/config/appkit'
+import sdk from "@farcaster/miniapp-sdk" // 1. Import Farcaster SDK
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -19,6 +21,24 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  
+  // 2. Initialize Farcaster SDK on mount
+  useEffect(() => {
+    const init = async () => {
+      try {
+        // This tells Farcaster the app is ready to render.
+        // If you don't call this, the user sees a permanent loading spinner.
+        // We add a small delay to ensure React has painted the initial state.
+        setTimeout(() => {
+          sdk.actions.ready();
+        }, 300);
+      } catch (error) {
+        console.warn("Failed to initialize Farcaster SDK", error);
+      }
+    };
+    init();
+  }, []);
+
   return (
     <html lang="en">
       <head>

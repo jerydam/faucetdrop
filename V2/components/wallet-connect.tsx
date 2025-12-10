@@ -22,17 +22,13 @@ import {
   ExternalLink
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useWallet } from "@/components/wallet-provider" // Import your custom hook
+import { useWallet } from "@/components/wallet-provider" // Make sure this path is correct
 
-interface WalletConnectButtonProps {
-  className?: string
-}
-
-export function WalletConnectButton({ className }: WalletConnectButtonProps) {
+export function WalletConnectButton({ className }: { className?: string }) {
   const { open } = useAppKit()
   const { toast } = useToast()
   
-  // Use your unified context
+  // Get state from our custom provider
   const { address, isConnected, isFarcaster } = useWallet() 
   
   const formatAddress = (addr: string) => {
@@ -49,16 +45,27 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
     }
   }
 
-  // 1. FARCASTER STATE
-  if (isFarcaster && address) {
-     return (
-        <Button variant="ghost" className="font-mono text-xs cursor-default hover:bg-transparent">
-           Farcaster: {formatAddress(address)}
-        </Button>
-     );
+  // --- 1. FARCASTER MODE ---
+  // If in Farcaster, we HIDE the connect button completely.
+  // We only display the connected wallet address as a static badge.
+  if (isFarcaster) {
+     if (address) {
+       return (
+         <div className={`flex items-center gap-2 px-3 py-2 bg-secondary/30 rounded-full border border-border/50 ${className}`}>
+            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="font-mono text-xs font-medium text-foreground/80">
+              {formatAddress(address)}
+            </span>
+         </div>
+       );
+     }
+     // If loading or not connected yet in Farcaster, return nothing (clean UI)
+     return null;
   }
 
-  // 2. DISCONNECTED STATE
+  // --- 2. STANDARD WEB MODE ---
+  // (Your existing AppKit Logic)
+  
   if (!isConnected || !address) {
     return (
       <Button 
@@ -72,7 +79,6 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
     )
   }
 
-  // 3. CONNECTED STATE (Standard Web)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -88,8 +94,8 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
           <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      {/* ... Rest of your DropdownMenuContent stays exactly the same ... */}
-       <DropdownMenuContent align="end" className="w-56">
+
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           My Account
         </DropdownMenuLabel>

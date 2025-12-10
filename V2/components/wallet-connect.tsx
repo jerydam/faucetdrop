@@ -1,10 +1,8 @@
-// File: components/wallet-connect.tsx
 "use client"
 
 import Link from "next/link"
-import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
+import { useAppKit } from '@reown/appkit/react'
 import { Button } from "@/components/ui/button"
-import sdk from "@farcaster/miniapp-sdk";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +21,8 @@ import {
   ChevronDown,
   ExternalLink
 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast" // Adjust path to your toast hook
+import { useToast } from "@/hooks/use-toast"
+import { useWallet } from "@/components/wallet-provider" // Import your custom hook
 
 interface WalletConnectButtonProps {
   className?: string
@@ -31,11 +30,11 @@ interface WalletConnectButtonProps {
 
 export function WalletConnectButton({ className }: WalletConnectButtonProps) {
   const { open } = useAppKit()
-  
-  const { address, isConnected } = useAppKitAccount()
   const { toast } = useToast()
   
-  // Format address for display (e.g., 0x12...3456)
+  // Use your unified context
+  const { address, isConnected, isFarcaster } = useWallet() 
+  
   const formatAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
@@ -49,18 +48,17 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
       })
     }
   }
-const isMiniApp = typeof window !== 'undefined' && !!sdk.wallet;
 
-  // If in MiniApp, you might want to show just the address or a different UI
-  // because "Connect Wallet" is redundant.
-  if (isMiniApp && address) {
+  // 1. FARCASTER STATE
+  if (isFarcaster && address) {
      return (
-        <Button variant="ghost" className="font-mono text-xs">
-           Farcaster Connected: {formatAddress(address)}
+        <Button variant="ghost" className="font-mono text-xs cursor-default hover:bg-transparent">
+           Farcaster: {formatAddress(address)}
         </Button>
      );
   }
-  // 1. DISCONNECTED STATE: Show standard Connect Button
+
+  // 2. DISCONNECTED STATE
   if (!isConnected || !address) {
     return (
       <Button 
@@ -74,7 +72,7 @@ const isMiniApp = typeof window !== 'undefined' && !!sdk.wallet;
     )
   }
 
-  // 2. CONNECTED STATE: Show Dropdown with Dashboard
+  // 3. CONNECTED STATE (Standard Web)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -90,14 +88,13 @@ const isMiniApp = typeof window !== 'undefined' && !!sdk.wallet;
           <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-
-      <DropdownMenuContent align="end" className="w-56">
+      {/* ... Rest of your DropdownMenuContent stays exactly the same ... */}
+       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           My Account
         </DropdownMenuLabel>
         
         <DropdownMenuGroup>
-          {/* Dashboard Link */}
           <DropdownMenuItem asChild>
             <Link href="/faucet/dashboard" className="cursor-pointer flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
@@ -105,7 +102,6 @@ const isMiniApp = typeof window !== 'undefined' && !!sdk.wallet;
             </Link>
           </DropdownMenuItem>
 
-          {/* Copy Address */}
           <DropdownMenuItem onClick={handleCopyAddress} className="cursor-pointer flex items-center gap-2">
             <Copy className="h-4 w-4" />
             <span>Copy Address</span>
@@ -121,13 +117,11 @@ const isMiniApp = typeof window !== 'undefined' && !!sdk.wallet;
         <DropdownMenuSeparator />
 
         <DropdownMenuGroup>
-          {/* Open Reown Modal (for network switching/disconnecting) */}
           <DropdownMenuItem onClick={() => open()} className="cursor-pointer flex items-center gap-2">
             <ExternalLink className="h-4 w-4" />
             <span>Wallet Settings</span>
           </DropdownMenuItem>
           
-          {/* Direct Disconnect (optional, usually handled inside open() modal but you can try forcing it if the library exposes a disconnect function) */}
           <DropdownMenuItem 
             onClick={() => open({ view: 'Account' })} 
             className="cursor-pointer flex items-center gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"

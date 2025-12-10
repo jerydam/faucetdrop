@@ -1,4 +1,5 @@
 "use client"
+
 import type React from "react"
 import { useEffect, useState } from "react"
 import { Inter } from "next/font/google"
@@ -8,12 +9,13 @@ import { Toaster } from "@/components/ui/toaster"
 import { NetworkProvider } from "@/hooks/use-network"
 import { WalletProvider } from "@/components/wallet-provider"
 import { Footer } from "@/components/footer"
-import { QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider } from 'wagmi'
-import { wagmiConfig, queryClient } from '@/config/appkit'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import sdk from "@farcaster/miniapp-sdk"
 
 const inter = Inter({ subsets: ["latin"] })
+
+// Create a new QueryClient instance locally
+const queryClient = new QueryClient()
 
 export default function RootLayout({
   children,
@@ -65,21 +67,20 @@ export default function RootLayout({
           enableSystem 
           disableTransitionOnChange
         >
-          <WagmiProvider config={wagmiConfig}>
-            <QueryClientProvider client={queryClient}>
-              <NetworkProvider>
-                <WalletProvider>
-                  <div className="min-h-screen flex flex-col">
-                    <main className="flex-1">
-                      {children}
-                    </main>
-                    <Footer />
-                  </div>
-                  <Toaster />
-                </WalletProvider>
-              </NetworkProvider>
-            </QueryClientProvider>
-          </WagmiProvider>
+          {/* Removed WagmiProvider wrapper */}
+          <QueryClientProvider client={queryClient}>
+            <NetworkProvider>
+              <WalletProvider>
+                <div className="min-h-screen flex flex-col">
+                  <main className="flex-1">
+                    {children}
+                  </main>
+                  <Footer />
+                </div>
+                <Toaster />
+              </WalletProvider>
+            </NetworkProvider>
+          </QueryClientProvider>
         </ThemeProvider>
       </body>
     </html>

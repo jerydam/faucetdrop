@@ -10,7 +10,7 @@ export default function OfferTabs() {
   const [openCard, setOpenCard] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen w-full flex justify-center items-center">
+    <div className="w-full flex justify-center items-center">
       <div className="w-full max-w-4xl flex flex-col gap-10">
         <Tabs defaultValue="faucets" className="w-full">
           <TabsList className="w-full flex justify-center bg-transparent p-0">

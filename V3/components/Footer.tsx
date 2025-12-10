@@ -91,7 +91,7 @@ const Footer = () => {
               />
             </div>
             <p className={`mb-6 text-[#94A3B8]`}>
-            Free, Fast, Fair & Frictionless Token Distribution 💧.
+            Free, Fast, Fair & Frictionless Token Distribution 💧
             </p>
 
             {/* Social links */}

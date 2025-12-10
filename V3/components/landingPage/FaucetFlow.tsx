@@ -114,7 +114,7 @@ const FaucetFlow = () => {
   const svgHeight = 700;
 
   return (
-    <div className="w-full min-h-screen p-4 md:p-8 flex flex-col items-center">
+    <div className="w-full mt-30 p-4 md:p-8 flex flex-col items-center">
       <div className="w-full max-w-6xl">
         <motion.div
           initial={{ opacity: 0, y: -10 }}

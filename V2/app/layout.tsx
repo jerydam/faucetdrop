@@ -12,7 +12,7 @@ const appUrl = process.env.NEXT_PUBLIC_URL || "https://app.faucetdrops.io";
 
 const frameMetadata = JSON.stringify({
   version: "next",
-  imageUrl: `${appUrl}/opengraph-image.png`, // Make sure this image exists
+  imageUrl: `${appUrl}/logo.png`, // Make sure this image exists
   button: {
     title: "Drip Token💧",
     action: {

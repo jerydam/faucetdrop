@@ -12,15 +12,15 @@ const appUrl = process.env.NEXT_PUBLIC_URL || "https://app.faucetdrops.io";
 
 const frameMetadata = JSON.stringify({
   version: "next",
-  imageUrl: `${appUrl}/logo.png`, // Make sure this image exists
+  imageUrl: `${appUrl}/opengraph-image.png`, // Make sure this image exists
   button: {
-    title: "Drip Token💧",
+    title: "Drip Tokens 💧",
     action: {
       type: "launch_frame",
       name: "FaucetDrops",
       url: appUrl,
       splashImageUrl: `${appUrl}/splash.png`,
-      splashBackgroundColor: "#0208176",
+      splashBackgroundColor: "#020817",
     },
   },
 });

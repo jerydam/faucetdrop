@@ -18,29 +18,26 @@ const Header = () => {
   const navLinks = [
     {
       name: 'Product',
-      // href: '/coming-soon',
       dropdown: [
-        { name: 'Faucets', href: '/faucets', icon: <Droplets />, description: 'Test test test tets tes' },
-        { name: 'Quests', href: '/quests', icon: <PackageCheck />, description: 'Test test test tets tes' },
-        { name: 'Quizzes', href: '/quizzes', icon: <GraduationCap />, description: 'Test test test tets tes' },
-        { name: 'Enterprise', href: '/enterprise', icon: <Landmark />, description: 'Test test test tets tes' },
+        { name: 'Faucets', href: '/product/faucets', icon: <Droplets />, description: 'Smarter, Flexibility, Onchain Distribution' },
+        { name: 'Quests', href: '/product/quests', icon: <PackageCheck />, description: 'Gamified Progress + Automated Rewards' },
+        { name: 'Quizzes', href: '/product/quizzes', icon: <GraduationCap />, description: 'Fun, Interactive, AI-Powered Web3 Quiz Engine' },
+        { name: 'Enterprise', href: '/product/enterprise', icon: <Landmark />, description: 'White Label Solutions' },
       ]
     },
     {
       name: 'Developers',
-      // href: '/coming-soon',
       dropdown: [
-        { name: 'Documentation', href: '/docs', icon: <FileMinus />, description: 'A comprehensive guide for seamless integration' },
-        { name: 'GitHub', href: '/github', icon: <Github />, description: 'Explore our open-source projects' },
+        { name: 'Documentation', href: '/developers/docs', icon: <FileMinus />, description: 'A comprehensive guide for seamless integration' },
+        { name: 'GitHub', href: 'https://github.com/Priveedores-de-soluciones/Faucet_drops', icon: <Github />, description: 'Explore our open-source projects' },
       ]
     },
     {
       name: 'Company',
-      // href: '/coming-soon',
       dropdown: [
-        { name: 'About', href: '/about', icon: <Info />, description: 'Test test test tets tes' },
-        { name: 'Career', href: '/career', icon: <Briefcase />, description: 'Test test test tets tes' },
-        { name: 'Brand kit', href: '/brand', icon: <PaintRoller />, description: 'Test test test tets tes' },
+        { name: 'About', href: '/company/about', icon: <Info />, description: 'Learn more about our company' },
+        { name: 'Career', href: '/company/career', icon: <Briefcase />, description: 'Explore career opportunities' },
+        { name: 'Brand kit', href: '/company/brand', icon: <PaintRoller />, description: 'Download our brand kit' },
       ]
     },
   ];

@@ -194,7 +194,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       throw error
     }
   }
-
+// Add to your WalletProvider component
+useEffect(() => {
+  const autoConnect = async () => {
+    if (isFarcaster && !isConnected) {
+      console.log('[WalletProvider] Auto-connecting to Farcaster wallet...')
+      try {
+        await connect()
+      } catch (error) {
+        console.error('[WalletProvider] Auto-connect failed:', error)
+      }
+    }
+  }
+  
+  // Add a small delay to ensure SDK is ready
+  const timer = setTimeout(autoConnect, 500)
+  return () => clearTimeout(timer)
+}, [isFarcaster, isConnected])
   const ensureCorrectNetwork = async (requiredChainId: number): Promise<boolean> => {
     console.log('Ensuring correct network:', { 
       current: chainId, 

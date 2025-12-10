@@ -179,7 +179,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     })
   }, [isConnected, isConnecting, wagmiConnected, address, chainId, provider, signer, isReady])
 
- 
+  const connect = async () => {
+    try {
+      console.log('Opening wallet connection modal...')
+      await connectAsync()
+    } catch (error: any) {
+      console.error("Error connecting wallet:", error)
+      toast({
+        title: "Connection failed",
+        description: error.message || "Failed to connect wallet",
+        variant: "destructive",
+      })
+    }
+  }
 
   const disconnect = () => {
     try {

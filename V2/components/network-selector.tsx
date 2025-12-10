@@ -1,9 +1,9 @@
-// File: components/network-selector.tsx (NetworkSelector with Direct Switching)
 "use client"
 
 import { useNetwork, type Network } from "@/hooks/use-network"
-import { useAppKit, useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
-import { useSwitchChain, useAccount } from 'wagmi'
+import { useAppKit } from '@reown/appkit/react'
+import { useSwitchChain } from 'wagmi'
+import { useWallet } from "./wallet-provider" // <--- Import unified hook
 
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -99,35 +99,26 @@ export function NetworkSelector({
   showLogos = true,
   className = ""
 }: NetworkSelectorProps) {
-  const { networks, isConnecting } = useNetwork() 
-  const { chainId } = useAppKitNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
+  // HOOKS
+  const { networks, isConnecting: isNetworkLoading } = useNetwork() 
+  
+  // Use unified wallet context instead of raw AppKit hooks
+  const { chainId, isConnected, address, isFarcaster, connect } = useWallet()
+  
+  // We still use Wagmi directly for switching as it handles the connector logic
   const { switchChain, isPending: isSwitching } = useSwitchChain()
+  
+  const { open } = useAppKit() // Only used for standard web modal
   const { toast } = useToast()
   
-  const isWalletAvailable = typeof window !== "undefined" && window.ethereum
   const hasWalletConnected = isConnected && !!address
   
+  // Find current network object based on the chainId from wallet
   const currentNetwork = networks.find((net) => net.chainId === chainId)
   
-  const formatNetworkDisplay = (net: Network | null, mode: 'name' | 'logo' | 'both' = displayMode): string => {
-    if (!net) return "Select Network"
-    
-    switch (mode) {
-      case 'logo':
-        return ''
-      case 'name':
-        return net.name
-      case 'both':
-      default:
-        return compact ? net.name : net.name
-    }
-  }
-
+  // Status Logic
   const getConnectionStatus = () => {
-    if (isConnecting) return 'connecting' 
-    if (!isWalletAvailable) return 'no-wallet'
+    if (isNetworkLoading) return 'connecting' 
     if (!hasWalletConnected) return 'disconnected'
     if (isSwitching) return 'switching'
     if (!chainId) return 'disconnected'
@@ -141,11 +132,9 @@ export function NetworkSelector({
   const displayText = () => {
     switch (connectionStatus) {
       case 'connecting': 
-        return "Connecting..."
+        return "Loading..."
       case 'switching':
         return "Switching..."
-      case 'no-wallet':
-        return "No Wallet Detected"
       case 'disconnected':
         return "Connect Wallet"
       case 'connected':
@@ -169,7 +158,6 @@ export function NetworkSelector({
         return { icon: Wifi, color: 'text-green-500' }
       case 'wrong-network':
         return { icon: AlertTriangle, color: 'text-orange-500' }
-      case 'no-wallet':
       case 'disconnected':
         return { icon: WifiOff, color: 'text-red-500' }
       case 'unknown-network':
@@ -181,25 +169,34 @@ export function NetworkSelector({
 
   const { icon: StatusIcon, color: statusColor } = getStatusIndicator()
 
-  // Direct network switching without modal
+  // Unified Network Switching
   const handleNetworkSelect = async (net: Network) => {
     console.log('Direct network switch to:', net.name, net.chainId)
     
-    // If not connected, open wallet modal first
+    // 1. Connect first if needed
     if (!hasWalletConnected) {
-      await open()
+      if (isFarcaster) {
+        // In Farcaster, we trigger the SDK connect (usually auto, but good fallback)
+        await connect()
+      } else {
+        // In Web, we open the AppKit modal
+        await open()
+      }
       return
     }
     
-    // Already on this network
+    // 2. Already on this network?
     if (chainId === net.chainId) {
       console.log('Already on', net.name)
       return
     }
     
-    // Switch directly using wagmi
+    // 3. Switch Network
     try {
+      // switchChain from Wagmi will automatically use the correct connector 
+      // (Farcaster MiniApp connector OR Standard WalletConnect/Injected)
       await switchChain({ chainId: net.chainId })
+      
       toast({
         title: "Network Switched",
         description: `Switched to ${net.name}`,
@@ -220,7 +217,7 @@ export function NetworkSelector({
         <Button 
           variant="outline" 
           className={`flex items-center gap-2 ${className}`}
-          disabled={!isWalletAvailable || isConnecting || isSwitching} 
+          disabled={isNetworkLoading || isSwitching} 
         >
           {showLogos && currentNetwork && connectionStatus === 'connected' ? (
             <NetworkImage network={currentNetwork} size={compact ? "xs" : "sm"} />
@@ -250,7 +247,6 @@ export function NetworkSelector({
                   {connectionStatus === 'switching' && "Switching Networks..."}
                   {connectionStatus === 'connecting' && "Connecting..."}
                   {connectionStatus === 'disconnected' && "Not Connected"}
-                  {connectionStatus === 'no-wallet' && "No Wallet Found"}
                   {connectionStatus === 'unknown-network' && "Unsupported Chain"}
                 </span>
               </div>
@@ -268,7 +264,7 @@ export function NetworkSelector({
               key={net.chainId}
               onClick={() => handleNetworkSelect(net)}
               className="flex items-center gap-3 cursor-pointer py-3"
-              disabled={!isWalletAvailable || isConnecting || isSwitching || !hasWalletConnected} 
+              disabled={isNetworkLoading || isSwitching} 
             >
               <NetworkImage network={net} size={compact ? "xs" : "sm"} />
               
@@ -321,6 +317,10 @@ export function NetworkSelector({
   )
 }
 
+// ... (Rest of your helper components: CompactNetworkSelector, LogoOnlyNetworkSelector, etc. 
+//      They will automatically inherit the logic from NetworkSelector so they don't strictly need changes 
+//      unless you want to apply the same hook updates to the standalone components below)
+
 export function CompactNetworkSelector({ className }: { className?: string }) {
   return (
     <NetworkSelector 
@@ -361,18 +361,19 @@ export function NetworkStatusSelector({ className }: { className?: string }) {
 
 export function MobileNetworkSelector({ className }: { className?: string }) {
   const { networks, network } = useNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
+  
+  // Update hooks here too if used independently
+  const { chainId, isConnected, address, isFarcaster, connect } = useWallet()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
+  const { open } = useAppKit()
   const { toast } = useToast()
   
   const hasWalletConnected = isConnected && !!address
   
   const handleNetworkSelect = async (net: Network) => {
-    console.log('Mobile network select:', net.name)
-    
     if (!hasWalletConnected) {
-      await open()
+      if(isFarcaster) await connect()
+      else await open()
       return
     }
     
@@ -445,11 +446,9 @@ export function NetworkBreadcrumb({ className }: { className?: string }) {
 
 export function NetworkStatusIndicator({ className }: { className?: string }) {
   const { network } = useNetwork()
-  const { chainId } = useAppKitNetwork()
-  const { isConnected } = useAppKitAccount()
+  // Update to useWallet
+  const { chainId, isConnected } = useWallet()
 
-  // const currentChainId = chainId
-  
   if (!isConnected || !network || !chainId) {
     return (
       <div className={`flex items-center space-x-2 text-red-600 ${className}`}>
@@ -535,16 +534,19 @@ export function NetworkGrid({ onNetworkSelect }: { onNetworkSelect?: (network: N
 
 export function HorizontalNetworkSelector({ className }: { className?: string }) {
   const { networks, network } = useNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
+  
+  // Update hooks here too if used independently
+  const { isConnected, address, isFarcaster, connect } = useWallet()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
+  const { open } = useAppKit()
   const { toast } = useToast()
   
   const hasWalletConnected = isConnected && !!address
   
   const handleNetworkSelect = async (net: Network) => {
     if (!hasWalletConnected) {
-      await open()
+      if(isFarcaster) await connect()
+      else await open()
       return
     }
     

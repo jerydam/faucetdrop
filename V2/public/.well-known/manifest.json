@@ -10,10 +10,10 @@
     "description": "Free, Fast, Fair & Frictionless Token Distribution 💧",
     "iconUrl": "https://faucetdrops.com/logo.png",
     "splashImageUrl": "https://faucetdrops.com/splash.png",
-    "splashBackgroundColor": "#3b82f6",
+    "splashBackgroundColor": "#212127",
     "url": "https://faucetdrops.com",
     "homeUrl": "https://faucetdrops.com",
     "requiredChains": [42220, 44787, 1135],
     "requiredCapabilities": ["eth_sendTransaction", "eth_signTypedData_v4"]
-}
+  }
 }

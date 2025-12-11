@@ -57,7 +57,7 @@ const StatCard = ({ label, value, isHighlighted = false, delay = 0 }: { label: s
         y: -5,
         transition: { duration: 0.2 }
       }}
-      className={`relative overflow-hidden rounded-2xl p-8 border ${
+      className={`relative overflow-hidden rounded-2xl py-8 px-4 md:px-8 border ${
         isHighlighted 
           ? 'bg-linear-to-br from-[#2563EB]/30 to-[#2563EB]/20 border-[#2563EB]/50' 
           : 'bg-linear-to-br from-gray-900 to-gray-800 border-gray-800'
@@ -65,7 +65,7 @@ const StatCard = ({ label, value, isHighlighted = false, delay = 0 }: { label: s
     >
       <div className="relative z-10">
         <div className="text-gray-400 text-sm mb-2">{label}</div>
-        <div className="text-5xl font-bold">
+        <div className="text-4xl md:text-5xl font-bold">
           {count.toLocaleString()}{label === 'Transactions' || label === 'Total Drops' || label === "Active users" || label === "Faucets" ? '+' : ''}
         </div>
       </div>

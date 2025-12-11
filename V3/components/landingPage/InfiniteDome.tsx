@@ -539,15 +539,12 @@ class App {
   }
 
   createMedias(items?: { image: string; text: string }[]) {
-    const defaultItems = [      
-      // { image: "/coin.png", text: "Tokenization"},
-      // { image: "/contract.png", text: "Intelligent Contract"},
-      // { image: "/crypto.png", text: "Crypto Engagement"},
-      // { image: "/reward.png", text: "Reward Distribution"},
-
+    const defaultItems = [
       { image: "/community.png", text: "Engage your community"},
       { image: "/distribution.png", text: "Automate your distribution"},
-      { image: "/rewards.png", text: "Reward your users online"}
+      { image: "/rewards.png", text: "Reward your users online"},
+      { image: "/onboarding.png", text: "Simplify user onboarding"},
+      { image: "campaigns.png", text: "Run Targeted Campaigns"}
     ];
     const galleryItems = items && items.length ? items : defaultItems;
     this.mediasImages = galleryItems.concat(galleryItems);
@@ -682,7 +679,7 @@ export default function InfiniteDome({
   bend = 3,
   textColor = "#ffffff",
   borderRadius = 0.5,
-  font = "bold 24px Figtree", // Reduced from 30px
+  font = "bold 24px Inter", // Reduced from 30px
   scrollSpeed = 2,
   scrollEase = 0.05,
   autoScrollSpeed = 0.2,

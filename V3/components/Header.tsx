@@ -9,35 +9,61 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Droplets, PackageCheck, GraduationCap, Landmark, FileMinus, Github, Info, Briefcase, PaintRoller } from 'lucide-react';
+import { Droplets, PackageCheck, GraduationCap, Landmark, FileMinus, Github, Info, Briefcase, PaintRoller, LockOpen, List, Columns3Cog } from 'lucide-react';
+
+interface NavItemBase {
+  name: string;
+  href: string;
+  icon: React.ReactNode;
+  description?: string;
+  target?: string;
+}
+
+interface NavItemWithDropdown extends NavItemBase {
+  dropdown: NavItem[];
+}
+
+type NavItem = NavItemBase | NavItemWithDropdown;
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
-  const navLinks = [
+  const navLinks: Array<{
+    name: string;
+    dropdown: NavItem[];
+  }> = [
     {
       name: 'Product',
       dropdown: [
-        { name: 'Faucets', href: '/product/faucets', icon: <Droplets />, description: 'Smarter, Flexibility, Onchain Distribution' },
-        { name: 'Quests', href: '/product/quests', icon: <PackageCheck />, description: 'Gamified Progress + Automated Rewards' },
-        { name: 'Quizzes', href: '/product/quizzes', icon: <GraduationCap />, description: 'Fun, Interactive, AI-Powered Web3 Quiz Engine' },
-        { name: 'Enterprise', href: '/product/enterprise', icon: <Landmark />, description: 'White Label Solutions' },
+          { name: 'Faucets', href: '#', icon: <Droplets />, description: 'Smarter, Flexible, Onchain Distribution',
+            dropdown: [
+              { name: 'Open Drop', href: '/product/open-drop', icon: <LockOpen />},
+              { name: 'Whitelist Drop', href: '/product/whitelist-drop', icon: <List />},
+              { name: 'Custom Drop', href: '/product/custom-drop', icon: <Columns3Cog />},
+            ]
+           },
+        { name: 'Quests', href: '/coming-soon', icon: <PackageCheck />, description: 'Gamified Progress + Automated Rewards' },
+        { name: 'Quizzes', href: '/coming-soon', icon: <GraduationCap />, description: 'Fun, Interactive, AI-Powered Web3 Quiz Engine' },
+        { name: 'Enterprise', href: '/coming-soon', icon: <Landmark />, description: 'White Label Solutions' },
+        // href: '/product/quests' // path to follow
       ]
     },
     {
       name: 'Developers',
       dropdown: [
-        { name: 'Documentation', href: '/developers/docs', icon: <FileMinus />, description: 'A comprehensive guide for seamless integration' },
-        { name: 'GitHub', href: 'https://github.com/Priveedores-de-soluciones/Faucet_drops', icon: <Github />, description: 'Explore our open-source projects' },
+        { name: 'Documentation', href: '/coming-soon', icon: <FileMinus />, description: 'A comprehensive guide for seamless integration' },
+        // href: '/developers/docs' // path to follow
+        { name: 'GitHub', href: 'https://github.com/Priveedores-de-soluciones/Faucet_drops', target: '_blank', icon: <Github />, description: 'Explore our open-source projects' },
       ]
     },
     {
       name: 'Company',
       dropdown: [
-        { name: 'About', href: '/company/about', icon: <Info />, description: 'Learn more about our company' },
-        { name: 'Career', href: '/company/career', icon: <Briefcase />, description: 'Explore career opportunities' },
-        { name: 'Brand kit', href: '/company/brand', icon: <PaintRoller />, description: 'Download our brand kit' },
+        { name: 'About', href: '/coming-soon', icon: <Info />, description: 'Learn more about our company' },
+        { name: 'Career', href: '/coming-soon', icon: <Briefcase />, description: 'Explore career opportunities' },
+        { name: 'Brand kit', href: '/coming-soon', icon: <PaintRoller />, description: 'Download our brand kit' },
+        // ref: '/company/about' // path to follow
       ]
     },
   ];
@@ -88,23 +114,52 @@ const Header = () => {
                     }`}>
                     <div className="p-2">
                       {link.dropdown.map((item) => (
-                        <Link
-                          key={item.name}
-                          href={item.href}
-                          className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-800/50 transition-colors group/item"
-                        >
-                          <span className="text-2xl mt-0.5">{item.icon}</span>
-                          <div className="flex-1">
-                            <div className="text-sm font-medium text-white group-hover/item:text-[#94A3B8] transition-colors">
-                              {item.name}
-                            </div>
-                            {item.description && (
-                              <div className="text-xs text-gray-400 mt-0.5">
-                                {item.description}
+                        <div key={item.name} className="relative group/item">
+                          <Link
+                            href={item.href}
+                            className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-800/50 transition-colors"
+                          >
+                            <span className="text-2xl mt-0.5">{item.icon}</span>
+                            <div className="flex-1 flex justify-between items-center">
+                              <div>
+                                <div className="text-sm font-medium text-white group-hover/item:text-[#94A3B8] transition-colors">
+                                  {item.name}
+                                </div>
+                                {item.description && (
+                                  <div className="text-xs text-gray-400 mt-0.5">
+                                    {item.description}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        </Link>
+                              {'dropdown' in item && item.dropdown && (
+                                <svg
+                                  className="w-4 h-4 text-gray-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              )}
+                            </div>
+                          </Link>
+                          {'dropdown' in item && item.dropdown && (
+                            <div className="absolute left-full top-0 ml-1 w-56 bg-[#0F172A] rounded-xl ring-1 ring-gray-700 shadow-2xl opacity-0 invisible group-hover/item:opacity-100 group-hover/item:visible transition-all duration-200">
+                              <div className="p-2">
+                                {item.dropdown.map((subItem) => (
+                                  <Link
+                                    key={subItem.name}
+                                    href={subItem.href}
+                                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800/50 transition-colors"
+                                  >
+                                    <span className="text-xl">{subItem.icon}</span>
+                                    <span className="text-sm text-white">{subItem.name}</span>
+                                  </Link>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -165,21 +220,50 @@ const Header = () => {
                   </AccordionTrigger>
                   <AccordionContent className="px-4 pb-2">
                     <div className="space-y-1 pl-2">
-                      {link.dropdown.map((item) => (
-                        <Link
-                          key={item.name}
-                          href={item.href}
-                          className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800/50 transition-colors"
-                          onClick={() => setIsMenuOpen(false)}
-                        >
-                          <span className="text-xl">{item.icon}</span>
-                          <div className="flex-1">
-                            <div className="text-sm text-[#F8FAFC]">{item.name}</div>
-                            {item.description && (
-                              <div className="text-xs text-gray-400 mt-0.5">{item.description}</div>
-                            )}
-                          </div>
-                        </Link>
+                      {link.dropdown.map((item: NavItem) => (
+                        <div key={item.name}>
+                          {'dropdown' in item && item.dropdown ? (
+                            <Accordion type="single" collapsible className="w-full">
+                              <AccordionItem value={item.name} className="border-0">
+                                <AccordionTrigger className="p-3 -my-2 hover:no-underline [&>svg]:text-gray-400 [&>svg]:w-4 [&>svg]:h-4">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xl">{item.icon}</span>
+                                    <span className="text-sm text-[#F8FAFC]">{item.name}</span>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-4 py-2">
+                                  <div className="space-y-1 border-l border-gray-700 ml-4 pl-4">
+                                    {item.dropdown.map((subItem) => (
+                                      <Link
+                                        key={subItem.name}
+                                        href={subItem.href}
+                                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-800/50 transition-colors"
+                                        onClick={() => setIsMenuOpen(false)}
+                                      >
+                                        <span className="text-lg">{subItem.icon}</span>
+                                        <span className="text-sm text-[#F8FAFC]">{subItem.name}</span>
+                                      </Link>
+                                    ))}
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
+                          ) : (
+                            <Link
+                              href={item.href}
+                              className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800/50 transition-colors"
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              <span className="text-xl">{item.icon}</span>
+                              <div>
+                                <div className="text-sm text-[#F8FAFC]">{item.name}</div>
+                                {item.description && (
+                                  <div className="text-xs text-gray-400 mt-0.5">{item.description}</div>
+                                )}
+                              </div>
+                            </Link>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </AccordionContent>

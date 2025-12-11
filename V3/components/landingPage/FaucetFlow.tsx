@@ -137,10 +137,9 @@ const FaucetFlow = () => {
             className="max-w-4xl mx-auto"
           >
             <defs>
-              <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                {/* <stop offset="0%" stopColor="#3b82f6" /> */}
-                {/* <stop offset="50%" stopColor="#8b5cf6" /> */}
-                {/* <stop offset="100%" stopColor="#ec4899" /> */}
+              <linearGradient id="lineGradient">
+                <stop offset="0%" stopColor="#3b82f6" />
+                <stop offset="100%" stopColor="#3b82f6" />
               </linearGradient>
 
               <filter id="glow">
@@ -209,7 +208,7 @@ const FaucetFlow = () => {
                     key={`animated-${index}`}
                     d={pathD}
                     fill="none"
-                    stroke="url(#lineGradient)"
+                    stroke="#3b82f6"
                     strokeWidth="4"
                     strokeLinecap="round"
                     strokeLinejoin="round"

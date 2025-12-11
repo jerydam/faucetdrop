@@ -14,7 +14,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'FaucetDrops',
-  description: 'FaucetDrops - Get test tokens for your development needs',
+  description: 'FaucetDrops - Free, Fast, Fair & Frictionless Token Distribution 💧',
   icons: '/favicon.ico'
 }
 

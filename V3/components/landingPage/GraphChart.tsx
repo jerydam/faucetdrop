@@ -72,28 +72,38 @@ export default function GraphChart() {
   }
 
   return (
-    <div className="space-y-12 py-8 w-full grid grid-cols-1 lg:grid-cols-3">
-      {/* Area Chart - Daily Trends */}
-      {chartData.areaData.length > 0 && (
-        <AnimateOnScroll type="fadeIn" delay={100} className="col-span-1 lg:col-span-2">
-          <div className="rounded-xl p-6 shadow-lg border border-white/10">
-            <h3 className="text-2xl font-bold text-white mb-6 text-center">Daily Claim Trends by Network</h3>
-            <div className="h-[500px] w-full">
-              <StackedAreaChart data={chartData.areaData} />
+    <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+        {/* Area Chart - Daily Trends */}
+        {chartData.areaData.length > 0 && (
+          <AnimateOnScroll 
+            type="fadeIn" 
+            delay={100} 
+            className="col-span-1 lg:col-span-2"
+          >
+            <div className="h-full rounded-xl p-6 shadow-lg border border-white/10 bg-linear-to-br from-gray-900/50 to-gray-800/50">
+              <h3 className="text-2xl font-bold text-white mb-6 text-center">Daily Claim Trends by Network</h3>
+              <div className="h-[400px] w-full">
+                <StackedAreaChart data={chartData.areaData} />
+              </div>
+            </div>
+          </AnimateOnScroll>
+        )}
+
+        {/* Radar Chart - Network Performance */}
+        <AnimateOnScroll 
+          type="fadeIn" 
+          delay={200} 
+          className="col-span-1"
+        >
+          <div className="h-full rounded-xl p-6 shadow-lg border border-white/10 bg-linear-to-br from-gray-900/50 to-gray-800/50">
+            <h3 className="text-2xl font-bold text-white mb-6 text-center">Network Performance</h3>
+            <div className="h-[400px] w-full">
+              <SimpleRadarChart data={chartData.radarData} />
             </div>
           </div>
         </AnimateOnScroll>
-      )}
-
-      {/* Radar Chart - Network Performance */}
-      <AnimateOnScroll type="slideLeft" delay={200} className="col-span-1 lg:col-span-1">
-        <div className="rounded-xl p-6 shadow-lg border border-white/10">
-          <h3 className="text-2xl font-bold text-white mb-6 text-center">Network Performance</h3>
-          <div className="h-[500px] w-full">
-            <SimpleRadarChart data={chartData.radarData} />
-          </div>
-        </div>
-      </AnimateOnScroll>
+      </div>
     </div>
   );
 }

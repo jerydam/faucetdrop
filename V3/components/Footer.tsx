@@ -141,13 +141,13 @@ const Footer = () => {
             &copy; {new Date().getFullYear()} FaucetDrops. All rights reserved.
           </p>
           <div className="flex flex-wrap justify-center md:justify-end gap-4 mt-4 md:mt-0">
-            <Link href="/coming-soon" className="text-sm hover:text-[#2563EB] transition-colors">
+            <Link href="/privacy" className="text-sm hover:text-[#2563EB] transition-colors">
               Privacy Policy
             </Link>
-            <Link href="/coming-soon" className="text-sm hover:text-[#2563EB] transition-colors">
+            <Link href="/terms" className="text-sm hover:text-[#2563EB] transition-colors">
               Terms of Service
             </Link>
-            <Link href="/coming-soon" className="text-sm hover:text-[#2563EB] transition-colors">
+            <Link href="/cookie-policy" className="text-sm hover:text-[#2563EB] transition-colors">
               Cookie Policy
             </Link>
           </div>

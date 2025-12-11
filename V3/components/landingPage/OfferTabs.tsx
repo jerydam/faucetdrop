@@ -71,7 +71,7 @@ export default function OfferTabs() {
               <GeneralCard
                 card={{
                   id: 4,
-                  title: "Reward Participants",
+                  title: "Quests",
                   desc: "Create task-based quests with points and automatically distribute rewards upon completion",
                 }}
                 openCard={openCard}
@@ -90,7 +90,7 @@ export default function OfferTabs() {
               <GeneralCard
                 card={{
                   id: 5,
-                  title: "Engagements",
+                  title: "Quizzes",
                   desc: "Set up interactive, time-based, AI-powered Web3 quizzes tied directly to onchain rewards",
                 }}
                 openCard={openCard}
@@ -109,7 +109,7 @@ export default function OfferTabs() {
               <GeneralCard
                 card={{
                   id: 6,
-                  title: "White Label Solutions",
+                  title: "Enterprise",
                   desc: "Designed for protocols and large ecosystems running massive airdrops or global onboarding campaigns",
                 }}
                 openCard={openCard}

@@ -306,7 +306,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
                         onClick={handleBackendClaim}
                         disabled={!address || !canClaim}
                     >
-                        {!address ? "Connect Wallet to Drop" : hasClaimed ? "Already dropped" : "Drop Tokens"}
+                        {!address ? "Connect Wallet to Drip" : hasClaimed ? "Already dripped" : "Drip Tokens"}
                     </Button>
                 </CardFooter>
             </Card>

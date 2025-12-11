@@ -44,7 +44,7 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/favicon.png" />
         <title>FaucetDrops</title>
-        <meta name="description" content="Token Drops Made Easy 💧" />
+        <meta name="description" content="Automated onchain reward and engagement platform 💧" />
       </head>
       <body className={inter.className}>
         <ThemeProvider 

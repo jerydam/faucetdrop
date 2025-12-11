@@ -913,7 +913,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                                 <Share2 className="h-4 w-4 mr-2" /> Custom Share Post
                             </CardTitle>
                             <div>
-                                <p className="text-xs text-muted-foreground">Customize the message users share after a successful drop.</p>
+                                <p className="text-xs text-muted-foreground">Customize the message users share after a successful drip.</p>
                                 <p className="text-xs font-mono text-blue-500 mt-1">Placeholders: {"{amount}"}, {"{token}"}, {"{network}"}, {"{explorer}"}</p>
                             </div>
                             <Textarea placeholder="..." value={customXPostTemplate} onChange={(e) => setCustomXPostTemplate(e.target.value)} rows={4} className="text-xs font-mono" />
@@ -1067,7 +1067,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                             <Eye className="h-5 w-5 mr-2" /> User View Preview
                         </DialogTitle>
                         <DialogDescription className="text-sm">
-                            This preview uses the latest saved and unsaved parameter values (Name, Drop Amount, Tasks) to show the user interface.
+                            This preview uses the latest saved and unsaved parameter values (Name, Drip Amount, Tasks) to show the user interface.
                         </DialogDescription>
                         
                         {combinedPreviewTasks.length > 0 && (

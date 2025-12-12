@@ -38,9 +38,9 @@ const Header = () => {
       dropdown: [
           { name: 'Faucets', href: '#', icon: <Droplets />, description: 'Smarter, Flexible, Onchain Distribution',
             dropdown: [
-              { name: 'Open Drop', href: '/product/open-drop', icon: <LockOpen />},
-              { name: 'Whitelist Drop', href: '/product/whitelist-drop', icon: <List />},
-              { name: 'Custom Drop', href: '/product/custom-drop', icon: <Columns3Cog />},
+              { name: 'Open Drop', href: '/faucets/open-drop', icon: <LockOpen />},
+              { name: 'Whitelist Drop', href: '/faucets/whitelist-drop', icon: <List />},
+              { name: 'Custom Drop', href: '/faucets/custom-drop', icon: <Columns3Cog />},
             ]
            },
         { name: 'Quests', href: '/coming-soon', icon: <PackageCheck />, description: 'Gamified Progress + Automated Rewards' },

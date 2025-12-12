@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ExternalLink, FingerprintPattern } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
+import Link from "next/link";
 
 export default function OfferTabs() {
   const [openCard, setOpenCard] = useState<number | null>(null);
@@ -39,16 +40,19 @@ export default function OfferTabs() {
                   id: 1,
                   title: "Open Drop",
                   desc: "Open-access distribution secured with a unique 6-character drop-code",
+                  path: "/faucets/open-drop"
                 },
                 {
                   id: 2,
                   title: "Whitelist Drop",
                   desc: "Reward specific wallets with precision. Only approved addresses can claim.",
+                  path: "/faucets/whitelist-drop"
                 },
                 {
                   id: 3,
                   title: "Custom Drop",
                   desc: "Advanced fully customizable distribution engine with complex logic",
+                  path: "/faucets/custom-drop"
                 },
               ].map((card) => (
                 <GeneralCard
@@ -73,6 +77,7 @@ export default function OfferTabs() {
                   id: 4,
                   title: "Quests",
                   desc: "Create task-based quests with points and automatically distribute rewards upon completion",
+                  path: "/quests"
                 }}
                 openCard={openCard}
                 setOpenCard={setOpenCard}
@@ -92,6 +97,7 @@ export default function OfferTabs() {
                   id: 5,
                   title: "Quizzes",
                   desc: "Set up interactive, time-based, AI-powered Web3 quizzes tied directly to onchain rewards",
+                  path: "/quizzes"
                 }}
                 openCard={openCard}
                 setOpenCard={setOpenCard}
@@ -111,6 +117,7 @@ export default function OfferTabs() {
                   id: 6,
                   title: "Enterprise",
                   desc: "Designed for protocols and large ecosystems running massive airdrops or global onboarding campaigns",
+                  path: "/enterprise"
                 }}
                 openCard={openCard}
                 setOpenCard={setOpenCard}
@@ -150,11 +157,14 @@ function GeneralCard({
   openCard,
   setOpenCard,
 }: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  card: any;
+  card: {
+    id: number;
+    title: string;
+    desc: string;
+    path: string;
+  };
   openCard: number | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  setOpenCard: any;
+  setOpenCard: (id: number | null) => void;
 }) {
   const isOpen = openCard === card.id;
 
@@ -178,9 +188,8 @@ function GeneralCard({
         flex items-center gap-2 absolute top-4 right-4 text-white opacity-100 md:hidden transition-all duration-300 
         ${isOpen ? "opacity-0" : "opacity-100"}
       `}>
-
-      <span className="md:hidden">Tap to open</span>
-      <FingerprintPattern className="h-5 w-5" />
+        <span className="md:hidden">Tap to open</span>
+        <FingerprintPattern className="h-5 w-5" />
       </div>
 
       <h3 className="text-3xl font-semibold">{card.title}</h3>
@@ -197,17 +206,22 @@ function GeneralCard({
       </p>
 
       {/* Button */}
-      <Button
-        onClick={(e) => e.stopPropagation()}
-        className={`
-          flex items-center justify-end w-fit gap-2 text-sm font-medium mt-4 rounded px-5 py-3 bg-[#2563EB]
-          transition-all duration-300
-          ${isOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}
-          md:opacity-0 md:translate-y-3 md:group-hover:opacity-100 md:group-hover:translate-y-0
-        `}
-      >
-        Learn more <ExternalLink className="h-4 w-4" />
-      </Button>
+      <Link href={card.path} passHref>
+        <Button
+          asChild
+          // onClick={(e) => e.stopPropagation()}
+          className={`
+            flex items-center justify-end w-fit gap-2 text-sm font-medium mt-4 rounded px-5 py-3 bg-[#2563EB]
+            transition-all duration-300
+            ${isOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"}
+            md:opacity-0 md:translate-y-3 md:group-hover:opacity-100 md:group-hover:translate-y-0
+          `}
+        >
+          <Button className="flex items-center gap-2">
+            Learn more <ExternalLink className="h-4 w-4" />
+          </Button>
+        </Button>
+      </Link>
     </motion.div>
   );
 }

@@ -1,12 +1,13 @@
 'use client'
 
 import { Alert } from "@/components/ui/alert"
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react"
 import { useWallet } from "@/hooks/use-wallet"
 import { useNetwork, isFactoryTypeAvailable, getAvailableFactoryTypes } from "@/hooks/use-network"
 import { useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
 import { useAccount, useChainId } from 'wagmi'
 import { useToast } from "@/hooks/use-toast"
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   createFaucet,
   checkFaucetNameExists,
@@ -66,7 +67,6 @@ import {
 import { zeroAddress } from "viem"
 import { isAddress } from "ethers"
 import LoadingPage from "@/components/loading"
-import { useRouter } from 'next/navigation'
 
 // Enhanced type definitions
 interface TokenConfiguration {
@@ -139,14 +139,14 @@ const DEFAULT_FAUCET_IMAGE = "/default.jpeg"
 function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProps) {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
-  
+   
   const sizeClasses = {
     xs: 'w-4 h-4',
     sm: 'w-6 h-6',
     md: 'w-8 h-8',
     lg: 'w-12 h-12'
   }
-  
+   
   const fallbackSizes = {
     xs: 'text-xs',
     sm: 'text-xs',
@@ -206,14 +206,14 @@ interface TokenImageProps {
 function TokenImage({ token, size = 'md', className = '' }: TokenImageProps) {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
-  
+   
   const sizeClasses = {
     xs: 'w-4 h-4',
     sm: 'w-5 h-5',
     md: 'w-6 h-6',
     lg: 'w-8 h-8'
   }
-  
+   
   const fallbackSizes = {
     xs: 'text-xs',
     sm: 'text-xs',
@@ -293,7 +293,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "CELO",
       decimals: 18,
       isNative: true,
-      logoUrl: "/celo.jpeg", // ✅ Local path
+      logoUrl: "/celo.jpeg", 
       description: "Native Celo token for governance and staking",
     },
     {
@@ -301,7 +301,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Nigerian Naira",
       symbol: "cNGN",
       decimals: 18,
-      logoUrl: "/cngn.png", // ✅ Local path
+      logoUrl: "/cngn.png", 
       description: "Naira-pegged stablecoin on Celo",
     },
     {
@@ -318,7 +318,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Dollar",
       symbol: "cUSD",
       decimals: 18,
-      logoUrl: "/cusd.png", // ✅ Local path
+      logoUrl: "/cusd.png", 
       description: "USD-pegged stablecoin on Celo",
     },
     {
@@ -326,7 +326,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether",
       symbol: "USDT",
       decimals: 6,
-      logoUrl: "/usdt.jpg", // ✅ Local path
+      logoUrl: "/usdt.jpg", 
       description: "Tether USD stablecoin",
     },
     {
@@ -334,7 +334,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Brazilian Real",
       symbol: "cREAL",
       decimals: 18,
-      logoUrl: "/creal.jpg", // ✅ Local path
+      logoUrl: "/creal.jpg", 
       description: "Brazilian Real-pegged stablecoin on Celo",
     },
     {
@@ -342,7 +342,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Kenyan Shilling",
       symbol: "cKES",
       decimals: 18,
-      logoUrl: "/ckes.jpg", // ✅ Local path
+      logoUrl: "/ckes.jpg", 
       description: "Kenyan Shilling-pegged stablecoin on Celo",
     },
     {
@@ -350,7 +350,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
-      logoUrl: "/usdc.jpg", // ✅ Local path
+      logoUrl: "/usdc.jpg", 
       description: "USD Coin stablecoin",
     },
     {
@@ -358,7 +358,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Celo Euro",
       symbol: "cEUR",
       decimals: 18,
-      logoUrl: "/ceur.png", // ✅ Local path
+      logoUrl: "/ceur.png", 
       description: "Euro-pegged stablecoin on Celo",
     },
     {
@@ -366,7 +366,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Glo Dollar",
       symbol: "USDGLO",
       decimals: 18,
-      logoUrl: "/glo.jpg", // ✅ Local path
+      logoUrl: "/glo.jpg", 
       description: "Philanthropic dollar that funds global poverty relief",
     },
     {
@@ -374,7 +374,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "GoodDollar",
       symbol: "G$",
       decimals: 18,
-      logoUrl: "/gd.jpg", // ✅ Local path
+      logoUrl: "/gd.jpg", 
       description: "Universal basic income token",
     },
   ],
@@ -387,7 +387,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg", // ✅ Local path
+      logoUrl: "/ether.jpeg", 
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -395,7 +395,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Lisk",
       symbol: "LSK",
       decimals: 18,
-      logoUrl: "/lsk.png", // ✅ Local path
+      logoUrl: "/lsk.png", 
       description: "Lisk native token",
     },
     {
@@ -403,7 +403,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether USD",
       symbol: "USDT",
       decimals: 6,
-      logoUrl: "/usdt.jpg", // ✅ Local path
+      logoUrl: "/usdt.jpg", 
       description: "Tether USD stablecoin",
     },
     {
@@ -411,7 +411,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Bridged USDC",
       symbol: "USDC.e",
       decimals: 6,
-      logoUrl: "/usdc.jpg", // ✅ Local path
+      logoUrl: "/usdc.jpg", 
       description: "Bridged USD Coin from Ethereum",
     },
   ],
@@ -424,7 +424,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg", // ✅ Local path
+      logoUrl: "/ether.jpeg", 
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -432,7 +432,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
-      logoUrl: "/usdc.jpg", // ✅ Local path
+      logoUrl: "/usdc.jpg", 
       description: "Native USD Coin on Arbitrum",
     },
     {
@@ -440,7 +440,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Tether USD",
       symbol: "USDT",
       decimals: 6,
-      logoUrl: "/usdt.jpg", // ✅ Local path
+      logoUrl: "/usdt.jpg", 
       description: "Tether USD stablecoin",
     },
     {
@@ -448,7 +448,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Arbitrum",
       symbol: "ARB",
       decimals: 18,
-      logoUrl: "/arb.jpeg", // ✅ Local path
+      logoUrl: "/arb.jpeg", 
       description: "Arbitrum governance token",
     },
   ],
@@ -461,7 +461,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "ETH",
       decimals: 18,
       isNative: true,
-      logoUrl: "/ether.jpeg", // ✅ Local path
+      logoUrl: "/ether.jpeg", 
       description: "Native Ethereum for transaction fees",
     },
     {
@@ -469,7 +469,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 6,
-      logoUrl: "/usdc.jpg", // ✅ Local path
+      logoUrl: "/usdc.jpg", 
       description: "Native USD Coin on Base",
     },
     {
@@ -477,7 +477,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Bridged Tether USD",
       symbol: "USDT",
       decimals: 6,
-      logoUrl: "/usdt.jpg", // ✅ Local path
+      logoUrl: "/usdt.jpg", 
       description: "Bridged Tether USD from Ethereum",
     },
     {
@@ -485,7 +485,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "Degen",
       symbol: "DEGEN",
       decimals: 18,
-      logoUrl: "/degen.png", // ✅ Local path
+      logoUrl: "/degen.png", 
       description: "Degen community token",
     },
   ],
@@ -549,7 +549,10 @@ const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{
   ],
 }
 
-export default function CreateFaucetWizard() {
+// ----------------------------------------------------------------------------------
+// MAIN WIZARD LOGIC COMPONENT (Renamed from export default)
+// ----------------------------------------------------------------------------------
+function CreateFaucetWizardContent() {
   const { provider, connect } = useWallet()
   const { network, getFactoryAddress, networks } = useNetwork()
   const { address, isConnected } = useAppKitAccount()
@@ -557,9 +560,9 @@ export default function CreateFaucetWizard() {
   const { chainId: appKitChainId } = useAppKitNetwork()
   const { toast } = useToast()
   const router = useRouter()
-
+  const searchParams = useSearchParams()
   const effectiveChainId = (chainId || appKitChainId) as number
-  
+   
   const currentNetwork = useMemo(() => {
     if (!effectiveChainId) return null
     const matched = networks.find(n => n.chainId === effectiveChainId)
@@ -604,6 +607,30 @@ export default function CreateFaucetWizard() {
   const [creationError, setCreationError] = useState<string | null>(null)
   const [showConflictDetails, setShowConflictDetails] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
+
+  // Auto-select type from URL Params
+  useEffect(() => {
+    const typeParam = searchParams.get('type')
+
+    // Check if we have a param and we haven't already selected a type
+    if (typeParam && wizardState.selectedFaucetType === '') {
+      let targetType: FaucetType | '' = ''
+
+      // Map URL param to internal types
+      if (typeParam === 'open') targetType = FAUCET_TYPES.OPEN
+      if (typeParam === 'whitelist') targetType = FAUCET_TYPES.GATED
+      if (typeParam === 'custom') targetType = FAUCET_TYPES.CUSTOM
+
+      if (targetType) {
+        console.log(`🔗 Auto-selecting faucet type from URL: ${targetType}`)
+        setWizardState(prev => ({
+          ...prev,
+          selectedFaucetType: targetType,
+          currentStep: 2 // Auto-advance to configuration step
+        }))
+      }
+    }
+  }, [searchParams, wizardState.selectedFaucetType])
 
   // Helper function to upload image
   const uploadImageToServer = async (file: File): Promise<string> => {
@@ -683,7 +710,7 @@ export default function CreateFaucetWizard() {
   ): Promise<void> => {
     try {
       console.log(`💾 Saving faucet metadata for ${faucetAddress}`)
-      
+       
       const response = await fetch('https://fauctdrop-backend.onrender.com/faucet-metadata', {
         method: 'POST',
         headers: {
@@ -697,14 +724,14 @@ export default function CreateFaucetWizard() {
           chainId
         }),
       })
-      
+       
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.detail || 'Failed to save faucet metadata')
       }
-      
+       
       console.log('✅ Faucet metadata saved successfully')
-      
+       
     } catch (error: any) {
       console.error('❌ Error saving faucet metadata:', error)
       toast({
@@ -1090,7 +1117,7 @@ export default function CreateFaucetWizard() {
       setCreationError("Please enter a valid custom token address")
       return
     }
-    
+     
     if (!effectiveChainId || !currentNetwork) {
       setCreationError("Please connect your wallet to a supported network")
       return
@@ -1101,7 +1128,7 @@ export default function CreateFaucetWizard() {
       return
     }
 
-    
+     
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
     const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
     if (!factoryAddress) {
@@ -1176,7 +1203,7 @@ export default function CreateFaucetWizard() {
      if (!createdFaucetAddress) {
       throw new Error("Failed to get created faucet address")
     }
-    
+     
     console.log("🎉 Faucet created successfully at:", createdFaucetAddress)
     console.log("🎉 Expected type:", mappedFactoryType)
 
@@ -1185,7 +1212,7 @@ export default function CreateFaucetWizard() {
     const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
     const finalDescription = faucetDescription.trim() || 
       `This is a faucet on ${networkName} by ${ownerShort}`
-    
+     
     const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
 
     console.log("💾 Saving metadata with:", {
@@ -1209,7 +1236,7 @@ export default function CreateFaucetWizard() {
       description: `Your ${selectedToken?.symbol || "token"} faucet (${mappedFactoryType}) has been created at ${createdFaucetAddress}`,
     })
 
-      
+       
       setTimeout(() => {
       window.location.href = `/faucet/${createdFaucetAddress}?networkId=${effectiveChainId}`
     }, 2000)
@@ -1869,7 +1896,7 @@ export default function CreateFaucetWizard() {
         <Label htmlFor="faucet-image">
           Faucet Image (Optional)
         </Label>
-        
+         
         <div className="flex flex-col gap-3">
           <div className="flex gap-2">
             <Button
@@ -1891,7 +1918,7 @@ export default function CreateFaucetWizard() {
                 </>
               )}
             </Button>
-            
+             
             {selectedImageFile && (
               <Button
                 type="button"
@@ -2302,5 +2329,16 @@ export default function CreateFaucetWizard() {
         </div>
       </div>
     </main>
+  )
+}
+
+// ----------------------------------------------------------------------------------
+// SUSPENSE WRAPPER (This is the default export)
+// ----------------------------------------------------------------------------------
+export default function CreateFaucetPage() {
+  return (
+    <Suspense fallback={<LoadingPage />}>
+      <CreateFaucetWizardContent />
+    </Suspense>
   )
 }

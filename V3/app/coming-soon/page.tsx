@@ -77,7 +77,7 @@ export default function ComingSoon() {
         {/* Social Media Links */}
         <div className="pt-8">
           <p className="text-sm text-muted-foreground">
-            In the meantime, you can follow us on social media or contact out team
+            In the meantime, you can follow us on social media or contact our team
           </p>
         <div className="flex justify-center space-x-6 pt-4">
           {socialLinks.map((social, index) => (

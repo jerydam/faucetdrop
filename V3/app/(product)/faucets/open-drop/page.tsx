@@ -5,21 +5,22 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { CheckCircle, Sparkles, Settings, Radio } from "lucide-react";
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
 
 export default function OpenDrop() {
 
   const features = [
-    { textHead: "Simple Access Control", textBody: "Users only need a simple 6-character code to claim. No complex whitelisting required."},
-    { textHead: "Sybil-Resistant", textBody: "Powered by Self Protocol, our ZK-powered identity verification ensures only real humans claim even in an open drop."},
-    { textHead: "Social Gating: Optional", textBody: "Require Twitter follows or Telegram joins before the code is revealed."},
-    { textHead: "Cross-Chain Ready", textBody: "Deploy on Celo, Lisk, Arbitrum, Base, and more."},
+    { textHead: "Simple Access Control", textBody: "Users only need a simple 6-character code to claim. No complex whitelisting required." },
+    { textHead: "Sybil-Resistant", textBody: "Powered by Self Protocol, our ZK-powered identity verification ensures only real humans claim even in an open drop." },
+    { textHead: "Social Gating: Optional", textBody: "Require Twitter follows or Telegram joins before the code is revealed." },
+    { textHead: "Cross-Chain Ready", textBody: "Deploy on Celo, Lisk, Arbitrum, Base, and more." },
   ]
 
   const howItWorks = [
-    { textHead: "Set Your Budget", textBody: "Deposit the total amount of tokens or ETH/stablecoins."},
-    { textHead: "Generate Code", textBody: "The system creates a unique 6-character Drop-Code."},
-    { textHead: "Share Live", textBody: "Announce the code during your conference, stream, or hackathon."},
-    { textHead: "Instant Claims", textBody: "Attendees enter the code and claim gaslessly."}
+    { textHead: "Set Your Budget", textBody: "Deposit the total amount of tokens or ETH/stablecoins." },
+    { textHead: "Generate Code", textBody: "The system creates a unique 6-character Drop-Code." },
+    { textHead: "Share Live", textBody: "Announce the code during your conference, stream, or hackathon." },
+    { textHead: "Instant Claims", textBody: "Attendees enter the code and claim gaslessly." }
   ]
 
   const useCases = [
@@ -27,7 +28,11 @@ export default function OpenDrop() {
     { textHead: "Twitter Spaces / AMAs", textBody: "Reward listeners who stay until the end", image: "/learnMore/podcast.png" },
     { textHead: "Flash Marketing Campaigns", textBody: "Time-sensitive promotions and giveaways", image: "/learnMore/marketing.png" },
     { textHead: "Community Onboarding", textBody: "Quick distribution to new community members", image: "/learnMore/community.png" },
+    { textHead: "Airdrops", textBody: "First come, first serve", image: "/learnMore/early.png" },
   ]
+  const createOpenDrop = () => {
+    window.open('https://app.faucetdrops.io/create-faucet?type=open', '_blank');
+  }
   return (
     <div className="w-full min-h-screen flex flex-col items-center px-4 sm:px-6 py-20 md:py-24">
       {/* HERO SECTION */}
@@ -47,6 +52,13 @@ export default function OpenDrop() {
           Distribute tokens securely in seconds using a unique 6-character access code.
           Perfect for live events, AMAs, hackathons, and onboarding new users instantly.
         </p>
+        <Button
+          onClick={createOpenDrop}
+          variant={"outline"}
+          className="mt-5 hover:bg-white/80"
+        >
+          Create Open Drop
+        </Button>
       </motion.div>
 
       {/* GRID: KEY FEATURES + HOW IT WORKS */}
@@ -67,10 +79,10 @@ export default function OpenDrop() {
             <CardContent className="space-y-3">
               {features.map((feature, index) => (
 
-              <p key={index} className="flex items-start gap-2">
-                <CheckCircle className="h-5 w-5 text-green-400 mt-0.5 shrink-0" />
-                <span className="text-[#E2E8F0]"><span className="font-medium text-white">{feature.textHead}: </span>{feature.textBody}</span>
-              </p>
+                <p key={index} className="flex items-start gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-400 mt-0.5 shrink-0" />
+                  <span className="text-[#E2E8F0]"><span className="font-medium text-white">{feature.textHead}: </span>{feature.textBody}</span>
+                </p>
               ))}
             </CardContent>
           </Card>
@@ -132,8 +144,8 @@ export default function OpenDrop() {
                 <Image
                   src={useCase.image}
                   alt={useCase.textHead}
-                  width={100}
-                  height={100}
+                  width={120}
+                  height={120}
                   className="object-contain rounded"
                 />
               </div>
@@ -180,12 +192,21 @@ export default function OpenDrop() {
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="4" className="border-b-0">
+          <AccordionItem value="4" className="border-b border-gray-700 pb-2">
             <AccordionTrigger className="hover:no-underline [&[data-state=open]>svg]:rotate-180 text-[#E2E8F0] hover:text-white">
               Do users pay gas fees?
             </AccordionTrigger>
             <AccordionContent className="pt-2 text-[#94A3B8]">
               No — all claims are completely gasless for users, making it seamless for community engagement.
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="5" className="border-b-0">
+            <AccordionTrigger className="hover:no-underline [&[data-state=open]>svg]:rotate-180 text-[#E2E8F0] hover:text-white">
+              What does it cost to set up an open-drop faucet?
+            </AccordionTrigger>
+            <AccordionContent className="pt-2 text-[#94A3B8]">
+              A 3% platform fee on the amount you fund for distribution.
             </AccordionContent>
           </AccordionItem>
         </Accordion>

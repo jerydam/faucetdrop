@@ -41,7 +41,7 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.png" />
         
         {/* Primary Meta Tags */}
-        <title>app.faucetdrops - Token Drops Made Easy</title>
+        <title>Faucetdrops - Token Drops Made Easy</title>
         <meta name="title" content="app.faucetdrops - Token Drops Made Easy" />
         <meta name="description" content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains." />
         
@@ -68,7 +68,7 @@ export default function RootLayout({
         
         {/* Additional SEO */}
         <meta name="keywords" content="token drops, crypto faucet, onchain rewards, web3 engagement, token distribution, blockchain rewards" />
-        <meta name="author" content="app.faucetdrops" />
+        <meta name="author" content="Faucetdrops" />
         <link rel="canonical" href="https://app.faucetdrops.io/" />
         
         {/* Theme Color */}

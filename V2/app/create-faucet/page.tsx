@@ -618,7 +618,7 @@ function CreateFaucetWizardContent() {
 
       // Map URL param to internal types
       if (typeParam === 'open') targetType = FAUCET_TYPES.OPEN
-      if (typeParam === 'gated') targetType = FAUCET_TYPES.GATED
+      if (typeParam === 'whitelist') targetType = FAUCET_TYPES.GATED
       if (typeParam === 'custom') targetType = FAUCET_TYPES.CUSTOM
 
       if (targetType) {

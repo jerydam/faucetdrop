@@ -364,7 +364,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         `Saving ${tasksToSend.length} tasks via dedicated backend endpoint.`
       );
       const response = await fetch(
-        "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
+        "http://127.0.0.1:8000/add-faucet-tasks",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -382,7 +382,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       }
       toast({
         title: "Tasks Saved",
-        description: "Social media tasks updated successfully (Backend only).",
+        description: "Social media tasks updated successfully.",
       });
       setNewSocialLinks([]);
       await loadFaucetDetails();
@@ -902,7 +902,35 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       setIsGeneratingNewCode(false);
     }
   };
+const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
+    try {
+      let url = "";
+      
+      if (type === 'web') {
+        // Copies the current browser URL (User View Link)
+        // If Admin is at /faucet/[address]/admin, we might want to strip /admin
+        // Assuming the user view is at the base URL of the current page:
+        url = window.location.origin + "/faucet/" + faucetAddress;
+      } else {
+        // Constructs the Farcaster Mini-app link with the faucet address as a parameter
+        // We append ?startapp={address} so the mini-app knows which faucet to open
+        url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/faucetdrops?startapp/faucet=${faucetAddress}`;
+      }
 
+      await navigator.clipboard.writeText(url);
+      
+      toast({ 
+        title: "Link Copied", 
+        description: `${type === 'web' ? 'Web' : 'Farcaster'} link has been copied to clipboard.`, 
+      });
+    } catch (error) {
+      toast({ 
+        title: "Copy Failed", 
+        description: "Failed to copy the link. Please try again.", 
+        variant: "destructive", 
+      });
+    }
+  };
   const handleCopySecretCode = async (code: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(code);
@@ -1031,6 +1059,22 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
               activity here.
             </CardDescription>
           </div>
+          <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="text-xs">
+                  <Share2 className="h-3 w-3 mr-1" /> Share
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleCopyLink('web')}>
+                  <Link className="h-4 w-4 mr-2" /> Copy Web Link
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleCopyLink('farcaster')}>
+                  <div className="h-4 w-4 mr-2 flex items-center justify-center font-bold bg-purple-600 text-white rounded-full text-[10px]">F</div>
+                  Copy Farcaster Link
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           <Button
             onClick={handlePreview}
             variant="secondary"

@@ -26,7 +26,6 @@ import { MyCreationsModal } from "@/components/my-creations-modal"
 import { CreateNewModal } from "@/components/create-new-modal" 
 
 // --- Custom Icons ---
-
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -41,10 +40,15 @@ const TelegramIcon = ({ className }: { className?: string }) => (
 
 const FarcasterIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 1000 1000" fill="currentColor" className={className} xmlns="http://www.w3.org/2000/svg">
-    {/* Background rect removed so it takes badge background */}
     <path d="M257.778 155.556H742.222V844.444H671.111V528.889H670.414C662.554 441.677 589.258 373.333 500 373.333C410.742 373.333 337.446 441.677 329.586 528.889H328.889V844.444H257.778V155.556Z" />
     <path d="M128.889 253.333L157.778 351.111H182.222V746.667C169.949 746.667 160 756.616 160 768.889V795.556H155.556C143.283 795.556 133.333 805.505 133.333 817.778V844.444H382.222V817.778C382.222 805.505 372.273 795.556 360 795.556H355.556V768.889C355.556 756.616 345.606 746.667 333.333 746.667H306.667V253.333H128.889Z" />
     <path d="M675.556 746.667C663.283 746.667 653.333 756.616 653.333 768.889V795.556H648.889C636.616 795.556 626.667 805.505 626.667 817.778V844.444H875.556V817.778C875.556 805.505 865.606 795.556 853.333 795.556H848.889V768.889C848.889 756.616 838.94 746.667 826.667 746.667V351.111H851.111L880 253.333H702.222V746.667H675.556Z" />
+  </svg>
+)
+
+const DiscordIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M20.317 4.3698a19.7913 19.7913 0 0 0-4.8851-1.5152.0741.0741 0 0 0-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 0 0-.0785-.037 19.7363 19.7363 0 0 0-4.8852 1.515.0699.0699 0 0 0-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 0 0 .0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 0 0 .0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 0 0-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 0 1-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 0 1 .0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 0 1 .0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 0 1-.0066.1276 12.2986 12.2986 0 0 1-1.873.8914.0766.0766 0 0 0-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 0 0 .0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 0 0 .0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 0 0-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.419-2.1568 2.419zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.419-2.1568 2.419z" />
   </svg>
 )
 
@@ -194,6 +198,17 @@ export default function DashboardPage() {
         router.push(`/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`)
     }
 
+    // Helper to format social URLs
+    const getSocialUrl = (platform: string, handle: string) => {
+        const cleanHandle = handle.replace('@', '').trim();
+        switch (platform) {
+            case 'twitter': return `https://x.com/${cleanHandle}`;
+            case 'telegram': return `https://t.me/${cleanHandle}`;
+            case 'farcaster': return `https://farcaster.xyz/${cleanHandle}`;
+            default: return '#';
+        }
+    };
+
     // --- Filtering Logic ---
     const filteredFaucets = useMemo(() => {
         return faucets.filter(faucet => {
@@ -259,24 +274,51 @@ export default function DashboardPage() {
                                         </h1>
                                     )}
                                     
-                                    {/* --- SOCIAL BADGES --- */}
+                                    {/* --- UPDATED CLICKABLE SOCIAL BADGES --- */}
                                     <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
                                         {profile?.twitter_handle && (
-                                            <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-100 gap-1.5 pl-2 pr-2.5">
-                                                <XIcon className="h-3 w-3" />
-                                                {profile.twitter_handle.replace('@', '')}
-                                            </Badge>
+                                            <a 
+                                                href={getSocialUrl('twitter', profile.twitter_handle)} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="no-underline"
+                                            >
+                                                <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 hover:underline border-blue-100 gap-1.5 pl-2 pr-2.5 cursor-pointer transition-colors">
+                                                    <XIcon className="h-3 w-3" />
+                                                    {profile.twitter_handle.replace('@', '')}
+                                                </Badge>
+                                            </a>
                                         )}
                                         {profile?.telegram_handle && (
-                                            <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-100 gap-1.5 pl-2 pr-2.5">
-                                                <TelegramIcon className="h-3 w-3" />
-                                                {profile.telegram_handle.replace('@', '')}
-                                            </Badge>
+                                            <a 
+                                                href={getSocialUrl('telegram', profile.telegram_handle)} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="no-underline"
+                                            >
+                                                <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 hover:underline border-sky-100 gap-1.5 pl-2 pr-2.5 cursor-pointer transition-colors">
+                                                    <TelegramIcon className="h-3 w-3" />
+                                                    {profile.telegram_handle.replace('@', '')}
+                                                </Badge>
+                                            </a>
                                         )}
                                         {profile?.farcaster_handle && (
-                                            <Badge variant="secondary" className="bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-100 gap-1.5 pl-2 pr-2.5">
-                                                <FarcasterIcon className="h-3 w-3" />
-                                                {profile.farcaster_handle}
+                                            <a 
+                                                href={getSocialUrl('farcaster', profile.farcaster_handle)} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="no-underline"
+                                            >
+                                                <Badge variant="secondary" className="bg-purple-50 text-purple-700 hover:bg-purple-100 hover:underline border-purple-100 gap-1.5 pl-2 pr-2.5 cursor-pointer transition-colors">
+                                                    <FarcasterIcon className="h-3 w-3" />
+                                                    {profile.farcaster_handle}
+                                                </Badge>
+                                            </a>
+                                        )}
+                                        {profile?.discord_handle && (
+                                            <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-100 gap-1.5 pl-2 pr-2.5 cursor-default transition-colors">
+                                                <DiscordIcon className="h-3 w-3" />
+                                                {profile.discord_handle}
                                             </Badge>
                                         )}
                                     </div>
@@ -518,18 +560,7 @@ function FaucetCard({
                     </a>
                 </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1">
-                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mt-2">
-                    <div className="bg-muted/50 p-2 rounded">
-                        <span className="block font-semibold text-foreground">Created</span>
-                        {dateCreated}
-                    </div>
-                    <div className="bg-muted/50 p-2 rounded">
-                        <span className="block font-semibold text-foreground">Chain ID</span>
-                        {faucet.chainId}
-                    </div>
-                </div>
-            </CardContent>
+            
             <div className="p-4 pt-0 mt-auto">
                 <Button onClick={onManage} className="w-full group-hover:bg-primary/90">
                     <Settings className="h-4 w-4 mr-2" /> Manage Faucet

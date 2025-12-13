@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Settings, Loader2, Save, Upload, Check, Edit2 } from "lucide-react"
+import { Settings, Loader2, Save, Upload, Check, Edit2, RefreshCw, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 // Backend URL
@@ -27,7 +27,23 @@ interface UserProfile {
   avatar_url: string
 }
 
-const GENERATED_SEEDS = ["Felix", "Aneka", "Zack", "Molly", "Bear", "Crypto", "Whale", "Pepe"];
+// --- EXPANDED SEED LIST ---
+const GENERATED_SEEDS = [
+  "Felix", "Aneka", "Zack", "Molly", "Bear", "Crypto", "Whale", "Pepe",
+  "Satoshi", "Vitalik", "Gwei", "HODL", "WAGMI", "Doge", "Shiba", "Solana",
+  "Ether", "Bitcoin", "Chain", "Block", "DeFi", "NFT", "Alpha", "Beta",
+  "Neon", "Cyber", "Pixel", "Glitch", "Retro", "Vapor", "Synth", "Wave",
+  "Pulse", "Echo", "Flux", "Spark", "Glow", "Shine", "Shadow", "Light",
+  "Dark", "Void", "Zenith", "Apex", "Nova", "Nebula", "Galaxy", "Comet",
+  "Zeus", "Hera", "Odin", "Thor", "Loki", "Freya", "Ra", "Anubis",
+  "Apollo", "Athena", "Ares", "Hades", "Poseidon", "Atlas", "Titan",
+  "Phoenix", "Dragon", "Griffin", "Hydra", "Medusa", "Pegasus", "Sphinx",
+  "Wolf", "Eagle", "Hawk", "Lion", "Tiger", "Shark", "Dolphin", "Panda",
+  "Fox", "Owl", "Raven", "Crow", "Snake", "Cobra", "Viper", "Toad",
+  "River", "Sky", "Ocean", "Forest", "Mountain", "Rain", "Storm", "Snow",
+  "Leo", "Zoe", "Max", "Ruby", "Kai", "Luna", "Finn", "Cleo",
+  "Jasper", "Milo", "Otis", "Arlo", "Ezra", "Silas", "Jude", "Rowan"
+];
 
 export function ProfileSettingsModal() {
   const { address, isConnected } = useAppKitAccount()
@@ -39,6 +55,21 @@ export function ProfileSettingsModal() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   
+  // --- SHUFFLE LOGIC STATE ---
+  const [seedOffset, setSeedOffset] = useState(0);
+  const ITEMS_PER_PAGE = 8;
+
+  const handleShuffle = () => {
+      setSeedOffset((prev) => (prev + ITEMS_PER_PAGE) % GENERATED_SEEDS.length);
+  };
+
+  const currentSeeds = GENERATED_SEEDS.slice(seedOffset, seedOffset + ITEMS_PER_PAGE);
+  if (currentSeeds.length < ITEMS_PER_PAGE) {
+      const remaining = ITEMS_PER_PAGE - currentSeeds.length;
+      currentSeeds.push(...GENERATED_SEEDS.slice(0, remaining));
+  }
+  // ---------------------------
+
   const [formData, setFormData] = useState<UserProfile>({
     username: "",
     email: "",
@@ -49,6 +80,9 @@ export function ProfileSettingsModal() {
     farcaster_handle: "",
     avatar_url: ""
   })
+
+  // Basic validation check
+  const isFormValid = formData.email?.trim() !== "" && formData.twitter_handle?.trim() !== "";
 
   // Fetch Profile on Open
   useEffect(() => {
@@ -81,7 +115,7 @@ export function ProfileSettingsModal() {
     }
   }
 
-  // Handle Image Upload to Backend
+  // Handle Image Upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -115,6 +149,11 @@ export function ProfileSettingsModal() {
     if (!isConnected || !walletProvider || !address) {
       toast({ title: "Error", description: "Wallet not connected", variant: "destructive" })
       return
+    }
+
+    if (!isFormValid) {
+        toast({ title: "Missing Information", description: "Email and X (Twitter) are required.", variant: "destructive" })
+        return
     }
 
     setSaving(true)
@@ -170,7 +209,6 @@ export function ProfileSettingsModal() {
           <Edit2 className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      {/* Responsive Dialog Content: Full width on mobile, max-width-lg on desktop */}
       <DialogContent className="w-[95%] sm:max-w-[600px] max-h-[90vh] overflow-y-auto rounded-lg">
         <DialogHeader>
           <DialogTitle>Edit Profile</DialogTitle>
@@ -196,7 +234,6 @@ export function ProfileSettingsModal() {
                         <TabsTrigger value="generate">Choose Avatar</TabsTrigger>
                     </TabsList>
                     
-                    {/* Upload Tab */}
                     <TabsContent value="upload" className="pt-4">
                         <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 hover:bg-accent/50 transition-colors cursor-pointer relative bg-muted/20">
                             <input 
@@ -217,22 +254,20 @@ export function ProfileSettingsModal() {
                         </div>
                     </TabsContent>
 
-                    {/* Generate Tab */}
                     <TabsContent value="generate" className="pt-4">
                         <div className="grid grid-cols-4 gap-3">
-                            {GENERATED_SEEDS.map((seed) => {
+                            {currentSeeds.map((seed, idx) => { 
                                 const url = `https://api.dicebear.com/9.x/notionists/svg?seed=${seed}`
                                 const isSelected = formData.avatar_url === url
                                 return (
                                     <div 
-                                        key={seed} 
+                                        key={`${seed}-${idx}`}
                                         onClick={() => setFormData(prev => ({...prev, avatar_url: url}))}
                                         className={`
                                             relative aspect-square rounded-full cursor-pointer overflow-hidden border-2 transition-all hover:scale-105
                                             ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-transparent bg-muted'}
                                         `}
                                     >
-                                        {/* Image tag used here for SVG support from Dicebear */}
                                         <img src={url} alt={seed} className="w-full h-full" />
                                         {isSelected && (
                                             <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
@@ -243,12 +278,20 @@ export function ProfileSettingsModal() {
                                 )
                             })}
                         </div>
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={handleShuffle} 
+                            className="w-full mt-4 text-muted-foreground hover:text-primary gap-2"
+                        >
+                            <RefreshCw className="h-3 w-3" />
+                            Shuffle Avatars
+                        </Button>
                     </TabsContent>
                 </Tabs>
             </div>
 
             {/* --- Text Inputs --- */}
-            {/* Grid Layout: Stacks on mobile, Side-by-side on SM+ screens */}
             <div className="grid gap-4">
                 <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
                     <Label htmlFor="username" className="text-left sm:text-right font-medium text-muted-foreground">Username</Label>
@@ -258,6 +301,19 @@ export function ProfileSettingsModal() {
                         onChange={(e) => setFormData({...formData, username: e.target.value})}
                         className="col-span-1 sm:col-span-3" 
                         placeholder="CryptoKing"
+                    />
+                </div>
+
+                {/* EMAIL REQUIRED */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
+                    <Label htmlFor="email" className="text-left sm:text-right font-medium text-foreground">Email <span className="text-red-500">*</span></Label>
+                    <Input 
+                        id="email" 
+                        required
+                        value={formData.email}
+                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        className="col-span-1 sm:col-span-3" 
+                        placeholder="you@example.com"
                     />
                 </div>
                 
@@ -271,49 +327,74 @@ export function ProfileSettingsModal() {
                         placeholder="Tell us about yourself..."
                     />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
-                    <Label htmlFor="email" className="text-left sm:text-right font-medium text-muted-foreground">Email</Label>
-                    <Input 
-                        id="email" 
-                        value={formData.email}
-                        onChange={(e) => setFormData({...formData, email: e.target.value})}
-                        className="col-span-1 sm:col-span-3" 
-                        placeholder="Optional"
-                    />
-                </div>
             </div>
 
             {/* --- Socials --- */}
             <div className="border-t pt-4">
               <h4 className="mb-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Social Connections</h4>
               <div className="grid gap-4">
+                
+                {/* TWITTER REQUIRED */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 items-start gap-2 sm:gap-4">
+                  <Label className="text-left sm:text-right font-medium text-foreground pt-2">X (Twitter) <span className="text-red-500">*</span></Label>
+                  <div className="col-span-1 sm:col-span-3 space-y-1">
+                    <Input 
+                        required
+                        value={formData.twitter_handle} 
+                        onChange={(e) => setFormData({...formData, twitter_handle: e.target.value})} 
+                        placeholder="username" 
+                    />
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Please enter username only (without @)
+                    </p>
+                  </div>
+                </div>
+                {/* Discord (Added) */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
-                  <Label className="text-left sm:text-right font-medium text-muted-foreground">X (Twitter)</Label>
+                  <Label className="text-left sm:text-right font-medium text-muted-foreground">Discord</Label>
+                  <div className="col-span-1 sm:col-span-3 space-y-1">
                   <Input 
-                    value={formData.twitter_handle} 
-                    onChange={(e) => setFormData({...formData, twitter_handle: e.target.value})} 
+                    value={formData.discord_handle} 
+                    onChange={(e) => setFormData({...formData, discord_handle: e.target.value})} 
                     className="col-span-1 sm:col-span-3" 
-                    placeholder="@handle" 
+                    placeholder="username" 
                   />
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Please enter username only (without @)
+                    </p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
                   <Label className="text-left sm:text-right font-medium text-muted-foreground">Telegram</Label>
+                  <div className="col-span-1 sm:col-span-3 space-y-1">
                   <Input 
                     value={formData.telegram_handle} 
                     onChange={(e) => setFormData({...formData, telegram_handle: e.target.value})} 
                     className="col-span-1 sm:col-span-3" 
-                    placeholder="@username" 
+                    placeholder="username" 
                   />
+                   <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Please enter username only (without @)
+                    </p>
+                    </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 items-start sm:items-center gap-2 sm:gap-4">
                   <Label className="text-left sm:text-right font-medium text-muted-foreground">Farcaster</Label>
+                  <div className="col-span-1 sm:col-span-3 space-y-1">
                   <Input 
                     value={formData.farcaster_handle} 
                     onChange={(e) => setFormData({...formData, farcaster_handle: e.target.value})} 
                     className="col-span-1 sm:col-span-3" 
                     placeholder="handle" 
                   />
+                   <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Please enter username only (without @)
+                    </p>
+                    </div>
                 </div>
               </div>
             </div>
@@ -321,7 +402,7 @@ export function ProfileSettingsModal() {
         )}
 
         <div className="sticky bottom-0 bg-background pt-2 pb-4 sm:static sm:pb-0">
-            <Button onClick={handleSave} disabled={saving || loading || uploading} className="w-full">
+            <Button onClick={handleSave} disabled={saving || loading || uploading || !isFormValid} className="w-full">
             {saving ? (
                 <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing & Saving...

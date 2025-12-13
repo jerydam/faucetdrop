@@ -252,22 +252,29 @@ export default function Head() {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
         {/* Logo and Title with Mobile Menu Button */}
         <div className="flex justify-between items-center w-full lg:w-auto">
-         <Link href="/">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <div className="flex-shrink-0">
-          <Image
-            src="/logo.png"
-            alt="FaucetDrops Logo"
-            // Updated intrinsic size to ensure quality at larger display sizes
-            width={200}
-            height={80}
-            // Updated Tailwind classes for larger rendering
-            // Mobile: h-12 (48px) | Small screens: h-16 (64px) | Large screens: h-20 (80px)
-            className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain"
-          />
-        </div>
-      </div>
-    </Link>
+        <Link href="/">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex-shrink-0 relative">
+                {/* 1. Light Mode Logo: Visible by default, hidden in dark mode */}
+                <Image
+                  src="/lightlogo.png"
+                  alt="FaucetDrops Logo"
+                  width={200}
+                  height={80}
+                  className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain dark:hidden"
+                />
+                
+                {/* 2. Dark Mode Logo: Hidden by default, visible in dark mode */}
+                <Image
+                  src="/darklogo.png"
+                  alt="FaucetDrops Logo"
+                  width={200}
+                  height={80}
+                  className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain hidden dark:block"
+                />
+              </div>
+            </div>
+          </Link>
           {/* Mobile menu button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}

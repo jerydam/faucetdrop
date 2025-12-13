@@ -13,23 +13,36 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
-    Settings, 
-    Plus, 
-    Loader2, 
-    Search, 
-    Copy, 
-    ExternalLink, 
-    LayoutGrid, 
-    List as ListIcon,
-    Wallet
+    Settings, Plus, Loader2, Search, Copy, ExternalLink, 
+    LayoutGrid, List as ListIcon, Wallet, Activity, 
+    Droplets, ScrollText, BrainCircuit, ArrowRight
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-// --- Custom Components ---
 import { ProfileSettingsModal } from "@/components/profile-setting" 
 import { MyCreationsModal } from "@/components/my-creations-modal" 
-import { CreateNewModal } from "@/components/create-new-modal" // Ensure this path is correct
+import { CreateNewModal } from "@/components/create-new-modal" 
+
+// --- Custom Icons ---
+const XIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+)
+
+const TelegramIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+  </svg>
+)
+
+const FarcasterIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M12 24C5.37 24 0 18.63 0 12S5.37 0 12 0s12 5.37 12 12-5.37 12-12 12zm5.25-16.5h-1.5v6h-1.5v-6h-1.5v6h-1.5v-6H9.75v6h-1.5v-9h9v3z" />
+  </svg>
+)
 
 // --- Types ---
 interface FaucetData {
@@ -55,6 +68,8 @@ interface QuestData {
     faucetAddress: string
     creatorAddress: string
     title: string
+    startDate: string
+    isActive: boolean
 }
 
 interface QuizData {
@@ -216,6 +231,7 @@ export default function DashboardPage() {
                     <Card className="border-none bg-gradient-to-r from-primary/5 via-primary/10 to-background shadow-sm">
                         <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center gap-6">
                             
+                            {/* Avatar & Edit */}
                             <div className="relative group">
                                 <Avatar className="h-20 w-20 sm:h-24 sm:w-24 border-4 border-background shadow-lg">
                                     <AvatarImage src={profile?.avatar_url} className="object-cover" />
@@ -240,20 +256,24 @@ export default function DashboardPage() {
                                         </h1>
                                     )}
                                     
-                                    <div className="flex gap-2 flex-wrap">
+                                    {/* --- UPDATED SOCIAL BADGES --- */}
+                                    <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
                                         {profile?.twitter_handle && (
-                                            <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-100">
-                                                𝕏 {profile.twitter_handle}
+                                            <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-100 gap-1.5 pl-2 pr-2.5">
+                                                <XIcon className="h-3 w-3" />
+                                                {profile.twitter_handle.replace('@', '')}
                                             </Badge>
                                         )}
                                         {profile?.telegram_handle && (
-                                            <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-100">
-                                                ✈️ {profile.telegram_handle}
+                                            <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-100 gap-1.5 pl-2 pr-2.5">
+                                                <TelegramIcon className="h-3 w-3" />
+                                                {profile.telegram_handle.replace('@', '')}
                                             </Badge>
                                         )}
                                         {profile?.farcaster_handle && (
-                                            <Badge variant="secondary" className="bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-100">
-                                                🟣 {profile.farcaster_handle}
+                                            <Badge variant="secondary" className="bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-100 gap-1.5 pl-2 pr-2.5">
+                                                <FarcasterIcon className="h-3 w-3" />
+                                                {profile.farcaster_handle}
                                             </Badge>
                                         )}
                                     </div>

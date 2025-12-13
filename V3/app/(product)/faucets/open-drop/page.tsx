@@ -197,7 +197,7 @@ export default function OpenDrop() {
               Do users pay gas fees?
             </AccordionTrigger>
             <AccordionContent className="pt-2 text-[#94A3B8]">
-              No — all claims are completely gasless for users, making it seamless for community engagement.
+              No, all claims are completely gasless for users, making it seamless for community engagement.
             </AccordionContent>
           </AccordionItem>
 

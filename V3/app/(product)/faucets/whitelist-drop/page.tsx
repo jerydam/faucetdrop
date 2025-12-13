@@ -50,8 +50,6 @@ export default function WhitelistDrop() {
                 </p>
                 <p className="mt-4 text-[#E2E8F0]">
                     Use this Faucet for Precision Rewards for your community. With the Whitelist Drop Faucet, only approved addresses can claim, ensuring your tokens go exactly where they are intended. This distribution logic is ideal for Community/DAO payouts, contest/campaign winner rewards, and private airdrops.
-
-                    [Button: Create Whitelist Drop] [Button: Manage Lists]
                 </p>
                 <Button
                     onClick={createWhitelistDrop}
@@ -180,7 +178,7 @@ export default function WhitelistDrop() {
                             How do I create a Whitelist Drop?
                         </AccordionTrigger>
                         <AccordionContent className="pt-2 text-[#94A3B8]">
-                            Upload a CSV of eligible wallet addresses, set the allocation amount for each address, activate the drop, and share the claim link with your community.
+                            Add a list of eligible wallet addresses, set the allocation amount for each address, activate the drop, and share the claim link with your community.
                         </AccordionContent>
                     </AccordionItem>
 
@@ -211,16 +209,7 @@ export default function WhitelistDrop() {
                         </AccordionContent>
                     </AccordionItem>
 
-                    <AccordionItem value="6" className="border-b border-gray-700 pb-2">
-                        <AccordionTrigger className="hover:no-underline [&[data-state=open]>svg]:rotate-180 text-[#E2E8F0] hover:text-white">
-                            How do I create a Whitelist Drop
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-2 text-[#94A3B8]">
-                            Add a list of eligible wallet addresses, set the allocation amount for each address, activate the drop, and share the claim link with your community.
-                        </AccordionContent>
-                    </AccordionItem>
-
-                    <AccordionItem value="7" className="border-b-0">
+                    <AccordionItem value="6" className="border-b-0">
                         <AccordionTrigger className="hover:no-underline [&[data-state=open]>svg]:rotate-180 text-[#E2E8F0] hover:text-white">
                             What does it cost to set up a Whitelist Drop Faucet?
                         </AccordionTrigger>

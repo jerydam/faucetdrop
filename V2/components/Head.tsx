@@ -252,34 +252,22 @@ export default function Head() {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
         {/* Logo and Title with Mobile Menu Button */}
         <div className="flex justify-between items-center w-full lg:w-auto">
-          <Link href="/">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="flex-shrink-0">
-             
-              <Image
-                src="/logo.png"
-                alt="FaucetDrops Logo"
-                width={32}
-                height={32}
-                className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-md object-contain"
-              />
-             
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-slate-100">
-                FaucetDrops
-              </h1>
-              <div className="hidden sm:flex gap-1">
-                <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                  Free, Fast, Fair & Frictionless
-                </span>
-                <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                  Token Distribution 💧
-                </span>
-              </div>
-            </div>
-          </div>
-           </Link> 
+         <Link href="/">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex-shrink-0">
+          <Image
+            src="/logo.png"
+            alt="FaucetDrops Logo"
+            // Updated intrinsic size to ensure quality at larger display sizes
+            width={200}
+            height={80}
+            // Updated Tailwind classes for larger rendering
+            // Mobile: h-12 (48px) | Small screens: h-16 (64px) | Large screens: h-20 (80px)
+            className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain"
+          />
+        </div>
+      </div>
+    </Link>
           {/* Mobile menu button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -301,7 +289,7 @@ export default function Head() {
           <div className="pt-4 space-y-4">
             <div className="flex flex-col space-y-3">
               <Button
-                onClick={() => router.push('/create-faucet')}
+                onClick={() => router.push('faucet/create-faucet')}
                 size="sm"
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700"
               >
@@ -338,7 +326,7 @@ export default function Head() {
         <div className="hidden lg:flex items-center gap-4">
           <div className="flex items-center gap-3">
             <Button
-              onClick={() => router.push('/create-faucet')}
+              onClick={() => router.push('faucet/create-faucet')}
               size="sm"
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
             >

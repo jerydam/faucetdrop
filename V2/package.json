@@ -60,6 +60,7 @@
     "dotenv": "^17.2.3",
     "embla-carousel-react": "8.5.1",
     "ethers": "^6.14.1",
+    "simple-icons": "^16.1.0",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "next": "15.5.7",

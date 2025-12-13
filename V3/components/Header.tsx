@@ -10,6 +10,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Droplets, PackageCheck, GraduationCap, Landmark, FileMinus, Github, Info, Briefcase, PaintRoller, LockOpen, List, Columns3Cog } from 'lucide-react';
+import GetStartedModal from './GetStartedModal';
 
 interface NavItemBase {
   name: string;
@@ -28,45 +29,47 @@ type NavItem = NavItemBase | NavItemWithDropdown;
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [isGetStartedModalOpen, setIsGetStartedModalOpen] = useState(false);
 
   const navLinks: Array<{
     name: string;
     dropdown: NavItem[];
   }> = [
-    {
-      name: 'Product',
-      dropdown: [
-          { name: 'Faucets', href: '#', icon: <Droplets />, description: 'Smarter, Flexible, Onchain Distribution',
+      {
+        name: 'Product',
+        dropdown: [
+          {
+            name: 'Faucets', href: '#', icon: <Droplets />, description: 'Smarter, Flexible, Onchain Distribution',
             dropdown: [
-              { name: 'Open Drop', href: '/faucets/open-drop', icon: <LockOpen />},
-              { name: 'Whitelist Drop', href: '/faucets/whitelist-drop', icon: <List />},
-              { name: 'Custom Drop', href: '/faucets/custom-drop', icon: <Columns3Cog />},
+              { name: 'Open Drop', href: '/faucets/open-drop', icon: <LockOpen /> },
+              { name: 'Whitelist Drop', href: '/faucets/whitelist-drop', icon: <List /> },
+              { name: 'Custom Drop', href: '/faucets/custom-drop', icon: <Columns3Cog /> },
             ]
-           },
-        { name: 'Quests', href: '/coming-soon', icon: <PackageCheck />, description: 'Gamified Progress + Automated Rewards' },
-        { name: 'Quizzes', href: '/coming-soon', icon: <GraduationCap />, description: 'Fun, Interactive, AI-Powered Web3 Quiz Engine' },
-        { name: 'Enterprise', href: '/coming-soon', icon: <Landmark />, description: 'White Label Solutions' },
-        // href: '/product/quests' // path to follow
-      ]
-    },
-    {
-      name: 'Developers',
-      dropdown: [
-        { name: 'Documentation', href: '/coming-soon', icon: <FileMinus />, description: 'A comprehensive guide for seamless integration' },
-        // href: '/developers/docs' // path to follow
-        { name: 'GitHub', href: 'https://github.com/Priveedores-de-soluciones/Faucet_drops', target: '_blank', icon: <Github />, description: 'Explore our open-source projects' },
-      ]
-    },
-    {
-      name: 'Company',
-      dropdown: [
-        { name: 'About', href: '/coming-soon', icon: <Info />, description: 'Learn more about our company' },
-        { name: 'Career', href: '/coming-soon', icon: <Briefcase />, description: 'Explore career opportunities' },
-        { name: 'Brand kit', href: '/coming-soon', icon: <PaintRoller />, description: 'Download our brand kit' },
-        // ref: '/company/about' // path to follow
-      ]
-    },
-  ];
+          },
+          { name: 'Quests', href: '/coming-soon', icon: <PackageCheck />, description: 'Gamified Progress + Automated Rewards' },
+          { name: 'Quizzes', href: '/coming-soon', icon: <GraduationCap />, description: 'Fun, Interactive, AI-Powered Web3 Quiz Engine' },
+          { name: 'Enterprise', href: '/coming-soon', icon: <Landmark />, description: 'White Label Solutions' },
+          // href: '/product/quests' // path to follow
+        ]
+      },
+      {
+        name: 'Developers',
+        dropdown: [
+          { name: 'Documentation', href: '/coming-soon', icon: <FileMinus />, description: 'A comprehensive guide for seamless integration' },
+          // href: '/developers/docs' // path to follow
+          { name: 'GitHub', href: 'https://github.com/Priveedores-de-soluciones/Faucet_drops', target: '_blank', icon: <Github />, description: 'Explore our open-source projects' },
+        ]
+      },
+      {
+        name: 'Company',
+        dropdown: [
+          { name: 'About', href: '/coming-soon', icon: <Info />, description: 'Learn more about our company' },
+          { name: 'Career', href: '/coming-soon', icon: <Briefcase />, description: 'Explore career opportunities' },
+          { name: 'Brand kit', href: '/coming-soon', icon: <PaintRoller />, description: 'Download our brand kit' },
+          // ref: '/company/about' // path to follow
+        ]
+      },
+    ];
 
   return (
     <header className="fixed w-full z-50 transition-colors duration-300 text-white mx-auto max-w-full px-0 max-md:bg-[#020817]/80 max-md:backdrop-blur-sm">
@@ -85,7 +88,7 @@ const Header = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-4 lg:space-x-6 bg-[#020817]/50 px-4 lg:px-6 py-2.5 rounded-2xl ring-1 ring-gray-700">
+          <nav className="hidden md:flex items-center space-x-4 lg:space-x-6 bg-[#020817]/90 px-4 lg:px-6 py-2.5 rounded-2xl ring-1 ring-gray-700">
             {navLinks.map((link) => (
               <div
                 key={link.name}
@@ -170,18 +173,28 @@ const Header = () => {
 
           {/* Auth Buttons - Desktop */}
           <div className="hidden md:flex items-center space-x-3">
-            <Link
+            {/* <Link
               href="/coming-soon"
               className="px-4 py-2 text-sm lg:text-base rounded-xl text-white hover:bg-gray-800/50 ring-1 ring-gray-700 transition-colors"
             >
-              Login
-            </Link>
-            <Link
+              Login 
+            </Link> */}
+            {/* <Link
               href="/coming-soon"
               className="px-4 py-2 text-sm lg:text-base bg-[#0052FF] text-white rounded-xl hover:bg-[#2563EB] transition-colors"
             >
               Sign Up
-            </Link>
+            </Link> */}
+
+            <button
+              onClick={() => {
+                setIsMenuOpen(false);
+                setIsGetStartedModalOpen(true);
+              }}
+              className="w-full text-center px-4 py-3 mt-2 text-white bg-[#0052FF] rounded-lg hover:bg-[#2564ebe9] transition-colors active:bg-[#1d4ed8]"
+            >
+              Get Started
+            </button>
           </div>
 
           {/* Mobile menu button */}
@@ -272,24 +285,39 @@ const Header = () => {
             </Accordion>
 
             <div className="pt-2 border-t border-gray-800">
-              <Link
+              {/* <Link
                 href="/coming-soon"
                 className="block w-full text-center px-4 py-3 rounded-lg text-[#F8FAFC] hover:bg-gray-800/50 transition-colors active:bg-gray-800/30"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Login
-              </Link>
-              <Link
+              </Link> */}
+              {/* <Link
                 href="/coming-soon"
                 className="block w-full text-center px-4 py-3 mt-2 text-white bg-[#0052FF] rounded-lg hover:bg-[#2563EB] transition-colors active:bg-[#1d4ed8]"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Sign Up
-              </Link>
+              </Link> */}
+
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  setIsGetStartedModalOpen(true);
+                }}
+                className="w-full text-center px-4 py-3 mt-2 text-white bg-[#0052FF] rounded-lg hover:bg-[#2563EB] transition-colors active:bg-[#1d4ed8]"
+              >
+                Get Started
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      <GetStartedModal
+        isOpen={isGetStartedModalOpen}
+        onClose={() => setIsGetStartedModalOpen(false)}
+      />
     </header>
   );
 };

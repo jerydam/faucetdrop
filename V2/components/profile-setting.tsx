@@ -29,7 +29,7 @@ interface UserProfile {
 
 // --- EXPANDED SEED LIST ---
 const GENERATED_SEEDS = [
-  "Felix", "Aneka", "Zack", "Molly", "Bear", "Crypto", "Whale", "Pepe",
+  "John","Jerry", "Aneka", "Zack", "Molly", "Bear", "Crypto", "Whale", "Pepe",
   "Satoshi", "Vitalik", "Gwei", "HODL", "WAGMI", "Doge", "Shiba", "Solana",
   "Ether", "Bitcoin", "Chain", "Block", "DeFi", "NFT", "Alpha", "Beta",
   "Neon", "Cyber", "Pixel", "Glitch", "Retro", "Vapor", "Synth", "Wave",

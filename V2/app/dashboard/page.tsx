@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import { 
     Settings, 
     Plus, 
@@ -19,10 +21,15 @@ import {
     Copy, 
     ExternalLink, 
     LayoutGrid, 
-    List as ListIcon 
+    List as ListIcon,
+    Wallet
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { format } from "date-fns" // Optional: for date formatting
+
+// --- Custom Components ---
+import { ProfileSettingsModal } from "@/components/profile-setting" 
+import { MyCreationsModal } from "@/components/my-creations-modal" 
+import { CreateNewModal } from "@/components/create-new-modal" // Ensure this path is correct
 
 // --- Types ---
 interface FaucetData {
@@ -33,6 +40,29 @@ interface FaucetData {
     createdAt?: string
 }
 
+interface UserProfileData {
+    username: string
+    email?: string
+    bio?: string
+    avatar_url?: string
+    twitter_handle?: string
+    discord_handle?: string
+    telegram_handle?: string
+    farcaster_handle?: string
+}
+
+interface QuestData {
+    faucetAddress: string
+    creatorAddress: string
+    title: string
+}
+
+interface QuizData {
+    id: string
+    creatorAddress: string
+    title: string
+}
+
 export default function DashboardPage() {
     const { address, isConnected } = useWallet()
     const { networks } = useNetwork()
@@ -41,16 +71,30 @@ export default function DashboardPage() {
     
     // State
     const [faucets, setFaucets] = useState<FaucetData[]>([])
-    const [loading, setLoading] = useState(true)
+    const [questCount, setQuestCount] = useState<number>(0) 
+    const [quizCount, setQuizCount] = useState<number>(0)
+    const [profile, setProfile] = useState<UserProfileData | null>(null)
+    
+    const [loadingFaucets, setLoadingFaucets] = useState(true)
+    const [loadingProfile, setLoadingProfile] = useState(true)
+    
     const [searchQuery, setSearchQuery] = useState("")
     const [networkFilter, setNetworkFilter] = useState("all")
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid') // Toggle between grid/list on desktop
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
     // --- Data Fetching ---
     useEffect(() => {
+        if (!isConnected || !address) {
+            setLoadingFaucets(false)
+            setLoadingProfile(false)
+            return
+        }
+
+        const backendUrl = "https://fauctdrop-backend.onrender.com"; 
+
+        // 1. Fetch Faucets
         const fetchFaucets = async () => {
-            if (!address) return
-            setLoading(true)
+            setLoadingFaucets(true)
             try {
                 const data = await getUserFaucets(address)
                 setFaucets(data)
@@ -58,28 +102,73 @@ export default function DashboardPage() {
                 console.error("Failed to load faucets", error)
                 toast({ title: "Error", description: "Could not load your faucets.", variant: "destructive" })
             } finally {
-                setLoading(false)
+                setLoadingFaucets(false)
             }
         }
 
-        if (isConnected && address) {
-            fetchFaucets()
-        } else {
-            setLoading(false)
+        // 2. Fetch User Profile
+        const fetchProfile = async () => {
+            setLoadingProfile(true)
+            try {
+                const response = await fetch(`${backendUrl}/api/profile/${address}?t=${Date.now()}`)
+                const data = await response.json()
+                
+                if (data.success && data.profile) {
+                    setProfile(data.profile)
+                }
+            } catch (error) {
+                console.error("Failed to fetch profile", error)
+            } finally {
+                setLoadingProfile(false)
+            }
         }
+
+        // 3. Fetch Stats (Quests & Quizzes)
+        const fetchStats = async () => {
+            try {
+                // Fetch Quests
+                const questRes = await fetch(`${backendUrl}/api/quests`)
+                const questData = await questRes.json()
+                if (questData.success && Array.isArray(questData.quests)) {
+                    const myQuests = questData.quests.filter((q: QuestData) => 
+                        q.creatorAddress.toLowerCase() === address.toLowerCase()
+                    )
+                    setQuestCount(myQuests.length)
+                }
+
+                // Fetch Quizzes
+                try {
+                    const quizRes = await fetch(`${backendUrl}/api/quizzes`)
+                    if (quizRes.ok) {
+                        const quizData = await quizRes.json()
+                        if (quizData.success && Array.isArray(quizData.quizzes)) {
+                            const myQuizzes = quizData.quizzes.filter((q: QuizData) => 
+                                q.creatorAddress.toLowerCase() === address.toLowerCase()
+                            )
+                            setQuizCount(myQuizzes.length)
+                        }
+                    }
+                } catch (e) {
+                    // console.log("Quiz endpoint unavailable")
+                }
+
+            } catch (error) {
+                console.error("Failed to fetch stats", error)
+            }
+        }
+
+        fetchFaucets()
+        fetchProfile()
+        fetchStats()
     }, [address, isConnected, toast])
 
     // --- Helpers ---
     const getNetworkName = (chainId: number) => networks.find(n => n.chainId === chainId)?.name || `Chain ${chainId}`
-    
-    const getNetworkColor = (chainId: number) => {
-        const net = networks.find(n => n.chainId === chainId)
-        return net?.color || "#64748b" // Default slate color
-    }
+    const getNetworkColor = (chainId: number) => networks.find(n => n.chainId === chainId)?.color || "#64748b"
 
-    const copyAddress = (addr: string) => {
-        navigator.clipboard.writeText(addr)
-        toast({ title: "Copied", description: "Address copied to clipboard" })
+    const copyToClipboard = (text: string, label: string) => {
+        navigator.clipboard.writeText(text)
+        toast({ title: "Copied", description: `${label} copied to clipboard` })
     }
 
     const handleManage = (faucet: FaucetData) => {
@@ -92,14 +181,12 @@ export default function DashboardPage() {
             const matchesSearch = 
                 faucet.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 faucet.faucetAddress.toLowerCase().includes(searchQuery.toLowerCase())
-            
             const matchesNetwork = networkFilter === "all" || faucet.chainId.toString() === networkFilter
-
             return matchesSearch && matchesNetwork
         })
     }, [faucets, searchQuery, networkFilter])
 
-    // --- Empty State Component ---
+    // --- Empty State ---
     if (!isConnected) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -116,28 +203,128 @@ export default function DashboardPage() {
         )
     }
 
+    const displayName = profile?.username || "Anonymous User"
+    const displayAddress = address ? `${address.slice(0,6)}...${address.slice(-4)}` : ""
+
     return (
         <main className="min-h-screen bg-background pb-20">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
                 <Header pageTitle="Dashboard" />
 
-                {/* --- Action Bar --- */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                    <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Your Faucets</h1>
-                        <p className="text-muted-foreground mt-1">Manage and monitor your token distributions across {networks.length} chains.</p>
-                    </div>
-                    <Button onClick={() => router.push("/create")} className="w-full md:w-auto">
-                        <Plus className="h-4 w-4 mr-2" /> Create New Faucet
-                    </Button>
+                {/* --- 1. USER IDENTITY SECTION --- */}
+                <div className="mb-10">
+                    <Card className="border-none bg-gradient-to-r from-primary/5 via-primary/10 to-background shadow-sm">
+                        <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center gap-6">
+                            
+                            <div className="relative group">
+                                <Avatar className="h-20 w-20 sm:h-24 sm:w-24 border-4 border-background shadow-lg">
+                                    <AvatarImage src={profile?.avatar_url} className="object-cover" />
+                                    <AvatarFallback className="text-2xl font-bold bg-primary text-primary-foreground">
+                                        {displayName.charAt(0).toUpperCase()}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="absolute -bottom-2 -right-2">
+                                    <div className="bg-background rounded-full shadow-md">
+                                        <ProfileSettingsModal /> 
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 space-y-2">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+                                    {loadingProfile ? (
+                                        <Skeleton className="h-8 w-48" />
+                                    ) : (
+                                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                                            {displayName}
+                                        </h1>
+                                    )}
+                                    
+                                    <div className="flex gap-2 flex-wrap">
+                                        {profile?.twitter_handle && (
+                                            <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-100">
+                                                𝕏 {profile.twitter_handle}
+                                            </Badge>
+                                        )}
+                                        {profile?.telegram_handle && (
+                                            <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-100">
+                                                ✈️ {profile.telegram_handle}
+                                            </Badge>
+                                        )}
+                                        {profile?.farcaster_handle && (
+                                            <Badge variant="secondary" className="bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-100">
+                                                🟣 {profile.farcaster_handle}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 text-muted-foreground font-mono text-sm">
+                                    <Wallet className="h-4 w-4" />
+                                    <span>{displayAddress}</span>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-6 w-6 hover:bg-muted" 
+                                        onClick={() => copyToClipboard(address || "", "Address")}
+                                    >
+                                        <Copy className="h-3 w-3" />
+                                    </Button>
+                                </div>
+
+                                {profile?.bio ? (
+                                    <p className="text-sm text-muted-foreground max-w-2xl line-clamp-2">
+                                        {profile.bio}
+                                    </p>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground italic">No bio yet.</p>
+                                )}
+                            </div>
+
+                            {/* Stats */}
+                            <div className="flex items-center gap-6 bg-background/50 p-4 rounded-xl border self-start md:self-center w-full md:w-auto justify-around md:justify-start">
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold">{faucets.length}</div>
+                                    <div className="text-xs text-muted-foreground uppercase font-semibold">Faucets</div>
+                                </div>
+                                <div className="h-10 w-[1px] bg-border" />
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold">{questCount}</div> 
+                                    <div className="text-xs text-muted-foreground uppercase font-semibold">Quests</div>
+                                </div>
+                                <div className="h-10 w-[1px] bg-border" />
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold">{quizCount}</div> 
+                                    <div className="text-xs text-muted-foreground uppercase font-semibold">Quizzes</div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
 
-                {/* --- Filters & Controls --- */}
+                {/* --- 2. ACTION BAR --- */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                    <div>
+                        <h2 className="text-2xl font-bold tracking-tight">Your Deployments</h2>
+                        <p className="text-muted-foreground mt-1">Manage your active faucets and claim distributions.</p>
+                    </div>
+                    
+                    {/* Updated Action Buttons Section */}
+                    <div className="flex flex-wrap gap-3 w-full md:w-auto mt-4 md:mt-0">
+                        {/* Library Button */}
+                        <MyCreationsModal faucets={faucets} address={address} />
+                        
+                        {/* Create New Button (Using the Modal) */}
+                        <CreateNewModal />
+                    </div>
+                </div>
+
+                {/* --- 3. FILTERS --- */}
                 <div className="flex flex-col sm:flex-row gap-4 mb-6">
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input 
-                            placeholder="Search by name or address..." 
+                            placeholder="Search deployments..." 
                             className="pl-9"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -176,8 +363,8 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* --- Content Area --- */}
-                {loading ? (
+                {/* --- 4. FAUCET LIST --- */}
+                {loadingFaucets ? (
                     <div className="flex flex-col items-center justify-center py-20 gap-4">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         <p className="text-sm text-muted-foreground">Loading your faucets...</p>
@@ -189,15 +376,13 @@ export default function DashboardPage() {
                                 <Search className="h-8 w-8 text-muted-foreground" />
                             </div>
                             <div className="space-y-1">
-                                <h3 className="font-semibold text-lg">No faucets found</h3>
+                                <h3 className="font-semibold text-lg">No deployments found</h3>
                                 <p className="text-muted-foreground max-w-sm mx-auto">
-                                    {searchQuery ? "Try adjusting your search or filters." : "Get started by deploying your first faucet on any supported chain."}
+                                    {searchQuery ? "Try adjusting your search or filters." : "Get started by creating your first project."}
                                 </p>
                             </div>
                             {!searchQuery && (
-                                <Button onClick={() => router.push("/create")} variant="outline">
-                                    Deploy Faucet
-                                </Button>
+                                <CreateNewModal />
                             )}
                         </div>
                     </Card>
@@ -211,7 +396,7 @@ export default function DashboardPage() {
                                 getNetworkName={getNetworkName}
                                 getNetworkColor={getNetworkColor}
                                 onManage={() => handleManage(faucet)}
-                                onCopy={() => copyAddress(faucet.faucetAddress)}
+                                onCopy={() => copyToClipboard(faucet.faucetAddress, "Address")}
                             />
                         ))}
                     </div>
@@ -221,7 +406,6 @@ export default function DashboardPage() {
     )
 }
 
-// --- Faucet Card Component (Handles both Grid and List view styles) ---
 function FaucetCard({ 
     faucet, 
     viewMode, 
@@ -245,12 +429,10 @@ function FaucetCard({
         return (
             <Card className="hover:shadow-md transition-shadow group">
                 <div className="p-4 flex items-center gap-4">
-                    {/* Icon Placeholder */}
                     <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                         <span className="font-bold text-primary">{faucet.name.charAt(0).toUpperCase()}</span>
                     </div>
                     
-                    {/* Info */}
                     <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
                         <div>
                             <h3 className="font-semibold truncate">{faucet.name}</h3>
@@ -278,7 +460,6 @@ function FaucetCard({
                         </div>
                     </div>
 
-                    {/* Action */}
                     <Button onClick={onManage} size="sm" className="shrink-0">
                         <Settings className="h-4 w-4 mr-2" /> Manage
                     </Button>
@@ -287,7 +468,6 @@ function FaucetCard({
         )
     }
 
-    // Grid View
     return (
         <Card className="hover:shadow-lg transition-all duration-200 group flex flex-col">
             <CardHeader className="pb-3">
@@ -307,7 +487,7 @@ function FaucetCard({
                         <Copy className="h-3 w-3" />
                     </button>
                     <a 
-                        href="#" // In a real app, link to block explorer
+                        href="#" 
                         className="hover:text-foreground p-1 rounded hover:bg-muted transition-colors ml-auto"
                         onClick={(e) => e.preventDefault()}
                     >
@@ -321,7 +501,6 @@ function FaucetCard({
                         <span className="block font-semibold text-foreground">Created</span>
                         {dateCreated}
                     </div>
-                    {/* Placeholder stats - could be real if backend returns them */}
                     <div className="bg-muted/50 p-2 rounded">
                         <span className="block font-semibold text-foreground">Chain ID</span>
                         {faucet.chainId}

@@ -364,7 +364,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         `Saving ${tasksToSend.length} tasks via dedicated backend endpoint.`
       );
       const response = await fetch(
-        "http://127.0.0.1:8000/add-faucet-tasks",
+        "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

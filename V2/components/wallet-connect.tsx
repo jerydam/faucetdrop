@@ -87,7 +87,7 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
         <DropdownMenuGroup>
           {/* Dashboard Link */}
           <DropdownMenuItem asChild>
-            <Link href="/faucet/dashboard" className="cursor-pointer flex items-center gap-2">
+            <Link href="/dashboard" className="cursor-pointer flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               <span>Dashboard</span>
             </Link>

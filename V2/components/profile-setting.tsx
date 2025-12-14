@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Settings, Loader2, Save, Upload, Check, Edit2, RefreshCw, AlertCircle } from "lucide-react"
+import { Settings, Loader2, Save, Upload, Check, Edit2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 // Backend URL
@@ -27,14 +27,14 @@ interface UserProfile {
   avatar_url: string
 }
 
-// Map for field-specific error messages
-interface FieldErrors {
-  username?: string;
-  email?: string;
-  twitter_handle?: string;
-  discord_handle?: string;
-  telegram_handle?: string;
-  farcaster_handle?: string;
+// Map for field status: string = error message, null = valid/available, undefined = initial/unchecked
+interface FieldStatus {
+  username?: string | null;
+  email?: string | null;
+  twitter_handle?: string | null;
+  discord_handle?: string | null;
+  telegram_handle?: string | null;
+  farcaster_handle?: string | null;
 }
 
 const GENERATED_SEEDS = [
@@ -63,7 +63,9 @@ export function ProfileSettingsModal() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [errors, setErrors] = useState<FieldErrors>({}) // Store availability errors
+  
+  // Field Status: undefined = clean, null = success, string = error
+  const [fieldStatus, setFieldStatus] = useState<FieldStatus>({}) 
   
   const [seedOffset, setSeedOffset] = useState(0);
   const ITEMS_PER_PAGE = 8;
@@ -94,7 +96,7 @@ export function ProfileSettingsModal() {
   useEffect(() => {
     if (isOpen && address) {
       fetchProfile()
-      setErrors({}) // Clear errors on open
+      setFieldStatus({}) // Clear status on open
     }
   }, [isOpen, address])
 
@@ -152,7 +154,15 @@ export function ProfileSettingsModal() {
 
   // Helper to check uniqueness against backend
   const checkUniqueness = async (field: keyof UserProfile, value: string) => {
-    if (!value || value.trim() === "") return true; // Empty fields are fine (except required ones handled by isFormValid)
+    if (!value || value.trim() === "") {
+        // Reset status if empty
+        setFieldStatus(prev => {
+            const newStatus = { ...prev };
+            delete newStatus[field as keyof FieldStatus];
+            return newStatus;
+        });
+        return true; 
+    }
     
     try {
         const res = await fetch(`${API_BASE_URL}/api/profile/check-availability`, {
@@ -161,20 +171,17 @@ export function ProfileSettingsModal() {
             body: JSON.stringify({ field, value, current_wallet: address })
         });
         const data = await res.json();
+        
         if (!data.available) {
-            setErrors(prev => ({ ...prev, [field]: data.message }));
+            setFieldStatus(prev => ({ ...prev, [field]: data.message })); // Set Error Message
             return false;
         } else {
-            setErrors(prev => {
-                const newErrors = { ...prev };
-                delete newErrors[field as keyof FieldErrors]; // Clear error if available
-                return newErrors;
-            });
+            setFieldStatus(prev => ({ ...prev, [field]: null })); // Set Success (null means valid)
             return true;
         }
     } catch (error) {
         console.error("Validation error", error);
-        return true; // Assume valid if network error to avoid blocking
+        return true; // Assume valid if network error
     }
   };
 
@@ -191,7 +198,7 @@ export function ProfileSettingsModal() {
 
     setSaving(true)
 
-    // 1. Check Uniqueness for all relevant fields
+    // Check all fields
     const validations = await Promise.all([
         checkUniqueness('username', formData.username),
         checkUniqueness('email', formData.email),
@@ -201,9 +208,10 @@ export function ProfileSettingsModal() {
         formData.farcaster_handle ? checkUniqueness('farcaster_handle', formData.farcaster_handle) : Promise.resolve(true),
     ]);
 
+    // If any validation failed (returned false), stop
     if (validations.includes(false)) {
         setSaving(false);
-        toast({ title: "Validation Failed", description: "Some details are already in use. Please check the form.", variant: "destructive" });
+        toast({ title: "Validation Failed", description: "Some details are already in use.", variant: "destructive" });
         return;
     }
 
@@ -248,17 +256,34 @@ export function ProfileSettingsModal() {
     }
   }
 
-  // Generic input change handler that clears errors on type
   const handleInputChange = (field: keyof UserProfile, value: string) => {
       setFormData({ ...formData, [field]: value });
-      // Optional: Clear error immediately when user starts typing to fix it
-      if (errors[field as keyof FieldErrors]) {
-          setErrors(prev => {
-              const newErrors = { ...prev };
-              delete newErrors[field as keyof FieldErrors];
-              return newErrors;
+      // Clear status when typing to remove old error/success states until blur
+      if (fieldStatus[field as keyof FieldStatus] !== undefined) {
+          setFieldStatus(prev => {
+              const newStatus = { ...prev };
+              delete newStatus[field as keyof FieldStatus];
+              return newStatus;
           });
       }
+  };
+
+  // Helper to render feedback message
+  const renderFeedback = (field: keyof FieldStatus) => {
+      const status = fieldStatus[field];
+      if (status === undefined) return null; // No status yet
+
+      if (status === null) {
+          // Success state
+          return (
+              <p className="text-xs text-green-600 flex items-center gap-1 mt-1">
+                  <CheckCircle2 className="h-3 w-3" /> Available
+              </p>
+          );
+      }
+      
+      // Error state
+      return <p className="text-xs text-red-500 mt-1">{status}</p>;
   };
 
   return (
@@ -362,9 +387,9 @@ export function ProfileSettingsModal() {
                             onChange={(e) => handleInputChange('username', e.target.value)}
                             onBlur={() => checkUniqueness('username', formData.username)}
                             placeholder="CryptoKing"
-                            className={errors.username ? "border-red-500" : ""}
+                            className={fieldStatus.username ? "border-red-500" : (fieldStatus.username === null ? "border-green-500" : "")}
                         />
-                        {errors.username && <p className="text-xs text-red-500">{errors.username}</p>}
+                        {renderFeedback('username')}
                     </div>
                 </div>
 
@@ -379,9 +404,9 @@ export function ProfileSettingsModal() {
                             onChange={(e) => handleInputChange('email', e.target.value)}
                             onBlur={() => checkUniqueness('email', formData.email)}
                             placeholder="you@example.com"
-                            className={errors.email ? "border-red-500" : ""}
+                            className={fieldStatus.email ? "border-red-500" : (fieldStatus.email === null ? "border-green-500" : "")}
                         />
-                        {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+                        {renderFeedback('email')}
                     </div>
                 </div>
                 
@@ -413,13 +438,13 @@ export function ProfileSettingsModal() {
                         onChange={(e) => handleInputChange('twitter_handle', e.target.value)} 
                         onBlur={() => checkUniqueness('twitter_handle', formData.twitter_handle)}
                         placeholder="username" 
-                        className={errors.twitter_handle ? "border-red-500" : ""}
+                        className={fieldStatus.twitter_handle ? "border-red-500" : (fieldStatus.twitter_handle === null ? "border-green-500" : "")}
                     />
                     <div className="flex justify-between items-start">
                         <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" /> No @ symbol
                         </p>
-                        {errors.twitter_handle && <p className="text-xs text-red-500">{errors.twitter_handle}</p>}
+                        {renderFeedback('twitter_handle')}
                     </div>
                   </div>
                 </div>
@@ -433,13 +458,13 @@ export function ProfileSettingsModal() {
                         onChange={(e) => handleInputChange('discord_handle', e.target.value)} 
                         onBlur={() => checkUniqueness('discord_handle', formData.discord_handle)}
                         placeholder="username" 
-                        className={errors.discord_handle ? "border-red-500" : ""}
+                        className={fieldStatus.discord_handle ? "border-red-500" : (fieldStatus.discord_handle === null ? "border-green-500" : "")}
                     />
                     <div className="flex justify-between items-start">
                          <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" /> No @ symbol
                         </p>
-                        {errors.discord_handle && <p className="text-xs text-red-500">{errors.discord_handle}</p>}
+                        {renderFeedback('discord_handle')}
                     </div>
                   </div>
                 </div>
@@ -453,13 +478,13 @@ export function ProfileSettingsModal() {
                         onChange={(e) => handleInputChange('telegram_handle', e.target.value)} 
                         onBlur={() => checkUniqueness('telegram_handle', formData.telegram_handle)}
                         placeholder="username" 
-                        className={errors.telegram_handle ? "border-red-500" : ""}
+                        className={fieldStatus.telegram_handle ? "border-red-500" : (fieldStatus.telegram_handle === null ? "border-green-500" : "")}
                     />
                     <div className="flex justify-between items-start">
                         <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" /> No @ symbol
                         </p>
-                        {errors.telegram_handle && <p className="text-xs text-red-500">{errors.telegram_handle}</p>}
+                        {renderFeedback('telegram_handle')}
                     </div>
                   </div>
                 </div>
@@ -473,13 +498,13 @@ export function ProfileSettingsModal() {
                         onChange={(e) => handleInputChange('farcaster_handle', e.target.value)} 
                         onBlur={() => checkUniqueness('farcaster_handle', formData.farcaster_handle)}
                         placeholder="handle" 
-                        className={errors.farcaster_handle ? "border-red-500" : ""}
+                        className={fieldStatus.farcaster_handle ? "border-red-500" : (fieldStatus.farcaster_handle === null ? "border-green-500" : "")}
                     />
                      <div className="flex justify-between items-start">
                         <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" /> No @ symbol
                         </p>
-                        {errors.farcaster_handle && <p className="text-xs text-red-500">{errors.farcaster_handle}</p>}
+                        {renderFeedback('farcaster_handle')}
                     </div>
                   </div>
                 </div>
@@ -489,7 +514,8 @@ export function ProfileSettingsModal() {
         )}
 
         <div className="sticky bottom-0 bg-background pt-2 pb-4 sm:static sm:pb-0">
-            <Button onClick={handleSave} disabled={saving || loading || uploading || !isFormValid || Object.keys(errors).length > 0} className="w-full">
+            {/* Disable save button if ANY field has an error (string) */}
+            <Button onClick={handleSave} disabled={saving || loading || uploading || !isFormValid || Object.values(fieldStatus).some(val => typeof val === 'string')} className="w-full">
             {saving ? (
                 <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing & Saving...

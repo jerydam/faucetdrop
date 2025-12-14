@@ -852,7 +852,48 @@ function CreateFaucetWizardContent() {
     })
     return unavailableTypes
   }
+  // Helper function to register faucet in backend database
+  const registerFaucetInBackend = async (
+    faucetAddress: string,
+    ownerAddress: string,
+    chainId: number,
+    faucetType: string,
+    name: string
+  ): Promise<void> => {
+    try {
+      console.log(`📝 Registering faucet ${name} (${faucetAddress}) in backend...`)
 
+      const response = await fetch('https://fauctdrop-backend.onrender.com/register-faucet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          faucetAddress,
+          ownerAddress,
+          chainId,
+          faucetType, // This should be 'dropcode', 'droplist', or 'custom'
+          name
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to register faucet in database')
+      }
+
+      console.log('✅ Faucet registered successfully in backend')
+
+    } catch (error: any) {
+      console.error('❌ Error registering faucet in backend:', error)
+      // We don't block the UI here, just log/toast warning, as the on-chain faucet is already created
+      toast({
+        title: "Database Sync Warning",
+        description: "Faucet created on-chain, but failed to register in dashboard. It may not appear in your list immediately.",
+        variant: "default", // or "destructive" if you prefer
+      })
+    }
+  }
   // Name validation
   const validateFaucetNameAcrossFactories = useCallback(async (nameToValidate: string) => {
     if (!nameToValidate.trim()) {
@@ -1190,25 +1231,36 @@ function CreateFaucetWizardContent() {
         userAddress: address,
         isCustomToken: wizardState.formData.showCustomTokenInput,
       })
-      const createdFaucetAddress = await createFaucet(
-      provider,
-      factoryAddress,
-      wizardState.formData.faucetName,
-      finalTokenAddress,
-      BigInt(effectiveChainId),
-      BigInt(effectiveChainId),
-      shouldUseBackend,
-      isCustomFaucet
-    )
-     if (!createdFaucetAddress) {
-      throw new Error("Failed to get created faucet address")
-    }
-     
-    console.log("🎉 Faucet created successfully at:", createdFaucetAddress)
-    console.log("🎉 Expected type:", mappedFactoryType)
+     const createdFaucetAddress = await createFaucet(
+        provider,
+        factoryAddress,
+        wizardState.formData.faucetName,
+        finalTokenAddress,
+        BigInt(effectiveChainId),
+        BigInt(effectiveChainId),
+        shouldUseBackend,
+        isCustomFaucet
+      )
 
-    // ✅ ALWAYS save metadata with defaults if not provided
-    const networkName = currentNetwork?.name || "Unknown Network"
+      if (!createdFaucetAddress) {
+        throw new Error("Failed to get created faucet address")
+      }
+      
+      console.log("🎉 Faucet created successfully at:", createdFaucetAddress)
+      console.log("🎉 Expected type:", mappedFactoryType)
+
+      // --- NEW CODE START: Register Faucet in Backend ---
+      await registerFaucetInBackend(
+        createdFaucetAddress,
+        address, // The current user's wallet address
+        effectiveChainId,
+        mappedFactoryType, // 'dropcode', 'droplist', or 'custom'
+        wizardState.formData.faucetName
+      )
+      // --- NEW CODE END ---
+
+      // ✅ ALWAYS save metadata with defaults if not provided
+      const networkName = currentNetwork?.name || "Unknown Network"
     const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
     const finalDescription = faucetDescription.trim() || 
       `This is a faucet on ${networkName} by ${ownerShort}`

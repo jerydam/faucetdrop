@@ -357,47 +357,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
   // --- Handlers ---
 
-  const saveSocialMediaTasks = async (tasksToSend: any[]): Promise<boolean> => {
-    if (!address || !chainId) return false;
-    try {
-      console.log(
-        `Saving ${tasksToSend.length} tasks via dedicated backend endpoint.`
-      );
-      const response = await fetch(
-        "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            faucetAddress,
-            tasks: tasksToSend,
-            userAddress: address,
-            chainId: Number(chainId),
-          }),
-        }
-      );
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to save social media tasks.");
-      }
-      toast({
-        title: "Tasks Saved",
-        description: "Social media tasks updated successfully.",
-      });
-      setNewSocialLinks([]);
-      await loadFaucetDetails();
-      return true;
-    } catch (error: any) {
-      console.error("Error saving social media tasks:", error);
-      toast({
-        title: "Task Save Failed",
-        description: error.message || "Could not save tasks to backend.",
-        variant: "destructive",
-      });
-      return false;
-    }
-  };
-
   const handleUpdateFaucetName = async (): Promise<void> => {
     if (
       !address ||
@@ -546,9 +505,12 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     }
   };
 
+  // --- UPDATED LOGIC: Split Paths for Blockchain vs Task-Only ---
   const handleUpdateClaimParameters = async (): Promise<void> => {
     if (!address || !provider || !chainId || !checkNetwork()) return;
+
     const hasTaskChanges = newSocialLinks.length > 0;
+
     const currentClaimAmountStr =
       faucetType !== "custom"
         ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
@@ -563,6 +525,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           .toISOString()
           .slice(0, 16)
       : "";
+
     const isClaimAmountChanged =
       faucetType !== "custom" && claimAmount !== currentClaimAmountStr;
     const isStartTimeChanged = startTime !== currentStartTimeStr;
@@ -579,62 +542,41 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       return;
     }
 
-    if (!hasBlockchainChanges && hasTaskChanges) {
-      const tasksToSend = newSocialLinks
-        .filter((link) => link.url.trim() && link.handle.trim())
-        .map((link) => ({
-          title: `${
-            link.action.charAt(0).toUpperCase() + link.action.slice(1)
-          } ${link.handle}`,
-          description: `${
-            link.action.charAt(0).toUpperCase() + link.action.slice(1)
-          } our ${link.platform} account: ${link.handle}`,
-          url: link.url.trim(),
-          required: true,
-          platform: link.platform,
-          handle: link.handle,
-          action: link.action,
-        }));
-      await saveSocialMediaTasks(tasksToSend);
-      return;
-    }
-
-    if (faucetType !== "custom" && !claimAmount) {
-      toast({
-        title: "Invalid Input",
-        description: "Please fill in the drop amount",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!startTime || !endTime) {
-      toast({
-        title: "Invalid Input",
-        description: "Please fill in the start and end times",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (startTimeError) {
-      toast({
-        title: "Invalid Start Time",
-        description: startTimeError,
-        variant: "destructive",
-      });
-      return;
+    // Input Validation
+    if (hasBlockchainChanges) {
+      if (faucetType !== "custom" && !claimAmount) {
+        toast({
+          title: "Invalid Input",
+          description: "Please fill in the drop amount",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!startTime || !endTime) {
+        toast({
+          title: "Invalid Input",
+          description: "Please fill in the start and end times",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (startTimeError) {
+        toast({
+          title: "Invalid Start Time",
+          description: startTimeError,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     try {
       setIsUpdatingParameters(true);
-      const claimAmountBN =
-        faucetType === "custom"
-          ? BigInt(0)
-          : parseUnits(claimAmount, tokenDecimals);
-      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
-      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
+      // Prepare tasks list for sending to backend
+      let tasksToSend: any[] = [];
       if (hasTaskChanges) {
-        const tasksToSend = newSocialLinks
+        tasksToSend = newSocialLinks
           .filter((link) => link.url.trim() && link.handle.trim())
           .map((link) => ({
             title: `${
@@ -649,30 +591,121 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             handle: link.handle,
             action: link.action,
           }));
-        await saveSocialMediaTasks(tasksToSend);
       }
 
-      await setClaimParameters(
-        provider as BrowserProvider,
-        faucetAddress,
-        claimAmountBN,
-        startTimestamp,
-        endTimestamp,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
-      );
-      toast({
-        title: "Drop parameters updated",
-        description: `Parameters updated successfully on chain and backend.`,
-      });
+      // ======================================================
+      // PATH 1: BLOCKCHAIN INTERACTION (Time/Amount Changed)
+      // Result: Contract Update + NEW Secret Code Generated
+      // ======================================================
+      if (hasBlockchainChanges) {
+        const claimAmountBN =
+          faucetType === "custom"
+            ? BigInt(0)
+            : parseUnits(claimAmount, tokenDecimals);
+
+        const startTimestamp = Math.floor(
+          new Date(startTime).getTime() / 1000
+        );
+        const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
+
+        // 1. Transaction
+        await setClaimParameters(
+          provider as BrowserProvider,
+          faucetAddress,
+          claimAmountBN,
+          startTimestamp,
+          endTimestamp,
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+
+        // 2. Backend Call to Sync and Generate New Code
+        console.log("Calling backend to generate new code...");
+        const response = await fetch(
+          "https://fauctdrop-backend.onrender.com/set-claim-parameters",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              faucetAddress: faucetAddress,
+              claimAmount: claimAmountBN.toString(), // Send as string to fix 422 error
+              startTime: startTimestamp,
+              endTime: endTimestamp,
+              chainId: Number(chainId),
+              tasks: tasksToSend.length > 0 ? tasksToSend : undefined,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.detail || "Failed to sync parameters with backend"
+          );
+        }
+
+        const result = await response.json();
+        console.log("Backend response:", result);
+
+        // FIX: Robust check for secret code keys + immediate state update
+        const newCode = result.secretCode || result.secret_code;
+
+        if (newCode) {
+          console.log("New code generated:", newCode);
+          setNewlyGeneratedCode(newCode); // Update popup state
+          setCurrentSecretCode(newCode); // Update Admin View state
+          setShowNewCodeDialog(true); // Trigger Popup
+        } else {
+          console.warn("No secret code found in response", result);
+        }
+
+        toast({
+          title: "Parameters Updated",
+          description:
+            "Blockchain updated and new Drop Code generated (if applicable).",
+        });
+      }
+      // ======================================================
+      // PATH 2: TASKS ONLY (No Blockchain)
+      // Result: Tasks Updated + OLD Code Preserved
+      // ======================================================
+      else if (hasTaskChanges) {
+        const response = await fetch(
+          "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              faucetAddress: faucetAddress,
+              tasks: tasksToSend,
+              userAddress: address,
+              chainId: Number(chainId),
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || "Failed to save tasks");
+        }
+
+        toast({
+          title: "Tasks Updated",
+          description:
+            "Social tasks updated successfully. Drop Code remains unchanged.",
+        });
+      }
+
+      setNewSocialLinks([]); // Clear new links queue
       await loadFaucetDetails();
       await loadTransactionHistory();
     } catch (error: any) {
-      console.error("Error updating drop parameters:", error);
+      console.error("Error updating parameters:", error);
       toast({
-        title: "Failed to update drop parameters",
-        description: error.message || "Unknown error occurred",
+        title: "Update Failed",
+        description:
+          error.message || "Failed to update parameters on chain or backend.",
         variant: "destructive",
       });
     } finally {
@@ -902,32 +935,29 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       setIsGeneratingNewCode(false);
     }
   };
-const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
+  const handleCopyLink = async (type: "web" | "farcaster"): Promise<void> => {
     try {
       let url = "";
-      
-      if (type === 'web') {
-        // Copies the current browser URL (User View Link)
-        // If Admin is at /faucet/[address]/admin, we might want to strip /admin
-        // Assuming the user view is at the base URL of the current page:
+
+      if (type === "web") {
         url = window.location.origin + "/faucet/" + faucetAddress;
       } else {
-        // Constructs the Farcaster Mini-app link with the faucet address as a parameter
-        // We append ?startapp={address} so the mini-app knows which faucet to open
         url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/faucetdrops?startapp/faucet=${faucetAddress}`;
       }
 
       await navigator.clipboard.writeText(url);
-      
-      toast({ 
-        title: "Link Copied", 
-        description: `${type === 'web' ? 'Web' : 'Farcaster'} link has been copied to clipboard.`, 
+
+      toast({
+        title: "Link Copied",
+        description: `${
+          type === "web" ? "Web" : "Farcaster"
+        } link has been copied to clipboard.`,
       });
     } catch (error) {
-      toast({ 
-        title: "Copy Failed", 
-        description: "Failed to copy the link. Please try again.", 
-        variant: "destructive", 
+      toast({
+        title: "Copy Failed",
+        description: "Failed to copy the link. Please try again.",
+        variant: "destructive",
       });
     }
   };
@@ -979,9 +1009,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
 
   const getTokenName = (isEther: boolean): string => {
     if (!isEther) return tokenSymbol;
-    return selectedNetwork?.name
-      ? selectedNetwork.nativeCurrency.symbol
-      : "ETH";
+    return selectedNetwork?.name ? selectedNetwork.nativeCurrency.symbol : "ETH";
   };
 
   // --- Preview Logic ---
@@ -1006,16 +1034,14 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
     isClaimActive:
       new Date(endTime).getTime() > Date.now() &&
       new Date(startTime).getTime() <= Date.now(),
-    // --- USING THE METADATA PROP ---
-   // --- NEW CODE ---
     faucetMetadata: {
       description:
         faucetMetadata?.description ||
-        faucetDetails?.faucetMetadata?.description || // Check existing details first
+        faucetDetails?.faucetMetadata?.description ||
         `Preview of ${newFaucetName} Faucet`,
       imageUrl:
         faucetMetadata?.imageUrl ||
-        faucetDetails?.faucetMetadata?.imageUrl || // Check existing details first
+        faucetDetails?.faucetMetadata?.imageUrl ||
         "/default.jpeg",
     },
   };
@@ -1025,9 +1051,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
     const diff = timestamp * 1000 - Date.now();
     if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor(
-      (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-    );
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
     return `${days}d ${hours}h ${minutes}m ${seconds}s`;
@@ -1051,30 +1075,30 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
       <CardHeader className="px-4 sm:px-6">
         <div className="flex justify-between items-start">
           <div>
-            <CardTitle className="text-lg sm:text-xl">
-              Admin Controls
-            </CardTitle>
+            <CardTitle className="text-lg sm:text-xl">Admin Controls</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
               Manage your {faucetType || "unknown"} faucet settings and monitor
               activity here.
             </CardDescription>
           </div>
           <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="text-xs">
-                  <Share2 className="h-3 w-3 mr-1" /> Share
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleCopyLink('web')}>
-                  <Link className="h-4 w-4 mr-2" /> Copy Web Link
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleCopyLink('farcaster')}>
-                  <div className="h-4 w-4 mr-2 flex items-center justify-center font-bold bg-purple-600 text-white rounded-full text-[10px]">F</div>
-                  Copy Farcaster Link
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="text-xs">
+                <Share2 className="h-3 w-3 mr-1" /> Share
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleCopyLink("web")}>
+                <Link className="h-4 w-4 mr-2" /> Copy Web Link
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCopyLink("farcaster")}>
+                <div className="h-4 w-4 mr-2 flex items-center justify-center font-bold bg-purple-600 text-white rounded-full text-[10px]">
+                  F
+                </div>
+                Copy Farcaster Link
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             onClick={handlePreview}
             variant="secondary"
@@ -1150,8 +1174,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
               <Clock className="h-3 w-3 mr-1 " /> Ends In
             </span>
             <span className="text-sm sm:text-lg font-bold truncate">
-              {faucetDetails.isClaimActive &&
-              Number(faucetDetails.endTime) > 0
+              {faucetDetails.isClaimActive && Number(faucetDetails.endTime) > 0
                 ? renderCountdown(Number(faucetDetails.endTime), "End")
                 : "N/A"}
             </span>
@@ -1205,7 +1228,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
               </TabsTrigger>
             ))}
           </TabsList>
-          
+
           <TabsContent value="fund" className="space-y-6 mt-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <Card className="p-4 border shadow-sm">
@@ -1520,44 +1543,6 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
                 "Save & Update Parameters"
               )}
             </Button>
-            {shouldShowSecretCodeButton && (
-              <div className="flex flex-col sm:flex-row gap-3 w-full pt-4">
-                <Button
-                  onClick={handleRetrieveSecretCode}
-                  variant="outline"
-                  className="text-xs sm:text-sm w-full"
-                  disabled={isRetrievingSecret}
-                >
-                  {isRetrievingSecret ? (
-                    <span className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                      Retrieving...
-                    </span>
-                  ) : (
-                    <>
-                      <Key className="h-4 w-4 mr-1" /> Get Current Code
-                    </>
-                  )}
-                </Button>
-                <Button
-                  onClick={handleGenerateNewDropCode}
-                  variant="outline"
-                  className="text-xs sm:text-sm w-full"
-                  disabled={isGeneratingNewCode}
-                >
-                  {isGeneratingNewCode ? (
-                    <span className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                      Generating...
-                    </span>
-                  ) : (
-                    <>
-                      <RotateCcw className="h-4 w-4 mr-1" /> Generate New Code
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
           </TabsContent>
 
           {shouldShowWhitelistTab && (
@@ -1644,8 +1629,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
                     } catch (error: any) {
                       toast({
                         title: "Failed to set custom claim amounts",
-                        description:
-                          error.message || "Unknown error occurred",
+                        description: error.message || "Unknown error occurred",
                         variant: "destructive",
                       });
                     }
@@ -1657,6 +1641,56 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
           )}
 
           <TabsContent value="admin-power" className="space-y-6 mt-6">
+            {/* --- Secret Code Controls --- */}
+            {shouldShowSecretCodeButton && (
+              <Card className="p-4 border shadow-sm space-y-4">
+                <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                  <Key className="h-4 w-4 mr-2" /> Drop Code Management
+                </CardTitle>
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                  <Button
+                    onClick={handleRetrieveSecretCode}
+                    variant="outline"
+                    className="text-xs sm:text-sm w-full"
+                    disabled={isRetrievingSecret}
+                  >
+                    {isRetrievingSecret ? (
+                      <span className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                        Retrieving...
+                      </span>
+                    ) : (
+                      <>
+                        <Key className="h-4 w-4 mr-1" /> Get Current Code
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleGenerateNewDropCode}
+                    variant="outline"
+                    className="text-xs sm:text-sm w-full"
+                    disabled={isGeneratingNewCode}
+                  >
+                    {isGeneratingNewCode ? (
+                      <span className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                        Generating...
+                      </span>
+                    ) : (
+                      <>
+                        <RotateCcw className="h-4 w-4 mr-1" /> Generate New
+                        Code
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  "Generate New Code" will invalidate the previous code
+                  immediately.
+                </p>
+              </Card>
+            )}
+
             <Card className="p-4 border shadow-sm space-y-4">
               <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
                 <Users className="h-4 w-4 mr-2" /> Admin List

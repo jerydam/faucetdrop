@@ -1,28 +1,46 @@
-// src/pages/quests/[faucetAddress].tsx (or components/QuestDetailsPage.tsx)
-
 "use client";
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Header } from '@/components/header';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, CheckCircle, Clock, Save, TrendingUp, Users, ArrowRight } from 'lucide-react';
+import { Badge } from "@/components/ui/badge";
+import { Loader2, CheckCircle, Clock, Save, TrendingUp, Users, ArrowRight, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 import { useNetwork } from '@/hooks/use-network'; 
 
-// Backend API URL
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+// Header Component (Inline for simplicity)
+const Header = ({ pageTitle }: { pageTitle: string }) => <h1 className="text-3xl font-bold mb-6">{pageTitle}</h1>;
 
-// --- Data Structures ---
-interface QuestData {
+// Backend API URL
+const API_BASE_URL = "http://127.0.0.1:8000";
+
+// --- Types ---
+interface QuestTask {
+    id: string;
     title: string;
     description: string;
+    points: number;
+    category: string;
+    verificationType: string;
+    url: string;
+    stage: string;
+}
+
+interface QuestData {
     faucetAddress: string;
+    title: string;
+    description: string;
     isActive: boolean;
-    tasks: any[]; 
-    creatorAddress: string; 
+    rewardPool: string;
+    creatorAddress: string;
+    startDate: string;
+    endDate: string;
+    imageUrl: string;
+    tasks: QuestTask[];
+    tasksCount: number;
+    participantsCount: number;
 }
 
 interface LeaderboardEntry {
@@ -38,21 +56,42 @@ interface Submission {
     taskId: string;
     taskTitle: string;
     submittedData: string; 
-    submissionType: 'manual_link' | 'manual_upload' | 'auto_tx';
+    submissionType: string;
     status: 'pending' | 'approved' | 'rejected';
 }
 
 export default function QuestDetailsPage() {
     const params = useParams();
-    // Get parameter from route. Can be string | string[] | undefined.
-    const slugAndId = params.faucetAddress as string | undefined; 
+    const router = useRouter();
     
-    // FIX 1: Safely extract faucetAddress. It remains string | undefined.
-    // NOTE: This logic now expects slug-address format, matching the updated HomePage logic.
-    const faucetAddress: string | undefined = slugAndId?.split('-').pop()?.startsWith('0x') ? slugAndId.split('-').pop() : undefined;
+    // --- 1. Robust Address Extraction (Fixes 404/Loading issues) ---
+    // Extract the raw parameter from the URL (e.g., "quest-title-0x1234...")
+    const rawSlug = params.faucetAddress as string | undefined; 
+    
+    // Use Regex to find the 42-char ETH address safely, ignoring the slug title
+    const faucetAddress = useMemo(() => {
+    if (!rawSlug) {
+        console.log("No rawSlug provided");
+        return undefined;
+    }
+
+    // First try: exact 42-char hex at the end
+    let match = rawSlug.match(/(0x[a-fA-F0-9]{40})$/i);
+    if (match) return match[0];
+
+    // Fallback: if no slug, maybe rawSlug IS the full address
+    if (/^0x[a-fA-F0-9]{40}$/i.test(rawSlug)) {
+        console.log("rawSlug is pure address, using it directly");
+        return rawSlug;
+    }
+
+    console.error("Failed to extract address from:", rawSlug);
+    return undefined;
+}, [rawSlug]);
+
 
     const { address: userWalletAddress } = useWallet(); 
-    const { network, chainId } = useNetwork(); 
+    const { network } = useNetwork(); 
     
     const [questData, setQuestData] = useState<QuestData | null>(null);
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -60,245 +99,186 @@ export default function QuestDetailsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // --- Data Fetching ---
-
+    // --- 2. Real Data Fetching (Replaces Mock) ---
     useEffect(() => {
-        // FIX 2: Check for existence of faucetAddress before fetching.
+        // If params aren't loaded yet, wait.
+        if (!rawSlug) return;
+
+        // If extraction failed, stop loading and show error
         if (!faucetAddress) {
-            if (slugAndId) { // Route is defined but address is invalid/not found
-                setError("Invalid Quest URL format or Faucet Address not found in the path.");
-                setIsLoading(false);
-            }
+            setError("Invalid URL format. Could not find a valid Faucet Address.");
+            setIsLoading(false);
             return;
         }
-        fetchQuestData();
-        fetchLeaderboard();
-        fetchPendingSubmissions(); 
-    }, [faucetAddress, slugAndId]); // Re-run if faucetAddress becomes defined
 
-    const fetchQuestData = async () => {
-        // FIX 3: Use non-null assertion (!) since we checked for 'undefined' in useEffect.
-        const address = faucetAddress!; 
-        setIsLoading(true); // Reset loading state for every fetch attempt
-        setError(null);
-        try {
-            await new Promise(resolve => setTimeout(resolve, 500)); 
-            
-            const mockData: QuestData = {
-                title: "Launch Community Campaign",
-                // FIX: Use optional chaining when displaying the address slice, though it should be safe here
-                description: `Manage the activity and rewards for ${address.slice(0, 8)}...`, 
-                faucetAddress: address,
-                isActive: true,
-                tasks: [{ id: 't1', title: 'Follow on X', verificationType: 'auto_social' }, { id: 't2', title: 'Submit Meme Link', verificationType: 'manual_link' }],
-                creatorAddress: "0xMockCreatorAddress1234567890",
-            };
-            setQuestData(mockData);
-        } catch (err: any) {
-            setError(err.message || "An unknown error occurred while fetching data.");
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        const fetchAllData = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                console.log(`fetching quest data for: ${faucetAddress}`);
+                
+                // Call the REAL backend API
+                const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}`);
+                
+                if (!response.ok) {
+                    if (response.status === 404) throw new Error("Quest not found in database.");
+                    throw new Error(`Server Error: ${response.status} ${response.statusText}`);
+                }
 
-    const fetchLeaderboard = async () => { /* ... existing implementation ... */ 
-        try {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            const mockLeaderboard: LeaderboardEntry[] = [
-                { rank: 1, walletAddress: "0x123...abc", points: 1200, completedTasks: 6 },
-                { rank: 2, walletAddress: "0x456...def", points: 1100, completedTasks: 5 },
-                { rank: 3, walletAddress: "0x789...ghi", points: 950, completedTasks: 5 },
-            ];
-            setLeaderboard(mockLeaderboard);
-        } catch (err: any) {
-            console.error("Leaderboard fetch failed:", err);
-        }
-    };
-    
-    const fetchPendingSubmissions = async () => { /* ... existing implementation ... */
-        try {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            const mockSubmissions: Submission[] = [
-                { submissionId: 's1', walletAddress: "0x123...abc", taskId: 't2', taskTitle: 'Submit Meme Link', submittedData: 'http://link.to/meme', submissionType: 'manual_link', status: 'pending' },
-                { submissionId: 's2', walletAddress: "0x456...def", taskId: 't2', taskTitle: 'Submit Meme Link', submittedData: 'http://link.to/another', submissionType: 'manual_link', status: 'pending' },
-            ];
-            setPendingSubmissions(mockSubmissions);
-        } catch (err: any) {
-            console.error("Submissions fetch failed:", err);
-        }
-    }
+                const data = await response.json();console.log("QuestDetailsPage rendered");
+            console.log("rawSlug from params:", rawSlug);
+            console.log("Extracted faucetAddress:", faucetAddress);
+                            
+                            if (!data.success) {
+                    throw new Error(data.message || "Failed to load quest details");
+                }
+
+                setQuestData(data.quest);
+
+                // Placeholder for other endpoints (Implement these in backend later)
+                setLeaderboard([]); 
+                setPendingSubmissions([]);
+
+            } catch (err: any) {
+                console.error("Error fetching quest details:", err);
+                setError(err.message || "Could not connect to backend.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchAllData();
+    }, [faucetAddress, rawSlug]);
+
+    if (!faucetAddress) {
+    setError("Invalid quest URL: Could not extract faucet address.");
+    setIsLoading(false);
+    return;
+}
+
 
     // --- Admin Action Handlers ---
-    // FIX 4: Use optional chaining (?) for safe access to questData properties.
     const isCreator = userWalletAddress && questData && questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
 
-    const handleApprove = async (submissionId: string) => {
-        if (!isCreator) return;
-        console.log(`Approving submission ${submissionId}`);
-        setPendingSubmissions(p => p.filter(s => s.submissionId !== submissionId));
-    };
+    const handleApprove = (submissionId: string) => { console.log(`Approving ${submissionId}`); };
+    const handleReject = (submissionId: string) => { console.log(`Rejecting ${submissionId}`); };
 
-    const handleReject = async (submissionId: string) => {
-        if (!isCreator) return;
-        console.log(`Rejecting submission ${submissionId}`);
-        setPendingSubmissions(p => p.filter(s => s.submissionId !== submissionId));
-    };
-
-    const handleFinalizeRewards = () => {
-        if (!isCreator) return;
-        alert("Reward Finalization Triggered! (Requires Manual Reward Allocation UI)");
+    // --- Render States ---
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-muted-foreground">Loading Quest Details...</p>
+            </div>
+        );
     }
 
-    // --- Render ---
-
-    if (isLoading || !faucetAddress) {
-        // Show loading or error if address is not available
-        if (error) {
-            return <Card className="max-w-6xl mx-auto p-4 mt-8 border-red-500 bg-red-50 text-red-700">Error loading quest: {error}</Card>;
-        }
-         if (!questData && !isLoading) { // Handles case where data loaded null/404
-             return <Card className="max-w-6xl mx-auto p-4 mt-8 text-center text-muted-foreground">Quest data could not be loaded or found.</Card>;
-        }
-        return <Card className="max-w-6xl mx-auto p-8 mt-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Loading Quest Details...</Card>;
+    if (error || !questData) {
+        return (
+            <div className="max-w-4xl mx-auto p-6 mt-10">
+                <Card className="border-red-200 bg-red-50">
+                    <CardContent className="flex flex-col items-center justify-center p-6 text-red-700">
+                        <AlertTriangle className="h-10 w-10 mb-4" />
+                        <h2 className="text-lg font-bold mb-2">Unable to Load Quest</h2>
+                        <p className="mb-4">{error || "Quest data not found."}</p>
+                        <Button variant="outline" className="border-red-200 hover:bg-red-100 text-red-700" onClick={() => router.push('/faucet/dashboard')}>
+                            Return to Dashboard
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
     }
-    
-    // Non-null assertion (!) is now safe here because of the checks above
-    const tasksCount = questData!.tasks.length;
 
     return (
-        <div className="max-w-6xl mx-auto p-6 space-y-6">
-            {/* FIX 1: Add ! assertion */}
-            <Header pageTitle={questData!.title} />
+        <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
+            <Header pageTitle={questData.title} />
 
             <Card>
-                <CardHeader className='flex flex-row justify-between items-start'>
-                    <div className='space-y-1'>
-                        {/* FIX 2: Add ! assertion */}
-                        <CardTitle className="text-2xl">{questData!.title}</CardTitle>
-                        {/* FIX 3: Add ! assertion */}
-                        <CardDescription>{questData!.description}</CardDescription>
+                <CardContent className="p-6">
+                    <div className="flex flex-col md:flex-row gap-6">
+                        {/* Quest Image */}
+                        <div className="w-full md:w-48 h-48 shrink-0 rounded-lg overflow-hidden border bg-muted">
+                            {questData.imageUrl ? (
+                                <img src={questData.imageUrl} alt={questData.title} className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-muted-foreground">No Image</div>
+                            )}
+                        </div>
+
+                        {/* Quest Info */}
+                        <div className="flex-1 space-y-4">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h1 className="text-2xl font-bold">{questData.title}</h1>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <Badge variant={questData.isActive ? "default" : "secondary"} className={questData.isActive ? "bg-green-600" : ""}>
+                                            {questData.isActive ? "Active" : "Inactive"}
+                                        </Badge>
+                                        <Badge variant="outline">{network?.name || "Unknown Network"}</Badge>
+                                    </div>
+                                </div>
+                                {isCreator && (
+                                    <Button variant="outline" size="sm">
+                                        Edit Quest
+                                    </Button>
+                                )}
+                            </div>
+
+                            <p className="text-muted-foreground text-sm leading-relaxed">
+                                {questData.description}
+                            </p>
+
+                            <div className="flex flex-wrap gap-4 text-sm mt-4">
+                                <div className="bg-muted/50 px-3 py-1.5 rounded-md">
+                                    <span className="font-semibold text-primary">{questData.rewardPool}</span> Reward Pool
+                                </div>
+                                <div className="bg-muted/50 px-3 py-1.5 rounded-md">
+                                    <span className="font-semibold">{questData.tasks.length}</span> Tasks
+                                </div>
+                                <div className="bg-muted/50 px-3 py-1.5 rounded-md">
+                                    <span className="font-semibold">{questData.participantsCount}</span> Participants
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    {isCreator && (
-                        <Button onClick={handleFinalizeRewards} className='bg-purple-600 hover:bg-purple-700'>
-                            <Save className='h-4 w-4 mr-2' /> Finalize Rewards & Payout
-                        </Button>
-                    )}
-                </CardHeader>
+                </CardContent>
             </Card>
 
-            <Tabs defaultValue="activity">
-                <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="activity">Activity & Submissions</TabsTrigger>
-                    <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
-                    <TabsTrigger value="settings">Settings</TabsTrigger>
+            <Tabs defaultValue="tasks" className="w-full">
+                <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent gap-6">
+                    <TabsTrigger value="tasks" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3">Tasks</TabsTrigger>
+                    <TabsTrigger value="activity" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3">Activity</TabsTrigger>
+                    <TabsTrigger value="leaderboard" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3">Leaderboard</TabsTrigger>
                 </TabsList>
 
-                {/* --- ACTIVITY & SUBMISSIONS TAB --- */}
-                <TabsContent value="activity" className="mt-4 space-y-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Clock className='h-5 w-5' /> Pending Manual Verification ({pendingSubmissions.length})
-                            </CardTitle>
-                            <CardDescription>Review user submissions for manual verification tasks.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Wallet</TableHead>
-                                        <TableHead>Task</TableHead>
-                                        <TableHead>Type</TableHead>
-                                        <TableHead>Submission</TableHead>
-                                        <TableHead>Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {pendingSubmissions.length === 0 ? (
-                                        <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No pending manual submissions found.</TableCell></TableRow>
-                                    ) : (
-                                        pendingSubmissions.map(submission => (
-                                            <TableRow key={submission.submissionId}>
-                                                <TableCell className='font-mono text-xs'>{submission.walletAddress.slice(0, 6)}...</TableCell>
-                                                <TableCell>{submission.taskTitle}</TableCell>
-                                                <TableCell>{submission.submissionType.replace('_', ' ')}</TableCell>
-                                                <TableCell>
-                                                    <a href={submission.submittedData} target="_blank" rel="noopener noreferrer" className='text-blue-500 hover:underline flex items-center'>
-                                                        View Link <ArrowRight className='h-3 w-3 ml-1' />
-                                                    </a>
-                                                </TableCell>
-                                                <TableCell className='space-x-2'>
-                                                    <Button size="sm" variant="default" onClick={() => handleApprove(submission.submissionId)}>Approve</Button>
-                                                    <Button size="sm" variant="outline" onClick={() => handleReject(submission.submissionId)}>Reject</Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
+                {/* --- TASKS TAB --- */}
+                <TabsContent value="tasks" className="mt-6 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {questData.tasks.map((task) => (
+                            <Card key={task.id} className="hover:border-primary/50 transition-colors">
+                                <CardContent className="p-4 flex flex-col h-full">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <Badge variant="outline" className="capitalize">{task.stage} Stage</Badge>
+                                        <span className="font-bold text-green-600">{task.points} Pts</span>
+                                    </div>
+                                    <h3 className="font-semibold mb-1">{task.title}</h3>
+                                    <p className="text-sm text-muted-foreground mb-4 flex-grow line-clamp-2">{task.description}</p>
+                                    
+                                    <Button className="w-full mt-auto" variant="secondary" asChild>
+                                        <a href={task.url} target="_blank" rel="noreferrer">
+                                            {task.verificationType === 'manual_link' ? 'Perform & Submit' : 'Go to Task'} <ExternalLink className="h-3 w-3 ml-2"/>
+                                        </a>
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
                 </TabsContent>
 
-                {/* --- LEADERBOARD TAB --- */}
-                <TabsContent value="leaderboard" className="mt-4">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <TrendingUp className='h-5 w-5' /> Quest Leaderboard
-                            </CardTitle>
-                            <CardDescription>Top users ranked by earned points.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Rank</TableHead>
-                                        <TableHead>Wallet Address</TableHead>
-                                        <TableHead>Points</TableHead>
-                                        <TableHead>Tasks Completed</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {leaderboard.length === 0 ? (
-                                        <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No activity yet. Be the first!</TableCell></TableRow>
-                                    ) : (
-                                        leaderboard.map((entry, index) => (
-                                            <TableRow key={entry.walletAddress} className={index < 3 ? 'bg-yellow-50/50 dark:bg-yellow-900/10 font-semibold' : ''}>
-                                                <TableCell>{entry.rank}</TableCell>
-                                                <TableCell className='font-mono text-xs'>{entry.walletAddress.slice(0, 10)}...{entry.walletAddress.slice(-8)}</TableCell>
-                                                <TableCell>{entry.points}</TableCell>
-                                                <TableCell>{entry.completedTasks} / {tasksCount}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* --- SETTINGS TAB --- */}
-                <TabsContent value="settings" className="mt-4">
-                    <Card><CardHeader><CardTitle>Quest Configuration</CardTitle><CardDescription>View and modify deployment parameters.</CardDescription></CardHeader>
-                        <CardContent className='space-y-4 text-sm'>
-                            <p><strong>Faucet Address:</strong> <span className='font-mono'>{faucetAddress}</span></p>
-                            <p>
-                                <strong>Deployment Chain:</strong> {network?.name || 'Unknown'} (ID: {chainId})
-                            </p>
-                            <p>
-                                <strong>Active:</strong> 
-                                {/* FIX 4: Add ! assertion */}
-                                {questData!.isActive 
-                                    ? <CheckCircle className='h-4 w-4 inline text-green-500 ml-2' /> 
-                                    : 'No'
-                                }
-                            </p>
-                            <Button variant="outline" onClick={() => {/* Edit logic */}}>Edit Quest Details</Button>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                {/* --- OTHER TABS (Placeholders) --- */}
+                <TabsContent value="activity" className="mt-6 text-center text-muted-foreground">Activity feed coming soon.</TabsContent>
+                <TabsContent value="leaderboard" className="mt-6 text-center text-muted-foreground">Leaderboard coming soon.</TabsContent>
             </Tabs>
         </div>
     );

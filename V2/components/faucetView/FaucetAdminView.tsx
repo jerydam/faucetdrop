@@ -2197,7 +2197,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+{/* testing */}
       <Dialog open={showNewCodeDialog} onOpenChange={setShowNewCodeDialog}>
         <DialogContent className="w-11/12 max-w-md">
           <DialogHeader>

@@ -398,6 +398,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     if (!address || !provider || !chainId || !checkNetwork()) return;
     try {
       setIsDeletingFaucet(true);
+      
+      // 1. Perform On-Chain Deletion
       await deleteFaucet(
         provider as BrowserProvider,
         faucetAddress,
@@ -405,10 +407,32 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(Number(selectedNetwork.chainId)),
         faucetType || undefined
       );
+
+      // 2. --- NEW CODE: Call Backend to clean up Database ---
+      try {
+        const response = await fetch("https://fauctdrop-backend.onrender.com/delete-faucet-metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            faucetAddress: faucetAddress,
+            userAddress: address,
+            chainId: Number(chainId)
+          }),
+        });
+
+        if (!response.ok) {
+          console.warn("Backend deletion failed, but blockchain deletion succeeded.");
+        }
+      } catch (apiError) {
+        console.error("Failed to sync deletion with backend:", apiError);
+      }
+      // -----------------------------------------------------
+
       toast({
         title: "Faucet deleted",
         description: "Faucet has been successfully deleted",
       });
+      
       setShowDeleteDialog(false);
       router.push("/");
     } catch (error: any) {
@@ -708,8 +732,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       }
 
       setNewSocialLinks([]); // Clear new links queue
-      // await loadFaucetDetails();
-      // await loadTransactionHistory();
+      
     } catch (error: any) {
       console.error("Error updating parameters:", error);
       toast({

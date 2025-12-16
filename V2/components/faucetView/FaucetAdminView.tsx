@@ -764,7 +764,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
               title: "Parameters Updated",
               description:
                 "Blockchain updated, but no new code was returned by server.",
-              variant: "warning",
+              variant: "destructive",
             });
           }
         } catch (backendError: any) {
@@ -1169,43 +1169,45 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   return (
     <Card className="w-full mx-auto">
       <CardHeader className="px-4 sm:px-6">
-        <div className="flex justify-between items-start">
-          <div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-1">
             <CardTitle className="text-lg sm:text-xl">Admin Controls</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
               Manage your {faucetType || "unknown"} faucet settings and monitor
               activity here.
             </CardDescription>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="text-xs">
-                <Share2 className="h-3 w-3 mr-1" /> Share
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => handleCopyLink("web")}>
-                <Link className="h-4 w-4 mr-2" /> Copy Web Link
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleCopyLink("farcaster")}>
-                <div className="h-4 w-4 mr-2 flex items-center justify-center font-bold bg-purple-600 text-white rounded-full text-[10px]">
-                  F
-                </div>
-                Copy Farcaster Link
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            onClick={handlePreview}
-            variant="secondary"
-            size="sm"
-            className="text-xs"
-          >
-            <Eye className="h-3 w-3 mr-1" /> View User Preview
-          </Button>
+          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="text-xs">
+                  <Share2 className="h-3 w-3 mr-1" /> Share
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleCopyLink("web")}>
+                  <Link className="h-4 w-4 mr-2" /> Copy Web Link
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleCopyLink("farcaster")}>
+                  <div className="h-4 w-4 mr-2 flex items-center justify-center font-bold bg-purple-600 text-white rounded-full text-[10px]">
+                    F
+                  </div>
+                  Copy Farcaster Link
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              onClick={handlePreview}
+              variant="secondary"
+              size="sm"
+              className="text-xs"
+            >
+              <Eye className="h-3 w-3 mr-1" /> View User Preview
+            </Button>
+          </div>
         </div>
         {isOwner && (
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2">
             <Button
               variant="outline"
               size="sm"
@@ -1283,7 +1285,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           value={activeTab}
           onValueChange={setActiveTab}
         >
-          <div className="sm:hidden mb-4">
+          <div className="md:hidden mb-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="w-full justify-between">
@@ -1305,7 +1307,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             </DropdownMenu>
           </div>
           <TabsList
-            className={`hidden sm:grid gap-2 w-full ${
+            className={`hidden md:grid gap-2 w-full ${
               shouldShowWhitelistTab && shouldShowCustomTab
                 ? "grid-cols-6"
                 : shouldShowWhitelistTab || shouldShowCustomTab
@@ -1914,7 +1916,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                 Recent Faucet Transactions (All Admins)
               </Label>
               {transactions.length > 0 ? (
-                <>
+                <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1958,7 +1960,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                       ))}
                     </TableBody>
                   </Table>
-                </>
+                </div>
               ) : (
                 <p className="text-xs sm:text-sm text-muted-foreground">
                   No transactions found

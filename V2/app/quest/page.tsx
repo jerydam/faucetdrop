@@ -1,5 +1,5 @@
 // src/pages/QuestHomePage.tsx
-"use client";
+ "use client";
 // import React, { useState, useEffect } from 'react';
 // import { useRouter } from 'next/navigation';
 // import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -175,8 +175,6 @@ export const SimpleIcon: React.FC<SimpleIconProps> = ({
   );
 };
 
-
-
 export default function ComingSoon() {
   const socialLinks = [
     { icon: <SimpleIcon icon={siX} size={20} />, href: 'https://x.com/faucetdrops', label: 'Twitter' },
@@ -187,12 +185,25 @@ export default function ComingSoon() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center text-white p-6">
       <div className="max-w-2xl w-full text-center space-y-8">
-        <div className="relative w-48 h-48 mx-auto">
+        
+        {/* Updated: Added flex and justify-center to center the logo */}
+        <div className="flex justify-center relative">
+          {/* 1. Light Mode Logo: Visible by default, hidden in dark mode */}
           <Image
-            src="/logo.png"
+            src="/lightlogo.png"
             alt="FaucetDrops Logo"
-            fill
-            className="object-contain"
+            width={200}
+            height={80}
+            className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain dark:hidden"
+          />
+          
+          {/* 2. Dark Mode Logo: Hidden by default, visible in dark mode */}
+          <Image
+            src="/darklogo.png"
+            alt="FaucetDrops Logo"
+            width={200}
+            height={80}
+            className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain hidden dark:block"
           />
         </div>
 
@@ -221,20 +232,20 @@ export default function ComingSoon() {
           <p className="text-sm text-muted-foreground">
             In the meantime, you can follow us on social media or contact out team
           </p>
-        <div className="flex justify-center space-x-6 pt-4">
-          {socialLinks.map((social, index) => (
-            <a
-              key={index}
-              href={social.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`p-2 rounded-full hover:bg-gray-800`}
-              aria-label={social.label}
-            >
-              {social.icon}
-            </a>
-          ))}
-        </div>
+          <div className="flex justify-center space-x-6 pt-4">
+            {socialLinks.map((social, index) => (
+              <a
+                key={index}
+                href={social.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`p-2 rounded-full hover:bg-gray-800`}
+                aria-label={social.label}
+              >
+                {social.icon}
+              </a>
+            ))}
+          </div>
         </div>
 
         <div className="pt-8">
@@ -247,4 +258,3 @@ export default function ComingSoon() {
     </div>
   );
 }
-

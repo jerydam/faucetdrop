@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useMemo } from "react"
+import React, { useEffect, useState, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useWallet } from "@/hooks/use-wallet"
 import { useNetwork } from "@/hooks/use-network" 
@@ -13,7 +13,6 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
     Settings, Plus, Loader2, Search, Copy, ExternalLink, 
     LayoutGrid, List as ListIcon, Wallet, Activity, 
@@ -87,6 +86,7 @@ interface QuizData {
 }
 
 export default function DashboardPage() {
+    const backendUrl = "https://fauctdrop-backend.onrender.com"; 
     const { address, isConnected } = useWallet()
     const { networks } = useNetwork()
     const router = useRouter()
@@ -105,7 +105,26 @@ export default function DashboardPage() {
     const [networkFilter, setNetworkFilter] = useState("all")
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
 
-    // --- Data Fetching ---
+    // --- Data Fetching (UseCallback Wrapper) ---
+    const refreshFaucets = useCallback(async () => {
+        if (!address) {
+            setLoadingFaucets(false)
+            return
+        }
+        
+        setLoadingFaucets(true)
+        try {
+            // Add timestamp to prevent caching
+            const data = await getUserFaucets(address)
+            setFaucets(data)
+        } catch (error) {
+            console.error("Failed to load faucets", error)
+            toast({ title: "Error", description: "Could not load your faucets.", variant: "destructive" })
+        } finally {
+            setLoadingFaucets(false)
+        }
+    }, [address, toast])
+
     useEffect(() => {
         if (!isConnected || !address) {
             setLoadingFaucets(false)
@@ -113,21 +132,10 @@ export default function DashboardPage() {
             return
         }
 
-        const backendUrl = "https://fauctdrop-backend.onrender.com"; 
+        
 
-        // 1. Fetch Faucets
-        const fetchFaucets = async () => {
-            setLoadingFaucets(true)
-            try {
-                const data = await getUserFaucets(address)
-                setFaucets(data)
-            } catch (error) {
-                console.error("Failed to load faucets", error)
-                toast({ title: "Error", description: "Could not load your faucets.", variant: "destructive" })
-            } finally {
-                setLoadingFaucets(false)
-            }
-        }
+        // 1. Initial Faucet Fetch
+        refreshFaucets()
 
         // 2. Fetch User Profile
         const fetchProfile = async () => {
@@ -180,10 +188,9 @@ export default function DashboardPage() {
             }
         }
 
-        fetchFaucets()
         fetchProfile()
         fetchStats()
-    }, [address, isConnected, toast])
+    }, [address, isConnected, refreshFaucets])
 
     // --- Helpers ---
     const getNetworkName = (chainId: number) => networks.find(n => n.chainId === chainId)?.name || `Chain ${chainId}`
@@ -379,8 +386,8 @@ export default function DashboardPage() {
                         {/* Library Button */}
                         <MyCreationsModal faucets={faucets} address={address} />
                         
-                        {/* Create New Button (Using the Modal) */}
-                        <CreateNewModal />
+                        {/* Create New Button (Using the Modal) - PASS REFRESH FUNCTION */}
+                        <CreateNewModal onSuccess={refreshFaucets} />
                     </div>
                 </div>
 
@@ -447,7 +454,7 @@ export default function DashboardPage() {
                                 </p>
                             </div>
                             {!searchQuery && (
-                                <CreateNewModal />
+                                <CreateNewModal onSuccess={refreshFaucets} />
                             )}
                         </div>
                     </Card>

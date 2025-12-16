@@ -80,10 +80,21 @@ import {
   updateFaucetName,
   deleteFaucet,
 } from "@/lib/faucet";
-import { retrieveSecretCode,getSecretCodeForAdmin } from "@/lib/backend-service";
+import { retrieveSecretCode, getSecretCodeForAdmin } from "@/lib/backend-service";
 
 type FaucetType = "dropcode" | "droplist" | "custom";
 const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
+
+// --- NEW CONSTANT: Base URLs for platforms ---
+const PLATFORM_BASE_URLS: Record<string, string> = {
+  "𝕏": "https://x.com/",
+  "telegram": "https://t.me/",
+  "discord": "https://discord.gg/",
+  "youtube": "https://youtube.com/@",
+  "instagram": "https://instagram.com/",
+  "tiktok": "https://tiktok.com/@",
+  "facebook": "https://facebook.com/",
+};
 
 interface SocialMediaLink {
   platform: string;
@@ -357,6 +368,70 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
   // --- Handlers ---
 
+  // --- UPDATED LOGIC: Add New Social Link with Standby URL ---
+  const addNewSocialLink = (): void => {
+    const defaultPlatform = "𝕏";
+    setNewSocialLinks([
+      ...newSocialLinks,
+      {
+        platform: defaultPlatform,
+        url: PLATFORM_BASE_URLS[defaultPlatform], // Auto-fill base URL
+        handle: "",
+        action: "follow",
+      },
+    ]);
+  };
+
+  const removeNewSocialLink = (index: number): void => {
+    setNewSocialLinks(newSocialLinks.filter((_, i) => i !== index));
+  };
+
+  // --- UPDATED LOGIC: Update Social Link with Smart Appending ---
+  const updateNewSocialLink = (
+    index: number,
+    field: keyof SocialMediaLink,
+    value: string
+  ): void => {
+    const updated = [...newSocialLinks];
+    const currentLink = updated[index];
+
+    // Helper to clean handle (remove @)
+    const cleanHandle = (h: string) => h.replace(/^@/, "");
+
+    if (field === "platform") {
+      // 1. Update Platform
+      currentLink.platform = value;
+
+      // 2. Update URL to new platform base + existing handle
+      const baseUrl = PLATFORM_BASE_URLS[value] || "";
+      currentLink.url = currentLink.handle
+        ? `${baseUrl}${cleanHandle(currentLink.handle)}`
+        : baseUrl;
+    } else if (field === "handle") {
+      const oldHandleClean = cleanHandle(currentLink.handle);
+      const newHandleClean = cleanHandle(value);
+      const baseUrl = PLATFORM_BASE_URLS[currentLink.platform] || "";
+
+      // 1. Update Handle
+      currentLink.handle = value;
+
+      // 2. Smart URL Update:
+      // Only auto-update URL if user hasn't manually customized it
+      // (matches Base or Base + OldHandle)
+      if (
+        currentLink.url === baseUrl ||
+        currentLink.url === `${baseUrl}${oldHandleClean}`
+      ) {
+        currentLink.url = `${baseUrl}${newHandleClean}`;
+      }
+    } else {
+      // Direct update for 'url' or 'action' (Manual edits)
+      currentLink[field] = value;
+    }
+
+    setNewSocialLinks(updated);
+  };
+
   const handleUpdateFaucetName = async (): Promise<void> => {
     if (
       !address ||
@@ -398,7 +473,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     if (!address || !provider || !chainId || !checkNetwork()) return;
     try {
       setIsDeletingFaucet(true);
-      
+
       // 1. Perform On-Chain Deletion
       await deleteFaucet(
         provider as BrowserProvider,
@@ -408,31 +483,35 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         faucetType || undefined
       );
 
-      // 2. --- NEW CODE: Call Backend to clean up Database ---
+      // 2. Call Backend to clean up Database
       try {
-        const response = await fetch("https://fauctdrop-backend.onrender.com/delete-faucet-metadata", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            faucetAddress: faucetAddress,
-            userAddress: address,
-            chainId: Number(chainId)
-          }),
-        });
+        const response = await fetch(
+          "https://fauctdrop-backend.onrender.com/delete-faucet-metadata",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              faucetAddress: faucetAddress,
+              userAddress: address,
+              chainId: Number(chainId),
+            }),
+          }
+        );
 
         if (!response.ok) {
-          console.warn("Backend deletion failed, but blockchain deletion succeeded.");
+          console.warn(
+            "Backend deletion failed, but blockchain deletion succeeded."
+          );
         }
       } catch (apiError) {
         console.error("Failed to sync deletion with backend:", apiError);
       }
-      // -----------------------------------------------------
 
       toast({
         title: "Faucet deleted",
         description: "Faucet has been successfully deleted",
       });
-      
+
       setShowDeleteDialog(false);
       router.push("/");
     } catch (error: any) {
@@ -529,7 +608,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     }
   };
 
-  // --- UPDATED LOGIC: Split Paths for Blockchain vs Task-Only ---
   const handleUpdateClaimParameters = async (): Promise<void> => {
     if (!address || !provider || !chainId || !checkNetwork()) return;
 
@@ -619,7 +697,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
       // ======================================================
       // PATH 1: BLOCKCHAIN INTERACTION (Time/Amount Changed)
-      // Result: Contract Update + NEW Secret Code Generated
       // ======================================================
       if (hasBlockchainChanges) {
         const claimAmountBN =
@@ -645,64 +722,63 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         );
 
         // 2. Backend Call to Sync and Generate New Code
-        // We use a try/catch block specifically for the backend call 
-        // to ensure we capture the specific error if the DB fails
         try {
-            console.log("Calling backend to generate new code...");
-            const response = await fetch(
-              "https://fauctdrop-backend.onrender.com/set-claim-parameters",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  faucetAddress: faucetAddress,
-                  claimAmount: claimAmountBN.toString(), 
-                  startTime: startTimestamp,
-                  endTime: endTimestamp,
-                  chainId: Number(chainId),
-                  tasks: tasksToSend.length > 0 ? tasksToSend : undefined,
-                }),
-              }
-            );
-
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.detail || "Backend sync failed");
+          console.log("Calling backend to generate new code...");
+          const response = await fetch(
+            "https://fauctdrop-backend.onrender.com/set-claim-parameters",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                faucetAddress: faucetAddress,
+                claimAmount: claimAmountBN.toString(),
+                startTime: startTimestamp,
+                endTime: endTimestamp,
+                chainId: Number(chainId),
+                tasks: tasksToSend.length > 0 ? tasksToSend : undefined,
+              }),
             }
+          );
 
-            const result = await response.json();
-            
-            // Explicit check for the code
-            const newCode = result.secretCode || result.secret_code;
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || "Backend sync failed");
+          }
 
-            if (newCode) {
-              setNewlyGeneratedCode(newCode); 
-              setCurrentSecretCode(newCode); 
-              setShowNewCodeDialog(true); // Trigger Popup
-              
-              toast({
-                title: "Parameters Updated & Code Generated",
-                description: "Blockchain updated and new Drop Code created.",
-              });
-            } else {
-               toast({
-                title: "Parameters Updated",
-                description: "Blockchain updated, but no new code was returned by server.",
-                variant: "warning",
-              });
-            }
-        } catch (backendError: any) {
-            console.error("Backend Sync Error:", backendError);
+          const result = await response.json();
+
+          // Explicit check for the code
+          const newCode = result.secretCode || result.secret_code;
+
+          if (newCode) {
+            setNewlyGeneratedCode(newCode);
+            setCurrentSecretCode(newCode);
+            setShowNewCodeDialog(true); // Trigger Popup
+
             toast({
-                title: "Blockchain Updated, Backend Failed",
-                description: "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
-                variant: "destructive"
+              title: "Parameters Updated & Code Generated",
+              description: "Blockchain updated and new Drop Code created.",
             });
+          } else {
+            toast({
+              title: "Parameters Updated",
+              description:
+                "Blockchain updated, but no new code was returned by server.",
+              variant: "warning",
+            });
+          }
+        } catch (backendError: any) {
+          console.error("Backend Sync Error:", backendError);
+          toast({
+            title: "Blockchain Updated, Backend Failed",
+            description:
+              "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
+            variant: "destructive",
+          });
         }
       }
       // ======================================================
       // PATH 2: TASKS ONLY (No Blockchain)
-      // Result: Tasks Updated + OLD Code Preserved
       // ======================================================
       else if (hasTaskChanges) {
         const response = await fetch(
@@ -732,7 +808,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       }
 
       setNewSocialLinks([]); // Clear new links queue
-      
     } catch (error: any) {
       console.error("Error updating parameters:", error);
       toast({
@@ -897,25 +972,23 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   };
 
   const handleRetrieveSecretCode = async (): Promise<void> => {
-    if (faucetType !== "dropcode" || !faucetAddress || !address || !chainId) return;
-    
+    if (faucetType !== "dropcode" || !faucetAddress || !address || !chainId)
+      return;
+
     try {
       setIsRetrievingSecret(true);
-      
-      // FIX: Use the Admin endpoint instead of the public one
-      // The public one throws errors if the code is "Future" or "Expired"
-      // The Admin one allows the owner to see it regardless of status
+
       const data = await getSecretCodeForAdmin(address, faucetAddress, chainId);
-      
+
       if (!data.secretCode) throw new Error("No code returned from server");
 
       setCurrentSecretCode(data.secretCode);
       setShowCurrentSecretDialog(true);
-      
+
       toast({
         title: "Drop Code Retrieved",
-        description: data.isFuture 
-          ? "This code is scheduled for the future." 
+        description: data.isFuture
+          ? "This code is scheduled for the future."
           : "Current active code retrieved.",
       });
     } catch (error: any) {
@@ -1021,27 +1094,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     }
   };
 
-  const addNewSocialLink = (): void => {
-    setNewSocialLinks([
-      ...newSocialLinks,
-      { platform: "𝕏", url: "", handle: "", action: "follow" },
-    ]);
-  };
-
-  const removeNewSocialLink = (index: number): void => {
-    setNewSocialLinks(newSocialLinks.filter((_, i) => i !== index));
-  };
-
-  const updateNewSocialLink = (
-    index: number,
-    field: keyof SocialMediaLink,
-    value: string
-  ): void => {
-    const updated = [...newSocialLinks];
-    updated[index] = { ...updated[index], [field]: value };
-    setNewSocialLinks(updated);
-  };
-
   const totalPages = Math.ceil(transactions.length / 10);
   const startIndex = (currentPage - 1) * 10;
   const currentTransactions = transactions.slice(startIndex, startIndex + 10);
@@ -1051,7 +1103,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
   const getTokenName = (isEther: boolean): string => {
     if (!isEther) return tokenSymbol;
-    return selectedNetwork?.name ? selectedNetwork.nativeCurrency.symbol : "ETH";
+    return selectedNetwork?.name
+      ? selectedNetwork.nativeCurrency.symbol
+      : "ETH";
   };
 
   // --- Preview Logic ---
@@ -1531,7 +1585,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                           onChange={(e) =>
                             updateNewSocialLink(index, "url", e.target.value)
                           }
-                          className="text-xs"
+                          className="text-xs font-mono text-muted-foreground"
                         />
                       </div>
                       <div className="space-y-1">
@@ -1641,13 +1695,19 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             <TabsContent value="custom" className="space-y-4 mt-4">
               <Card className="p-4 border shadow-sm space-y-4">
                 <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                  <FileUp className="h-4 w-4 mr-2" /> Upload Custom Claim Amounts
+                  <FileUp className="h-4 w-4 mr-2" /> Upload Custom Claim
+                  Amounts
                 </CardTitle>
                 <CustomClaimUploader
                   tokenSymbol={tokenSymbol}
                   tokenDecimals={tokenDecimals}
                   onDataParsed={async (addresses, amounts) => {
-                    if (!address || !provider || !chainId || !checkNetwork())
+                    if (
+                      !address ||
+                      !provider ||
+                      !chainId ||
+                      !checkNetwork()
+                    )
                       return;
                     try {
                       console.log(
@@ -1720,8 +1780,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                       </span>
                     ) : (
                       <>
-                        <RotateCcw className="h-4 w-4 mr-1" /> Generate New
-                        Code
+                        <RotateCcw className="h-4 w-4 mr-1" /> Generate New Code
                       </>
                     )}
                   </Button>
@@ -2010,7 +2069,10 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
+              <Label
+                htmlFor="adjusted-fund-amount"
+                className="text-xs sm:text-sm"
+              >
                 Amount to Fund
               </Label>
               <Input
@@ -2239,7 +2301,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-{/* testing */}
+
       <Dialog open={showNewCodeDialog} onOpenChange={setShowNewCodeDialog}>
         <DialogContent className="w-11/12 max-w-md">
           <DialogHeader>

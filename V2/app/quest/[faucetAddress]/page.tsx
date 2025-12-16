@@ -4,19 +4,16 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle, Clock, Save, TrendingUp, Users, ArrowRight, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Loader2, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 import { useNetwork } from '@/hooks/use-network'; 
 
-// Header Component (Inline for simplicity)
 const Header = ({ pageTitle }: { pageTitle: string }) => <h1 className="text-3xl font-bold mb-6">{pageTitle}</h1>;
 
-// Backend API URL
-const API_BASE_URL = "http://127.0.0.1:8000";
+// IMPORTANT: Update this to match your deployment
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
 
-// --- Types ---
 interface QuestTask {
     id: string;
     title: string;
@@ -43,136 +40,129 @@ interface QuestData {
     participantsCount: number;
 }
 
-interface LeaderboardEntry {
-    rank: number;
-    walletAddress: string;
-    points: number;
-    completedTasks: number;
-}
-
-interface Submission {
-    submissionId: string;
-    walletAddress: string;
-    taskId: string;
-    taskTitle: string;
-    submittedData: string; 
-    submissionType: string;
-    status: 'pending' | 'approved' | 'rejected';
-}
-
 export default function QuestDetailsPage() {
     const params = useParams();
     const router = useRouter();
     
-    // --- 1. Robust Address Extraction (Fixes 404/Loading issues) ---
-    // Extract the raw parameter from the URL (e.g., "quest-title-0x1234...")
+    // --- FIXED: Robust Address Extraction ---
     const rawSlug = params.faucetAddress as string | undefined; 
     
-    // Use Regex to find the 42-char ETH address safely, ignoring the slug title
     const faucetAddress = useMemo(() => {
-    if (!rawSlug) {
-        console.log("No rawSlug provided");
+        if (!rawSlug) {
+            console.log("❌ No rawSlug provided");
+            return undefined;
+        }
+
+        console.log("🔍 Attempting to extract address from:", rawSlug);
+
+        // Method 1: Try to find 0x followed by 40 hex chars (case-insensitive)
+        // This handles: "quest-title-0xABCD...1234" format
+        const addressPattern = /(0x[a-fA-F0-9]{40})/i;
+        const match = rawSlug.match(addressPattern);
+        
+        if (match && match[1]) {
+            console.log("✅ Address extracted successfully:", match[1]);
+            return match[1];
+        }
+
+        // Method 2: Check if the entire rawSlug IS an address (no slug prefix)
+        if (/^0x[a-fA-F0-9]{40}$/i.test(rawSlug)) {
+            console.log("✅ rawSlug is a pure address:", rawSlug);
+            return rawSlug;
+        }
+
+        console.error("❌ Failed to extract valid address from:", rawSlug);
         return undefined;
-    }
-
-    // First try: exact 42-char hex at the end
-    let match = rawSlug.match(/(0x[a-fA-F0-9]{40})$/i);
-    if (match) return match[0];
-
-    // Fallback: if no slug, maybe rawSlug IS the full address
-    if (/^0x[a-fA-F0-9]{40}$/i.test(rawSlug)) {
-        console.log("rawSlug is pure address, using it directly");
-        return rawSlug;
-    }
-
-    console.error("Failed to extract address from:", rawSlug);
-    return undefined;
-}, [rawSlug]);
-
+    }, [rawSlug]);
 
     const { address: userWalletAddress } = useWallet(); 
     const { network } = useNetwork(); 
     
     const [questData, setQuestData] = useState<QuestData | null>(null);
-    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-    const [pendingSubmissions, setPendingSubmissions] = useState<Submission[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // --- 2. Real Data Fetching (Replaces Mock) ---
+    // --- FIXED: Data Fetching with Better Error Handling ---
     useEffect(() => {
-        // If params aren't loaded yet, wait.
-        if (!rawSlug) return;
+        // Wait for params to be available
+        if (!rawSlug) {
+            console.log("⏳ Waiting for route params...");
+            return;
+        }
 
-        // If extraction failed, stop loading and show error
+        // If extraction failed, show error immediately
         if (!faucetAddress) {
-            setError("Invalid URL format. Could not find a valid Faucet Address.");
+            console.error("❌ Invalid URL: Could not extract faucet address");
+            setError("Invalid quest URL format. The faucet address could not be found.");
             setIsLoading(false);
             return;
         }
 
-        const fetchAllData = async () => {
+        const fetchQuestData = async () => {
+            console.log(`📡 Fetching quest data for address: ${faucetAddress}`);
             setIsLoading(true);
             setError(null);
+
             try {
-                console.log(`fetching quest data for: ${faucetAddress}`);
+                const apiUrl = `${API_BASE_URL}/api/quests/${faucetAddress}`;
+                console.log(`🌐 API Request: GET ${apiUrl}`);
                 
-                // Call the REAL backend API
-                const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}`);
+                const response = await fetch(apiUrl);
                 
+                console.log(`📥 Response Status: ${response.status} ${response.statusText}`);
+
                 if (!response.ok) {
-                    if (response.status === 404) throw new Error("Quest not found in database.");
-                    throw new Error(`Server Error: ${response.status} ${response.statusText}`);
+                    if (response.status === 404) {
+                        throw new Error("Quest not found. It may not exist in the database yet.");
+                    }
+                    throw new Error(`Server error: ${response.status} ${response.statusText}`);
                 }
 
-                const data = await response.json();console.log("QuestDetailsPage rendered");
-            console.log("rawSlug from params:", rawSlug);
-            console.log("Extracted faucetAddress:", faucetAddress);
+                const data = await response.json();
+                console.log("📦 Response data:", data);
                             
-                            if (!data.success) {
+                if (!data.success) {
                     throw new Error(data.message || "Failed to load quest details");
                 }
 
+                console.log("✅ Quest data loaded successfully");
                 setQuestData(data.quest);
 
-                // Placeholder for other endpoints (Implement these in backend later)
-                setLeaderboard([]); 
-                setPendingSubmissions([]);
-
             } catch (err: any) {
-                console.error("Error fetching quest details:", err);
-                setError(err.message || "Could not connect to backend.");
+                console.error("❌ Error fetching quest details:", err);
+                setError(err.message || "Could not connect to backend. Check console for details.");
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchAllData();
+        fetchQuestData();
     }, [faucetAddress, rawSlug]);
 
-    if (!faucetAddress) {
-    setError("Invalid quest URL: Could not extract faucet address.");
-    setIsLoading(false);
-    return;
-}
+    // --- Debug Info in Console ---
+    useEffect(() => {
+        console.log("=== Quest Details Page Debug ===");
+        console.log("rawSlug:", rawSlug);
+        console.log("Extracted faucetAddress:", faucetAddress);
+        console.log("API Base URL:", API_BASE_URL);
+        console.log("================================");
+    }, [rawSlug, faucetAddress]);
 
+    const isCreator = userWalletAddress && questData && 
+        questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
 
-    // --- Admin Action Handlers ---
-    const isCreator = userWalletAddress && questData && questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
-
-    const handleApprove = (submissionId: string) => { console.log(`Approving ${submissionId}`); };
-    const handleReject = (submissionId: string) => { console.log(`Rejecting ${submissionId}`); };
-
-    // --- Render States ---
+    // --- Loading State ---
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
                 <p className="text-muted-foreground">Loading Quest Details...</p>
+                <p className="text-xs text-gray-400">Address: {faucetAddress}</p>
             </div>
         );
     }
 
+    // --- Error State ---
     if (error || !questData) {
         return (
             <div className="max-w-4xl mx-auto p-6 mt-10">
@@ -180,9 +170,19 @@ export default function QuestDetailsPage() {
                     <CardContent className="flex flex-col items-center justify-center p-6 text-red-700">
                         <AlertTriangle className="h-10 w-10 mb-4" />
                         <h2 className="text-lg font-bold mb-2">Unable to Load Quest</h2>
-                        <p className="mb-4">{error || "Quest data not found."}</p>
-                        <Button variant="outline" className="border-red-200 hover:bg-red-100 text-red-700" onClick={() => router.push('/faucet/dashboard')}>
-                            Return to Dashboard
+                        <p className="mb-4 text-center">{error || "Quest data not found."}</p>
+                        <div className="text-xs text-gray-600 mb-4 p-2 bg-white rounded border">
+                            <p><strong>Debug Info:</strong></p>
+                            <p>URL Slug: {rawSlug || "N/A"}</p>
+                            <p>Extracted Address: {faucetAddress || "Failed to extract"}</p>
+                            <p>API URL: {API_BASE_URL}/api/quests/{faucetAddress || "N/A"}</p>
+                        </div>
+                        <Button 
+                            variant="outline" 
+                            className="border-red-200 hover:bg-red-100 text-red-700" 
+                            onClick={() => router.push('/quest')}
+                        >
+                            Return to Quest List
                         </Button>
                     </CardContent>
                 </Card>
@@ -190,6 +190,7 @@ export default function QuestDetailsPage() {
         );
     }
 
+    // --- Success State: Display Quest ---
     return (
         <div className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
             <Header pageTitle={questData.title} />
@@ -200,9 +201,15 @@ export default function QuestDetailsPage() {
                         {/* Quest Image */}
                         <div className="w-full md:w-48 h-48 shrink-0 rounded-lg overflow-hidden border bg-muted">
                             {questData.imageUrl ? (
-                                <img src={questData.imageUrl} alt={questData.title} className="w-full h-full object-cover" />
+                                <img 
+                                    src={questData.imageUrl} 
+                                    alt={questData.title} 
+                                    className="w-full h-full object-cover" 
+                                />
                             ) : (
-                                <div className="w-full h-full flex items-center justify-center text-muted-foreground">No Image</div>
+                                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                    No Image
+                                </div>
                             )}
                         </div>
 
@@ -212,10 +219,15 @@ export default function QuestDetailsPage() {
                                 <div>
                                     <h1 className="text-2xl font-bold">{questData.title}</h1>
                                     <div className="flex items-center gap-2 mt-2">
-                                        <Badge variant={questData.isActive ? "default" : "secondary"} className={questData.isActive ? "bg-green-600" : ""}>
+                                        <Badge 
+                                            variant={questData.isActive ? "default" : "secondary"} 
+                                            className={questData.isActive ? "bg-green-600" : ""}
+                                        >
                                             {questData.isActive ? "Active" : "Inactive"}
                                         </Badge>
-                                        <Badge variant="outline">{network?.name || "Unknown Network"}</Badge>
+                                        <Badge variant="outline">
+                                            {network?.name || "Unknown Network"}
+                                        </Badge>
                                     </div>
                                 </div>
                                 {isCreator && (
@@ -247,27 +259,31 @@ export default function QuestDetailsPage() {
 
             <Tabs defaultValue="tasks" className="w-full">
                 <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent gap-6">
-                    <TabsTrigger value="tasks" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3">Tasks</TabsTrigger>
-                    <TabsTrigger value="activity" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3">Activity</TabsTrigger>
-                    <TabsTrigger value="leaderboard" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3">Leaderboard</TabsTrigger>
+                    <TabsTrigger value="tasks">Tasks</TabsTrigger>
+                    <TabsTrigger value="activity">Activity</TabsTrigger>
+                    <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
                 </TabsList>
 
-                {/* --- TASKS TAB --- */}
                 <TabsContent value="tasks" className="mt-6 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {questData.tasks.map((task) => (
                             <Card key={task.id} className="hover:border-primary/50 transition-colors">
                                 <CardContent className="p-4 flex flex-col h-full">
                                     <div className="flex justify-between items-start mb-2">
-                                        <Badge variant="outline" className="capitalize">{task.stage} Stage</Badge>
+                                        <Badge variant="outline" className="capitalize">
+                                            {task.stage} Stage
+                                        </Badge>
                                         <span className="font-bold text-green-600">{task.points} Pts</span>
                                     </div>
                                     <h3 className="font-semibold mb-1">{task.title}</h3>
-                                    <p className="text-sm text-muted-foreground mb-4 flex-grow line-clamp-2">{task.description}</p>
+                                    <p className="text-sm text-muted-foreground mb-4 flex-grow line-clamp-2">
+                                        {task.description}
+                                    </p>
                                     
                                     <Button className="w-full mt-auto" variant="secondary" asChild>
                                         <a href={task.url} target="_blank" rel="noreferrer">
-                                            {task.verificationType === 'manual_link' ? 'Perform & Submit' : 'Go to Task'} <ExternalLink className="h-3 w-3 ml-2"/>
+                                            {task.verificationType === 'manual_link' ? 'Perform & Submit' : 'Go to Task'}
+                                            <ExternalLink className="h-3 w-3 ml-2"/>
                                         </a>
                                     </Button>
                                 </CardContent>
@@ -276,9 +292,13 @@ export default function QuestDetailsPage() {
                     </div>
                 </TabsContent>
 
-                {/* --- OTHER TABS (Placeholders) --- */}
-                <TabsContent value="activity" className="mt-6 text-center text-muted-foreground">Activity feed coming soon.</TabsContent>
-                <TabsContent value="leaderboard" className="mt-6 text-center text-muted-foreground">Leaderboard coming soon.</TabsContent>
+                <TabsContent value="activity" className="mt-6 text-center text-muted-foreground">
+                    Activity feed coming soon.
+                </TabsContent>
+                
+                <TabsContent value="leaderboard" className="mt-6 text-center text-muted-foreground">
+                    Leaderboard coming soon.
+                </TabsContent>
             </Tabs>
         </div>
     );

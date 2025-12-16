@@ -80,7 +80,7 @@ import {
   updateFaucetName,
   deleteFaucet,
 } from "@/lib/faucet";
-import { retrieveSecretCode } from "@/lib/backend-service";
+import { retrieveSecretCode,getSecretCodeForAdmin } from "@/lib/backend-service";
 
 type FaucetType = "dropcode" | "droplist" | "custom";
 const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
@@ -621,50 +621,60 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         );
 
         // 2. Backend Call to Sync and Generate New Code
-        console.log("Calling backend to generate new code...");
-        const response = await fetch(
-          "https://fauctdrop-backend.onrender.com/set-claim-parameters",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              faucetAddress: faucetAddress,
-              claimAmount: claimAmountBN.toString(), // Send as string to fix 422 error
-              startTime: startTimestamp,
-              endTime: endTimestamp,
-              chainId: Number(chainId),
-              tasks: tasksToSend.length > 0 ? tasksToSend : undefined,
-            }),
-          }
-        );
+        // We use a try/catch block specifically for the backend call 
+        // to ensure we capture the specific error if the DB fails
+        try {
+            console.log("Calling backend to generate new code...");
+            const response = await fetch(
+              "https://fauctdrop-backend.onrender.com/set-claim-parameters",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  faucetAddress: faucetAddress,
+                  claimAmount: claimAmountBN.toString(), 
+                  startTime: startTimestamp,
+                  endTime: endTimestamp,
+                  chainId: Number(chainId),
+                  tasks: tasksToSend.length > 0 ? tasksToSend : undefined,
+                }),
+              }
+            );
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            errorData.detail || "Failed to sync parameters with backend"
-          );
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.detail || "Backend sync failed");
+            }
+
+            const result = await response.json();
+            
+            // Explicit check for the code
+            const newCode = result.secretCode || result.secret_code;
+
+            if (newCode) {
+              setNewlyGeneratedCode(newCode); 
+              setCurrentSecretCode(newCode); 
+              setShowNewCodeDialog(true); // Trigger Popup
+              
+              toast({
+                title: "Parameters Updated & Code Generated",
+                description: "Blockchain updated and new Drop Code created.",
+              });
+            } else {
+               toast({
+                title: "Parameters Updated",
+                description: "Blockchain updated, but no new code was returned by server.",
+                variant: "warning",
+              });
+            }
+        } catch (backendError: any) {
+            console.error("Backend Sync Error:", backendError);
+            toast({
+                title: "Blockchain Updated, Backend Failed",
+                description: "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
+                variant: "destructive"
+            });
         }
-
-        const result = await response.json();
-        console.log("Backend response:", result);
-
-        // FIX: Robust check for secret code keys + immediate state update
-        const newCode = result.secretCode || result.secret_code;
-
-        if (newCode) {
-          console.log("New code generated:", newCode);
-          setNewlyGeneratedCode(newCode); // Update popup state
-          setCurrentSecretCode(newCode); // Update Admin View state
-          setShowNewCodeDialog(true); // Trigger Popup
-        } else {
-          console.warn("No secret code found in response", result);
-        }
-
-        toast({
-          title: "Parameters Updated",
-          description:
-            "Blockchain updated and new Drop Code generated (if applicable).",
-        });
       }
       // ======================================================
       // PATH 2: TASKS ONLY (No Blockchain)
@@ -698,8 +708,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       }
 
       setNewSocialLinks([]); // Clear new links queue
-      await loadFaucetDetails();
-      await loadTransactionHistory();
+      // await loadFaucetDetails();
+      // await loadTransactionHistory();
     } catch (error: any) {
       console.error("Error updating parameters:", error);
       toast({
@@ -864,23 +874,32 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   };
 
   const handleRetrieveSecretCode = async (): Promise<void> => {
-    if (faucetType !== "dropcode" || !faucetAddress) return;
+    if (faucetType !== "dropcode" || !faucetAddress || !address || !chainId) return;
+    
     try {
       setIsRetrievingSecret(true);
-      const code = await retrieveSecretCode(faucetAddress);
-      if (!code || code.trim() === "")
-        throw new Error("Retrieved code is empty or invalid");
-      setCurrentSecretCode(code);
+      
+      // FIX: Use the Admin endpoint instead of the public one
+      // The public one throws errors if the code is "Future" or "Expired"
+      // The Admin one allows the owner to see it regardless of status
+      const data = await getSecretCodeForAdmin(address, faucetAddress, chainId);
+      
+      if (!data.secretCode) throw new Error("No code returned from server");
+
+      setCurrentSecretCode(data.secretCode);
       setShowCurrentSecretDialog(true);
+      
       toast({
-        title: "Valid Drop Code Retrieved! ",
-        description: "Fresh valid code retrieved and cached",
+        title: "Drop Code Retrieved",
+        description: data.isFuture 
+          ? "This code is scheduled for the future." 
+          : "Current active code retrieved.",
       });
     } catch (error: any) {
-      let errorMessage = error.message || "Failed to retrieve the drop code";
+      console.error("Retrieval error:", error);
       toast({
         title: "Failed to retrieve Drop code",
-        description: errorMessage,
+        description: error.message || "Ensure you are the owner or admin.",
         variant: "destructive",
       });
     } finally {

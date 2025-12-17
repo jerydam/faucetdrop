@@ -609,217 +609,220 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   };
 
   const handleUpdateClaimParameters = async (): Promise<void> => {
-    if (!address || !provider || !chainId || !checkNetwork()) return;
+  if (!address || !provider || !chainId || !checkNetwork()) return;
 
-    const hasTaskChanges = newSocialLinks.length > 0;
+  const hasTaskChanges = newSocialLinks.length > 0;
 
-    const currentClaimAmountStr =
-      faucetType !== "custom"
-        ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
-        : "0";
-    const currentStartTimeStr = faucetDetails.startTime
-      ? new Date(Number(faucetDetails.startTime) * 1000)
-          .toISOString()
-          .slice(0, 16)
-      : "";
-    const currentEndTimeStr = faucetDetails.endTime
-      ? new Date(Number(faucetDetails.endTime) * 1000)
-          .toISOString()
-          .slice(0, 16)
-      : "";
+  const currentClaimAmountStr =
+    faucetType !== "custom"
+      ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
+      : "0";
+  const currentStartTimeStr = faucetDetails.startTime
+    ? new Date(Number(faucetDetails.startTime) * 1000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
+  const currentEndTimeStr = faucetDetails.endTime
+    ? new Date(Number(faucetDetails.endTime) * 1000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
 
-    const isClaimAmountChanged =
-      faucetType !== "custom" && claimAmount !== currentClaimAmountStr;
-    const isStartTimeChanged = startTime !== currentStartTimeStr;
-    const isEndTimeChanged = endTime !== currentEndTimeStr;
-    const hasBlockchainChanges =
-      isClaimAmountChanged || isStartTimeChanged || isEndTimeChanged;
+  const isClaimAmountChanged =
+    faucetType !== "custom" && claimAmount !== currentClaimAmountStr;
+  const isStartTimeChanged = startTime !== currentStartTimeStr;
+  const isEndTimeChanged = endTime !== currentEndTimeStr;
+  const hasBlockchainChanges =
+    isClaimAmountChanged || isStartTimeChanged || isEndTimeChanged;
 
-    if (!hasTaskChanges && !hasBlockchainChanges) {
+  if (!hasTaskChanges && !hasBlockchainChanges) {
+    toast({
+      title: "No Changes",
+      description: "No parameters or tasks were modified.",
+      variant: "default",
+    });
+    return;
+  }
+
+  // Input Validation
+  if (hasBlockchainChanges) {
+    if (faucetType !== "custom" && !claimAmount) {
       toast({
-        title: "No Changes",
-        description: "No parameters or tasks were modified.",
-        variant: "default",
+        title: "Invalid Input",
+        description: "Please fill in the drop amount",
+        variant: "destructive",
       });
       return;
     }
+    if (!startTime || !endTime) {
+      toast({
+        title: "Invalid Input",
+        description: "Please fill in the start and end times",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (startTimeError) {
+      toast({
+        title: "Invalid Start Time",
+        description: startTimeError,
+        variant: "destructive",
+      });
+      return;
+    }
+  }
 
-    // Input Validation
-    if (hasBlockchainChanges) {
-      if (faucetType !== "custom" && !claimAmount) {
-        toast({
-          title: "Invalid Input",
-          description: "Please fill in the drop amount",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (!startTime || !endTime) {
-        toast({
-          title: "Invalid Input",
-          description: "Please fill in the start and end times",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (startTimeError) {
-        toast({
-          title: "Invalid Start Time",
-          description: startTimeError,
-          variant: "destructive",
-        });
-        return;
-      }
+  try {
+    setIsUpdatingParameters(true);
+
+    // 1. Prepare NEW tasks (formatted)
+    let newTasksFormatted: any[] = [];
+    if (hasTaskChanges) {
+      newTasksFormatted = newSocialLinks
+        .filter((link) => link.url.trim() && link.handle.trim())
+        .map((link) => ({
+          title: `${
+            link.action.charAt(0).toUpperCase() + link.action.slice(1)
+          } ${link.handle}`,
+          description: `${
+            link.action.charAt(0).toUpperCase() + link.action.slice(1)
+          } our ${link.platform} account: ${link.handle}`,
+          url: link.url.trim(),
+          required: true,
+          platform: link.platform,
+          handle: link.handle,
+          action: link.action,
+        }));
     }
 
-    try {
-      setIsUpdatingParameters(true);
+    // ======================================================
+    // PATH 1: BLOCKCHAIN INTERACTION (Time/Amount Changed)
+    // ======================================================
+    if (hasBlockchainChanges) {
+      const claimAmountBN =
+        faucetType === "custom"
+          ? BigInt(0)
+          : parseUnits(claimAmount, tokenDecimals);
 
-      // Prepare tasks list for sending to backend
-      let tasksToSend: any[] = [];
-      if (hasTaskChanges) {
-        tasksToSend = newSocialLinks
-          .filter((link) => link.url.trim() && link.handle.trim())
-          .map((link) => ({
-            title: `${
-              link.action.charAt(0).toUpperCase() + link.action.slice(1)
-            } ${link.handle}`,
-            description: `${
-              link.action.charAt(0).toUpperCase() + link.action.slice(1)
-            } our ${link.platform} account: ${link.handle}`,
-            url: link.url.trim(),
-            required: true,
-            platform: link.platform,
-            handle: link.handle,
-            action: link.action,
-          }));
-      }
+      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
+      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
-      // ======================================================
-      // PATH 1: BLOCKCHAIN INTERACTION (Time/Amount Changed)
-      // ======================================================
-      if (hasBlockchainChanges) {
-        const claimAmountBN =
-          faucetType === "custom"
-            ? BigInt(0)
-            : parseUnits(claimAmount, tokenDecimals);
+      // A. Transaction
+      await setClaimParameters(
+        provider as BrowserProvider,
+        faucetAddress,
+        claimAmountBN,
+        startTimestamp,
+        endTimestamp,
+        BigInt(chainId),
+        BigInt(Number(selectedNetwork.chainId)),
+        faucetType || undefined
+      );
 
-        const startTimestamp = Math.floor(
-          new Date(startTime).getTime() / 1000
-        );
-        const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
+      // B. Backend Call: MUST include OLD + NEW tasks to prevent overwrite
+      // Start with existing tasks from state, or empty array if undefined
+      const existingTasks = faucetDetails.tasks ? [...faucetDetails.tasks] : [];
+      // Merge existing with new
+      const mergedTasks = [...existingTasks, ...newTasksFormatted];
 
-        // 1. Transaction
-        await setClaimParameters(
-          provider as BrowserProvider,
-          faucetAddress,
-          claimAmountBN,
-          startTimestamp,
-          endTimestamp,
-          BigInt(chainId),
-          BigInt(Number(selectedNetwork.chainId)),
-          faucetType || undefined
-        );
-
-        // 2. Backend Call to Sync and Generate New Code
-        try {
-          console.log("Calling backend to generate new code...");
-          const response = await fetch(
-            "https://fauctdrop-backend.onrender.com/set-claim-parameters",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                faucetAddress: faucetAddress,
-                claimAmount: claimAmountBN.toString(),
-                startTime: startTimestamp,
-                endTime: endTimestamp,
-                chainId: Number(chainId),
-                tasks: tasksToSend.length > 0 ? tasksToSend : undefined,
-              }),
-            }
-          );
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || "Backend sync failed");
-          }
-
-          const result = await response.json();
-
-          // Explicit check for the code
-          const newCode = result.secretCode || result.secret_code;
-
-          if (newCode) {
-            setNewlyGeneratedCode(newCode);
-            setCurrentSecretCode(newCode);
-            setShowNewCodeDialog(true); // Trigger Popup
-
-            toast({
-              title: "Parameters Updated & Code Generated",
-              description: "Blockchain updated and new Drop Code created.",
-            });
-          } else {
-            toast({
-              title: "Parameters Updated",
-              description:
-                "Blockchain updated, but no new code was returned by server.",
-              variant: "destructive",
-            });
-          }
-        } catch (backendError: any) {
-          console.error("Backend Sync Error:", backendError);
-          toast({
-            title: "Blockchain Updated, Backend Failed",
-            description:
-              "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
-            variant: "destructive",
-          });
-        }
-      }
-      // ======================================================
-      // PATH 2: TASKS ONLY (No Blockchain)
-      // ======================================================
-      else if (hasTaskChanges) {
+      try {
+        console.log("Calling backend to generate new code...");
         const response = await fetch(
-          "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
+          "https://fauctdrop-backend.onrender.com/set-claim-parameters",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               faucetAddress: faucetAddress,
-              tasks: tasksToSend,
-              userAddress: address,
+              claimAmount: claimAmountBN.toString(),
+              startTime: startTimestamp,
+              endTime: endTimestamp,
               chainId: Number(chainId),
+              // Send the MERGED list so previous tasks are not deleted
+              tasks: mergedTasks.length > 0 ? mergedTasks : undefined,
             }),
           }
         );
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.detail || "Failed to save tasks");
+          throw new Error(errorData.detail || "Backend sync failed");
         }
 
+        const result = await response.json();
+        const newCode = result.secretCode || result.secret_code;
+
+        if (newCode) {
+          setNewlyGeneratedCode(newCode);
+          setCurrentSecretCode(newCode);
+          setShowNewCodeDialog(true); 
+
+          toast({
+            title: "Parameters Updated & Code Generated",
+            description: "Blockchain updated and new Drop Code created.",
+          });
+        } else {
+          toast({
+            title: "Parameters Updated",
+            description:
+              "Blockchain updated, but no new code was returned by server.",
+            variant: "destructive",
+          });
+        }
+      } catch (backendError: any) {
+        console.error("Backend Sync Error:", backendError);
         toast({
-          title: "Tasks Updated",
+          title: "Blockchain Updated, Backend Failed",
           description:
-            "Social tasks updated successfully. Drop Code remains unchanged.",
+            "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
+          variant: "destructive",
         });
       }
-
-      setNewSocialLinks([]); // Clear new links queue
-    } catch (error: any) {
-      console.error("Error updating parameters:", error);
-      toast({
-        title: "Update Failed",
-        description:
-          error.message || "Failed to update parameters on chain or backend.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUpdatingParameters(false);
     }
-  };
+    // ======================================================
+    // PATH 2: TASKS ONLY (No Blockchain)
+    // ======================================================
+    else if (hasTaskChanges) {
+      // For "add-faucet-tasks", we likely only send the NEW ones to append
+      const response = await fetch(
+        "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            faucetAddress: faucetAddress,
+            tasks: newTasksFormatted, // Send only NEW tasks here
+            userAddress: address,
+            chainId: Number(chainId),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to save tasks");
+      }
+
+      toast({
+        title: "Tasks Updated",
+        description:
+          "Social tasks updated successfully. Drop Code remains unchanged.",
+      });
+    }
+
+    setNewSocialLinks([]); // Clear new links queue
+  } catch (error: any) {
+    console.error("Error updating parameters:", error);
+    toast({
+      title: "Update Failed",
+      description:
+        error.message || "Failed to update parameters on chain or backend.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsUpdatingParameters(false);
+  }
+};
 
   const handleUpdateWhitelist = async (): Promise<void> => {
     if (

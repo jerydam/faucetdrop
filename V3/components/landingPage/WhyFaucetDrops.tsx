@@ -45,6 +45,7 @@ const KnowFaucetDrops = () => {
       } else {
         // Move to next text
         const nextIndex = (currentIndex + 1) % texts.length;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCurrentIndex(nextIndex);
         setIsDeleting(false);
         

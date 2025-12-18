@@ -31,7 +31,7 @@ export default function OpenDrop() {
     { textHead: "Airdrops", textBody: "First come, first serve", image: "/learnMore/early.png" },
   ]
   const createOpenDrop = () => {
-    window.open('https://app.faucetdrops.io/create-faucet?type=open', '_blank');
+    window.open('https://app.faucetdrops.io/faucet/create-faucet?type=open', '_blank');
   }
   return (
     <div className="w-full min-h-screen flex flex-col items-center px-4 sm:px-6 py-20 md:py-24">

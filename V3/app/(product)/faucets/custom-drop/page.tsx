@@ -30,7 +30,7 @@ export default function CustomDrop() {
     ]
 
     const createCustomDrop = () => {
-        window.open('https://app.faucetdrops.io/create-faucet?type=custom', '_blank');
+        window.open('https://app.faucetdrops.io/faucet/create-faucet?type=custom', '_blank');
     }
     return (
         <div className="w-full min-h-screen flex flex-col items-center px-4 sm:px-6 py-20 md:py-24">

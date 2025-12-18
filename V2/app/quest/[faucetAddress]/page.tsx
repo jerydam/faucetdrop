@@ -16,12 +16,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Loader2, ExternalLink, CheckCircle2, Clock, 
-  Trophy, Shield, Save, Edit2, X, Upload, Lock, ImageIcon, UserCircle, AlertTriangle
+  Trophy, Shield, Save, Edit2, X, Upload, Lock, ImageIcon, UserCircle, AlertTriangle, Coins
 } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 import { useToast } from "@/hooks/use-toast";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
 
 // ============= TYPES =============
 interface QuestTask {
@@ -103,6 +103,10 @@ export default function QuestDetailsPage() {
     const [submissionData, setSubmissionData] = useState({ proofUrl: '', notes: '', file: null as File | null });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Admin Fund Modal State
+    const [showFundModal, setShowFundModal] = useState(false);
+    const [fundAmount, setFundAmount] = useState<string>("");
+
     // Admin Edit Form
     const [editForm, setEditForm] = useState({
         title: "",
@@ -116,6 +120,18 @@ export default function QuestDetailsPage() {
         questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
 
     const stages = ['Beginner', 'Intermediate', 'Advance', 'Legend', 'Ultimate'];
+
+    // ============= FUNDING CALCULATION LOGIC =============
+    const rewardPoolAmount = parseFloat(questData?.rewardPool || "0");
+    const platformFeePercentage = 0.05; // 5%
+    const requiredFee = rewardPoolAmount * platformFeePercentage;
+    const totalRequired = rewardPoolAmount + requiredFee;
+
+    const isValidFundingAmount = useMemo(() => {
+        const input = parseFloat(fundAmount || "0");
+        // Check if input matches required total (allowing for small float rounding differences)
+        return Math.abs(input - totalRequired) < 0.0001;
+    }, [fundAmount, totalRequired]);
 
     // ============= 1. CHECK USER PROFILE =============
     useEffect(() => {
@@ -339,6 +355,17 @@ export default function QuestDetailsPage() {
         }
     };
 
+    const handleFundQuest = async () => {
+        // Here you would integrate the Smart Contract Deposit Logic
+        // For example: await faucetContract.deposit({ value: parseEther(fundAmount) });
+        
+        toast({ title: "Simulation", description: `Funding logic triggered for ${fundAmount} tokens.` });
+        
+        // After successful tx, optimistic update:
+        setQuestData((prev: any) => ({ ...prev, isFunded: true }));
+        setShowFundModal(false);
+    };
+
     // Helper: Logic for task status
     const getTaskStatus = (task: QuestTask) => {
         if (userProgress.completedTasks.includes(task.id)) return 'completed';
@@ -473,6 +500,9 @@ export default function QuestDetailsPage() {
                                             <Badge variant={questData.isActive ? "default" : "destructive"} className="h-6 px-3">
                                                 {questData.isActive ? "Live" : "Paused"}
                                             </Badge>
+                                            {questData.isFunded && (
+                                                <Badge className="bg-green-500 hover:bg-green-600 h-6 px-3">Funded</Badge>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -492,7 +522,7 @@ export default function QuestDetailsPage() {
 
                             {/* Creator Controls */}
                             {isCreator && (
-                                <div className="hidden md:block pl-4">
+                                <div className="hidden md:block pl-4 space-y-2">
                                     {isEditing ? (
                                         <div className="flex gap-2 flex-col">
                                             <Button size="sm" className="bg-green-600 hover:bg-green-500 w-full" onClick={handleSaveDetails} disabled={isSaving}>
@@ -503,9 +533,24 @@ export default function QuestDetailsPage() {
                                             </Button>
                                         </div>
                                     ) : (
-                                        <Button variant="secondary" size="sm" onClick={() => setIsEditing(true)}>
-                                            <Edit2 className="w-4 h-4 mr-2"/> Edit
-                                        </Button>
+                                        <>
+                                            <Button variant="secondary" size="sm" className="w-full" onClick={() => setIsEditing(true)}>
+                                                <Edit2 className="w-4 h-4 mr-2"/> Edit
+                                            </Button>
+                                            {/* Fund Button */}
+                                            {!questData.isFunded && (
+                                                <Button 
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setFundAmount("");
+                                                        setShowFundModal(true);
+                                                    }}
+                                                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                                                >
+                                                    <Coins className="mr-2 h-4 w-4" /> Fund Quest
+                                                </Button>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             )}
@@ -708,7 +753,10 @@ export default function QuestDetailsPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        leaderboard.map((entry) => (
+                                        // Filter out creator address and map
+                                        leaderboard
+                                            .filter(entry => entry.walletAddress.toLowerCase() !== questData.creatorAddress.toLowerCase())
+                                            .map((entry) => (
                                             <TableRow key={entry.walletAddress} className={entry.walletAddress === userWalletAddress ? "bg-primary/5 hover:bg-primary/10" : ""}>
                                                 <TableCell className="font-medium text-lg">
                                                     {entry.rank === 1 && "🥇"}
@@ -762,6 +810,7 @@ export default function QuestDetailsPage() {
                                 <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Quest Status</CardTitle></CardHeader>
                                 <CardContent>
                                     <Badge className="text-sm" variant={questData.isActive ? "default" : "destructive"}>{questData.isActive ? "Active" : "Inactive"}</Badge>
+                                    {questData.isFunded && <Badge className="ml-2 bg-green-500 text-white">Funded</Badge>}
                                 </CardContent>
                             </Card>
                         </div>
@@ -891,6 +940,66 @@ export default function QuestDetailsPage() {
                             <Button onClick={handleSubmitTask} disabled={isSubmitting || (!submissionData.proofUrl && !submissionData.file)} className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-black dark:hover:bg-slate-200">
                                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                                 Submit for Review
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                </div>
+            )}
+
+            {/* ============= FUNDING MODAL ============= */}
+            {showFundModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <Card className="w-full max-w-md shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
+                        <CardHeader>
+                            <CardTitle>Fund Reward Pool</CardTitle>
+                            <CardDescription>
+                                Deposit tokens to activate this quest. 
+                                <br/>Includes <strong>5% Platform Fee</strong>.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            
+                            {/* Calculation Display */}
+                            <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                    <span>Reward Pool Goal:</span>
+                                    <span className="font-bold">{rewardPoolAmount}</span>
+                                </div>
+                                <div className="flex justify-between text-muted-foreground">
+                                    <span>Platform Fee (5%):</span>
+                                    <span>+ {requiredFee.toFixed(4)}</span>
+                                </div>
+                                <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold text-primary">
+                                    <span>Total Required:</span>
+                                    <span>{totalRequired.toFixed(4)}</span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Enter Deposit Amount</Label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="0.00"
+                                    value={fundAmount}
+                                    onChange={(e) => setFundAmount(e.target.value)} 
+                                    className={isValidFundingAmount ? "border-green-500 focus-visible:ring-green-500" : "border-red-500 focus-visible:ring-red-500"}
+                                />
+                                {!isValidFundingAmount && fundAmount && (
+                                    <p className="text-xs text-red-500">
+                                        Amount must be exactly {totalRequired.toFixed(4)}
+                                    </p>
+                                )}
+                            </div>
+
+                        </CardContent>
+                        <CardFooter className="flex justify-end gap-3">
+                            <Button variant="outline" onClick={() => setShowFundModal(false)}>Cancel</Button>
+                            <Button 
+                                onClick={handleFundQuest} 
+                                disabled={!isValidFundingAmount}
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                                Confirm & Deposit
                             </Button>
                         </CardFooter>
                     </Card>

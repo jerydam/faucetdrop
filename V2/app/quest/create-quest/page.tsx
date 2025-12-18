@@ -1,5 +1,5 @@
  "use client"
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +12,10 @@ import {
     Plus,
     Trash2,
     Save,
+    Clock,
+    Users,
+    PieChart,
+    Calendar,
     Settings,
     Loader2,
     ListPlus,
@@ -50,6 +54,7 @@ import {
     type FactoryType, 
     
 } from "@/lib/faucet"; 
+import { toast } from 'sonner'
 // ----------------------------------------------------------
 
 // --- LOCAL NETWORK & TOKEN CONFIGURATION ---
@@ -93,6 +98,43 @@ const getFactoryAddress = (factoryType: 'custom', targetNetwork: Network | null)
 // --- FAUCET.TS LOGIC & INTERFACES (CRITICAL FOR UI) ---
 const FACTORY_TYPE_CUSTOM = 'custom' as const;
 // NOTE: NameValidationResult is imported above
+
+interface TierConfig {
+    rankStart: number;
+    rankEnd: number;
+    amountPerUser: number;
+}
+
+interface DistributionConfig {
+    model: 'equal' | 'custom_tiers';
+    totalWinners: number;
+    tiers: TierConfig[]; // Used if model is custom_tiers
+}
+
+interface Quest {
+    // ... existing fields
+    id: string
+    creatorAddress: string
+    title: string
+    description: string
+    isActive: boolean
+    isFunded: boolean; // NEW: Controls visibility based on funding
+    rewardPool: string // Total amount string
+    startDate: string // Date string YYYY-MM-DD
+    startTime: string // NEW: HH:MM
+    endDate: string   // Date string YYYY-MM-DD
+    endTime: string   // NEW: HH:MM
+    tasks: QuestTask[]
+    faucetAddress?: string;
+    rewardTokenType: 'native' | 'erc20';
+    tokenAddress: string;
+    stagePassRequirements: StagePassRequirements;
+    imageUrl: string;
+    distributionConfig: DistributionConfig; // NEW
+}
+
+
+
 interface FaucetDetail {
     faucetAddress: string;
     name: string;
@@ -346,7 +388,7 @@ interface QuestTask {
     id: string
     title: string
     description: string
-    points: number
+    points: number | string;
     required: boolean
     category: 'social' | 'trading' | 'swap' | 'referral' | 'content' | 'general'
     url: string
@@ -357,7 +399,7 @@ interface QuestTask {
     targetContractAddress?: string
     targetChainId?: string
     stage: TaskStage
-    minReferrals?: number
+    minReferrals?: number | string;
 }
 
 // NOTE: This interface MUST be manually kept in sync with the FastAPI Pydantic model
@@ -391,23 +433,31 @@ const initialStagePassRequirements: StagePassRequirements = {
 }
 
 const initialNewQuest: Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'> = {
-    title: "New Community Campaign",
-    description: "Join our ecosystem and earn rewards.",
-    isActive: true,
-    rewardPool: "TBD",
+    title: "",
+    description: "",
+    isActive: true, // Will be filtered by isFunded on backend/frontend view
+    isFunded: false, 
+    rewardPool: "",
     startDate: getTodayDateString(),
+    startTime: "12:00",
     endDate: getFutureDateString(7),
+    endTime: "23:59",
     tasks: [],
     faucetAddress: undefined,
     rewardTokenType: 'native',
     tokenAddress: ZeroAddress,
-    imageUrl: "https://placehold.co/1024x1024/3b82f6/ffffff?text=Quest+Logo", // UPDATED default image size
+    imageUrl: "https://placehold.co/1280x1280/3b82f6/ffffff?text=Quest+Logo",
+    distributionConfig: {
+        model: 'equal',
+        totalWinners: 100,
+        tiers: []
+    }
 }
 
 const initialNewTaskForm: Partial<QuestTask> = {
     title: "",
     description: "",
-    points: 100,
+    points: "",
     required: true,
     category: "social",
     url: "",
@@ -415,7 +465,7 @@ const initialNewTaskForm: Partial<QuestTask> = {
     verificationType: "manual_link",
     targetPlatform: "Twitter",
     stage: 'Beginner',
-    minReferrals: undefined,
+    minReferrals: "",
 }
 
 const FACTORY_ABI_CUSTOM: any[] = [
@@ -503,8 +553,8 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [previewUrl, setPreviewUrl] = useState(imageUrl);
     const [resolutionError, setResolutionError] = useState<string | null>(null);
-    const requiredWidth = requiredResolution?.width || 1024;
-    const requiredHeight = requiredResolution?.height || 1024;
+    const maxWidth = requiredResolution?.width || 1280;
+    const maxHeight = requiredResolution?.height || 1280;
 
     useEffect(() => {
         setPreviewUrl(imageUrl);
@@ -521,12 +571,14 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         reader.onload = (e) => {
             const img = new Image();
             img.onload = () => {
-                if (img.width !== requiredWidth || img.height !== requiredHeight) {
-                    setResolutionError(`Resolution must be ${requiredWidth}x${requiredHeight} pixels. Found ${img.width}x${img.height}.`);
+                // UPDATED LOGIC: Allow anything LESS than or EQUAL to max dimensions
+                if (img.width > maxWidth || img.height > maxHeight) {
+                    setResolutionError(`Image is too large. Max allowed: ${maxWidth}x${maxHeight}. Found: ${img.width}x${img.height}.`);
                     setPreviewUrl(null);
-                    if (fileInputRef.current) fileInputRef.current.value = ""; // Clear file input
+                    if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
+                
                 // 2. Set preview and trigger upload
                 setPreviewUrl(e.target?.result as string);
                 onFileUpload(file);
@@ -545,13 +597,12 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
 
     const displayImageUrl = imageUrl || previewUrl;
 
-    return (
+   return (
         <div className="space-y-2">
-            <Label htmlFor="fileUpload">Quest Image/Logo (Max 5MB, {requiredWidth}x{requiredHeight} required)</Label>
+            <Label htmlFor="fileUpload">Quest Image/Logo (Max 5MB, Max {maxWidth}x{maxHeight})</Label>
             
             <div className="flex items-center space-x-3">
-                {/* File Input Trigger */}
-                <Button
+                 <Button
                     type="button"
                     variant="outline"
                     onClick={() => fileInputRef.current?.click()}
@@ -563,10 +614,9 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                     ) : (
                         <Upload className="h-4 w-4 mr-2" />
                     )}
-                    {isUploading ? "Uploading..." : imageUrl ? "Change Image" : "Upload Image (1024x1024)"}
+                    {isUploading ? "Uploading..." : imageUrl ? "Change Image" : "Upload Image"}
                 </Button>
                 
-                {/* Remove Button */}
                 {imageUrl && (
                     <Button
                         type="button"
@@ -579,7 +629,6 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                     </Button>
                 )}
                 
-                {/* Hidden File Input */}
                 <Input
                     id="fileUpload"
                     ref={fileInputRef}
@@ -591,30 +640,29 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
                 />
             </div>
 
-            {/* Preview and Error */}
             {(displayImageUrl || uploadError || resolutionError) && (
                 <div className="flex items-start space-x-3 mt-2 border p-3 rounded-lg bg-white dark:bg-gray-800">
                     <div className="h-16 w-16 flex-shrink-0 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden border">
                         {displayImageUrl ? (
-                            <img src={displayImageUrl} alt="Preview" className="h-full w-full object-cover" />
+                            <img src={displayImageUrl} alt="Preview" className="h-full w-full object-contain" />
                         ) : (
-                            <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
-                                No Preview
-                            </div>
+                            <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">No Img</div>
                         )}
                     </div>
-                    {(uploadError || resolutionError) && (
-                        <p className="text-xs text-red-500 flex-grow pt-1">
-                            <AlertTriangle className="h-3 w-3 inline mr-1" />
-                            {resolutionError || uploadError}
-                        </p>
-                    )}
-                     {(!uploadError && !resolutionError && imageUrl) && (
-                        <p className="text-xs text-green-500 flex-grow pt-1">
-                            <Check className="h-3 w-3 inline mr-1" />
-                            Image URL saved successfully.
-                        </p>
-                    )}
+                    <div className="flex-grow">
+                         {(uploadError || resolutionError) && (
+                            <p className="text-xs text-red-500 pt-1">
+                                <AlertTriangle className="h-3 w-3 inline mr-1" />
+                                {resolutionError || uploadError}
+                            </p>
+                        )}
+                         {(!uploadError && !resolutionError && imageUrl) && (
+                            <p className="text-xs text-green-500 pt-1">
+                                <Check className="h-3 w-3 inline mr-1" />
+                                Image uploaded successfully.
+                            </p>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
@@ -622,8 +670,10 @@ const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
 };
 
 
+
 // --- STEP 1: QUEST DETAILS ---
 // Updated StepOneProps to include new image handling props
+// Update the interface first to accept the new handlers
 interface StepOneProps {
     newQuest: Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'>;
     setNewQuest: React.Dispatch<React.SetStateAction<Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'>>>;
@@ -632,8 +682,15 @@ interface StepOneProps {
     isUploadingImage: boolean;
     uploadImageError: string | null;
     handleImageUpload: (file: File) => Promise<void>;
+    handleTitleChange: (value: string) => void;  // ADD THIS
+    handleTitleBlur: () => void;                  // ADD THIS
 }
-const StepOneDetails: React.FC<StepOneProps> = ({ newQuest, setNewQuest, nameError, isCheckingName, isUploadingImage, uploadImageError, handleImageUpload }) => (
+
+// Then update StepOneDetails to use them:
+const StepOneDetails: React.FC<StepOneProps> = ({ 
+    newQuest, setNewQuest, nameError, isCheckingName, isUploadingImage, 
+    uploadImageError, handleImageUpload, handleTitleChange, handleTitleBlur 
+}) => (
     <Card>
         <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -651,7 +708,8 @@ const StepOneDetails: React.FC<StepOneProps> = ({ newQuest, setNewQuest, nameErr
                     <Input
                         id="title"
                         value={newQuest.title}
-                        onChange={(e) => setNewQuest({...newQuest, title: e.target.value})}
+                        onChange={(e) => handleTitleChange(e.target.value)}
+                        onBlur={handleTitleBlur}
                         placeholder="The FaucetDrop Launch Campaign"
                         className={
                             nameError
@@ -679,16 +737,19 @@ const StepOneDetails: React.FC<StepOneProps> = ({ newQuest, setNewQuest, nameErr
                 {nameError && newQuest.title.trim().length >= 3 && (
                     <p className="text-xs text-red-500">{nameError}</p>
                 )}
+                {isCheckingName && newQuest.title.trim().length >= 3 && (
+                    <p className="text-xs text-blue-500">Checking name availability...</p>
+                )}
             </div>
             
-            {/* NEW IMAGE UPLOAD FIELD */}
+            {/* IMAGE UPLOAD FIELD */}
             <ImageUploadField
                 imageUrl={newQuest.imageUrl}
                 onImageUrlChange={(url) => setNewQuest({...newQuest, imageUrl: url})}
                 onFileUpload={handleImageUpload}
                 isUploading={isUploadingImage}
                 uploadError={uploadImageError}
-                requiredResolution={{ width: 1024, height: 1024 }} // Set required resolution
+                requiredResolution={{ width: 1280, height: 1280 }}
             />
             
             <div className="space-y-2">
@@ -703,7 +764,8 @@ const StepOneDetails: React.FC<StepOneProps> = ({ newQuest, setNewQuest, nameErr
             </div>
         </CardContent>
     </Card>
-)
+);
+
 
 // --- STEP 2: REWARDS CONFIG ---
 interface StepTwoProps {
@@ -721,48 +783,68 @@ const StepTwoRewards: React.FC<StepTwoProps> = ({ newQuest, setNewQuest, chainId
     const [customTokenAddress, setCustomTokenAddress] = useState('');
     const availableTokens = chainId ? ALL_TOKENS_BY_CHAIN[chainId] || [] : [];
 
+    // Helper to calculate total required based on tiers
+    const calculateTotalFromTiers = () => {
+        return newQuest.distributionConfig.tiers.reduce((acc, tier) => {
+            const count = (tier.rankEnd - tier.rankStart) + 1;
+            return acc + (count * tier.amountPerUser);
+        }, 0);
+    };
+
+    const handleTierChange = (index: number, field: keyof TierConfig, value: number) => {
+        const updatedTiers = [...newQuest.distributionConfig.tiers];
+        updatedTiers[index] = { ...updatedTiers[index], [field]: value };
+        setNewQuest(prev => ({
+            ...prev,
+            distributionConfig: { ...prev.distributionConfig, tiers: updatedTiers }
+        }));
+    };
+
+    const addTier = () => {
+        const lastTier = newQuest.distributionConfig.tiers[newQuest.distributionConfig.tiers.length - 1];
+        const start = lastTier ? lastTier.rankEnd + 1 : 1;
+        setNewQuest(prev => ({
+            ...prev,
+            distributionConfig: {
+                ...prev.distributionConfig,
+                tiers: [...prev.distributionConfig.tiers, { rankStart: start, rankEnd: start, amountPerUser: 0 }]
+            }
+        }));
+    };
+
+    const removeTier = (index: number) => {
+        const updatedTiers = newQuest.distributionConfig.tiers.filter((_, i) => i !== index);
+        setNewQuest(prev => ({
+            ...prev,
+            distributionConfig: { ...prev.distributionConfig, tiers: updatedTiers }
+        }));
+    };
+
     return (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Coins className="h-5 w-5" /> Step 2: Rewards Configuration
+              <Coins className="h-5 w-5" /> Step 2: Rewards & Timing
             </CardTitle>
             <CardDescription>
-                Define the rewards and the primary reward token for the Faucet.
+                Configure the token, distribution logic, and campaign duration.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
 
+            {/* --- TOKEN SELECTION (Existing Code) --- */}
             <div className="space-y-2">
-              <Label htmlFor="rewardPool">Reward Pool Description</Label>
-              <Input
-                id="rewardPool"
-                value={newQuest.rewardPool}
-                onChange={(e) => setNewQuest({...newQuest, rewardPool: e.target.value})}
-                placeholder="5000 $FD tokens + 10 NFT spots"
-              />
-               <p className="text-xs text-muted-foreground">This is for display only. The reward token will be used for the Faucet deployment.</p>
-            </div>
-
-            <div className="space-y-2">
-                <Label htmlFor="rewardToken">Reward Token ({network?.name || 'Unknown Chain'})</Label>
+                <Label>Reward Token ({network?.name || 'Unknown Chain'})</Label>
                 <Select
                     value={isCustomToken ? "custom" : (selectedToken ? selectedToken.address : undefined)}
                     onValueChange={(value) => {
                         if (value === "custom") {
-                            setIsCustomToken(true);
-                            setSelectedToken(null);
+                            setIsCustomToken(true); setSelectedToken(null);
                         } else {
                             const token = availableTokens.find(t => t.address === value);
                             if (token) {
-                                setSelectedToken(token);
-                                setIsCustomToken(false);
-                                setCustomTokenAddress('');
-                                setNewQuest(prev => ({
-                                    ...prev,
-                                    rewardTokenType: token.isNative ? 'native' : 'erc20',
-                                    tokenAddress: token.address,
-                                }));
+                                setSelectedToken(token); setIsCustomToken(false); setCustomTokenAddress('');
+                                setNewQuest(prev => ({ ...prev, rewardTokenType: token.isNative ? 'native' : 'erc20', tokenAddress: token.address }));
                             }
                         }
                     }}
@@ -770,72 +852,160 @@ const StepTwoRewards: React.FC<StepTwoProps> = ({ newQuest, setNewQuest, chainId
                 >
                     <SelectTrigger>
                         <SelectValue>
-                            {isCustomToken ? (
-                                "Custom Token"
-                            ) : selectedToken ? (
-                                <span className="flex items-center gap-2">
-                                    {selectedToken.name} ({selectedToken.symbol})
-                                </span>
-                            ) : (
-                                availableTokens.length > 0 ? "Select reward token" : "No tokens available on this chain"
-                            )}
+                            {isCustomToken ? "Custom Token" : selectedToken ? `${selectedToken.name} (${selectedToken.symbol})` : "Select reward token"}
                         </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                         {availableTokens.map((token) => (
-                            <SelectItem key={token.address} value={token.address}>
-                                <div className="flex items-center gap-2">
-                                    {token.name} ({token.symbol}) {token.isNative && <Badge variant="secondary" className="text-xs">Native</Badge>}
-                                </div>
-                            </SelectItem>
+                            <SelectItem key={token.address} value={token.address}>{token.name} ({token.symbol})</SelectItem>
                         ))}
                         <SelectItem value="custom">+ Custom Token</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
+            
+            {/* Custom Token Input (Existing Code Logic) */}
             {isCustomToken && (
                 <div className="space-y-3 p-3 border rounded-lg bg-gray-50 dark:bg-gray-900">
-                    <h4 className="text-sm font-medium">Custom Token Address</h4>
-                    <div className="space-y-2">
-                        <Label className="text-xs">Token Contract Address</Label>
-                        <Input
-                            value={customTokenAddress}
-                            onChange={(e) => setCustomTokenAddress(e.target.value)}
-                            placeholder="0x..."
-                        />
-                    </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            if (customTokenAddress && isAddress(customTokenAddress)) {
-                                const fullCustom: TokenConfiguration = {
-                                    address: customTokenAddress,
-                                    name: 'Custom Token',
-                                    symbol: 'CUST',
-                                    decimals: 18,
-                                    isNative: false,
-                                };
-                                setSelectedToken(fullCustom);
-                                setIsCustomToken(false);
-                                setCustomTokenAddress('');
-                                setNewQuest(prev => ({
-                                    ...prev,
-                                    rewardTokenType: 'erc20',
-                                    tokenAddress: fullCustom.address,
-                                }));
-                                setError(null);
-                            } else {
-                                setError("Please enter a valid token contract address.");
+                    <Label className="text-xs">Token Contract Address</Label>
+                    <div className="flex gap-2">
+                        <Input value={customTokenAddress} onChange={(e) => setCustomTokenAddress(e.target.value)} placeholder="0x..." />
+                        <Button variant="outline" size="sm" onClick={() => {
+                             if (customTokenAddress && isAddress(customTokenAddress)) {
+                                const fullCustom: TokenConfiguration = { address: customTokenAddress, name: 'Custom', symbol: 'TOK', decimals: 18, isNative: false };
+                                setSelectedToken(fullCustom); setIsCustomToken(false); setCustomTokenAddress('');
+                                setNewQuest(prev => ({ ...prev, rewardTokenType: 'erc20', tokenAddress: fullCustom.address }));
                             }
-                        }}
-                        disabled={!customTokenAddress || !isAddress(customTokenAddress)}
-                        className="w-full"
-                    >
-                        Set Custom Token
-                    </Button>
+                        }}>Set</Button>
+                    </div>
                 </div>
             )}
+
+            <div className="border-t pt-4 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                    <PieChart className="h-4 w-4 text-blue-500" />
+                    <h3 className="font-semibold text-sm">Distribution Model</h3>
+                </div>
+
+                {/* --- WINNERS & MODEL --- */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>Number of Winners</Label>
+                        <Input 
+                            type="number" 
+                            min=""
+                            value={newQuest.distributionConfig.totalWinners}
+                            onChange={(e) => setNewQuest(prev => ({
+                                ...prev, 
+                                distributionConfig: { ...prev.distributionConfig, totalWinners: parseFloat(e.target.value) || 1 }
+                            }))}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Distribution Type</Label>
+                        <Select
+                            value={newQuest.distributionConfig.model}
+                            onValueChange={(val: 'equal' | 'custom_tiers') => setNewQuest(prev => ({
+                                ...prev,
+                                distributionConfig: { ...prev.distributionConfig, model: val }
+                            }))}
+                        >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="equal">Equal Sharing</SelectItem>
+                                <SelectItem value="custom_tiers">Custom Tiered</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                {/* --- DISTRIBUTION LOGIC --- */}
+                {newQuest.distributionConfig.model === 'equal' ? (
+                     <div className="space-y-2">
+                        <Label htmlFor="rewardPool">Total Reward Pool Amount</Label>
+                        <Input
+                            id="rewardPool"
+                            type="number"
+                            step="any"
+                            value={newQuest.rewardPool}
+                            onChange={(e) => setNewQuest({...newQuest, rewardPool: e.target.value})}
+                            placeholder="e.g. 1000"
+                        />
+                        {newQuest.rewardPool && (
+                            <p className="text-sm text-green-600">
+                                Each winner receives: <strong>{(parseFloat(newQuest.rewardPool) / newQuest.distributionConfig.totalWinners).toFixed(4)} {selectedToken?.symbol || 'Tokens'}</strong>
+                            </p>
+                        )}
+                    </div>
+                ) : (
+                    <div className="space-y-3 p-3 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                        <div className="flex justify-between items-center">
+                            <Label>Custom Tiers</Label>
+                            <Button size="sm" variant="outline" onClick={addTier}><Plus className="h-3 w-3 mr-1"/> Add Tier</Button>
+                        </div>
+                        
+                        {newQuest.distributionConfig.tiers.map((tier, idx) => (
+                            <div key={idx} className="flex gap-2 items-end">
+                                <div className="space-y-1 flex-1">
+                                    <Label className="text-xs">Rank From</Label>
+                                    <Input type="number" value={tier.rankStart} onChange={(e) => handleTierChange(idx, 'rankStart', parseFloat(e.target.value))} />
+                                </div>
+                                <div className="space-y-1 flex-1">
+                                    <Label className="text-xs">Rank To</Label>
+                                    <Input type="number" value={tier.rankEnd} onChange={(e) => handleTierChange(idx, 'rankEnd', parseFloat(e.target.value))} />
+                                </div>
+                                <div className="space-y-1 flex-1">
+                                    <Label className="text-xs">Amount ({selectedToken?.symbol})</Label>
+                                    <Input type="number" value={tier.amountPerUser} onChange={(e) => handleTierChange(idx, 'amountPerUser', parseFloat(e.target.value))} />
+                                </div>
+                                <Button size="icon" variant="ghost" className="text-red-500 mb-0.5" onClick={() => removeTier(idx)}><Trash2 className="h-4 w-4"/></Button>
+                            </div>
+                        ))}
+                        
+                        <div className="pt-2 text-right text-sm">
+                            Total Tokens Needed: <strong>{calculateTotalFromTiers()} {selectedToken?.symbol}</strong>
+                        </div>
+                         {/* Hidden update to keep main rewardPool state in sync for display */}
+                        {(() => {
+                             const total = calculateTotalFromTiers().toString();
+                             if (newQuest.rewardPool !== total && newQuest.distributionConfig.model === 'custom_tiers') {
+                                 // Use setTimeout to avoid render loop warning, simple sync
+                                 setTimeout(() => setNewQuest(prev => ({...prev, rewardPool: total})), 0);
+                             }
+                             return null;
+                        })()}
+                    </div>
+                )}
+            </div>
+
+            {/* --- TIMING SECTION --- */}
+            <div className="border-t pt-4 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                    <Clock className="h-4 w-4 text-orange-500" />
+                    <h3 className="font-semibold text-sm">Campaign Duration</h3>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                         <Label className="flex items-center gap-2"><Calendar className="h-3 w-3"/> Start Date & Time</Label>
+                         <div className="flex gap-2">
+                             <Input type="date" value={newQuest.startDate} onChange={(e) => setNewQuest({...newQuest, startDate: e.target.value})} />
+                             <Input type="time" value={newQuest.startTime} onChange={(e) => setNewQuest({...newQuest, startTime: e.target.value})} />
+                         </div>
+                    </div>
+                     <div className="space-y-2">
+                         <Label className="flex items-center gap-2"><Calendar className="h-3 w-3"/> End Date & Time</Label>
+                         <div className="flex gap-2">
+                             <Input type="date" value={newQuest.endDate} onChange={(e) => setNewQuest({...newQuest, endDate: e.target.value})} />
+                             <Input type="time" value={newQuest.endTime} onChange={(e) => setNewQuest({...newQuest, endTime: e.target.value})} />
+                         </div>
+                    </div>
+                </div>
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded text-xs text-yellow-800 dark:text-yellow-200">
+                    <strong>Note:</strong> Quest will remain inactive for participants until the reward pool is funded on the Smart Contract.
+                </div>
+            </div>
+
           </CardContent>
         </Card>
     )
@@ -1141,9 +1311,15 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                             <Input
                                 id="points"
                                 type="number"
-                                value={newTask.points || 100}
-                                onChange={(e) => setNewTask({...newTask, points: parseInt(e.target.value)})}
+                                step="any"
+                                value={newTask.points} // It can now be ""
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    // If empty, set to "", otherwise parse int
+                                    setNewTask({...newTask, points: val === "" ? "" : parseFloat(e.target.value)})
+                                }}
                                 min="1"
+                                placeholder="e.g. 100" // Use placeholder for guidance
                             />
                         </div>
                     </div>
@@ -1154,12 +1330,14 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                </div>
                                <Label className="text-xs">Minimum Required Referrals</Label>
                                <Input
-                                   type="number"
-                                   value={newTask.minReferrals || 1}
-                                   onChange={(e) => setNewTask({...newTask, minReferrals: parseInt(e.target.value)})}
-                                   min="1"
-                                   placeholder="e.g. 5"
-                               />
+                                    type="number"
+                                    value={newTask.minReferrals || ""}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setNewTask({...newTask, minReferrals: val === "" ? "" : parseFloat(val)})
+                                    }}
+                                    placeholder="e.g. 5"
+                                />
                            </div>
                     )}
                     {newTask.verificationType === 'auto_social' && (
@@ -1217,7 +1395,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                 !newTask.title ||
                                 !newTask.url ||
                                 newTask.points === undefined ||
-                                newTask.points <= 0 ||
+                                newTask.points === "" ||
                                 (!editingTask && isCurrentStageAtMax)
                             }
                         >
@@ -1287,7 +1465,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                     <Input
                                         type="number"
                                         value={requiredPass || 0}
-                                        onChange={(e) => handleStagePassRequirementChange(stage, parseInt(e.target.value) || 0)}
+                                        onChange={(e) => handleStagePassRequirementChange(stage, parseFloat(e.target.value) || 0)}
                                         min={totalPoints > 0 ? 1 : 0}
                                         max={maxAllowed || undefined}
                                         disabled={totalPoints === 0}
@@ -1385,6 +1563,24 @@ const StepFourPreview: React.FC<StepFourProps> = ({
                                 {selectedToken ? `${selectedToken.name} (${selectedToken.symbol})` : 'TBD / Custom'}
                             </p>
                         </div>
+                        <div>
+                          <p className="text-sm font-medium">Distribution</p>
+                          <p className="font-semibold capitalize">{newQuest.distributionConfig.model.replace('_', ' ')}</p>
+                          <p className="text-xs text-muted-foreground">{newQuest.distributionConfig.totalWinners} Winners</p>
+                      </div>
+
+                      <div>
+                          <p className="text-sm font-medium">Timing</p>
+                          <p className="text-xs font-semibold">{newQuest.startDate} {newQuest.startTime}</p>
+                          <p className="text-xs text-muted-foreground">to {newQuest.endDate} {newQuest.endTime}</p>
+                      </div>
+                      
+                      <div>
+                          <p className="text-sm font-medium">Status</p>
+                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                              Pending Funding
+                          </Badge>
+                      </div>
                         <div>
                             <p className="text-sm font-medium">Reward Pool</p>
                             <p className="text-lg font-bold">{newQuest.rewardPool || 'Not Specified'}</p>
@@ -1497,10 +1693,14 @@ export default function QuestCreator() {
 
     // --- DYNAMIC CALCULATION: Stage Total Points & Task Counts ---
     const stageTotals = useMemo(() => {
-        const newTotals: Record<TaskStage, number> = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0, };
-        newQuest.tasks.forEach(task => { newTotals[task.stage] += task.points; });
-        return newTotals;
-    }, [newQuest.tasks]);
+    const newTotals: Record<TaskStage, number> = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0 };
+    newQuest.tasks.forEach(task => { 
+        // ✅ FIX: Use parseFloat and simple rounding to 2 decimals to avoid float errors
+        const val = parseFloat(String(task.points)) || 0;
+        newTotals[task.stage] = parseFloat((newTotals[task.stage] + val).toFixed(2));
+    });
+    return newTotals;
+}, [newQuest.tasks]);
 
     const stageTaskCounts = useMemo(() => {
         const counts: Record<TaskStage, number> = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0, };
@@ -1509,54 +1709,94 @@ export default function QuestCreator() {
     }, [newQuest.tasks]);
 
     // --- Name Validation: Updated to use imported function ---
-    const validateFaucetNameAcrossFactories = useCallback(async (nameToValidate: string) => {
-        console.log(`[QuestCreator: validateFaucetNameAcrossFactories] Checking name: "${nameToValidate}"`)
+    // Inside QuestCreator component
+   // REPLACE the section from handleTitleChange through the two useEffect hooks
+// with this corrected version:
 
-        if (!nameToValidate.trim() || !isConnected || !chainId || !network || !walletProvider) {
-            console.log('[QuestCreator: validateFaucetNameAcrossFactories] Skipping check (Missing connection/network data)')
-            setNameError(null); return;
+// Add ref after useState declarations
+const nameCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+// UPDATED checkNameAvailabilityAPI function
+const checkNameAvailabilityAPI = useCallback(async (nameToValidate: string) => {
+    if (!nameToValidate.trim()) {
+        setNameError(null);
+        return;
+    }
+    
+    setIsCheckingName(true); 
+    setNameError(null);
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/check-name?name=${encodeURIComponent(nameToValidate)}`);
+        const data = await response.json();
+
+        console.log("✅ Name check response:", data);
+
+        if (!response.ok) {
+            setNameError("Error checking name availability.");
+            return;
         }
 
-        setIsCheckingName(true); setNameError(null);
-
-        try {
-            console.log(`[QuestCreator: validateFaucetNameAcrossFactories] Calling external checkFaucetNameExists...`);
-            
-            const result: NameValidationResult = await checkFaucetNameExists(
-                walletProvider as BrowserProvider, 
-                network,       
-                nameToValidate
-            );
-
-            if (result.exists && result.existingFaucet) {
-                console.log(`[QuestCreator: validateFaucetNameAcrossFactories] ❌ Conflict found: ${result.existingFaucet.name}`);
-                setNameError(`The name "${result.existingFaucet.name}" is already in use by a deployed Faucet.`);
-            } else if (result.warning) {
-                console.warn(`[QuestCreator: validateFaucetNameAcrossFactories] Warning during check: ${result.warning}`);
-                setNameError(`Validation check returned a warning: ${result.warning}.`);
-            } else {
-                console.log(`[QuestCreator: validateFaucetNameAcrossFactories] ✅ Name is unique.`);
-                setNameError(null);
-            }
-        } catch (e: any) {
-            console.error("❌ [QuestCreator: validateFaucetNameAcrossFactories] Error checking name uniqueness:", e.message);
-            setNameError("Error checking name uniqueness on-chain. Try again or check wallet network.");
-        } finally {
-            setIsCheckingName(false);
-            console.log('[QuestCreator: validateFaucetNameAcrossFactories] Check finished.')
+        // Check the correct response structure
+        if (data.exists === true) {
+            setNameError(`The name "${nameToValidate}" is already taken.`);
+        } else if (data.valid === false) {
+            setNameError(data.message || `The name "${nameToValidate}" is invalid.`);
+        } else {
+            setNameError(null);
         }
-    }, [isConnected, chainId, network, walletProvider]);
+    } catch (e: any) {
+        console.error("❌ Name check failed:", e);
+        setNameError("Could not verify name availability. Service may be down.");
+    } finally {
+        setIsCheckingName(false);
+    }
+}, []);
 
-    useEffect(() => {
-        const title = newQuest.title.trim();
-        if (title.length < 3 || !isConnected || !network) { 
-            setNameError(null); 
-            return; 
+// Handler for onChange - debounced check
+const handleTitleChange = useCallback((value: string) => {
+    setNewQuest(prev => ({...prev, title: value}));
+    
+    // Clear previous timeout
+    if (nameCheckTimeoutRef.current) {
+        clearTimeout(nameCheckTimeoutRef.current);
+    }
+    
+    // Only check if title is at least 3 characters
+    if (value.trim().length >= 3 && isConnected && network) {
+        // Set new timeout - check 500ms after user stops typing
+        nameCheckTimeoutRef.current = setTimeout(() => {
+            checkNameAvailabilityAPI(value.trim());
+        }, 2000);
+    } else if (value.trim().length < 3) {
+        // Clear error if less than 3 characters
+        setNameError(null);
+    }
+}, [isConnected, network, checkNameAvailabilityAPI]);
+
+// Handler for onBlur - immediate check when user leaves the field
+const handleTitleBlur = useCallback(() => {
+    const title = newQuest.title.trim();
+    
+    // Clear the pending timeout
+    if (nameCheckTimeoutRef.current) {
+        clearTimeout(nameCheckTimeoutRef.current);
+    }
+    
+    // Immediate check if title is valid
+    // if (title.length >= 3 && isConnected && network) {
+    //     checkNameAvailabilityAPI(title);
+    // }
+}, [newQuest.title, isConnected, network, checkNameAvailabilityAPI]);
+
+// Cleanup timeout on unmount
+useEffect(() => {
+    return () => {
+        if (nameCheckTimeoutRef.current) {
+            clearTimeout(nameCheckTimeoutRef.current);
         }
-        const delayCheck = setTimeout(() => { validateFaucetNameAcrossFactories(title); }, 500);
-        return () => clearTimeout(delayCheck);
-    }, [newQuest.title, isConnected, network, validateFaucetNameAcrossFactories]);
-
+    };
+}, []);
     // --- Validation Helpers (implementation kept short for review) ---
     const validateTask = useCallback((): boolean => { 
         const isDuplicate = newQuest.tasks.some(t => {
@@ -1566,9 +1806,29 @@ export default function QuestCreator() {
                 || (newTask.description && t.description?.toLowerCase() === newTask.description?.trim().toLowerCase());
         });
         if (isDuplicate) { setError("A task already has the same Title, Description, or URL. Quest tasks must be unique."); return false; }
-        if (!newTask.title || !newTask.url || newTask.points === undefined || newTask.points <= 0 || !newTask.stage) { setError("Please fill in all required task fields: Title, URL, Points (must be > 0), and Stage."); return false; }
+        if (
+    !newTask.title || 
+    !newTask.url || 
+    newTask.points === undefined || 
+    newTask.points === "" || // Check for empty string specifically
+    Number(newTask.points) <= 0 || // Convert to Number for comparison
+    !newTask.stage
+) { 
+    setError("Please fill in all required task fields: Title, URL, Points (must be > 0), and Stage."); 
+    return false; 
+}
         if (newTask.category !== 'social' && newTask.category !== 'referral' && !newTask.description) { setError("Please provide a detailed description for non-template tasks."); return false; }
-        if (newTask.category === 'referral' && (newTask.minReferrals === undefined || newTask.minReferrals <= 0)) { setError("For 'referral' tasks, please specify a minimum required number of referrals (greater than 0)."); return false; }
+        if (
+    newTask.category === 'referral' && 
+    (
+        newTask.minReferrals === undefined || 
+        newTask.minReferrals === "" || 
+        Number(newTask.minReferrals) <= 0
+    )
+) { 
+    setError("For 'referral' tasks, please specify a minimum required number of referrals (greater than 0)."); 
+    return false; 
+}
         if (!editingTask) {
             const currentStageCount = stageTaskCounts[newTask.stage as TaskStage];
             const maxAllowed = STAGE_TASK_REQUIREMENTS[newTask.stage as TaskStage].max;
@@ -1639,7 +1899,7 @@ export default function QuestCreator() {
             id: Date.now().toString(),
             title: newTask.title!,
             description: newTask.category === 'social' ? (newTask.description || generateSocialTaskTitle(newTask.targetPlatform || 'Website', newTask.action || 'visit')) : newTask.description!,
-            points: newTask.points!,
+            points: parseFloat(String(newTask.points)),
             required: newTask.required!,
             category: newTask.category!,
             url: newTask.url!,
@@ -1650,7 +1910,7 @@ export default function QuestCreator() {
             targetContractAddress: newTask.targetContractAddress,
             targetChainId: newTask.targetChainId,
             stage: newTask.stage!,
-            minReferrals: newTask.category === 'referral' ? newTask.minReferrals : undefined,
+            minReferrals: newTask.minReferrals ? Number(newTask.minReferrals) : undefined,
         }
         setNewQuest(prev => ({ ...prev, tasks: [...prev.tasks, task] }))
         setNewTask(initialNewTaskForm)
@@ -1862,12 +2122,18 @@ const handleCreateQuest = async () => {
     const questData: Quest = {
         id: Date.now().toString(), 
         creatorAddress: address, 
-        ...newQuest, // This spreads all newQuest properties including tasks!
+        ...newQuest, 
         faucetAddress: faucetAddress,
         tokenAddress: tokenToDeploy, 
         rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
         stagePassRequirements: stagePassRequirements,
         imageUrl: newQuest.imageUrl,
+        // Ensure combined ISO strings for backend
+        startDate: `${newQuest.startDate}T${newQuest.startTime}:00Z`, 
+        endDate: `${newQuest.endDate}T${newQuest.endTime}:00Z`,
+        // isActive is true, but requires funding check on viewing side
+        isActive: true, 
+        isFunded: false // Default to false until funding tx logic is handled (usually separate step or post-creation)
     };
     
     // 🔍 DEBUG: Log the quest data BEFORE sending
@@ -1906,7 +2172,7 @@ const handleCreateQuest = async () => {
         console.log("✅ Parsed response:", responseData);
         
         console.log(`✅ Quest created successfully!`)
-        alert(`Quest created on ${network?.name}!\n\nFaucet Address: ${faucetAddress}\n\nTasks Saved: ${questData.tasks.length}\n\nRemember to fund the Faucet!`);
+        toast(`Quest created on ${network?.name}!\n\nFaucet Address: ${faucetAddress}\n\nTasks Saved: ${questData.tasks.length}\n\nRemember to fund the Faucet!`);
         
         // Reset state
         setNewQuest(initialNewQuest); 
@@ -1928,50 +2194,54 @@ const handleCreateQuest = async () => {
 }
     
     // --- 2. FIX: Next Button Handler ---
-    const handleNext = () => {
-        let isStepValid = true;
+    // COMPLETE CORRECTED handleNext FUNCTION:
+const handleNext = () => {
+    let isStepValid = true;
 
-        if (step === 1) {
-            if (!newQuest.title.trim() || newQuest.title.trim().length < 3) {
-                setError("Step 1: Quest Title must be at least 3 characters long.");
-                isStepValid = false;
-            } else if (isCheckingName || nameError) {
-                setError(nameError || "Step 1: Please wait for name check to complete or resolve the error.");
-                isStepValid = false;
-            } else if (!newQuest.imageUrl) {
-                setError("Step 1: Please upload a Quest Image.");
-                isStepValid = false;
-            } else if (isUploadingImage || uploadImageError) {
-                setError(uploadImageError || "Step 1: Please wait for image upload to complete or fix upload error.");
-                isStepValid = false;
-            }
-        }
-        
-        if (step === 2) {
-            if (!selectedToken) {
-                setError("Step 2: Please select a reward token.");
-                isStepValid = false;
-            }
-        }
-        
-        if (step === 3) {
-            // Note: validateStagePassPoints and validateStageTaskRequirements
-            // set the global 'error' state internally if they return false.
-            if (newQuest.tasks.length === 0) {
-                setError("Step 3: Please add at least one task to the quest.");
-                isStepValid = false;
-            } else if (!validateStagePassPoints()) {
-                isStepValid = false;
-            } else if (!validateStageTaskRequirements()) {
-                isStepValid = false;
-            }
-        }
-
-        if (isStepValid) {
-            setError(null); // Clear overall error only on success
-            setStep(prev => Math.min(prev + 1, maxSteps));
+    if (step === 1) {
+        if (!newQuest.title.trim() || newQuest.title.trim().length < 3) {
+            setError("Step 1: Quest Title must be at least 3 characters long.");
+            isStepValid = false;
+        } else if (isCheckingName || nameError) {
+            setError(nameError || "Step 1: Please wait for name check to complete or resolve the error.");
+            isStepValid = false;
+        } else if (!newQuest.imageUrl) {
+            setError("Step 1: Please upload a Quest Image.");
+            isStepValid = false;
+        } else if (isUploadingImage || uploadImageError) {
+            setError(uploadImageError || "Step 1: Please wait for image upload to complete or fix upload error.");
+            isStepValid = false;
         }
     }
+    
+    if (step === 2) {
+        if (!selectedToken) {
+            setError("Step 2: Please select a reward token.");
+            isStepValid = false;
+        }
+        // ADDED: Validate reward pool
+        if (!newQuest.rewardPool || parseFloat(newQuest.rewardPool) <= 0) {
+            setError("Step 2: Reward pool amount must be greater than 0.");
+            isStepValid = false;
+        }
+    }
+    
+    if (step === 3) {
+        if (newQuest.tasks.length === 0) {
+            setError("Step 3: Please add at least one task to the quest.");
+            isStepValid = false;
+        } else if (!validateStagePassPoints()) {
+            isStepValid = false;
+        } else if (!validateStageTaskRequirements()) {
+            isStepValid = false;
+        }
+    }
+
+    if (isStepValid) {
+        setError(null);
+        setStep(prev => Math.min(prev + 1, maxSteps));
+    }
+};
     
     const handleBack = () => {
         setStep(prev => Math.max(prev - 1, 1));
@@ -2054,16 +2324,18 @@ const handleCreateQuest = async () => {
                 </div>
 
                 <div className="min-h-[400px]">
-                    {step === 1 && (
-                        <StepOneDetails 
-                            newQuest={newQuest} 
-                            setNewQuest={setNewQuest} 
-                            nameError={nameError} 
-                            isCheckingName={isCheckingName}
-                            isUploadingImage={isUploadingImage}
-                            uploadImageError={uploadImageError}
-                            handleImageUpload={handleImageUpload}
-                        />
+                   {step === 1 && (
+                    <StepOneDetails 
+                        newQuest={newQuest} 
+                        setNewQuest={setNewQuest} 
+                        nameError={nameError} 
+                        isCheckingName={isCheckingName}
+                        isUploadingImage={isUploadingImage}
+                        uploadImageError={uploadImageError}
+                        handleImageUpload={handleImageUpload}
+                        handleTitleChange={handleTitleChange}      // ADD THIS
+                        handleTitleBlur={handleTitleBlur}           // ADD THIS
+                    />
                     )}
                     {step === 2 && (
                         <StepTwoRewards newQuest={newQuest} setNewQuest={setNewQuest} chainId={chainId} network={network} selectedToken={selectedToken} setSelectedToken={setSelectedToken} error={error} setError={setError} />
@@ -2203,7 +2475,7 @@ const handleCreateQuest = async () => {
 //                 target="_blank"
 //                 rel="noopener noreferrer"
 //                 className={`p-2 rounded-full hover:bg-gray-800`}
-//                 aria-label={social.label}
+//                 aria-label={social.label}    
 //               >
 //                 {social.icon}
 //               </a>

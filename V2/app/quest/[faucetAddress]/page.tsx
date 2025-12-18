@@ -20,7 +20,10 @@ import {
 } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 import { useToast } from "@/hooks/use-toast";
+import { Contract, BrowserProvider } from 'ethers';
+import { parseEther } from 'ethers';
 
+import { FAUCET_ABI_CUSTOM } from '@/lib/abis';
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
 
 // ============= TYPES =============
@@ -63,7 +66,7 @@ interface UserProfile {
 export default function QuestDetailsPage() {
     const params = useParams();
     const router = useRouter();
-    const { address: userWalletAddress } = useWallet(); 
+    const { address: userWalletAddress, provider: walletProvider } = useWallet(); 
     const { toast } = useToast();
 
     // Helper: Extract Address from Slug
@@ -96,7 +99,7 @@ export default function QuestDetailsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    
+    const [isFunding, setIsFunding] = useState(false);
     // Submission Modal
     const [showSubmitModal, setShowSubmitModal] = useState(false);
     const [selectedTask, setSelectedTask] = useState<QuestTask | null>(null);
@@ -249,7 +252,7 @@ export default function QuestDetailsPage() {
 
 
     // ============= HANDLERS =============
-
+    
     const handleSaveDetails = async () => {
         setIsSaving(true);
         try {
@@ -355,16 +358,123 @@ export default function QuestDetailsPage() {
         }
     };
 
-    const handleFundQuest = async () => {
-        // Here you would integrate the Smart Contract Deposit Logic
-        // For example: await faucetContract.deposit({ value: parseEther(fundAmount) });
+    // ============= NEW FUNDING HANDLER =============
+    // ============= CORRECTED FUNDING HANDLER =============
+// ============= ERC20 FUNDING HANDLER =============
+const handleFundQuest = async () => {
+    if (!walletProvider || !faucetAddress) {
+        toast({ title: "Error", description: "Wallet not connected or invalid address", variant: "destructive" });
+        return;
+    }
+
+    setIsFunding(true);
+    try {
+        // Get Provider and Signer
+        const provider = walletProvider as BrowserProvider;
+        const signer = await provider.getSigner();
+        const userAddress = await signer.getAddress();
         
-        toast({ title: "Simulation", description: `Funding logic triggered for ${fundAmount} tokens.` });
+        // Calculate Amounts
+        const baseAmountWei = parseEther(rewardPoolAmount.toString());
+        const feeWei = (baseAmountWei * 5n) / 100n;
+        const totalAmountWei = baseAmountWei + feeWei;
+
+        console.log(`Funding Quest:`);
+        console.log(`  Reward Pool: ${rewardPoolAmount} tokens`);
+        console.log(`  Platform Fee (5%): ${Number(feeWei) / 1e18}`);
+        console.log(`  Total Amount: ${Number(totalAmountWei) / 1e18} tokens`);
+        console.log(`  Sending to: ${faucetAddress}`);
+        console.log(`  User Address: ${userAddress}`);
+
+        // Get token address from quest data (you may need to add this to questData)
+        const tokenAddress = questData.tokenAddress; // Make sure this exists in your quest data
         
-        // After successful tx, optimistic update:
+        if (!tokenAddress) {
+            throw new Error("Token address not found in quest data");
+        }
+
+        // ERC20 ABI for approve and transfer
+        const ERC20_ABI = [
+            "function approve(address spender, uint256 amount) public returns (bool)",
+            "function balanceOf(address account) public view returns (uint256)",
+            "function allowance(address owner, address spender) public view returns (uint256)"
+        ];
+
+        const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer);
+
+        // Step 1: Check user's token balance
+        const userBalance = await tokenContract.balanceOf(userAddress);
+        console.log(`  User Token Balance: ${Number(userBalance) / 1e18} tokens`);
+
+        if (userBalance < totalAmountWei) {
+            throw new Error(
+                `Insufficient token balance. Required: ${Number(totalAmountWei) / 1e18} tokens, Available: ${Number(userBalance) / 1e18} tokens`
+            );
+        }
+
+        // Step 2: Check current allowance
+        const currentAllowance = await tokenContract.allowance(userAddress, faucetAddress);
+        console.log(`  Current Allowance: ${Number(currentAllowance) / 1e18} tokens`);
+
+        // Step 3: Approve tokens if needed
+        if (currentAllowance < totalAmountWei) {
+            console.log(`Approving ${Number(totalAmountWei) / 1e18} tokens...`);
+            toast({ title: "Approval Required", description: "Approving token transfer..." });
+
+            const approveTx = await tokenContract.approve(faucetAddress, totalAmountWei);
+            console.log("Approval transaction hash:", approveTx.hash);
+            
+            await approveTx.wait();
+            console.log("Approval confirmed");
+            toast({ title: "Approved", description: "Token approval confirmed. Processing funding..." });
+        }
+
+        // Step 4: Call fund function on faucet contract
+        console.log("Calling fund function...");
+        const faucetContract = new Contract(faucetAddress, FAUCET_ABI_CUSTOM, signer);
+
+        // The fund function should now just receive the base amount as parameter
+        // The contract will handle transferring tokens from user via approved amount
+        const tx = await faucetContract.fund(baseAmountWei);
+        
+        console.log("Fund transaction hash:", tx.hash);
+        toast({ title: "Transaction Sent", description: "Waiting for confirmation..." });
+        
+        const receipt = await tx.wait();
+        console.log("Transaction confirmed:", receipt);
+
+        toast({ title: "Success!", description: `Quest funded with ${Number(baseAmountWei) / 1e18} tokens!` });
+        
+        // Optimistic Update
         setQuestData((prev: any) => ({ ...prev, isFunded: true }));
         setShowFundModal(false);
-    };
+
+    } catch (error: any) {
+        console.error("Funding Error:", error);
+        
+        let errorMessage = "Transaction failed.";
+        
+        if (error.message.includes("Insufficient token balance")) {
+            errorMessage = error.message;
+        } else if (error.message.includes("Token address not found")) {
+            errorMessage = "Quest configuration error: Token address missing";
+        } else if (error.code === "ACTION_REJECTED") {
+            errorMessage = "Transaction was rejected by user.";
+        } else if (error.reason) {
+            errorMessage = error.reason;
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        toast({ 
+            title: "Funding Failed", 
+            description: errorMessage,
+            variant: "destructive" 
+        });
+    } finally {
+        setIsFunding(false);
+    }
+};
 
     // Helper: Logic for task status
     const getTaskStatus = (task: QuestTask) => {
@@ -686,10 +796,18 @@ export default function QuestDetailsPage() {
                                                     </div>
 
                                                     <div className="mt-auto pt-4 border-t flex items-center justify-between">
-                                                        <div className="text-xs font-medium text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
-                                                            {task.verificationType === 'manual_link' ? <ExternalLink className="h-3 w-3"/> : <Upload className="h-3 w-3"/>}
-                                                            {task.verificationType === 'manual_link' ? 'Link' : 'Upload'}
-                                                        </div>
+                                                        {task.url && !isLocked && status !== 'completed' ? (
+                                                            <a href={task.url} target="_blank" rel="noopener noreferrer" className="z-10 relative">
+                                                                <Button variant="outline" size="sm" className="h-8 text-xs gap-1 hover:bg-blue-50 text-blue-600 hover:text-blue-600 border-blue-200">
+                                                                    <ExternalLink className="h-3 w-3"/> Open Link
+                                                                </Button>
+                                                            </a>
+                                                        ) : (
+                                                            <div className="text-xs font-medium text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
+                                                                {task.verificationType === 'manual_link' ? <ExternalLink className="h-3 w-3"/> : <Upload className="h-3 w-3"/>}
+                                                                {task.verificationType === 'manual_link' ? 'Link' : 'Upload'}
+                                                            </div>
+                                                        )}
 
                                                         {status === 'completed' ? (
                                                             <div className="flex items-center text-green-600 text-sm font-bold">
@@ -709,7 +827,7 @@ export default function QuestDetailsPage() {
                                                                     onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }}
                                                                     className="bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"
                                                                 >
-                                                                    Start
+                                                                    Submit Task
                                                                 </Button>
                                                             ) : (
                                                                 <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Preview Mode</span>
@@ -844,39 +962,43 @@ export default function QuestDetailsPage() {
                                                     </div>
                                                 </div>
                                                 <div className="p-4 space-y-4">
-                                                    <div className="bg-slate-100 dark:bg-slate-900 p-3 rounded text-sm break-all">
-                                                        {sub.submittedData.startsWith('http') ? (
-                                                            <a href={sub.submittedData} target="_blank" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
-                                                                {sub.submittedData.includes('quest-proofs') ? "View Image Proof" : "Open Link Proof"} <ExternalLink size={14}/>
-                                                            </a>
-                                                        ) : (
-                                                            sub.submittedData
-                                                        )}
-                                                    </div>
-                                                    {sub.notes && (
-                                                        <div className="text-xs text-muted-foreground bg-white dark:bg-slate-800 p-2 rounded border dark:border-slate-700 italic">
-                                                            "{sub.notes}"
-                                                        </div>
-                                                    )}
-                                                    
-                                                    <div className="flex gap-3 pt-2">
-                                                        <Button className="flex-1 bg-green-600 hover:bg-green-700 h-9" onClick={() => handleReviewSubmission(sub.submissionId, 'approved')}>
-                                                            Approve
-                                                        </Button>
-                                                        <Button variant="destructive" className="flex-1 h-9" onClick={() => handleReviewSubmission(sub.submissionId, 'rejected')}>
-                                                            Reject
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </Card>
-                                        ))}
+                                        <div className="bg-slate-100 dark:bg-slate-900 p-3 rounded text-sm break-all">
+                                            {sub.submittedData ? (
+                                                sub.submittedData.startsWith('http') ? (
+                                                    <a href={sub.submittedData} target="_blank" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                                                        {sub.submittedData.includes('quest-proofs') ? "View Image Proof" : "Open Link Proof"} <ExternalLink size={14}/>
+                                                    </a>
+                                                ) : (
+                                                    sub.submittedData
+                                                )
+                                            ) : (
+                                                <span className="text-muted-foreground italic">No submission data provided</span>
+                                            )}
+                                        </div>
+                                        {sub.notes && (
+                                            <div className="text-xs text-muted-foreground bg-white dark:bg-slate-800 p-2 rounded border dark:border-slate-700 italic">
+                                                "{sub.notes}"
+                                            </div>
+                                        )}
+                                        
+                                        <div className="flex gap-3 pt-2">
+                                            <Button className="flex-1 bg-green-600 hover:bg-green-700 h-9" onClick={() => handleReviewSubmission(sub.submissionId, 'approved')}>
+                                                Approve
+                                            </Button>
+                                            <Button variant="destructive" className="flex-1 h-9" onClick={() => handleReviewSubmission(sub.submissionId, 'rejected')}>
+                                                Reject
+                                            </Button>
+                                        </div>
                                     </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-                )}
-            </Tabs>
+                                                                                </Card>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </CardContent>
+                                                            </Card>
+                                                        </TabsContent>
+                                                    )}
+                                                </Tabs>
 
             {/* ============= SUBMISSION MODAL ============= */}
             {showSubmitModal && selectedTask && (
@@ -947,64 +1069,37 @@ export default function QuestDetailsPage() {
             )}
 
             {/* ============= FUNDING MODAL ============= */}
+            {/* FUNDING MODAL WITH REAL CONTRACT CALL */}
             {showFundModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-                    <Card className="w-full max-w-md shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-md shadow-2xl">
                         <CardHeader>
                             <CardTitle>Fund Reward Pool</CardTitle>
-                            <CardDescription>
-                                Deposit tokens to activate this quest. 
-                                <br/>Includes <strong>5% Platform Fee</strong>.
-                            </CardDescription>
+                            <CardDescription>Deposit tokens to activate this quest.<br/>Includes <strong>5% Platform Fee</strong>.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            
-                            {/* Calculation Display */}
                             <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                    <span>Reward Pool Goal:</span>
-                                    <span className="font-bold">{rewardPoolAmount}</span>
-                                </div>
-                                <div className="flex justify-between text-muted-foreground">
-                                    <span>Platform Fee (5%):</span>
-                                    <span>+ {requiredFee.toFixed(4)}</span>
-                                </div>
-                                <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold text-primary">
-                                    <span>Total Required:</span>
-                                    <span>{totalRequired.toFixed(4)}</span>
-                                </div>
+                                <div className="flex justify-between"><span>Reward Pool Goal:</span><span className="font-bold">{rewardPoolAmount}</span></div>
+                                <div className="flex justify-between text-muted-foreground"><span>Platform Fee (5%):</span><span>+ {requiredFee.toFixed(4)}</span></div>
+                                <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold text-primary"><span>Total Required:</span><span>{totalRequired.toFixed(4)}</span></div>
                             </div>
-
                             <div className="space-y-2">
-                                <Label>Enter Deposit Amount</Label>
-                                <Input 
-                                    type="number" 
-                                    placeholder="0.00"
-                                    value={fundAmount}
-                                    onChange={(e) => setFundAmount(e.target.value)} 
-                                    className={isValidFundingAmount ? "border-green-500 focus-visible:ring-green-500" : "border-red-500 focus-visible:ring-red-500"}
-                                />
-                                {!isValidFundingAmount && fundAmount && (
-                                    <p className="text-xs text-red-500">
-                                        Amount must be exactly {totalRequired.toFixed(4)}
-                                    </p>
-                                )}
+                                <Label>Enter Deposit Amount (Total)</Label>
+                                <Input type="number" placeholder="0.00" value={totalRequired.toFixed(4)} onChange={(e) => setFundAmount(e.target.value)} className={isValidFundingAmount ? "border-green-500" : "border-red-500"}/>
+                                {!isValidFundingAmount && fundAmount && <p className="text-xs text-red-500">Amount must be exactly {totalRequired.toFixed(4)}</p>}
                             </div>
-
                         </CardContent>
                         <CardFooter className="flex justify-end gap-3">
-                            <Button variant="outline" onClick={() => setShowFundModal(false)}>Cancel</Button>
-                            <Button 
-                                onClick={handleFundQuest} 
-                                disabled={!isValidFundingAmount}
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                            >
-                                Confirm & Deposit
+                            <Button variant="outline" onClick={() => setShowFundModal(false)} disabled={isFunding}>Cancel</Button>
+                            <Button onClick={handleFundQuest} disabled={!isValidFundingAmount || isFunding} className="bg-green-600 hover:bg-green-700 text-white">
+                                {isFunding ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                                {isFunding ? "Processing..." : "Confirm & Deposit"}
                             </Button>
                         </CardFooter>
                     </Card>
                 </div>
             )}
+            
         </div>
     );
 }

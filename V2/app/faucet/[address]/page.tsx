@@ -180,9 +180,9 @@ const loadFaucetMetadata = async (faucetAddress: string): Promise<{description: 
   }
 };
 
-const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
+const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}. By {handle}, {hashtag}";
 const loadCustomXPostTemplate = async (faucetAddress: string): Promise<string> => {
-    return `Verify Drop 💧: {explorer}`
+    return `${FIXED_TWEET_PREFIX}Verify Drop 💧: {explorer}`
 }
 
 const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {

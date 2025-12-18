@@ -80,10 +80,21 @@ import {
   updateFaucetName,
   deleteFaucet,
 } from "@/lib/faucet";
-import { retrieveSecretCode } from "@/lib/backend-service";
+import { retrieveSecretCode, getSecretCodeForAdmin } from "@/lib/backend-service";
 
 type FaucetType = "dropcode" | "droplist" | "custom";
 const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
+
+// --- NEW CONSTANT: Base URLs for platforms ---
+const PLATFORM_BASE_URLS: Record<string, string> = {
+  "𝕏": "https://x.com/",
+  "telegram": "https://t.me/",
+  "discord": "https://discord.gg/",
+  "youtube": "https://youtube.com/@",
+  "instagram": "https://instagram.com/",
+  "tiktok": "https://tiktok.com/@",
+  "facebook": "https://facebook.com/",
+};
 
 interface SocialMediaLink {
   platform: string;
@@ -357,45 +368,68 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
   // --- Handlers ---
 
-  const saveSocialMediaTasks = async (tasksToSend: any[]): Promise<boolean> => {
-    if (!address || !chainId) return false;
-    try {
-      console.log(
-        `Saving ${tasksToSend.length} tasks via dedicated backend endpoint.`
-      );
-      const response = await fetch(
-        "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            faucetAddress,
-            tasks: tasksToSend,
-            userAddress: address,
-            chainId: Number(chainId),
-          }),
-        }
-      );
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to save social media tasks.");
+  // --- UPDATED LOGIC: Add New Social Link with Standby URL ---
+  const addNewSocialLink = (): void => {
+    const defaultPlatform = "𝕏";
+    setNewSocialLinks([
+      ...newSocialLinks,
+      {
+        platform: defaultPlatform,
+        url: PLATFORM_BASE_URLS[defaultPlatform], // Auto-fill base URL
+        handle: "",
+        action: "follow",
+      },
+    ]);
+  };
+
+  const removeNewSocialLink = (index: number): void => {
+    setNewSocialLinks(newSocialLinks.filter((_, i) => i !== index));
+  };
+
+  // --- UPDATED LOGIC: Update Social Link with Smart Appending ---
+  const updateNewSocialLink = (
+    index: number,
+    field: keyof SocialMediaLink,
+    value: string
+  ): void => {
+    const updated = [...newSocialLinks];
+    const currentLink = updated[index];
+
+    // Helper to clean handle (remove @)
+    const cleanHandle = (h: string) => h.replace(/^@/, "");
+
+    if (field === "platform") {
+      // 1. Update Platform
+      currentLink.platform = value;
+
+      // 2. Update URL to new platform base + existing handle
+      const baseUrl = PLATFORM_BASE_URLS[value] || "";
+      currentLink.url = currentLink.handle
+        ? `${baseUrl}${cleanHandle(currentLink.handle)}`
+        : baseUrl;
+    } else if (field === "handle") {
+      const oldHandleClean = cleanHandle(currentLink.handle);
+      const newHandleClean = cleanHandle(value);
+      const baseUrl = PLATFORM_BASE_URLS[currentLink.platform] || "";
+
+      // 1. Update Handle
+      currentLink.handle = value;
+
+      // 2. Smart URL Update:
+      // Only auto-update URL if user hasn't manually customized it
+      // (matches Base or Base + OldHandle)
+      if (
+        currentLink.url === baseUrl ||
+        currentLink.url === `${baseUrl}${oldHandleClean}`
+      ) {
+        currentLink.url = `${baseUrl}${newHandleClean}`;
       }
-      toast({
-        title: "Tasks Saved",
-        description: "Social media tasks updated successfully.",
-      });
-      setNewSocialLinks([]);
-      await loadFaucetDetails();
-      return true;
-    } catch (error: any) {
-      console.error("Error saving social media tasks:", error);
-      toast({
-        title: "Task Save Failed",
-        description: error.message || "Could not save tasks to backend.",
-        variant: "destructive",
-      });
-      return false;
+    } else {
+      // Direct update for 'url' or 'action' (Manual edits)
+      currentLink[field] = value;
     }
+
+    setNewSocialLinks(updated);
   };
 
   const handleUpdateFaucetName = async (): Promise<void> => {
@@ -439,6 +473,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     if (!address || !provider || !chainId || !checkNetwork()) return;
     try {
       setIsDeletingFaucet(true);
+
+      // 1. Perform On-Chain Deletion
       await deleteFaucet(
         provider as BrowserProvider,
         faucetAddress,
@@ -446,10 +482,36 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(Number(selectedNetwork.chainId)),
         faucetType || undefined
       );
+
+      // 2. Call Backend to clean up Database
+      try {
+        const response = await fetch(
+          "https://fauctdrop-backend.onrender.com/delete-faucet-metadata",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              faucetAddress: faucetAddress,
+              userAddress: address,
+              chainId: Number(chainId),
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          console.warn(
+            "Backend deletion failed, but blockchain deletion succeeded."
+          );
+        }
+      } catch (apiError) {
+        console.error("Failed to sync deletion with backend:", apiError);
+      }
+
       toast({
         title: "Faucet deleted",
         description: "Faucet has been successfully deleted",
       });
+
       setShowDeleteDialog(false);
       router.push("/");
     } catch (error: any) {
@@ -547,58 +609,43 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   };
 
   const handleUpdateClaimParameters = async (): Promise<void> => {
-    if (!address || !provider || !chainId || !checkNetwork()) return;
-    const hasTaskChanges = newSocialLinks.length > 0;
-    const currentClaimAmountStr =
-      faucetType !== "custom"
-        ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
-        : "0";
-    const currentStartTimeStr = faucetDetails.startTime
-      ? new Date(Number(faucetDetails.startTime) * 1000)
-          .toISOString()
-          .slice(0, 16)
-      : "";
-    const currentEndTimeStr = faucetDetails.endTime
-      ? new Date(Number(faucetDetails.endTime) * 1000)
-          .toISOString()
-          .slice(0, 16)
-      : "";
-    const isClaimAmountChanged =
-      faucetType !== "custom" && claimAmount !== currentClaimAmountStr;
-    const isStartTimeChanged = startTime !== currentStartTimeStr;
-    const isEndTimeChanged = endTime !== currentEndTimeStr;
-    const hasBlockchainChanges =
-      isClaimAmountChanged || isStartTimeChanged || isEndTimeChanged;
+  if (!address || !provider || !chainId || !checkNetwork()) return;
 
-    if (!hasTaskChanges && !hasBlockchainChanges) {
-      toast({
-        title: "No Changes",
-        description: "No parameters or tasks were modified.",
-        variant: "default",
-      });
-      return;
-    }
+  const hasTaskChanges = newSocialLinks.length > 0;
 
-    if (!hasBlockchainChanges && hasTaskChanges) {
-      const tasksToSend = newSocialLinks
-        .filter((link) => link.url.trim() && link.handle.trim())
-        .map((link) => ({
-          title: `${
-            link.action.charAt(0).toUpperCase() + link.action.slice(1)
-          } ${link.handle}`,
-          description: `${
-            link.action.charAt(0).toUpperCase() + link.action.slice(1)
-          } our ${link.platform} account: ${link.handle}`,
-          url: link.url.trim(),
-          required: true,
-          platform: link.platform,
-          handle: link.handle,
-          action: link.action,
-        }));
-      await saveSocialMediaTasks(tasksToSend);
-      return;
-    }
+  const currentClaimAmountStr =
+    faucetType !== "custom"
+      ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
+      : "0";
+  const currentStartTimeStr = faucetDetails.startTime
+    ? new Date(Number(faucetDetails.startTime) * 1000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
+  const currentEndTimeStr = faucetDetails.endTime
+    ? new Date(Number(faucetDetails.endTime) * 1000)
+        .toISOString()
+        .slice(0, 16)
+    : "";
 
+  const isClaimAmountChanged =
+    faucetType !== "custom" && claimAmount !== currentClaimAmountStr;
+  const isStartTimeChanged = startTime !== currentStartTimeStr;
+  const isEndTimeChanged = endTime !== currentEndTimeStr;
+  const hasBlockchainChanges =
+    isClaimAmountChanged || isStartTimeChanged || isEndTimeChanged;
+
+  if (!hasTaskChanges && !hasBlockchainChanges) {
+    toast({
+      title: "No Changes",
+      description: "No parameters or tasks were modified.",
+      variant: "default",
+    });
+    return;
+  }
+
+  // Input Validation
+  if (hasBlockchainChanges) {
     if (faucetType !== "custom" && !claimAmount) {
       toast({
         title: "Invalid Input",
@@ -623,35 +670,44 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       });
       return;
     }
+  }
 
-    try {
-      setIsUpdatingParameters(true);
+  try {
+    setIsUpdatingParameters(true);
+
+    // 1. Prepare NEW tasks (formatted)
+    let newTasksFormatted: any[] = [];
+    if (hasTaskChanges) {
+      newTasksFormatted = newSocialLinks
+        .filter((link) => link.url.trim() && link.handle.trim())
+        .map((link) => ({
+          title: `${
+            link.action.charAt(0).toUpperCase() + link.action.slice(1)
+          } ${link.handle}`,
+          description: `${
+            link.action.charAt(0).toUpperCase() + link.action.slice(1)
+          } our ${link.platform} account: ${link.handle}`,
+          url: link.url.trim(),
+          required: true,
+          platform: link.platform,
+          handle: link.handle,
+          action: link.action,
+        }));
+    }
+
+    // ======================================================
+    // PATH 1: BLOCKCHAIN INTERACTION (Time/Amount Changed)
+    // ======================================================
+    if (hasBlockchainChanges) {
       const claimAmountBN =
         faucetType === "custom"
           ? BigInt(0)
           : parseUnits(claimAmount, tokenDecimals);
+
       const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
       const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
-      if (hasTaskChanges) {
-        const tasksToSend = newSocialLinks
-          .filter((link) => link.url.trim() && link.handle.trim())
-          .map((link) => ({
-            title: `${
-              link.action.charAt(0).toUpperCase() + link.action.slice(1)
-            } ${link.handle}`,
-            description: `${
-              link.action.charAt(0).toUpperCase() + link.action.slice(1)
-            } our ${link.platform} account: ${link.handle}`,
-            url: link.url.trim(),
-            required: true,
-            platform: link.platform,
-            handle: link.handle,
-            action: link.action,
-          }));
-        await saveSocialMediaTasks(tasksToSend);
-      }
-
+      // A. Transaction
       await setClaimParameters(
         provider as BrowserProvider,
         faucetAddress,
@@ -662,23 +718,111 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(Number(selectedNetwork.chainId)),
         faucetType || undefined
       );
-      toast({
-        title: "Drop parameters updated",
-        description: `Parameters updated successfully on chain and backend.`,
-      });
-      await loadFaucetDetails();
-      await loadTransactionHistory();
-    } catch (error: any) {
-      console.error("Error updating drop parameters:", error);
-      toast({
-        title: "Failed to update drop parameters",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUpdatingParameters(false);
+
+      // B. Backend Call: MUST include OLD + NEW tasks to prevent overwrite
+      // Start with existing tasks from state, or empty array if undefined
+      const existingTasks = faucetDetails.tasks ? [...faucetDetails.tasks] : [];
+      // Merge existing with new
+      const mergedTasks = [...existingTasks, ...newTasksFormatted];
+
+      try {
+        console.log("Calling backend to generate new code...");
+        const response = await fetch(
+          "https://fauctdrop-backend.onrender.com/set-claim-parameters",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              faucetAddress: faucetAddress,
+              claimAmount: claimAmountBN.toString(),
+              startTime: startTimestamp,
+              endTime: endTimestamp,
+              chainId: Number(chainId),
+              // Send the MERGED list so previous tasks are not deleted
+              tasks: mergedTasks.length > 0 ? mergedTasks : undefined,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || "Backend sync failed");
+        }
+
+        const result = await response.json();
+        const newCode = result.secretCode || result.secret_code;
+
+        if (newCode) {
+          setNewlyGeneratedCode(newCode);
+          setCurrentSecretCode(newCode);
+          setShowNewCodeDialog(true); 
+
+          toast({
+            title: "Parameters Updated & Code Generated",
+            description: "Blockchain updated and new Drop Code created.",
+          });
+        } else {
+          toast({
+            title: "Parameters Updated",
+            description:
+              "Blockchain updated, but no new code was returned by server.",
+            variant: "destructive",
+          });
+        }
+      } catch (backendError: any) {
+        console.error("Backend Sync Error:", backendError);
+        toast({
+          title: "Blockchain Updated, Backend Failed",
+          description:
+            "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
+          variant: "destructive",
+        });
+      }
     }
-  };
+    // ======================================================
+    // PATH 2: TASKS ONLY (No Blockchain)
+    // ======================================================
+    else if (hasTaskChanges) {
+      // For "add-faucet-tasks", we likely only send the NEW ones to append
+      const response = await fetch(
+        "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            faucetAddress: faucetAddress,
+            tasks: newTasksFormatted, // Send only NEW tasks here
+            userAddress: address,
+            chainId: Number(chainId),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to save tasks");
+      }
+
+      toast({
+        title: "Tasks Updated",
+        description:
+          "Social tasks updated successfully. Drop Code remains unchanged.",
+      });
+    }
+
+    setNewSocialLinks([]); // Clear new links queue
+  } catch (error: any) {
+    console.error("Error updating parameters:", error);
+    toast({
+      title: "Update Failed",
+      description:
+        error.message || "Failed to update parameters on chain or backend.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsUpdatingParameters(false);
+  }
+};
 
   const handleUpdateWhitelist = async (): Promise<void> => {
     if (
@@ -831,23 +975,30 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   };
 
   const handleRetrieveSecretCode = async (): Promise<void> => {
-    if (faucetType !== "dropcode" || !faucetAddress) return;
+    if (faucetType !== "dropcode" || !faucetAddress || !address || !chainId)
+      return;
+
     try {
       setIsRetrievingSecret(true);
-      const code = await retrieveSecretCode(faucetAddress);
-      if (!code || code.trim() === "")
-        throw new Error("Retrieved code is empty or invalid");
-      setCurrentSecretCode(code);
+
+      const data = await getSecretCodeForAdmin(address, faucetAddress, chainId);
+
+      if (!data.secretCode) throw new Error("No code returned from server");
+
+      setCurrentSecretCode(data.secretCode);
       setShowCurrentSecretDialog(true);
+
       toast({
-        title: "Valid Drop Code Retrieved! ",
-        description: "Fresh valid code retrieved and cached",
+        title: "Drop Code Retrieved",
+        description: data.isFuture
+          ? "This code is scheduled for the future."
+          : "Current active code retrieved.",
       });
     } catch (error: any) {
-      let errorMessage = error.message || "Failed to retrieve the drop code";
+      console.error("Retrieval error:", error);
       toast({
         title: "Failed to retrieve Drop code",
-        description: errorMessage,
+        description: error.message || "Ensure you are the owner or admin.",
         variant: "destructive",
       });
     } finally {
@@ -902,32 +1053,29 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       setIsGeneratingNewCode(false);
     }
   };
-const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
+  const handleCopyLink = async (type: "web" | "farcaster"): Promise<void> => {
     try {
       let url = "";
-      
-      if (type === 'web') {
-        // Copies the current browser URL (User View Link)
-        // If Admin is at /faucet/[address]/admin, we might want to strip /admin
-        // Assuming the user view is at the base URL of the current page:
+
+      if (type === "web") {
         url = window.location.origin + "/faucet/" + faucetAddress;
       } else {
-        // Constructs the Farcaster Mini-app link with the faucet address as a parameter
-        // We append ?startapp={address} so the mini-app knows which faucet to open
         url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/faucetdrops?startapp/faucet=${faucetAddress}`;
       }
 
       await navigator.clipboard.writeText(url);
-      
-      toast({ 
-        title: "Link Copied", 
-        description: `${type === 'web' ? 'Web' : 'Farcaster'} link has been copied to clipboard.`, 
+
+      toast({
+        title: "Link Copied",
+        description: `${
+          type === "web" ? "Web" : "Farcaster"
+        } link has been copied to clipboard.`,
       });
     } catch (error) {
-      toast({ 
-        title: "Copy Failed", 
-        description: "Failed to copy the link. Please try again.", 
-        variant: "destructive", 
+      toast({
+        title: "Copy Failed",
+        description: "Failed to copy the link. Please try again.",
+        variant: "destructive",
       });
     }
   };
@@ -947,27 +1095,6 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
         variant: "destructive",
       });
     }
-  };
-
-  const addNewSocialLink = (): void => {
-    setNewSocialLinks([
-      ...newSocialLinks,
-      { platform: "𝕏", url: "", handle: "", action: "follow" },
-    ]);
-  };
-
-  const removeNewSocialLink = (index: number): void => {
-    setNewSocialLinks(newSocialLinks.filter((_, i) => i !== index));
-  };
-
-  const updateNewSocialLink = (
-    index: number,
-    field: keyof SocialMediaLink,
-    value: string
-  ): void => {
-    const updated = [...newSocialLinks];
-    updated[index] = { ...updated[index], [field]: value };
-    setNewSocialLinks(updated);
   };
 
   const totalPages = Math.ceil(transactions.length / 10);
@@ -1006,16 +1133,14 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
     isClaimActive:
       new Date(endTime).getTime() > Date.now() &&
       new Date(startTime).getTime() <= Date.now(),
-    // --- USING THE METADATA PROP ---
-   // --- NEW CODE ---
     faucetMetadata: {
       description:
         faucetMetadata?.description ||
-        faucetDetails?.faucetMetadata?.description || // Check existing details first
+        faucetDetails?.faucetMetadata?.description ||
         `Preview of ${newFaucetName} Faucet`,
       imageUrl:
         faucetMetadata?.imageUrl ||
-        faucetDetails?.faucetMetadata?.imageUrl || // Check existing details first
+        faucetDetails?.faucetMetadata?.imageUrl ||
         "/default.jpeg",
     },
   };
@@ -1025,9 +1150,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
     const diff = timestamp * 1000 - Date.now();
     if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor(
-      (diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-    );
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((diff % (1000 * 60)) / 1000);
     return `${days}d ${hours}h ${minutes}m ${seconds}s`;
@@ -1049,43 +1172,45 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
   return (
     <Card className="w-full mx-auto">
       <CardHeader className="px-4 sm:px-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-lg sm:text-xl">
-              Admin Controls
-            </CardTitle>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-1">
+            <CardTitle className="text-lg sm:text-xl">Admin Controls</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
               Manage your {faucetType || "unknown"} faucet settings and monitor
               activity here.
             </CardDescription>
           </div>
-          <DropdownMenu>
+          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+            <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="text-xs">
                   <Share2 className="h-3 w-3 mr-1" /> Share
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleCopyLink('web')}>
+                <DropdownMenuItem onClick={() => handleCopyLink("web")}>
                   <Link className="h-4 w-4 mr-2" /> Copy Web Link
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleCopyLink('farcaster')}>
-                  <div className="h-4 w-4 mr-2 flex items-center justify-center font-bold bg-purple-600 text-white rounded-full text-[10px]">F</div>
+                <DropdownMenuItem onClick={() => handleCopyLink("farcaster")}>
+                  <div className="h-4 w-4 mr-2 flex items-center justify-center font-bold bg-purple-600 text-white rounded-full text-[10px]">
+                    F
+                  </div>
                   Copy Farcaster Link
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          <Button
-            onClick={handlePreview}
-            variant="secondary"
-            size="sm"
-            className="text-xs"
-          >
-            <Eye className="h-3 w-3 mr-1" /> View User Preview
-          </Button>
+            <Button
+              onClick={handlePreview}
+              variant="secondary"
+              size="sm"
+              className="text-xs"
+            >
+              <Eye className="h-3 w-3 mr-1" /> View User Preview
+            </Button>
+          </div>
         </div>
         {isOwner && (
-          <div className="flex gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2">
             <Button
               variant="outline"
               size="sm"
@@ -1150,8 +1275,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
               <Clock className="h-3 w-3 mr-1 " /> Ends In
             </span>
             <span className="text-sm sm:text-lg font-bold truncate">
-              {faucetDetails.isClaimActive &&
-              Number(faucetDetails.endTime) > 0
+              {faucetDetails.isClaimActive && Number(faucetDetails.endTime) > 0
                 ? renderCountdown(Number(faucetDetails.endTime), "End")
                 : "N/A"}
             </span>
@@ -1164,7 +1288,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
           value={activeTab}
           onValueChange={setActiveTab}
         >
-          <div className="sm:hidden mb-4">
+          <div className="md:hidden mb-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="w-full justify-between">
@@ -1186,7 +1310,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
             </DropdownMenu>
           </div>
           <TabsList
-            className={`hidden sm:grid gap-2 w-full ${
+            className={`hidden md:grid gap-2 w-full ${
               shouldShowWhitelistTab && shouldShowCustomTab
                 ? "grid-cols-6"
                 : shouldShowWhitelistTab || shouldShowCustomTab
@@ -1205,7 +1329,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
               </TabsTrigger>
             ))}
           </TabsList>
-          
+
           <TabsContent value="fund" className="space-y-6 mt-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <Card className="p-4 border shadow-sm">
@@ -1466,7 +1590,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
                           onChange={(e) =>
                             updateNewSocialLink(index, "url", e.target.value)
                           }
-                          className="text-xs"
+                          className="text-xs font-mono text-muted-foreground"
                         />
                       </div>
                       <div className="space-y-1">
@@ -1520,44 +1644,6 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
                 "Save & Update Parameters"
               )}
             </Button>
-            {shouldShowSecretCodeButton && (
-              <div className="flex flex-col sm:flex-row gap-3 w-full pt-4">
-                <Button
-                  onClick={handleRetrieveSecretCode}
-                  variant="outline"
-                  className="text-xs sm:text-sm w-full"
-                  disabled={isRetrievingSecret}
-                >
-                  {isRetrievingSecret ? (
-                    <span className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                      Retrieving...
-                    </span>
-                  ) : (
-                    <>
-                      <Key className="h-4 w-4 mr-1" /> Get Current Code
-                    </>
-                  )}
-                </Button>
-                <Button
-                  onClick={handleGenerateNewDropCode}
-                  variant="outline"
-                  className="text-xs sm:text-sm w-full"
-                  disabled={isGeneratingNewCode}
-                >
-                  {isGeneratingNewCode ? (
-                    <span className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                      Generating...
-                    </span>
-                  ) : (
-                    <>
-                      <RotateCcw className="h-4 w-4 mr-1" /> Generate New Code
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
           </TabsContent>
 
           {shouldShowWhitelistTab && (
@@ -1614,13 +1700,19 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
             <TabsContent value="custom" className="space-y-4 mt-4">
               <Card className="p-4 border shadow-sm space-y-4">
                 <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                  <FileUp className="h-4 w-4 mr-2" /> Upload Custom Claim Amounts
+                  <FileUp className="h-4 w-4 mr-2" /> Upload Custom Claim
+                  Amounts
                 </CardTitle>
                 <CustomClaimUploader
                   tokenSymbol={tokenSymbol}
                   tokenDecimals={tokenDecimals}
                   onDataParsed={async (addresses, amounts) => {
-                    if (!address || !provider || !chainId || !checkNetwork())
+                    if (
+                      !address ||
+                      !provider ||
+                      !chainId ||
+                      !checkNetwork()
+                    )
                       return;
                     try {
                       console.log(
@@ -1644,8 +1736,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
                     } catch (error: any) {
                       toast({
                         title: "Failed to set custom claim amounts",
-                        description:
-                          error.message || "Unknown error occurred",
+                        description: error.message || "Unknown error occurred",
                         variant: "destructive",
                       });
                     }
@@ -1657,6 +1748,55 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
           )}
 
           <TabsContent value="admin-power" className="space-y-6 mt-6">
+            {/* --- Secret Code Controls --- */}
+            {shouldShowSecretCodeButton && (
+              <Card className="p-4 border shadow-sm space-y-4">
+                <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
+                  <Key className="h-4 w-4 mr-2" /> Drop Code Management
+                </CardTitle>
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                  <Button
+                    onClick={handleRetrieveSecretCode}
+                    variant="outline"
+                    className="text-xs sm:text-sm w-full"
+                    disabled={isRetrievingSecret}
+                  >
+                    {isRetrievingSecret ? (
+                      <span className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                        Retrieving...
+                      </span>
+                    ) : (
+                      <>
+                        <Key className="h-4 w-4 mr-1" /> Get Current Code
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleGenerateNewDropCode}
+                    variant="outline"
+                    className="text-xs sm:text-sm w-full"
+                    disabled={isGeneratingNewCode}
+                  >
+                    {isGeneratingNewCode ? (
+                      <span className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                        Generating...
+                      </span>
+                    ) : (
+                      <>
+                        <RotateCcw className="h-4 w-4 mr-1" /> Generate New Code
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  "Generate New Code" will invalidate the previous code
+                  immediately.
+                </p>
+              </Card>
+            )}
+
             <Card className="p-4 border shadow-sm space-y-4">
               <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
                 <Users className="h-4 w-4 mr-2" /> Admin List
@@ -1779,7 +1919,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
                 Recent Faucet Transactions (All Admins)
               </Label>
               {transactions.length > 0 ? (
-                <>
+                <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1823,7 +1963,7 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
                       ))}
                     </TableBody>
                   </Table>
-                </>
+                </div>
               ) : (
                 <p className="text-xs sm:text-sm text-muted-foreground">
                   No transactions found
@@ -1934,7 +2074,10 @@ const handleCopyLink = async (type: 'web' | 'farcaster'): Promise<void> => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="adjusted-fund-amount" className="text-xs sm:text-sm">
+              <Label
+                htmlFor="adjusted-fund-amount"
+                className="text-xs sm:text-sm"
+              >
                 Amount to Fund
               </Label>
               <Input

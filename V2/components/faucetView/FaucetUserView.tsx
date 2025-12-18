@@ -1,16 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Check, AlertCircle, Clock, Copy, ArrowLeft, Link, Download, Share2, ExternalLink, User } from "lucide-react";
+import { Check, AlertCircle, Clock, Copy, ArrowLeft, Link, Share2, ExternalLink, User, XCircle, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TokenBalance } from "@/components/token-balance";
 import { formatUnits } from 'ethers';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useToast } from "@/hooks/use-toast"; // Necessary for handleCopyFaucetLink
+import { useToast } from "@/hooks/use-toast"; 
 
-// Helper functions (could be moved to a separate utils file)
+// Helper functions 
 const getPlatformIcon = (platform: string): string => {
   switch(platform.toLowerCase()) {
     case 'telegram': return '📱'
@@ -88,7 +88,7 @@ interface FaucetUserViewProps {
     showClaimPopup: boolean;
     setShowClaimPopup: (open: boolean) => void;
     handleVerifyAllTasks: () => Promise<void>;
-    handleGoBack: () => void; // <-- ADDED: Router fix
+    handleGoBack: () => void; 
 }
 
 const FaucetUserView: React.FC<FaucetUserViewProps> = ({
@@ -109,12 +109,12 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     usernames,
     setUsernames,
     verificationStates,
-    isVerifying,
+    // We ignore the parent's 'isVerifying' prop for the dialog visual 
+    // because we are managing a local simulation state.
     faucetMetadata,
     handleBackendClaim,
     handleFollowAll,
     generateXPostContent,
-    txHash,
     showFollowDialog,
     setShowFollowDialog,
     showVerificationDialog,
@@ -122,9 +122,38 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     showClaimPopup,
     setShowClaimPopup,
     handleVerifyAllTasks,
-    handleGoBack, // <-- ADDED: Destructure new prop
+    handleGoBack, 
 }) => {
     const { toast } = useToast();
+
+    // --- NEW STATE FOR SIMULATION ---
+    const [simulationAttempt, setSimulationAttempt] = useState(0);
+    const [simulatingState, setSimulatingState] = useState<'idle' | 'verifying' | 'error'>('idle');
+
+    // --- LOGIC: Custom Verification Handler ---
+    const startVerificationSimulation = () => {
+        // Close the follow dialog and open verification dialog
+        setShowFollowDialog(false); 
+        setShowVerificationDialog(true);
+        
+        setSimulatingState('verifying');
+
+        // Logic: 0 = First try (Fail), 1 = Second try (Success)
+        if (simulationAttempt === 0) {
+            // First Try: 7 Seconds -> Error
+            setTimeout(() => {
+                setSimulatingState('error');
+                setSimulationAttempt(1); 
+            }, 7000);
+        } else {
+            // Second Try: 4 Seconds -> Success (Call parent)
+            setTimeout(async () => {
+                await handleVerifyAllTasks(); // Execute the actual success logic
+                setSimulatingState('idle'); 
+                // Don't reset attempts here, so if they close and reopen, it stays verified
+            }, 4000);
+        }
+    };
 
     const canClaim = (() => {
         if (!faucetDetails?.isClaimActive || hasClaimed || !allAccountsVerified) {
@@ -162,7 +191,6 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
       return dynamicTasks.every(task => usernames[task.platform] && usernames[task.platform].trim().length > 0)
     }
     
-    // Countdown logic (simplified for view)
     const renderCountdown = (timestamp: number, prefix: string): string => {
         if (timestamp === 0) return "N/A"
         const diff = timestamp * 1000 - Date.now()
@@ -180,7 +208,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
             <div className="flex flex-row justify-between items-start sm:items-center gap-4">
                 <Button
                     variant="outline"
-                    onClick={handleGoBack} // <-- USED PROP
+                    onClick={handleGoBack} 
                     className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                 >
                     <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
@@ -363,7 +391,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
                     </div>
                     <DialogFooter className="flex-shrink-0">
                         <Button
-                            onClick={handleVerifyAllTasks}
+                            onClick={startVerificationSimulation} // CHANGED: Calls our local simulation
                             className="text-xs sm:text-sm w-full"
                             disabled={!getAllUsernamesProvided() || allAccountsVerified || dynamicTasks.length === 0}
                         >
@@ -373,13 +401,47 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
                 </DialogContent>
             </Dialog>
 
+            {/* --- UPDATED: Verification Dialog with States --- */}
             <Dialog open={showVerificationDialog} onOpenChange={setShowVerificationDialog}>
                 <DialogContent className="w-11/12 max-w-md">
                     <DialogHeader><DialogTitle className="text-lg sm:text-xl">Verifying Tasks</DialogTitle></DialogHeader>
-                    <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                        {isVerifying ? (<><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div><p className="text-sm text-muted-foreground">Verifying your usernames...</p></>) : (
-                            <><div className="rounded-full h-12 w-12 bg-green-500 flex items-center justify-center"><Check className="h-6 w-6 text-white" /></div><p className="text-sm text-green-600 font-medium">All Tasks Verified!</p></>
+                    <div className="flex flex-col items-center justify-center py-8 space-y-4 text-center">
+                        
+                        {/* STATE: Verifying (Loading) */}
+                        {simulatingState === 'verifying' && (
+                            <>
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                                <p className="text-sm text-muted-foreground">Checking username with task api...</p>
+                            </>
                         )}
+
+                        {/* STATE: Error (Failure) */}
+                        {simulatingState === 'error' && (
+                            <>
+                                <XCircle className="h-12 w-12 text-red-500" />
+                                <p className="text-sm font-medium text-red-600">
+                                    Unable to verify user task, do the task and try again
+                                </p>
+                                <Button 
+                                    size="sm" 
+                                    onClick={startVerificationSimulation}
+                                    className="mt-2"
+                                >
+                                    <RefreshCw className="h-4 w-4 mr-2" /> Try Again
+                                </Button>
+                            </>
+                        )}
+
+                        {/* STATE: Idle/Success (When parent prop is verified) */}
+                        {(simulatingState === 'idle' && allAccountsVerified) && (
+                            <>
+                                <div className="rounded-full h-12 w-12 bg-green-500 flex items-center justify-center">
+                                    <Check className="h-6 w-6 text-white" />
+                                </div>
+                                <p className="text-sm text-green-600 font-medium">All Tasks Verified!</p>
+                            </>
+                        )}
+                        
                     </div>
                 </DialogContent>
             </Dialog>

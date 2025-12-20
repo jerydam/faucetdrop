@@ -34,9 +34,6 @@
         Image as ImageIcon,
         Lock,
         Unlock,
-        LinkIcon,
-        BadgeCheck,
-        Shield,
     } from "lucide-react"
     // --- LIVE EXTERNAL DEPENDENCIES ---
     import { useWallet } from "@/hooks/use-wallet"
@@ -45,7 +42,7 @@
     // import { Header } from "@/components/header"; 
 
     // --- Ethers v6 Imports ---
-    import { Contract, Provider, ZeroAddress, Interface } from 'ethers';
+    import { Contract, BrowserProvider, ZeroAddress, Interface } from 'ethers';
     const isAddress = (addr: string) => addr.startsWith('0x') && addr.length === 42;
 
     // --- ⚙️ IMPORTED FAUCET/NETWORK UTILITIES (from lib/faucet) ---
@@ -58,7 +55,6 @@
         
     } from "@/lib/faucet"; 
     import { toast } from 'sonner'
-import { Checkbox } from '@/components/ui/checkbox'
     // ----------------------------------------------------------
 
     // --- LOCAL NETWORK & TOKEN CONFIGURATION ---
@@ -115,7 +111,31 @@ import { Checkbox } from '@/components/ui/checkbox'
         tiers: TierConfig[]; // Used if model is custom_tiers
     }
 
-   interface FaucetDetail {
+    interface Quest {
+        // ... existing fields
+        id: string
+        creatorAddress: string
+        title: string
+        description: string
+        isActive: boolean
+        isFunded: boolean; // NEW: Controls visibility based on funding
+        rewardPool: string // Total amount string
+        startDate: string // Date string YYYY-MM-DD
+        startTime: string // NEW: HH:MM
+        endDate: string   // Date string YYYY-MM-DD
+        endTime: string   // NEW: HH:MM
+        tasks: QuestTask[]
+        faucetAddress?: string;
+        rewardTokenType: 'native' | 'erc20';
+        tokenAddress: string;
+        stagePassRequirements: StagePassRequirements;
+        imageUrl: string;
+        distributionConfig: DistributionConfig; // NEW
+    }
+
+
+
+    interface FaucetDetail {
         faucetAddress: string;
         name: string;
         owner: string;
@@ -358,36 +378,30 @@ import { Checkbox } from '@/components/ui/checkbox'
         Ultimate: { min: 1, max: 3 },
     };
 
-    // UPDATED: Type definitions
-    type VerificationType = 'auto_social' | 'auto_tx' | 'manual' | 'none'
-    type ManualVerificationMethod = 'upload' | 'link' | 'both'
-    type TokenVerificationType = 'none' | 'erc20' | 'erc721' | 'erc1155'
-
+    type VerificationType = 'auto_social' | 'auto_tx' | 'manual_link' | 'manual_upload' | 'none';
     export type SocialPlatform = 'Twitter' | 'Facebook' | 'Tiktok' | 'Youtube' | 'Discord' | 'Thread' | 'Linkedin' | 'Farcaster' | 'Instagram' | 'Website';
     const SOCIAL_PLATFORMS: SocialPlatform[] = ['Twitter', 'Facebook', 'Tiktok', 'Youtube', 'Discord', 'Thread', 'Linkedin', 'Farcaster', 'Instagram', 'Website'];
     const SOCIAL_ACTIONS = ['follow', 'retweet', 'like', 'join', 'subscribe', 'visit'];
     const TRADING_ACTIONS = ['swap', 'stake', 'deposit', 'lend'];
 
     interface QuestTask {
-    id: string
-    title: string
-    description: string
-    points: number | string
-    required: boolean
-    category: 'social' | 'trading' | 'swap' | 'referral' | 'content' | 'general'
-    url: string
-    action: string
-    verificationType: VerificationType
-    targetPlatform?: string
-    targetHandle?: string
-    targetContractAddress?: string
-    targetChainId?: string
-    stage: TaskStage
-    minReferrals?: number | string
-    // NEW FIELDS:
-    manualVerificationMethods?: ManualVerificationMethod[]
-    submissionPlaceholder?: string
+        id: string
+        title: string
+        description: string
+        points: number | string;
+        required: boolean
+        category: 'social' | 'trading' | 'swap' | 'referral' | 'content' | 'general'
+        url: string
+        action: string
+        verificationType: VerificationType
+        targetPlatform?: string
+        targetHandle?: string
+        targetContractAddress?: string
+        targetChainId?: string
+        stage: TaskStage
+        minReferrals?: number | string;
     }
+
     // NOTE: This interface MUST be manually kept in sync with the FastAPI Pydantic model
     interface StagePassRequirements {
         Beginner: number;
@@ -398,33 +412,20 @@ import { Checkbox } from '@/components/ui/checkbox'
     }
 
     interface Quest {
-    id: string
-    creatorAddress: string
-    title: string
-    description: string
-    isActive: boolean
-    rewardPool: string
-    startDate: string
-    endDate: string
-    startTime?: string
-    endTime?: string
-    tasks: QuestTask[]
-    faucetAddress?: string
-    rewardTokenType: 'native' | 'erc20'
-    tokenAddress: string
-    stagePassRequirements: StagePassRequirements
-    imageUrl: string
-    distributionConfig: DistributionConfig
-    // NEW FIELD:
-    tokenRequirement?: TokenRequirement
-    }
-
-    interface TokenRequirement {
-    type: TokenVerificationType
-    tokenAddress: string
-    chainId: string
-    minAmount?: string
-    tokenId?: string
+        id: string
+        creatorAddress: string
+        title: string
+        description: string
+        isActive: boolean
+        rewardPool: string
+        startDate: string
+        endDate: string
+        tasks: QuestTask[]
+        faucetAddress?: string;
+        rewardTokenType: 'native' | 'erc20';
+        tokenAddress: string;
+        stagePassRequirements: StagePassRequirements; // UPDATED
+        imageUrl: string;
     }
 
     const initialStagePassRequirements: StagePassRequirements = {
@@ -461,12 +462,11 @@ import { Checkbox } from '@/components/ui/checkbox'
         category: "social",
         url: "",
         action: "follow",
-        verificationType: "auto_social",
+        verificationType: "manual_link",
         targetPlatform: "Twitter",
         stage: 'Beginner',
-        manualVerificationMethods: [],
-        submissionPlaceholder: "",
-        }
+        minReferrals: "",
+    }
 
     const FACTORY_ABI_CUSTOM: any[] = [
         // Assuming this ABI segment is defined in faucet.ts now
@@ -537,263 +537,6 @@ import { Checkbox } from '@/components/ui/checkbox'
     };
 
 
-// NEW: Task Verification Settings Component
-interface TaskVerificationSettingsProps {
-  newTask: Partial<QuestTask>
-  setNewTask: (task: Partial<QuestTask>) => void
-}
-
-const TaskVerificationSettings: React.FC<TaskVerificationSettingsProps> = ({
-  newTask,
-  setNewTask,
-}) => {
-  const isSocial = newTask.category === 'social'
-  const isTrading = newTask.category === 'trading' || newTask.category === 'swap'
-
-  return (
-    <div className="space-y-4 p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
-      <h4 className="font-semibold text-sm flex items-center gap-2">
-        <BadgeCheck className="h-4 w-4" />
-        Verification Settings
-      </h4>
-
-      <div className="space-y-2">
-        <Label>Verification Type</Label>
-        <Select
-          value={newTask.verificationType || 'manual'}
-          onValueChange={(value: any) => {
-            setNewTask({
-              ...newTask,
-              verificationType: value,
-              manualVerificationMethods: value === 'manual' ? [] : undefined,
-            })
-          }}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {isSocial && (
-              <SelectItem value="auto_social">
-                🤖 Automatic (Verify Username Match)
-              </SelectItem>
-            )}
-            {isTrading && (
-              <SelectItem value="auto_tx">💰 Automatic (Transaction)</SelectItem>
-            )}
-            <SelectItem value="manual">✋ Manual Verification</SelectItem>
-            <SelectItem value="none">No Verification</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {newTask.verificationType === 'auto_social' && isSocial && (
-        <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded border border-blue-200">
-          <p className="text-xs text-blue-800 dark:text-blue-200">
-            ✅ System will verify submitted username matches user's {newTask.targetPlatform} profile.
-          </p>
-        </div>
-      )}
-
-      {newTask.verificationType === 'manual' && (
-        <div className="space-y-3">
-          <Label>Verification Methods (Select at least one)</Label>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="upload"
-                checked={newTask.manualVerificationMethods?.includes('upload') || false}
-                onCheckedChange={(checked) => {
-                  const methods = newTask.manualVerificationMethods || []
-                  const updated = checked
-                    ? [...methods, 'upload']
-                    : methods.filter(m => m !== 'upload')
-                  setNewTask({
-                    ...newTask,
-                    manualVerificationMethods: updated as ManualVerificationMethod[],
-                  })
-                }}
-              />
-              <Label htmlFor="upload" className="cursor-pointer text-sm">
-                <Upload className="h-3 w-3 inline mr-1" />
-                File Upload
-              </Label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="link"
-                checked={newTask.manualVerificationMethods?.includes('link') || false}
-                onCheckedChange={(checked) => {
-                  const methods = newTask.manualVerificationMethods || []
-                  const updated = checked
-                    ? [...methods, 'link']
-                    : methods.filter(m => m !== 'link')
-                  setNewTask({
-                    ...newTask,
-                    manualVerificationMethods: updated as ManualVerificationMethod[],
-                  })
-                }}
-              />
-              <Label htmlFor="link" className="cursor-pointer text-sm">
-                <LinkIcon className="h-3 w-3 inline mr-1" />
-                Link Submission
-              </Label>
-            </div>
-          </div>
-
-          {(!newTask.manualVerificationMethods || newTask.manualVerificationMethods.length === 0) && (
-            <p className="text-xs text-yellow-700 dark:text-yellow-200 bg-yellow-50 dark:bg-yellow-900/30 p-2 rounded">
-              ⚠️ Select at least one method
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Label htmlFor="placeholder">Submission Instructions</Label>
-        <Textarea
-          id="placeholder"
-          value={newTask.submissionPlaceholder || ''}
-          onChange={(e) =>
-            setNewTask({ ...newTask, submissionPlaceholder: e.target.value })
-          }
-          placeholder="e.g., 'Share the link to your completed task' or 'Upload a screenshot'"
-          rows={2}
-        />
-      </div>
-    </div>
-  )
-}
-// NEW: Token Verification Section Component
-interface TokenVerificationSectionProps {
-  tokenRequirement: TokenRequirement | undefined
-  setTokenRequirement: (req: TokenRequirement | undefined) => void
-  chainId: number | null
-}
-
-const TokenVerificationSection: React.FC<TokenVerificationSectionProps> = ({
-  tokenRequirement,
-  setTokenRequirement,
-  chainId,
-}) => {
-  const [verType, setVerType] = useState<TokenVerificationType>(tokenRequirement?.type || 'none')
-
-  const handleTypeChange = (type: TokenVerificationType) => {
-    setVerType(type)
-    if (type === 'none') {
-      setTokenRequirement(undefined)
-    } else {
-      setTokenRequirement({
-        type,
-        tokenAddress: tokenRequirement?.tokenAddress || '',
-        chainId: tokenRequirement?.chainId || chainId?.toString() || '42220',
-        minAmount: tokenRequirement?.minAmount || '1',
-        tokenId: tokenRequirement?.tokenId || '',
-      })
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Shield className="h-5 w-5" />
-          Token/NFT Requirements (Optional)
-        </CardTitle>
-        <CardDescription>
-          Require users to hold specific tokens or NFTs to participate.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>Verification Type</Label>
-          <Select value={verType} onValueChange={handleTypeChange}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No Token Requirement</SelectItem>
-              <SelectItem value="erc20">ERC-20 Token (Fungible)</SelectItem>
-              <SelectItem value="erc721">ERC-721 NFT (Non-Fungible)</SelectItem>
-              <SelectItem value="erc1155">ERC-1155 Token (Multi-Token)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {tokenRequirement && (
-          <div className="space-y-4 p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/20">
-            <div className="space-y-2">
-              <Label htmlFor="tokenAddr">Token Contract Address</Label>
-              <Input
-                id="tokenAddr"
-                value={tokenRequirement.tokenAddress}
-                onChange={(e) =>
-                  setTokenRequirement({
-                    ...tokenRequirement,
-                    tokenAddress: e.target.value,
-                  })
-                }
-                placeholder="0x..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="chainId">Chain ID</Label>
-              <Input
-                id="chainId"
-                value={tokenRequirement.chainId}
-                onChange={(e) =>
-                  setTokenRequirement({
-                    ...tokenRequirement,
-                    chainId: e.target.value,
-                  })
-                }
-                placeholder="42220"
-              />
-            </div>
-
-            {tokenRequirement.type === 'erc20' && (
-              <div className="space-y-2">
-                <Label htmlFor="minAmount">Minimum Amount</Label>
-                <Input
-                  id="minAmount"
-                  type="number"
-                  step="any"
-                  value={tokenRequirement.minAmount || ''}
-                  onChange={(e) =>
-                    setTokenRequirement({
-                      ...tokenRequirement,
-                      minAmount: e.target.value,
-                    })
-                  }
-                  placeholder="1"
-                />
-              </div>
-            )}
-
-            {(tokenRequirement.type === 'erc721' || tokenRequirement.type === 'erc1155') && (
-              <div className="space-y-2">
-                <Label htmlFor="tokenId">Token ID (Optional)</Label>
-                <Input
-                  id="tokenId"
-                  value={tokenRequirement.tokenId || ''}
-                  onChange={(e) =>
-                    setTokenRequirement({
-                      ...tokenRequirement,
-                      tokenId: e.target.value,
-                    })
-                  }
-                  placeholder="Leave empty for any"
-                />
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
     // --- NEW COMPONENT: Image Upload and Preview ---
     interface ImageUploadFieldProps {
         imageUrl: string;
@@ -1019,11 +762,6 @@ const TokenVerificationSection: React.FC<TokenVerificationSectionProps> = ({
                         rows={3}
                     />
                 </div>
-                <TokenVerificationSection
-                tokenRequirement={newQuest.tokenRequirement}
-                setTokenRequirement={(req) => setNewQuest({...newQuest, tokenRequirement: req})}
-                chainId={chainId}
-      />
             </CardContent>
         </Card>
     );
@@ -1701,9 +1439,7 @@ const TokenVerificationSection: React.FC<TokenVerificationSectionProps> = ({
                                     onCheckedChange={(checked) => setNewTask({...newTask, required: checked})}
                                 />
                                 <Label>Required Task</Label>
-                            </div>
-                             <TaskVerificationSettings newTask={newTask} setNewTask={setNewTask} />
-                             <Button
+                            </div> <Button
                                 onClick={editingTask ? handleUpdateTask : handleAddTask}
                                 disabled={
                                     !newTask.title ||
@@ -1713,7 +1449,7 @@ const TokenVerificationSection: React.FC<TokenVerificationSectionProps> = ({
                                     (!editingTask && isCurrentStageAtMax)
                                 }
                             >
-                                <Plus className="h-setEd4 w-4 mr-2" />
+                                <Plus className="h-4 w-4 mr-2" />
                                 {editingTask ? "Update Task" : "Add Task"}
                             </Button>
                         </div> {editingTask && (
@@ -2206,27 +1942,29 @@ const TokenVerificationSection: React.FC<TokenVerificationSectionProps> = ({
         const handleUseSuggestedTask = (suggestedTask: Partial<QuestTask>) => { 
             setNewTask({ ...initialNewTaskForm, ...suggestedTask, stage: newTask.stage || 'Beginner', id: undefined, });
         };
-        const handleAddTask = () => {
+    const handleAddTask = () => {
             if (!validateTask()) return
             const task: QuestTask = {
+                ...initialNewTaskForm,
                 id: Date.now().toString(),
                 title: newTask.title!,
-                description: newTask.description || '',
+                description: newTask.category === 'social' ? (newTask.description || generateSocialTaskTitle(newTask.targetPlatform || 'Website', newTask.action || 'visit')) : newTask.description!,
                 points: parseFloat(String(newTask.points)),
-                required: newTask.required || true,
+                required: newTask.required!,
                 category: newTask.category!,
                 url: newTask.url!,
                 action: newTask.action!,
                 verificationType: newTask.verificationType!,
                 targetPlatform: newTask.targetPlatform,
+                targetHandle: newTask.targetHandle,
+                targetContractAddress: newTask.targetContractAddress,
+                targetChainId: newTask.targetChainId,
                 stage: newTask.stage!,
-                manualVerificationMethods: newTask.manualVerificationMethods,
-                submissionPlaceholder: newTask.submissionPlaceholder,
-                    }
-                    setNewQuest(prev => ({ ...prev, tasks: [...prev.tasks, task] }))
-                    setNewTask(initialNewTaskForm)
+                minReferrals: newTask.minReferrals ? Number(newTask.minReferrals) : undefined,
+            }
+            setNewQuest(prev => ({ ...prev, tasks: [...prev.tasks, task] }))
+            setNewTask(initialNewTaskForm)
         }
-
         const handleUpdateTask = () => {
             if (!editingTask) return;
             if (!validateTask()) return;
@@ -2370,56 +2108,140 @@ const TokenVerificationSection: React.FC<TokenVerificationSectionProps> = ({
 
     // UPDATED handleCreateQuest function with debugging
     const handleCreateQuest = async () => {
-  if (!address || !isConnected || newQuest.tasks.length === 0) {
-    setError("Complete all steps first")
-    return
-  }
+        console.log('[QuestCreator: handleCreateQuest] Starting quest creation...')
+        
+        // All your existing validation...
+        if (!selectedToken) { 
+            setError("Please select a valid reward token (Step 2)."); 
+            setStep(2); 
+            return; 
+        }
+        
+        if (!address || !isConnected) { 
+            setError("You must connect your wallet to deploy the smart contract and create the quest."); 
+            return; 
+        }
+        
+        if (newQuest.tasks.length === 0) { 
+            setError("Please add at least one task to the quest (Step 3)."); 
+            setStep(3); 
+            return; 
+        }
+        
+        if (!isFactoryAvailableOnChain) { 
+            setError(`Cannot deploy: No Custom Faucet Factory configured for ${network?.name || 'this network'}.`); 
+            return; 
+        }
+        
+        if (isCheckingName || nameError || newQuest.title.trim().length < 3) { 
+            setError(nameError || "Title must be valid and checked (Step 1)."); 
+            setStep(1); 
+            return; 
+        }
+        
+        if (!validateStagePassPoints()) { 
+            setStep(3); 
+            return; 
+        }
+        
+        if (!validateStageTaskRequirements()) { 
+            setStep(3); 
+            return; 
+        }
+        
+        if (isUploadingImage || uploadImageError) { 
+            setError(uploadImageError || "Please wait for image upload to complete or fix upload error."); 
+            setStep(1); 
+            return; 
+        }
 
-  setError(null)
-  setIsSaving(true)
+        setError(null); 
+        setIsSaving(true);
+        
+        const tokenToDeploy = selectedToken.address;
 
-  try {
-    const faucetAddr = await createCustomFaucet(
-      provider as BrowserProvider,
-      FAUCET_FACTORY_ADDRESS!,
-      newQuest.title,
-      newQuest.tokenAddress
-    )
+        // Deploy faucet
+        const faucetAddress = await handleCreateCustomFaucet(newQuest.title, tokenToDeploy);
 
-    if (!faucetAddr) throw new Error("Deployment failed")
+        if (!faucetAddress) { 
+            setIsSaving(false); 
+            return; 
+        }
 
-    const questData: Quest = {
-      id: Date.now().toString(),
-      creatorAddress: address,
-      ...newQuest,
-      faucetAddress: faucetAddr,
-      stagePassRequirements,
-      startDate: `${newQuest.startDate}T${newQuest.startTime}:00Z`,
-      endDate: `${newQuest.endDate}T${newQuest.endTime}:00Z`,
+        // 🔍 BUILD THE QUEST DATA - THIS IS THE CRITICAL PART
+        const questData: Quest = {
+            id: Date.now().toString(), 
+            creatorAddress: address, 
+            ...newQuest, 
+            faucetAddress: faucetAddress,
+            tokenAddress: tokenToDeploy, 
+            rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
+            stagePassRequirements: stagePassRequirements,
+            imageUrl: newQuest.imageUrl,
+            // Ensure combined ISO strings for backend
+            startDate: `${newQuest.startDate}T${newQuest.startTime}:00Z`, 
+            endDate: `${newQuest.endDate}T${newQuest.endTime}:00Z`,
+            // isActive is true, but requires funding check on viewing side
+            isActive: true, 
+            isFunded: false // Default to false until funding tx logic is handled (usually separate step or post-creation)
+        };
+        
+        // 🔍 DEBUG: Log the quest data BEFORE sending
+        debugQuestData(questData);
+        
+        try {
+            console.log(`📤 Sending POST request to: ${API_BASE_URL}/api/quests`);
+            console.log("📦 Request body:", JSON.stringify(questData, null, 2));
+            
+            const response = await fetch(`${API_BASE_URL}/api/quests`, {
+                method: 'POST', 
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }, 
+                body: JSON.stringify(questData)
+            });
+
+            console.log(`📥 Response status: ${response.status} ${response.statusText}`);
+            
+            // Get response text first to see what we actually received
+            const responseText = await response.text();
+            console.log("📥 Raw response:", responseText);
+
+            if (!response.ok) {
+                let errorData;
+                try {
+                    errorData = JSON.parse(responseText);
+                } catch {
+                    errorData = { detail: responseText };
+                }
+                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const responseData = JSON.parse(responseText);
+            console.log("✅ Parsed response:", responseData);
+            
+            console.log(`✅ Quest created successfully!`)
+            toast(`Quest created on ${network?.name}!\n\nFaucet Address: ${faucetAddress}\n\nTasks Saved: ${questData.tasks.length}\n\nRemember to fund the Faucet!`);
+            
+            // Reset state
+            setNewQuest(initialNewQuest); 
+            setNewTask(initialNewTaskForm); 
+            setStagePassRequirements(initialStagePassRequirements); 
+            setSelectedToken(null);
+            setStep(1);
+            
+        } catch (e: any) {
+            console.error('❌ Quest save failed:', e);
+            console.error('Error details:', {
+                message: e.message,
+                stack: e.stack
+            });
+            setError(`Backend Error: ${e.message}. Faucet deployed at ${faucetAddress}.`);
+        } finally {
+            setIsSaving(false);
+        }
     }
-
-    const response = await fetch(`${API_BASE_URL}/api/quests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(questData),
-    })
-
-    if (!response.ok) throw new Error('Backend error')
-
-    const data = await response.json()
-    toast.success(`Quest created! Redirecting...`)
-    
-    // NEW: Route to quest details page
-    setTimeout(() => {
-      router.push(`/quest/${questData.id}`)
-    }, 1000)
-
-  } catch (e: any) {
-    setError(e.message || "Creation failed")
-  } finally {
-    setIsSaving(false)
-  }
-}
         
         // --- 2. FIX: Next Button Handler ---
         // COMPLETE CORRECTED handleNext FUNCTION:

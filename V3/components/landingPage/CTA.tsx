@@ -58,13 +58,13 @@ export default function CTA() {
         <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
           <MagneticButton
             onClick={handleLaunch}
-            className="bg-linear-to-r from-[#0052FF] to-[#2563EB] hover:from-[#2563EB] hover:to-[#0052FF] text-black font-bold px-8 py-4 rounded-full cursor-pointer transition-all shadow-lg shadow-[#94A3B8]/20 hover:shadow-xl hover:shadow-[#94A3B8]/30"
+            className="max-md:w-1/2 bg-linear-to-r from-[#0052FF] to-[#2563EB] hover:from-[#2563EB] hover:to-[#0052FF] text-black font-bold px-8 py-4 rounded-full cursor-pointer transition-all shadow-lg shadow-[#94A3B8]/20 hover:shadow-xl hover:shadow-[#94A3B8]/30"
             >
             Launch App
           </MagneticButton>
           <MagneticButton
             onClick={() => router.push('/coming-soon')}
-            className="bg-transparent text-white border-2 border-[#0052FF] px-8 py-4 rounded-full font-bold hover:bg-[#0052FF]/10 cursor-pointer transition-all"
+            className="max-md:w-1/2 bg-transparent text-white border-2 border-[#0052FF] px-8 py-4 rounded-full font-bold hover:bg-[#0052FF]/10 cursor-pointer transition-all"
           >
             Talk to Our Team
           </MagneticButton>

@@ -608,7 +608,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     }
   };
 
-  const handleUpdateClaimParameters = async (): Promise<void> => {
+ const handleUpdateClaimParameters = async (): Promise<void> => {
   if (!address || !provider || !chainId || !checkNetwork()) return;
 
   const hasTaskChanges = newSocialLinks.length > 0;
@@ -726,7 +726,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       const mergedTasks = [...existingTasks, ...newTasksFormatted];
 
       try {
-        console.log("Calling backend to generate new code...");
+        console.log("Calling backend to update parameters...");
         const response = await fetch(
           "https://fauctdrop-backend.onrender.com/set-claim-parameters",
           {
@@ -750,33 +750,55 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         }
 
         const result = await response.json();
-        const newCode = result.secretCode || result.secret_code;
 
-        if (newCode) {
-          setNewlyGeneratedCode(newCode);
-          setCurrentSecretCode(newCode);
-          setShowNewCodeDialog(true); 
+        // UPDATED LOGIC: Only generate/show code for dropcode faucets
+        if (faucetType === "dropcode") {
+          const newCode = result.secretCode || result.secret_code;
 
-          toast({
-            title: "Parameters Updated & Code Generated",
-            description: "Blockchain updated and new Drop Code created.",
-          });
+          if (newCode) {
+            setNewlyGeneratedCode(newCode);
+            setCurrentSecretCode(newCode);
+            setShowNewCodeDialog(true);
+
+            toast({
+              title: "Parameters Updated & Code Generated",
+              description: "Blockchain updated and new Drop Code created.",
+            });
+          } else {
+            toast({
+              title: "Parameters Updated",
+              description:
+                "Blockchain updated, but no new code was returned by server.",
+              variant: "destructive",
+            });
+          }
         } else {
+          // For non-dropcode faucets, just show success message
           toast({
-            title: "Parameters Updated",
+            title: "Parameters Updated Successfully",
             description:
-              "Blockchain updated, but no new code was returned by server.",
-            variant: "destructive",
+              "Blockchain parameters have been updated successfully.",
           });
         }
       } catch (backendError: any) {
         console.error("Backend Sync Error:", backendError);
-        toast({
-          title: "Blockchain Updated, Backend Failed",
-          description:
-            "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
-          variant: "destructive",
-        });
+
+        // UPDATED LOGIC: Different messages based on faucet type
+        if (faucetType === "dropcode") {
+          toast({
+            title: "Blockchain Updated, Backend Failed",
+            description:
+              "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Parameters Updated (Partial)",
+            description:
+              "Blockchain updated successfully, but backend sync encountered an issue.",
+            variant: "default",
+          });
+        }
       }
     }
     // ======================================================
@@ -811,6 +833,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     }
 
     setNewSocialLinks([]); // Clear new links queue
+    await loadFaucetDetails(); // Refresh faucet details
   } catch (error: any) {
     console.error("Error updating parameters:", error);
     toast({

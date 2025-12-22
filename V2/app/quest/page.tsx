@@ -273,44 +273,42 @@ export const SimpleIcon: React.FC<SimpleIconProps> = ({
 
 export default function ComingSoon() {
   const socialLinks = [
-    { icon: <SimpleIcon icon={siX} size={20} />, href: 'https://x.com/faucetdrops', label: 'Twitter' },
-    { icon: <SimpleIcon icon={siTelegram} size={20} />, href: 'https://t.me/faucetdropschat', label: 'Telegram' },
-    { icon: <SimpleIcon icon={siGmail} size={20} />, href: 'mailto:drops.faucet@gmail.com', label: 'Email' },
+    { icon: siX, href: 'https://x.com/faucetdrops', label: 'Twitter' },
+    { icon: siTelegram, href: 'https://t.me/faucetdropschat', label: 'Telegram' },
+    { icon: siGmail, href: 'mailto:drops.faucet@gmail.com', label: 'Email' },
   ];
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white dark:bg-gray-950 text-gray-900 dark:text-white transition-colors duration-300">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white dark:bg-black transition-colors duration-300">
       <div className="max-w-2xl w-full text-center space-y-8">
         
-        {/* Logo with Theme Adaptation */}
+        {/* Logo Section - Adapts to theme */}
         <div className="flex justify-center relative">
-          {/* Light Mode Logo */}
+          {/* Light Mode Logo: Visible by default, hidden in dark mode */}
           <Image
             src="/lightlogo.png"
             alt="FaucetDrops Logo"
             width={200}
             height={80}
             className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain dark:hidden"
-            priority
           />
           
-          {/* Dark Mode Logo */}
+          {/* Dark Mode Logo: Hidden by default, visible in dark mode */}
           <Image
             src="/darklogo.png"
             alt="FaucetDrops Logo"
             width={200}
             height={80}
             className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain hidden dark:block"
-            priority
           />
         </div>
 
-        {/* Main Content */}
+        {/* Heading Section - Theme aware */}
         <div className="space-y-4">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-4xl md:text-5xl font-bold text-black dark:text-white">
             Coming Soon
           </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300">
+          <p className="text-xl text-gray-600 dark:text-gray-400">
             We&apos;re working on something amazing!
           </p>
           <p className="text-gray-600 dark:text-gray-400">
@@ -318,12 +316,12 @@ export default function ComingSoon() {
           </p>
         </div>
 
-        {/* Status Badge */}
+        {/* Status Badge - Theme aware */}
         <div className="pt-4">
-          <div className="inline-flex items-center px-6 py-3 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium border border-gray-200 dark:border-gray-700 transition-colors duration-300">
+          <div className="inline-flex items-center px-6 py-3 rounded-md bg-gray-100 dark:bg-white/10 text-black dark:text-white font-medium transition-colors duration-300">
             <span className="relative flex h-3 w-3 mr-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 dark:bg-gray-300/75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-600 dark:bg-gray-200"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 dark:bg-white/75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-600 dark:bg-white"></span>
             </span>
             Under Development
           </div>
@@ -336,31 +334,36 @@ export default function ComingSoon() {
           </p>
           <div className="flex justify-center space-x-6 pt-4">
             {socialLinks.map((social, index) => (
-              <a
+              <Link
                 key={index}
                 href={social.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-300 hover:scale-110"
+                className="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-all duration-300 transform hover:scale-110"
                 aria-label={social.label}
                 title={social.label}
               >
-                {social.icon}
-              </a>
+                <SimpleIcon
+                  icon={social.icon}
+                  size={24}
+                  className="text-black dark:text-white transition-colors duration-300"
+                />
+              </Link>
             ))}
           </div>
         </div>
 
-        {/* Footer Link */}
+        {/* Footer Link - Theme aware */}
         <div className="pt-8">
           <p className="text-sm text-gray-600 dark:text-gray-400">
             In the meantime, you can check out our
             <Link 
               href="/" 
-              className="text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline font-medium transition-colors duration-300 ml-1"
+              className="text-black dark:text-white hover:underline font-semibold ml-1 transition-colors duration-300"
             >
               homepage
-            </Link>.
+            </Link>
+            .
           </p>
         </div>
       </div>

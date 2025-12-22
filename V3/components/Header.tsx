@@ -46,9 +46,9 @@ const Header = () => {
               { name: 'Custom Drop', href: '/faucets/custom-drop', icon: <Columns3Cog /> },
             ]
           },
-          { name: 'Quests', href: '/coming-soon', icon: <PackageCheck />, description: 'Gamified Progress + Automated Rewards' },
-          { name: 'Quizzes', href: '/coming-soon', icon: <GraduationCap />, description: 'Fun, Interactive, AI-Powered Web3 Quiz Engine' },
-          { name: 'Enterprise', href: '/coming-soon', icon: <Landmark />, description: 'White Label Solutions' },
+          { name: 'Quests', href: 'https://app.faucetdrops.io/quest/', icon: <PackageCheck />, description: 'Gamified Progress + Automated Rewards' },
+          { name: 'Quizzes', href: 'https://app.faucetdrops.io/quiz/', icon: <GraduationCap />, description: 'Fun, Interactive, AI-Powered Web3 Quiz Engine' },
+          { name: 'Enterprise', href: 'https://app.faucetdrops.io/enterprise/', icon: <Landmark />, description: 'White Label Solutions' },
           // href: '/product/quests' // path to follow
         ]
       },

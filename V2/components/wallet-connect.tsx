@@ -27,7 +27,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
 
 // Backend URL
-const API_BASE_URL = "http://127.0.0.1:8000"; 
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"; 
 
 export function WalletConnectButton() {
   const { open } = useAppKit()

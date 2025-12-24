@@ -361,17 +361,9 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
               {faucet.network?.name || "Unknown"}
             </span>
           </div>
+          
           <div className="flex justify-between items-center gap-2">
-            <span className="text-muted-foreground">Balance:</span>
-            <span className="font-medium truncate">
-              {faucet.balance
-                ? Number(formatUnits(faucet.balance, faucet.tokenDecimals || 18)).toFixed(4)
-                : "0"}{" "}
-              {displayTokenSymbol}
-            </span>
-          </div>
-          <div className="flex justify-between items-center gap-2">
-            <span className="text-muted-foreground">Drop Amount:</span>
+            <span className="text-muted-foreground">Drip Amount:</span>
             <span className="font-medium truncate">
               {faucet.claimAmount
                 ? Number(formatUnits(faucet.claimAmount, faucet.tokenDecimals || 18)).toFixed(4)

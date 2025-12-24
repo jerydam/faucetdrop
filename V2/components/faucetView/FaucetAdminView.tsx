@@ -1641,7 +1641,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                   Customize the message users share after a successful drip.
                 </p>
                 <p className="text-xs font-mono text-blue-500 mt-1">
-                  Placeholders: {"{amount}"}, {"{token}"}, {"{network}"},{" "}
+                  Placeholders: {"{hashtag}"},{"{handle}"},{"{amount}"}, {"{token}"}, {"{network}"},{" "}
                   {"{explorer}"}
                 </p>
               </div>

@@ -180,9 +180,12 @@ const loadFaucetMetadata = async (faucetAddress: string): Promise<{description: 
   }
 };
 
-const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}. By {handle}, {hashtag}";
+// Update the constant to remove the fixed prefix and restructure the template
+const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
+
 const loadCustomXPostTemplate = async (faucetAddress: string): Promise<string> => {
-    return `${FIXED_TWEET_PREFIX}Verify Drop 💧: {explorer}`
+    // Default template with placeholders for handle and hashtag
+    return `Drip created by {@handle} for {#hashtag}, Verify Drop 💧: {explorer}`
 }
 
 const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {

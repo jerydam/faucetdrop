@@ -108,7 +108,7 @@ export default function DashboardPage() {
     const { networks } = useNetwork();
     
     const targetUsername = params.username as string;
-
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
     const [profile, setProfile] = useState<UserProfileData | null>(null);
     const [questCount, setQuestCount] = useState<number>(0);
@@ -136,11 +136,9 @@ export default function DashboardPage() {
                 const userWallet = userProfile.wallet_address;
                 
                 if (userWallet) {
-                    // 2. Fetch Faucets for that user
                     const faucetData = await getUserFaucets(userWallet);
                     setFaucets(faucetData);
 
-                    // 3. Fetch Stats (Quests)
                     const questRes = await fetch(`${backendUrl}/api/quests`);
                     const qData = await questRes.json();
                     if (qData.success) {
@@ -151,14 +149,44 @@ export default function DashboardPage() {
                     }
                 }
             } else {
+                const isViewingOwnNewProfile = 
+                isConnected && 
+                connectedAddress && 
+                targetUsername.toLowerCase() === connectedAddress.toLowerCase();
+
+            if (isViewingOwnNewProfile) {
+                setProfile({
+                    wallet_address: connectedAddress,
+                    username: "New User", // Placeholder until they save settings
+                    bio: "You haven't set up your profile yet. Click settings to get started!",
+                    avatar_url: "" 
+                });
+                
+                // Still try to fetch faucets for this address even if no profile exists
+                const faucetData = await getUserFaucets(connectedAddress);
+                setFaucets(faucetData);
+            } else {
                 toast({ title: "User not found", variant: "destructive" });
+                setProfile(null);
             }
-        } catch (error) {
-            console.error("Dashboard load error:", error);
-        } finally {
-            setLoading(false);
         }
-    }, [targetUsername, toast, backendUrl]);
+    } catch (error) {
+        console.error("Dashboard load error:", error);
+    } finally {
+        setLoading(false);
+    }
+}, [targetUsername, connectedAddress, isConnected, backendUrl]);
+
+    useEffect(() => {
+    // If the profile is the fallback "New User" and it's the owner viewing it
+    if (profile && profile.username === "New User" && isOwner) {
+        // Optional: Add a slight delay for better UX
+        const timer = setTimeout(() => {
+            setIsSettingsOpen(true);
+        }, 1000);
+        return () => clearTimeout(timer);
+    }
+}, [profile, isOwner]);
 
     useEffect(() => {
         if (targetUsername) fetchData();

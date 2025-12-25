@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useAppKitAccount, useAppKitProvider } from "@reown/appkit/react"
 import { BrowserProvider, Eip1193Provider } from 'ethers'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -58,7 +59,7 @@ export function ProfileSettingsModal() {
   const { address, isConnected } = useAppKitAccount()
   const { walletProvider } = useAppKitProvider('eip155')
   const { toast } = useToast()
-  
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -231,18 +232,31 @@ export function ProfileSettingsModal() {
         nonce
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/profile/update`, {
+     const res = await fetch(`${API_BASE_URL}/api/profile/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       })
 
-      const result = await res.json()
+      // Inside handleSave in ProfileSettingsModal
+    const result = await res.json()
       if (!res.ok) throw new Error(result.detail || "Update failed")
 
       toast({ title: "Success", description: "Profile updated successfully!" })
       setIsOpen(false)
-      window.location.reload() 
+
+      // This triggers the fetchProfile function in your WalletConnectButton
+      window.dispatchEvent(new Event("profileUpdated"));
+
+      if (res.ok) {
+  window.dispatchEvent(new Event("profileUpdated"));
+  
+  // If the user just set a username for the first time, 
+  // redirect them to the new URL
+  if (formData.username && formData.username.toLowerCase() !== "anonymous") {
+          router.push(`/dashboard/${formData.username}`);
+      }
+}
 
     } catch (error: any) {
       console.error(error)

@@ -39,29 +39,47 @@ export function WalletConnectButton() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (isConnected && address) {
-      fetchProfile()
-    } else {
-      setUsername("Anonymous")
-      setAvatarUrl(null)
-    }
-  }, [address, isConnected])
+  if (isConnected && address) {
+    // 1. Initial fetch when wallet connects
+    fetchProfile();
 
-  const fetchProfile = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/profile/${address}?t=${Date.now()}`)
-      const data = await res.json()
-      if (data.success && data.profile) {
-        setUsername(data.profile.username || "Anonymous")
-        setAvatarUrl(data.profile.avatar_url || null)
-      }
-    } catch (error) {
-      console.error("Profile fetch error", error)
-    } finally {
-      setLoading(false)
-    }
+    // 2. Listen for the "signal" from the Modal
+    const handleUpdate = () => {
+      console.log("Profile update signal received! Re-fetching...");
+      fetchProfile();
+    };
+
+    window.addEventListener("profileUpdated", handleUpdate);
+    return () => window.removeEventListener("profileUpdated", handleUpdate);
+  } else {
+    setUsername("Anonymous");
+    setAvatarUrl(null);
   }
+}, [address, isConnected]);
+ 
+  const fetchProfile = async () => {
+  if (!address) return;
+  setLoading(true);
+  try {
+    // Add the timestamp to bust cache on refresh
+    const res = await fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}?t=${Date.now()}`);
+    const data = await res.json();
+    
+    if (data.success && data.profile && data.profile.username) {
+      setUsername(data.profile.username);
+      setAvatarUrl(data.profile.avatar_url || null);
+    } else {
+      // Keep it Anonymous if no profile record exists in DB
+      setUsername("Anonymous");
+      setAvatarUrl(null);
+    }
+  } catch (error) {
+    console.error("Profile fetch error", error);
+    setUsername("Anonymous");
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (!isConnected || !address) {
     return (
@@ -118,12 +136,11 @@ export function WalletConnectButton() {
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
             <Link 
-              href={`/dashboard/${username.toLowerCase() === 'anonymous' ? address : username}`} 
-              className="cursor-pointer flex items-center gap-2"
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              <span>Dashboard</span>
-            </Link>
+            href={`/dashboard/${username === 'Anonymous' ? address.toLowerCase() : username}`} 
+            className="cursor-pointer flex items-center gap-2"> 
+            <LayoutDashboard className="h-4 w-4" />
+            <span>Dashboard</span>
+          </Link>
           </DropdownMenuItem>
 
           <DropdownMenuItem onClick={() => {

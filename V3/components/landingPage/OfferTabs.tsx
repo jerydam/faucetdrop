@@ -77,7 +77,7 @@ export default function OfferTabs() {
                   id: 4,
                   title: "Quests",
                   desc: "Create task-based quests with points and automatically distribute rewards upon completion",
-                  path: "/quests"
+                  path: "/quest"
                 }}
                 openCard={openCard}
                 setOpenCard={setOpenCard}

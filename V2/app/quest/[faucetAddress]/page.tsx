@@ -16,7 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Loader2, ExternalLink, CheckCircle2, Clock, 
-  Trophy, Shield, Save, Edit2, X, Upload, Lock, ImageIcon, UserCircle, AlertTriangle, Coins
+  Trophy, Shield, Save, Edit2, X, Upload, Lock, ImageIcon, UserCircle, AlertTriangle, Coins, Sparkles
 } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 import { useToast } from "@/hooks/use-toast";
@@ -358,8 +358,6 @@ export default function QuestDetailsPage() {
         }
     };
 
-    // ============= NEW FUNDING HANDLER =============
-    // ============= CORRECTED FUNDING HANDLER =============
 // ============= ERC20 FUNDING HANDLER =============
 const handleFundQuest = async () => {
     if (!walletProvider || !faucetAddress) {
@@ -607,6 +605,12 @@ const handleFundQuest = async () => {
                                     ) : (
                                         <div className="flex items-center gap-3 flex-wrap">
                                             <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">{questData.title}</h1>
+                                            
+                                            {/* BETA TAG ADDED HERE */}
+                                            <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 flex items-center gap-1 shadow-sm h-6 px-3">
+                                                <Sparkles className="h-3 w-3" /> Beta Phase
+                                            </Badge>
+
                                             <Badge variant={questData.isActive ? "default" : "destructive"} className="h-6 px-3">
                                                 {questData.isActive ? "Live" : "Paused"}
                                             </Badge>
@@ -962,43 +966,43 @@ const handleFundQuest = async () => {
                                                     </div>
                                                 </div>
                                                 <div className="p-4 space-y-4">
-                                        <div className="bg-slate-100 dark:bg-slate-900 p-3 rounded text-sm break-all">
-                                            {sub.submittedData ? (
-                                                sub.submittedData.startsWith('http') ? (
-                                                    <a href={sub.submittedData} target="_blank" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
-                                                        {sub.submittedData.includes('quest-proofs') ? "View Image Proof" : "Open Link Proof"} <ExternalLink size={14}/>
-                                                    </a>
-                                                ) : (
-                                                    sub.submittedData
-                                                )
-                                            ) : (
-                                                <span className="text-muted-foreground italic">No submission data provided</span>
-                                            )}
-                                        </div>
-                                        {sub.notes && (
-                                            <div className="text-xs text-muted-foreground bg-white dark:bg-slate-800 p-2 rounded border dark:border-slate-700 italic">
-                                                "{sub.notes}"
-                                            </div>
-                                        )}
-                                        
-                                        <div className="flex gap-3 pt-2">
-                                            <Button className="flex-1 bg-green-600 hover:bg-green-700 h-9" onClick={() => handleReviewSubmission(sub.submissionId, 'approved')}>
-                                                Approve
-                                            </Button>
-                                            <Button variant="destructive" className="flex-1 h-9" onClick={() => handleReviewSubmission(sub.submissionId, 'rejected')}>
-                                                Reject
-                                            </Button>
-                                        </div>
-                                    </div>
-                                                                                </Card>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
-                                                                </CardContent>
-                                                            </Card>
-                                                        </TabsContent>
+                                                    <div className="bg-slate-100 dark:bg-slate-900 p-3 rounded text-sm break-all">
+                                                        {sub.submittedData ? (
+                                                            sub.submittedData.startsWith('http') ? (
+                                                                <a href={sub.submittedData} target="_blank" className="text-blue-600 hover:underline flex items-center gap-1 font-medium">
+                                                                    {sub.submittedData.includes('quest-proofs') ? "View Image Proof" : "Open Link Proof"} <ExternalLink size={14}/>
+                                                                </a>
+                                                            ) : (
+                                                                sub.submittedData
+                                                            )
+                                                        ) : (
+                                                            <span className="text-muted-foreground italic">No submission data provided</span>
+                                                        )}
+                                                    </div>
+                                                    {sub.notes && (
+                                                        <div className="text-xs text-muted-foreground bg-white dark:bg-slate-800 p-2 rounded border dark:border-slate-700 italic">
+                                                            "{sub.notes}"
+                                                        </div>
                                                     )}
-                                                </Tabs>
+                                                    
+                                                    <div className="flex gap-3 pt-2">
+                                                        <Button className="flex-1 bg-green-600 hover:bg-green-700 h-9" onClick={() => handleReviewSubmission(sub.submissionId, 'approved')}>
+                                                            Approve
+                                                        </Button>
+                                                        <Button variant="destructive" className="flex-1 h-9" onClick={() => handleReviewSubmission(sub.submissionId, 'rejected')}>
+                                                            Reject
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            </Card>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                )}
+            </Tabs>
 
             {/* ============= SUBMISSION MODAL ============= */}
             {showSubmitModal && selectedTask && (

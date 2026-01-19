@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge"; // Assuming you have this, otherwise use standard span
-import { Plus, Settings, Users, ArrowRight, Coins, Loader2, Calendar, ShieldCheck, Wallet } from 'lucide-react';
+import { Plus, Settings, Users, ArrowRight, Coins, Loader2, Calendar, ShieldCheck, Wallet, Sparkles } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet'; // Ensure this hook exists and returns { address }
 
 // Assume Header is a component defined elsewhere
@@ -107,10 +107,15 @@ export default function QuestHomePage() {
             
             {/* Top Section: Title & Create Button */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Explore Quests</h2>
-                    <p className="text-muted-foreground mt-1">Participate in campaigns or manage your own.</p>
-                </div>
+               <div>
+    <div className="flex items-center gap-3">
+        <h2 className="text-3xl font-bold tracking-tight">Explore Quests</h2>
+        <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 flex items-center gap-1 shadow-sm">
+            <Sparkles className="h-3 w-3" /> Beta Testing Phase
+        </Badge>
+    </div>
+    <p className="text-muted-foreground mt-1">Participate in campaigns or manage your own.</p>
+</div>
                 
                 <Button 
                     onClick={() => router.push('/quest/create-quest')} 

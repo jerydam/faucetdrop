@@ -34,6 +34,7 @@
         Image as ImageIcon,
         Lock,
         Unlock,
+        Sparkles
     } from "lucide-react"
     // --- LIVE EXTERNAL DEPENDENCIES ---
     import { useWallet } from "@/hooks/use-wallet"
@@ -2561,6 +2562,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                     <Header pageTitle="Quest creator page" />
                     <div className="max-w-6xl mx-auto p-6 space-y-6">
                         <h1 className="text-2xl font-bold mb-4">Create New Quest Campaign</h1>
+                        
                         <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative" role="alert">
                             <strong className="font-bold">Info:</strong>
                             <span className="block sm:inline ml-2">Please connect your wallet to create a quest campaign.</span>
@@ -2575,10 +2577,15 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
 
         return (
             <>
-                <Header pageTitle="Quest creator page" /> {/* 1. ADDED HEADER */}
+                <Header pageTitle="Quest creator page" /> 
                 <div className="max-w-6xl mx-auto p-6 space-y-6">
-                    <h1 className="text-2xl font-bold mb-4">Create New Quest Campaign</h1>
-                    
+                    <div className="flex items-center gap-3 mb-4">
+                    <h1 className="text-2xl font-bold">Create New Quest Campaign</h1>
+                    <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 flex items-center gap-1 shadow-sm">
+                        <Sparkles className="h-3 w-3" /> Beta Testing Phase
+                    </Badge>
+                </div>
+                  
                     {/* Inline Error/Warning Messages */}
                     {isConnected && error && (
                         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">

@@ -41,10 +41,10 @@ const Footer = () => {
     {
       title: 'Product',
       links: [
-        { name: 'Features', href: '/coming-soon' },
-        { name: 'Pricing', href: '/coming-soon' },
-        { name: 'Templates', href: '/coming-soon' },
-        { name: 'Integrations', href: '/coming-soon' },
+        { name: 'Faucets', href: '/coming-soon' },
+        { name: 'Quests', href: '/coming-soon' },
+        { name: 'Quizzes', href: '/coming-soon' },
+        { name: 'Enterprise', href: '/coming-soon' },
       ],
     },
     {

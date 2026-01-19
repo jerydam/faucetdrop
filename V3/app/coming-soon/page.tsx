@@ -44,10 +44,10 @@ export default function ComingSoon() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center text-white p-6">
-      <div className="max-w-2xl w-full text-center space-y-8">
-        <div className="relative w-48 h-48 mx-auto">
+      <div className="max-w-2xl w-full text-center space-y-8 pt-12">
+        <div className="relative w-80 h-20 mx-auto">
           <Image
-            src="/white_FaucetDrops.png"
+            src="/logo.png"
             alt="FaucetDrops Logo"
             fill
             className="object-contain"

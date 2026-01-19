@@ -29,7 +29,7 @@ const KnowFaucetDrops = () => {
       if (displayText.length < currentText.length) {
         timeout = setTimeout(() => {
           setDisplayText(currentText.substring(0, displayText.length + 1));
-        }, 30); // Slightly faster typing
+        }, 10); // Slightly faster typing
       } else {
         // Pause at the end of typing
         timeout = setTimeout(() => {
@@ -92,11 +92,11 @@ const KnowFaucetDrops = () => {
 
 const WhyFaucetDrops = () => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-10 w-full py-12 pt-24 md:pt-50 text-white">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-10 w-full py-12 md:px-10 pt-24 md:pt-50 text-white">
       <KnowFaucetDrops />
       <div className="relative w-full max-w-4xl h-[400px] flex items-center justify-center 1 order-1 md:order-2">
         {/* <div className="absolute inset-0 bg-[url('/water-fall-water.gif')] bg-cover bg-center" /> */}
-        <div className="relative z-10 w-[400px] h-[400px] md:w-[600px] md:h-[600px]">
+        <div className="relative z-10 w-[300px] h-[300px] md:w-[500px] md:h-[500px]">
           <div 
             className="w-full h-full"
             style={{
@@ -109,7 +109,7 @@ const WhyFaucetDrops = () => {
               maskRepeat: 'no-repeat',
               maskPosition: 'center',
               backgroundColor: 'transparent',
-              backgroundImage: 'url(/water-fall-water.gif)', 
+              backgroundImage: 'url(/water1.gif)', 
               backgroundSize: 'cover',
               backgroundPosition: 'center'
             }}

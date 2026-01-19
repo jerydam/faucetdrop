@@ -455,9 +455,9 @@
         required: true,
         category: "social",
         url: "",
-        action: "follow",
+        action: "",
         verificationType: "manual_link",
-        targetPlatform: "Twitter",
+        targetPlatform: "",
         stage: 'Beginner',
         minReferrals: "",
     }
@@ -977,7 +977,7 @@ const StepTwoRewards: React.FC<StepTwoProps> = ({
                                     id="amountPerWinner"
                                     type="number"
                                     step="any"
-                                    value={newQuest.rewardPool ? (parseFloat(newQuest.rewardPool) / newQuest.distributionConfig.totalWinners).toFixed(4) : ''}
+                                    value={newQuest.rewardPool ? (parseFloat(newQuest.rewardPool) / newQuest.distributionConfig.totalWinners) : ''}
                                     onChange={(e) => {
                                         const amountPerWinner = parseFloat(e.target.value) || 0;
                                         const totalRewardPool = (amountPerWinner * newQuest.distributionConfig.totalWinners).toFixed(4);
@@ -1046,7 +1046,7 @@ const StepTwoRewards: React.FC<StepTwoProps> = ({
                                     {examplePoints.map((points, idx) => {
                                         const weight = weights[idx];
                                         const sharePct = totalWeight > 0 ? (weight / totalWeight * 100).toFixed(2) : '0.00';
-                                        const reward = totalWeight > 0 ? (weight / totalWeight * poolAmount).toFixed(4) : '0.0000';
+                                        const reward = totalWeight > 0 ? (weight / totalWeight * poolAmount) : '0.0000';
                                         return (
                                             <div key={idx} className="grid grid-cols-5 gap-2 text-xs p-3 border-t">
                                                 <div className="font-medium">#{idx + 1}</div>
@@ -1060,11 +1060,11 @@ const StepTwoRewards: React.FC<StepTwoProps> = ({
                                     <div className="grid grid-cols-5 gap-2 text-xs font-medium bg-gray-100 dark:bg-gray-800 p-3 border-t">
                                         <div colSpan={3}>Total</div>
                                         <div>100.00%</div>
-                                        <div>{poolAmount.toFixed(4)}</div>
+                                        <div>{poolAmount}</div>
                                     </div>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-2">
-                                    Pool used for calculation: <strong>{poolAmount.toFixed(4)} {selectedToken?.symbol || 'TOK'}</strong> (your entered value or 10,000 as example).
+                                    Pool used for calculation: <strong>{poolAmount} {selectedToken?.symbol || 'TOK'}</strong> (your entered value or 10,000 as example).
                                 </p>
                             </div>
 
@@ -1085,7 +1085,7 @@ const StepTwoRewards: React.FC<StepTwoProps> = ({
                                     </div>
                                 </div>
                                 <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                                    ℹ️ Fee (5%) will be added during funding. You'll need to deposit: <strong>{newQuest.rewardPool ? (parseFloat(newQuest.rewardPool || '0') * 1.05).toFixed(4) : '0'} {selectedToken?.symbol}</strong>
+                                    ℹ️ Fee (5%) will be added during funding. You'll need to deposit: <strong>{newQuest.rewardPool ? (parseFloat(newQuest.rewardPool || '0') * 1.05) : '0'} {selectedToken?.symbol}</strong>
                                 </p>
                             </div>
                         </div>
@@ -1139,10 +1139,10 @@ const StepTwoRewards: React.FC<StepTwoProps> = ({
                                 <div className="text-right text-sm space-y-1">
                                     <div className="flex justify-between">
                                         <span>Total Pool:</span>
-                                        <strong className="text-green-600">{calculateTotalFromTiers().toFixed(4)} {selectedToken?.symbol}</strong>
+                                        <strong className="text-green-600">{calculateTotalFromTiers()} {selectedToken?.symbol}</strong>
                                     </div>
                                     <p className="text-xs text-blue-700 dark:text-blue-300">
-                                        ℹ️ Fee (5%) will be added during funding. You'll need to deposit: <strong>{(calculateTotalFromTiers() * 1.05).toFixed(4)} {selectedToken?.symbol}</strong>
+                                        ℹ️ Fee (5%) will be added during funding. You'll need to deposit: <strong>{(calculateTotalFromTiers() * 1.05)} {selectedToken?.symbol}</strong>
                                     </p>
                                 </div>
                                 {/* Hidden sync to keep rewardPool in state */}
@@ -1211,11 +1211,11 @@ const StepTwoRewards: React.FC<StepTwoProps> = ({
 };
   // --- STEP 3: TASKS & STAGE REQUIREMENTS ---
 // This version makes all restrictions OPTIONAL via a toggle.
-// Creator can enable "Enforce Strict Stage Rules" to get the original behavior:
-// - Min/max tasks per stage
-// - Stage progression locking
-// - Pass points capped at 70%
+// Creator can enable "Enforce Strict Stage Rules" to get the original behavior.
 // When disabled (default): completely open, no limits, no locking, no cap.
+// Task title, description, and url are now OPTIONAL (no mandatory check).
+// The only validation error for tasks is if title + description + url exactly match an existing task (handled in main validateTask).
+
 
 interface StepThreeProps {
     newQuest: Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'> & { enforceStageRules?: boolean };
@@ -1474,64 +1474,80 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                     )}
 
                     {/* Social Template */}
-                    {isSocialTemplate && (
-                        <div className="space-y-3 p-3 border-2 border-blue-300 rounded-lg bg-blue-50 dark:bg-blue-900/50">
-                            <h4 className="text-md font-semibold text-blue-700 dark:text-blue-200">Social Task Template</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-2">
-                                    <Label>Platform</Label>
-                                    <Select
-                                        value={newTask.targetPlatform}
-                                        onValueChange={(value: SocialPlatform) => {
-                                            setNewTask(prev => ({
-                                                ...prev,
-                                                targetPlatform: value,
-                                                title: generateSocialTaskTitle(value, prev.action || 'follow'),
-                                                description: `Complete the action on our ${value} channel/page.`,
-                                            }));
-                                        }}
-                                    >
-                                        <SelectTrigger><SelectValue placeholder="select platform"/></SelectTrigger>
-                                        <SelectContent>
-                                            {SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Action</Label>
-                                    <Select
-                                        value={newTask.action}
-                                        onValueChange={(value: string) => {
-                                            setNewTask(prev => ({
-                                                ...prev,
-                                                action: value,
-                                                title: generateSocialTaskTitle(prev.targetPlatform || 'Twitter', value),
-                                            }));
-                                        }}
-                                    >
-                                        <SelectTrigger><SelectValue placeholder="select action" /></SelectTrigger>
-                                        <SelectContent>
-                                            {SOCIAL_ACTIONS.map(a => <SelectItem key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Task Title (Auto-Generated)</Label>
-                                <Input
-                                    value={newTask.title || "Auto-generated based on selections"}
-                                    disabled
-                                    className="font-bold bg-white dark:bg-gray-800"
-                                />
-                            </div>
-                        </div>
-                    )}
-
+{isSocialTemplate && (
+    <div className="space-y-3 p-3 border-2 border-blue-300 rounded-lg bg-blue-50 dark:bg-blue-900/50">
+        <h4 className="text-md font-semibold text-blue-700 dark:text-blue-200">Social Task Template</h4>
+        <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+                <Label>Platform</Label>
+                <Select
+                    value={newTask.targetPlatform}
+                    onValueChange={(value: SocialPlatform) => {
+                        setNewTask(prev => ({
+                            ...prev,
+                            targetPlatform: value,
+                            // Only set title/description if action is already chosen
+                            ...(prev.action && {
+                                title: generateSocialTaskTitle(value, prev.action),
+                                description: `Complete the ${prev.action} action on our ${value} channel/page.`,
+                            }),
+                            // Otherwise clear them
+                            ...(!prev.action && {
+                                title: '',
+                                description: '',
+                            }),
+                        }));
+                    }}
+                >
+                    <SelectTrigger><SelectValue placeholder="select platform"/></SelectTrigger>
+                    <SelectContent>
+                        {SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-2">
+                <Label>Action</Label>
+                <Select
+                    value={newTask.action}
+                    onValueChange={(value: string) => {
+                        setNewTask(prev => ({
+                            ...prev,
+                            action: value,
+                            // Only set title/description if platform is already chosen
+                            ...(prev.targetPlatform && {
+                                title: generateSocialTaskTitle(prev.targetPlatform, value),
+                                description: `Complete the ${value} action on our ${prev.targetPlatform} channel/page.`,
+                            }),
+                            // Otherwise clear them
+                            ...(!prev.targetPlatform && {
+                                title: '',
+                                description: '',
+                            }),
+                        }));
+                    }}
+                >
+                    <SelectTrigger><SelectValue placeholder="select action" /></SelectTrigger>
+                    <SelectContent>
+                        {SOCIAL_ACTIONS.map(a => <SelectItem key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+        </div>
+        <div className="space-y-2">
+            <Label>Task Title (Auto-Generated)</Label>
+            <Input
+                value={newTask.title || "Auto-generated based on selections"}
+                disabled
+                className="font-bold bg-white dark:bg-gray-800"
+            />
+        </div>
+    </div>
+)}
                     {/* Non-social fields */}
                     {!isSocialTemplate && (
                         <>
                             <div className="space-y-2">
-                                <Label htmlFor="taskTitle">Task Title</Label>
+                                <Label htmlFor="taskTitle">Task Title (Optional)</Label>
                                 <Input
                                     id="taskTitle"
                                     value={newTask.title || ""}
@@ -1540,7 +1556,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="taskDescription">Description / Guide</Label>
+                                <Label htmlFor="taskDescription">Description / Guide (Optional)</Label>
                                 <Textarea
                                     id="taskDescription"
                                     value={newTask.description || ""}
@@ -1554,7 +1570,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
 
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-2">
-                            <Label htmlFor="url">Action URL / Guide Link</Label>
+                            <Label htmlFor="url">Action URL / Guide Link (Optional)</Label>
                             <Input
                                 id="url"
                                 value={newTask.url || ""}
@@ -1656,8 +1672,6 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                         <Button
                             onClick={editingTask ? handleUpdateTask : handleAddTask}
                             disabled={
-                                !newTask.title ||
-                                !newTask.url ||
                                 newTask.points === undefined ||
                                 newTask.points === "" ||
                                 Number(newTask.points) <= 0 ||
@@ -1781,7 +1795,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                                                 <div key={task.id} className="flex justify-between items-center text-xs p-1 bg-gray-50 dark:bg-gray-800 rounded">
                                                     <span className="truncate flex items-center gap-1">
                                                         {task.required && <span className="text-red-500 font-bold">*</span>}
-                                                        {task.title}
+                                                        {task.title || '(No title)'}
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <Badge variant="secondary" className={`text-xs ${getCategoryColor(task.category)}`}>
@@ -1936,78 +1950,70 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
     }
 
     // --- MAIN COMPONENT: QuestCreator ---
-    export default function QuestCreator() {
-        // --- LIVE HOOKS ---
-        const { address, isConnected, chainId, isConnecting: isWalletConnecting, provider: walletProvider } = useWallet();
-        
-        // Use local network lookup instead of a separate provider hook
-        const network = useMemo(() => getNetworkByChainId(chainId), [chainId]); 
+   export default function QuestCreator() {
+    // --- LIVE HOOKS ---
+    const { address, isConnected, chainId, isConnecting: isWalletConnecting, provider: walletProvider } = useWallet();
+    
+    // Use local network lookup instead of a separate provider hook
+    const network = useMemo(() => getNetworkByChainId(chainId), [chainId]); 
 
-        // --- WIZARD STATE ---
-        const [step, setStep] = useState(1);
-        const maxSteps = 4;
-        // --- EXISTING STATE ---
-        const [newQuest, setNewQuest] = useState<Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'>>(initialNewQuest)
-        const [newTask, setNewTask] = useState<Partial<QuestTask>>(initialNewTaskForm)
-        const [editingTask, setEditingTask] = useState<QuestTask | null>(null)
-        const [isSaving, setIsSaving] = useState(false)
-        const [error, setError] = useState<string | null>(null);
-        const [nameError, setNameError] = useState<string | null>(null);
-        const [isCheckingName, setIsCheckingName] = useState(false);
-        const [stagePassRequirements, setStagePassRequirements] = useState<StagePassRequirements>(initialStagePassRequirements); // UPDATED type
-        // --- TOKEN STATE ---
-        const [selectedToken, setSelectedToken] = useState<TokenConfiguration | null>(null);
-        // --- NEW IMAGE UPLOAD STATE ---
-        const [isUploadingImage, setIsUploadingImage] = useState(false);
-        const [uploadImageError, setUploadImageError] = useState<string | null>(null);
+    // --- WIZARD STATE ---
+    const [step, setStep] = useState(1);
+    const maxSteps = 4;
+    // --- EXISTING STATE ---
+    const [newQuest, setNewQuest] = useState<Omit<Quest, 'id' | 'creatorAddress' | 'stagePassRequirements'> & { enforceStageRules?: boolean }>(initialNewQuest);
+    const [newTask, setNewTask] = useState<Partial<QuestTask>>(initialNewTaskForm);
+    const [editingTask, setEditingTask] = useState<QuestTask | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [nameError, setNameError] = useState<string | null>(null);
+    const [isCheckingName, setIsCheckingName] = useState(false);
+    const [stagePassRequirements, setStagePassRequirements] = useState<StagePassRequirements>(initialStagePassRequirements);
+    // --- TOKEN STATE ---
+    const [selectedToken, setSelectedToken] = useState<TokenConfiguration | null>(null);
+    // --- NEW IMAGE UPLOAD STATE ---
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const [uploadImageError, setUploadImageError] = useState<string | null>(null);
 
+    const availableTokens = chainId ? ALL_TOKENS_BY_CHAIN[chainId] || [] : [];
 
-        const availableTokens = chainId ? ALL_TOKENS_BY_CHAIN[chainId] || [] : [];
+    useEffect(() => {
+        if (chainId && availableTokens.length > 0 && !selectedToken) {
+            const initialToken = availableTokens.find(t => t.isNative) || availableTokens[0];
+            setSelectedToken(initialToken || null);
+            setNewQuest(prev => ({
+                ...prev,
+                rewardTokenType: initialToken?.isNative ? 'native' : 'erc20',
+                tokenAddress: initialToken?.address || ZeroAddress,
+            }));
+        } else if (!chainId) {
+            setSelectedToken(null);
+            setNewQuest(initialNewQuest);
+        }
+    }, [chainId, selectedToken, availableTokens]);
 
-        useEffect(() => {
-            if (chainId && availableTokens.length > 0 && !selectedToken) {
-                const initialToken = availableTokens.find(t => t.isNative) || availableTokens[0];
-                setSelectedToken(initialToken || null);
-                setNewQuest(prev => ({
-                    ...prev,
-                    rewardTokenType: initialToken?.isNative ? 'native' : 'erc20',
-                    tokenAddress: initialToken?.address || ZeroAddress,
-                }));
-            } else if (!chainId) {
-                setSelectedToken(null);
-                setNewQuest(initialNewQuest);
-            }
-        }, [chainId, selectedToken, availableTokens]);
+    const FAUCET_FACTORY_ADDRESS = getFactoryAddress(FAUCET_TYPE_CUSTOM, network);
+    const isFactoryAvailableOnChain = !!FAUCET_FACTORY_ADDRESS && !!network;
 
-        const FAUCET_FACTORY_ADDRESS = getFactoryAddress(FAUCET_TYPE_CUSTOM, network);
-        const isFactoryAvailableOnChain = !!FAUCET_FACTORY_ADDRESS && !!network;
-
-        // --- DYNAMIC CALCULATION: Stage Total Points & Task Counts ---
-        const stageTotals = useMemo(() => {
+    // --- DYNAMIC CALCULATION: Stage Total Points & Task Counts ---
+    const stageTotals = useMemo(() => {
         const newTotals: Record<TaskStage, number> = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0 };
         newQuest.tasks.forEach(task => { 
-            // ✅ FIX: Use parseFloat and simple rounding to 2 decimals to avoid float errors
             const val = parseFloat(String(task.points)) || 0;
             newTotals[task.stage] = parseFloat((newTotals[task.stage] + val).toFixed(2));
         });
         return newTotals;
     }, [newQuest.tasks]);
 
-        const stageTaskCounts = useMemo(() => {
-            const counts: Record<TaskStage, number> = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0, };
-            newQuest.tasks.forEach(task => { counts[task.stage]++; });
-            return counts;
-        }, [newQuest.tasks]);
+    const stageTaskCounts = useMemo(() => {
+        const counts: Record<TaskStage, number> = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0 };
+        newQuest.tasks.forEach(task => { counts[task.stage]++; });
+        return counts;
+    }, [newQuest.tasks]);
 
-        // --- Name Validation: Updated to use imported function ---
-        // Inside QuestCreator component
-    // REPLACE the section from handleTitleChange through the two useEffect hooks
-    // with this corrected version:
-
-    // Add ref after useState declarations
+    // --- Name Validation ---
     const nameCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // UPDATED checkNameAvailabilityAPI function
     const checkNameAvailabilityAPI = useCallback(async (nameToValidate: string) => {
         if (!nameToValidate.trim()) {
             setNameError(null);
@@ -2021,14 +2027,11 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
             const response = await fetch(`${API_BASE_URL}/api/check-name?name=${encodeURIComponent(nameToValidate)}`);
             const data = await response.json();
 
-            console.log("✅ Name check response:", data);
-
             if (!response.ok) {
                 setNameError("Error checking name availability.");
                 return;
             }
 
-            // Check the correct response structure
             if (data.exists === true) {
                 setNameError(`The name "${nameToValidate}" is already taken.`);
             } else if (data.valid === false) {
@@ -2037,50 +2040,37 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
                 setNameError(null);
             }
         } catch (e: any) {
-            console.error("❌ Name check failed:", e);
+            console.error("Name check failed:", e);
             setNameError("Could not verify name availability. Service may be down.");
         } finally {
             setIsCheckingName(false);
         }
     }, []);
 
-    // Handler for onChange - debounced check
     const handleTitleChange = useCallback((value: string) => {
         setNewQuest(prev => ({...prev, title: value}));
         
-        // Clear previous timeout
         if (nameCheckTimeoutRef.current) {
             clearTimeout(nameCheckTimeoutRef.current);
         }
         
-        // Only check if title is at least 3 characters
         if (value.trim().length >= 3 && isConnected && network) {
-            // Set new timeout - check 500ms after user stops typing
             nameCheckTimeoutRef.current = setTimeout(() => {
                 checkNameAvailabilityAPI(value.trim());
             }, 2000);
         } else if (value.trim().length < 3) {
-            // Clear error if less than 3 characters
             setNameError(null);
         }
     }, [isConnected, network, checkNameAvailabilityAPI]);
 
-    // Handler for onBlur - immediate check when user leaves the field
     const handleTitleBlur = useCallback(() => {
         const title = newQuest.title.trim();
         
-        // Clear the pending timeout
         if (nameCheckTimeoutRef.current) {
             clearTimeout(nameCheckTimeoutRef.current);
         }
-        
-        // Immediate check if title is valid
-        // if (title.length >= 3 && isConnected && network) {
-        //     checkNameAvailabilityAPI(title);
-        // }
-    }, [newQuest.title, isConnected, network, checkNameAvailabilityAPI]);
+    }, [newQuest.title]);
 
-    // Cleanup timeout on unmount
     useEffect(() => {
         return () => {
             if (nameCheckTimeoutRef.current) {
@@ -2088,212 +2078,288 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
             }
         };
     }, []);
-        // --- Validation Helpers (implementation kept short for review) ---
-        const validateTask = useCallback((): boolean => { 
-            const isDuplicate = newQuest.tasks.some(t => {
-                if (editingTask && t.id === editingTask.id) return false;
-                return (newTask.title && t.title.toLowerCase() === newTask.title.trim().toLowerCase())
-                    || (newTask.url && t.url.toLowerCase() === newTask.url.trim().toLowerCase())
-                    || (newTask.description && t.description?.toLowerCase() === newTask.description?.trim().toLowerCase());
-            });
-            if (isDuplicate) { setError("A task already has the same Title, Description, or URL. Quest tasks must be unique."); return false; }
-            if (
-        !newTask.title || 
-        !newTask.url || 
-        newTask.points === undefined || 
-        newTask.points === "" || // Check for empty string specifically
-        Number(newTask.points) <= 0 || // Convert to Number for comparison
-        !newTask.stage
-    ) { 
-        setError("Please fill in all required task fields: Title, URL, Points (must be > 0), and Stage."); 
-        return false; 
-    }
-            if (newTask.category !== 'social' && newTask.category !== 'referral' && !newTask.description) { setError("Please provide a detailed description for non-template tasks."); return false; }
-            if (
-        newTask.category === 'referral' && 
-        (
-            newTask.minReferrals === undefined || 
-            newTask.minReferrals === "" || 
-            Number(newTask.minReferrals) <= 0
-        )
-    ) { 
-        setError("For 'referral' tasks, please specify a minimum required number of referrals (greater than 0)."); 
-        return false; 
-    }
-            if (!editingTask) {
-                const currentStageCount = stageTaskCounts[newTask.stage as TaskStage];
-                const maxAllowed = STAGE_TASK_REQUIREMENTS[newTask.stage as TaskStage].max;
-                if (currentStageCount >= maxAllowed) { setError(`Cannot add more tasks to ${newTask.stage} stage. Maximum ${maxAllowed} tasks allowed.`); return false; }
+
+    // --- Validation Helpers ---
+    const validateTask = useCallback((): boolean => { 
+        // Exact duplicate check (all three fields match exactly)
+        const normalizedNewTitle = (newTask.title || '').trim().toLowerCase();
+        const normalizedNewDesc = (newTask.description || '').trim().toLowerCase();
+        const normalizedNewUrl = (newTask.url || '').trim().toLowerCase();
+
+        const isExactDuplicate = newQuest.tasks.some(t => {
+            if (editingTask && t.id === editingTask.id) return false;
+
+            const existingTitle = (t.title || '').trim().toLowerCase();
+            const existingDesc = (t.description || '').trim().toLowerCase();
+            const existingUrl = (t.url || '').trim().toLowerCase();
+
+            return normalizedNewTitle === existingTitle &&
+                   normalizedNewDesc === existingDesc &&
+                   normalizedNewUrl === existingUrl;
+        });
+
+        if (isExactDuplicate) {
+            setError("A task with the exact same Title, Description, and URL already exists. Quest tasks must be unique.");
+            return false;
+        }
+
+        // Points required
+        if (
+            newTask.points === undefined || 
+            newTask.points === "" || 
+            Number(newTask.points) <= 0
+        ) {
+            setError("Task Points must be greater than 0.");
+            return false;
+        }
+
+        // Max tasks per stage (only if strict rules enabled)
+        const enforceRules = newQuest.enforceStageRules ?? false;
+        if (enforceRules && !editingTask) {
+            const currentStage = newTask.stage as TaskStage;
+            const currentStageCount = stageTaskCounts[currentStage];
+            const maxAllowed = STAGE_TASK_REQUIREMENTS[currentStage].max;
+            if (currentStageCount >= maxAllowed) {
+                setError(`Cannot add more tasks to ${currentStage} stage. Maximum ${maxAllowed} tasks allowed.`);
+                return false;
             }
-            setError(null); return true;
-        }, [newQuest.tasks, editingTask, newTask, stageTaskCounts]);
-        
-        const checkStagePassPointsValidity = useCallback((): boolean => { 
-            for (const stage of TASK_STAGES) {
-                const totalPoints = stageTotals[stage]; const requiredPass = stagePassRequirements[stage];
-                if (totalPoints > 0) {
-                    const maxAllowed = Math.floor(totalPoints * MAX_PASS_POINT_RATIO);
-                    if (requiredPass > maxAllowed || requiredPass <= 0) { return false; }
-                }
+        }
+
+        setError(null);
+        return true;
+    }, [
+        newQuest.tasks,
+        newQuest.enforceStageRules,
+        editingTask,
+        newTask.title,
+        newTask.description,
+        newTask.url,
+        newTask.points,
+        newTask.stage,
+        stageTaskCounts
+    ]);
+
+    // Conditional pass points validity check
+    const checkStagePassPointsValidity = useCallback((): boolean => { 
+        const enforceRules = newQuest.enforceStageRules ?? false;
+        if (!enforceRules) return true; // No restrictions when rules off
+
+        for (const stage of TASK_STAGES) {
+            const totalPoints = stageTotals[stage];
+            const requiredPass = stagePassRequirements[stage];
+            if (totalPoints > 0) {
+                const maxAllowed = Math.floor(totalPoints * MAX_PASS_POINT_RATIO);
+                if (requiredPass > maxAllowed || requiredPass <= 0) return false;
             }
+        }
+        return true;
+    }, [stageTotals, stagePassRequirements, newQuest.enforceStageRules]);
+
+    // Conditional pass points validation with error message
+    const validateStagePassPoints = useCallback((): boolean => { 
+        const enforceRules = newQuest.enforceStageRules ?? false;
+        if (!enforceRules) {
+            setError(null);
             return true;
-        }, [stageTotals, stagePassRequirements]);
+        }
 
-        const validateStagePassPoints = useCallback((): boolean => { 
-            let isValid = true;
-            for (const stage of TASK_STAGES) {
-                const totalPoints = stageTotals[stage]; const requiredPass = stagePassRequirements[stage];
-                if (totalPoints > 0) {
-                    const maxAllowed = Math.floor(totalPoints * MAX_PASS_POINT_RATIO);
-                    if (requiredPass > maxAllowed || requiredPass <= 0) {
-                        const errorMessage = `Stage "${stage}" Pass Points (${requiredPass}) must be > 0 and cannot exceed 70% of its total points (${totalPoints}). Expected max point: ${maxAllowed}.`;
-                        setError(errorMessage); isValid = false; break;
-                    }
-                }
-            }
-            if (isValid) setError(null); return isValid;
-        }, [stageTotals, stagePassRequirements, setError]);
-
-        const validateStageTaskRequirements = useCallback((): boolean => { 
-            let isValid = true;
-            for (const stage of TASK_STAGES) {
-                const taskCount = stageTaskCounts[stage]; const requirement = STAGE_TASK_REQUIREMENTS[stage];
-                if (taskCount > 0 && taskCount < requirement.min) { 
-                    setError(`Stage "${stage}" requires at least ${requirement.min} tasks. Currently has ${taskCount}.`); 
-                    isValid = false; 
+        let isValid = true;
+        for (const stage of TASK_STAGES) {
+            const totalPoints = stageTotals[stage];
+            const requiredPass = stagePassRequirements[stage];
+            if (totalPoints > 0) {
+                const maxAllowed = Math.floor(totalPoints * MAX_PASS_POINT_RATIO);
+                if (requiredPass > maxAllowed || requiredPass <= 0) {
+                    setError(`Stage "${stage}" Pass Points (${requiredPass}) must be > 0 and ≤70% (${maxAllowed}) of total points.`);
+                    isValid = false;
                     break;
                 }
             }
-            if (isValid) setError(null); return isValid;
-        }, [stageTaskCounts, setError]);
-        
-        const isStageSelectable = useCallback((targetStage: TaskStage): boolean => { 
-            const targetIndex = TASK_STAGES.indexOf(targetStage);
-            if (targetIndex === 0 || (editingTask && editingTask.stage === targetStage)) { return true; }
-            for (let i = 0; i < targetIndex; i++) {
-                const prevStage = TASK_STAGES[i];
-                const prevStageTaskCount = stageTaskCounts[prevStage];
-                const prevStageRequirement = STAGE_TASK_REQUIREMENTS[prevStage];
-                if (prevStageTaskCount < prevStageRequirement.min) { return false; }
-            }
+        }
+        if (isValid) setError(null);
+        return isValid;
+    }, [stageTotals, stagePassRequirements, newQuest.enforceStageRules]);
+
+    // Conditional min tasks validation
+    const validateStageTaskRequirements = useCallback((): boolean => { 
+        const enforceRules = newQuest.enforceStageRules ?? false;
+        if (!enforceRules) {
+            setError(null);
             return true;
-        }, [stageTaskCounts, editingTask]);
+        }
 
-        // --- Task Handlers (omitted implementation for brevity, assumed correct) ---
-        const handleUseSuggestedTask = (suggestedTask: Partial<QuestTask>) => { 
-            setNewTask({ ...initialNewTaskForm, ...suggestedTask, stage: newTask.stage || 'Beginner', id: undefined, });
-        };
+        let isValid = true;
+        for (const stage of TASK_STAGES) {
+            const taskCount = stageTaskCounts[stage];
+            const requirement = STAGE_TASK_REQUIREMENTS[stage];
+            if (taskCount > 0 && taskCount < requirement.min) { 
+                setError(`Stage "${stage}" requires at least ${requirement.min} tasks. Currently has ${taskCount}.`); 
+                isValid = false; 
+                break;
+            }
+        }
+        if (isValid) setError(null);
+        return isValid;
+    }, [stageTaskCounts, newQuest.enforceStageRules]);
+
+    // Conditional stage selectable
+    const isStageSelectable = useCallback((targetStage: TaskStage): boolean => { 
+        const enforceRules = newQuest.enforceStageRules ?? false;
+        if (!enforceRules) return true;
+
+        const targetIndex = TASK_STAGES.indexOf(targetStage);
+        if (targetIndex === 0 || (editingTask && editingTask.stage === targetStage)) return true;
+
+        for (let i = 0; i < targetIndex; i++) {
+            const prevStage = TASK_STAGES[i];
+            const prevStageTaskCount = stageTaskCounts[prevStage];
+            const prevStageRequirement = STAGE_TASK_REQUIREMENTS[prevStage];
+            if (prevStageTaskCount < prevStageRequirement.min) return false;
+        }
+        return true;
+    }, [stageTaskCounts, editingTask, newQuest.enforceStageRules]);
+
+    // --- Task Handlers ---
+    const handleUseSuggestedTask = (suggestedTask: Partial<QuestTask>) => { 
+        setNewTask({ ...initialNewTaskForm, ...suggestedTask, stage: newTask.stage || 'Beginner' });
+    };
+
     const handleAddTask = () => {
-            if (!validateTask()) return
-            const task: QuestTask = {
-                ...initialNewTaskForm,
-                id: Date.now().toString(),
-                title: newTask.title!,
-                description: newTask.category === 'social' ? (newTask.description || generateSocialTaskTitle(newTask.targetPlatform || 'Website', newTask.action || 'visit')) : newTask.description!,
-                points: parseFloat(String(newTask.points)),
-                required: newTask.required!,
-                category: newTask.category!,
-                url: newTask.url!,
-                action: newTask.action!,
-                verificationType: newTask.verificationType!,
-                targetPlatform: newTask.targetPlatform,
-                targetHandle: newTask.targetHandle,
-                targetContractAddress: newTask.targetContractAddress,
-                targetChainId: newTask.targetChainId,
-                stage: newTask.stage!,
-                minReferrals: newTask.minReferrals ? Number(newTask.minReferrals) : undefined,
-            }
-            setNewQuest(prev => ({ ...prev, tasks: [...prev.tasks, task] }))
-            setNewTask(initialNewTaskForm)
-        }
-        const handleUpdateTask = () => {
-            if (!editingTask) return;
-            if (!validateTask()) return;
-            const updatedTask: QuestTask = {
-                ...editingTask,
-                ...newTask,
-                id: editingTask.id,
-                points: newTask.points!,
-                stage: newTask.stage!,
-                description: newTask.category === 'social' ? (newTask.description || generateSocialTaskTitle(newTask.targetPlatform || 'Website', newTask.action || 'visit')) : newTask.description!,
-                minReferrals: newTask.category === 'referral' ? newTask.minReferrals : undefined,
-            }
-            setNewQuest(prev => ({ ...prev, tasks: prev.tasks.map(t => t.id === editingTask.id ? updatedTask : t) }))
-            setEditingTask(null)
-            setNewTask(initialNewTaskForm)
-        }
-        
-        const handleEditTask = (task: QuestTask) => { setEditingTask(task); setNewTask({ ...task, minReferrals: task.category === 'referral' ? task.minReferrals : undefined, }); };
-        const handleRemoveTask = (taskId: string) => { 
-            setNewQuest(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) })) 
-            if (editingTask && editingTask.id === taskId) {
-                setEditingTask(null);
-                setNewTask(initialNewTaskForm);
-            }
+        if (!validateTask()) return;
+
+        const task: QuestTask = {
+            ...initialNewTaskForm,
+            id: Date.now().toString(),
+            title: newTask.title || '',
+            description: newTask.category === 'social' 
+                ? (newTask.description || generateSocialTaskTitle(newTask.targetPlatform || 'Website', newTask.action || 'visit')) 
+                : (newTask.description || ''),
+            points: parseFloat(String(newTask.points || 0)),
+            required: newTask.required || false,
+            category: newTask.category || 'general',
+            url: newTask.url || '',
+            action: newTask.action || '',
+            verificationType: newTask.verificationType || 'none',
+            targetPlatform: newTask.targetPlatform,
+            targetHandle: newTask.targetHandle,
+            targetContractAddress: newTask.targetContractAddress,
+            targetChainId: newTask.targetChainId,
+            stage: newTask.stage || 'Beginner',
+            minReferrals: newTask.minReferrals ? Number(newTask.minReferrals) : undefined,
         };
-        const handleStagePassRequirementChange = (stage: TaskStage, value: number) => { setStagePassRequirements(prev => ({ ...prev, [stage]: value, })); };
+
+        setNewQuest(prev => ({ ...prev, tasks: [...prev.tasks, task] }));
+        setNewTask(initialNewTaskForm);
+    };
+
+    const handleUpdateTask = () => {
+        if (!editingTask || !validateTask()) return;
+
+        const updatedTask: QuestTask = {
+            ...editingTask,
+            ...newTask,
+            id: editingTask.id,
+            title: newTask.title || '',
+            description: newTask.category === 'social' 
+                ? (newTask.description || generateSocialTaskTitle(newTask.targetPlatform || 'Website', newTask.action || 'visit')) 
+                : (newTask.description || ''),
+            points: parseFloat(String(newTask.points || 0)),
+            url: newTask.url || '',
+            stage: newTask.stage || editingTask.stage,
+            minReferrals: newTask.category === 'referral' ? Number(newTask.minReferrals || 0) : undefined,
+        };
+
+        setNewQuest(prev => ({ 
+            ...prev, 
+            tasks: prev.tasks.map(t => t.id === editingTask.id ? updatedTask : t) 
+        }));
+        setEditingTask(null);
+        setNewTask(initialNewTaskForm);
+    };
+
+    const handleEditTask = (task: QuestTask) => { 
+        setEditingTask(task); 
+        setNewTask({ 
+            ...task, 
+            minReferrals: task.category === 'referral' ? task.minReferrals : undefined 
+        }); 
+    };
+
+    const handleRemoveTask = (taskId: string) => { 
+        setNewQuest(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) }));
+        if (editingTask && editingTask.id === taskId) {
+            setEditingTask(null);
+            setNewTask(initialNewTaskForm);
+        }
+    };
+
+    const handleStagePassRequirementChange = (stage: TaskStage, value: number) => { 
+        setStagePassRequirements(prev => ({ ...prev, [stage]: value })); 
+    };
+
+    // --- Render Logic Helpers ---
+    const getStageColor = (stage: TaskStage) => {
+        switch (stage) {
+            case 'Beginner': return 'bg-green-500 hover:bg-green-600';
+            case 'Intermediate': return 'bg-blue-500 hover:bg-blue-600';
+            case 'Advance': return 'bg-purple-500 hover:bg-purple-600';
+            case 'Legend': return 'bg-yellow-500 hover:bg-yellow-600';
+            case 'Ultimate': return 'bg-red-500 hover:bg-red-600';
+            default: return 'bg-gray-500 hover:bg-gray-600';
+        }
+    };
+
+    const getCategoryColor = (category: string) => {
+        switch (category) {
+            case 'social': return 'bg-blue-100 text-blue-800';
+            case 'trading': return 'bg-green-100 text-green-800';
+            case 'swap': return 'bg-purple-100 text-purple-800';
+            case 'referral': return 'bg-orange-100 text-orange-800';
+            case 'content': return 'bg-pink-100 text-pink-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
+    const getVerificationIcon = (type: VerificationType) => {
+        switch (type) {
+            case 'auto_social': return <Zap className="h-4 w-4 text-blue-500" />;
+            case 'auto_tx': return <Wallet className="h-4 w-4 text-green-500" />;
+            case 'manual_link': return <Link className="h-4 w-4 text-yellow-500" />;
+            case 'manual_upload': return <Upload className="h-4 w-4 text-red-500" />;
+            default: return <Settings className="h-4 w-4 text-gray-500" />;
+        }
+    };
+
+    // --- IMAGE UPLOAD HANDLER ---
+    const handleImageUpload = useCallback(async (file: File) => {
+        setIsUploadingImage(true);
+        setUploadImageError(null);
         
-        // --- Render Logic Helpers (REQUIRED FIX) ---
-        const getStageColor = (stage: TaskStage) => {
-            switch (stage) {
-                case 'Beginner': return 'bg-green-500 hover:bg-green-600'; case 'Intermediate': return 'bg-blue-500 hover:bg-blue-600';
-                case 'Advance': return 'bg-purple-500 hover:bg-purple-600'; case 'Legend': return 'bg-yellow-500 hover:bg-yellow-600';
-                case 'Ultimate': return 'bg-red-500 hover:bg-red-600'; default: return 'bg-gray-500 hover:bg-gray-600';
-            }
-        }
-        const getCategoryColor = (category: string) => {
-            switch (category) {
-                case 'social': return 'bg-blue-100 text-blue-800'; case 'trading': return 'bg-green-100 text-green-800';
-                case 'swap': return 'bg-purple-100 text-purple-800'; case 'referral': return 'bg-orange-100 text-orange-800';
-                case 'content': return 'bg-pink-100 text-pink-800'; default: return 'bg-gray-100 text-gray-800';
-            }
-        }
-        const getVerificationIcon = (type: VerificationType) => {
-            switch (type) {
-                case 'auto_social': return <Zap className="h-4 w-4 text-blue-500" />; case 'auto_tx': return <Wallet className="h-4 w-4 text-green-500" />;
-                case 'manual_link': return <Link className="h-4 w-4 text-yellow-500" />; case 'manual_upload': return <Upload className="h-4 w-4 text-red-500" />;
-                default: return <Settings className="h-4 w-4 text-gray-500" />;
-            }
-        }
-        // --- End Render Logic Helpers ---
+        const formData = new FormData();
+        formData.append("file", file);
 
+        try {
+            const response = await fetch(`${API_BASE_URL}/upload-image`, {
+                method: 'POST',
+                body: formData,
+            });
 
-        // --- NEW IMAGE UPLOAD HANDLER ---
-        const handleImageUpload = useCallback(async (file: File) => {
-            setIsUploadingImage(true);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to upload image.');
+            }
+
+            const data = await response.json();
+            setNewQuest(prev => ({ ...prev, imageUrl: data.imageUrl }));
             setUploadImageError(null);
-            
-            const formData = new FormData();
-            formData.append("file", file);
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/upload-image`, {
-                    method: 'POST',
-                    // Content-Type header for FormData is omitted; the browser sets it automatically.
-                    body: formData,
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'Failed to upload image.');
-                }
-
-                const data = await response.json();
-                
-                // Set the new URL from the backend response
-                setNewQuest(prev => ({ ...prev, imageUrl: data.imageUrl }));
-                setUploadImageError(null);
-                
-                // Do not show an alert, let the visual cue handle it
-            } catch (e: any) {
-                console.error('❌ Image upload failed:', e);
-                setUploadImageError(e.message || "Failed to upload image. Check console for details.");
-                setNewQuest(prev => ({ ...prev, imageUrl: initialNewQuest.imageUrl }));
-            } finally {
-                setIsUploadingImage(false);
-            }
-        }, [setNewQuest]);
-
+        } catch (e: any) {
+            console.error('Image upload failed:', e);
+            setUploadImageError(e.message || "Failed to upload image.");
+            setNewQuest(prev => ({ ...prev, imageUrl: initialNewQuest.imageUrl }));
+        } finally {
+            setIsUploadingImage(false);
+        }
+    }, []);
 
         // --- Web3 Logic: Faucet Deployment - Updated to use imported function ---
         const handleCreateCustomFaucet = async (questName: string, token: string) => {
@@ -2483,7 +2549,7 @@ const StepThreeTasks: React.FC<StepThreeProps> = ({
             setIsSaving(false);
         }
     }
-        
+
         // --- 2. FIX: Next Button Handler ---
         // COMPLETE CORRECTED handleNext FUNCTION:
     const handleNext = () => {

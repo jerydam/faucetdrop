@@ -20,7 +20,7 @@ export default function OfferTabs() {
                 <TabsTrigger
                   key={tab}
                   value={tab}
-                  className="rounded-full px-10 py-2.5 text-lg text-gray-300
+                  className="rounded-full px-5 md:px-10py-1.5 md:py-2.5 text-base md:text-lg text-gray-300
                     data-[state=active]:bg-[#2563EB]/10 data-[state=active]:text-white
                     data-[state=active]:ring-1 data-[state=active]:ring-[#0052FF] transition-all"
                 >

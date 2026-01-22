@@ -1,0 +1,569 @@
+"use client"
+
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toast } from 'sonner'
+import {
+    Upload,
+    Loader2,
+    Trash2,
+    Check,
+    AlertTriangle,
+    Coins,
+    Settings,
+    Save,
+    Plus
+} from "lucide-react"
+
+import { useWallet } from "@/hooks/use-wallet"
+import { ZeroAddress } from 'ethers'
+import { type Network } from "@/lib/faucet"
+
+// ==== SHARED CONFIG & TYPES ====
+const API_BASE_URL = "http://127.0.0.1:8000"
+const zeroAddress = ZeroAddress
+
+const networks: Network[] = [
+    {
+        name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png",
+        factoryAddresses: ["0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"],
+        factories: { custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
+    },
+    {
+        name: "Lisk", symbol: "LSK", chainId: BigInt(1135), rpcUrl: "https://rpc.api.lisk.com", blockExplorer: "https://blockscout.lisk.com", explorerUrl: "https://blockscout.lisk.com", color: "#0D4477", logoUrl: "/lsk.png", iconUrl: "/lsk.png",
+        factoryAddresses: ["0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7"],
+        factories: { custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+    },
+    {
+        name: "Arbitrum", symbol: "ARB", chainId: BigInt(42161), rpcUrl: "https://arb1.arbitrum.io/rpc", blockExplorer: "https://arbiscan.io", explorerUrl: "https://arbiscan.io", color: "#28A0F0", logoUrl: "/arb.jpeg", iconUrl: "/arb.jpeg",
+        factoryAddresses: ["0x9D6f441b31FBa22700bb3217229eb89b13FB49de"],
+        factories: { custom: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+    },
+    {
+        name: "Base", symbol: "BASE", chainId: BigInt(8453), rpcUrl: "https://base.publicnode.com", blockExplorer: "https://basescan.org", explorerUrl: "https://basescan.org", color: "#0052FF", logoUrl: "/base.png", iconUrl: "/base.png",
+        factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"],
+        factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+    }
+]
+
+const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
+    42220: [
+        { address: "0x471EcE3750Da237f93B8E339c536989b8978a438", name: "Celo", symbol: "CELO", decimals: 18, isNative: true, logoUrl: "/celo.jpeg", description: "Native Celo token" },
+        { address: "0x765DE816845861e75A25fCA122bb6898B8B1282a", name: "Celo Dollar", symbol: "cUSD", decimals: 18, logoUrl: "/cusd.png", description: "USD-pegged stablecoin on Celo" },
+        { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", name: "Tether", symbol: "USDT", decimals: 6, logoUrl: "/usdt.jpg", description: "Tether USD stablecoin" },
+        { address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "USD Coin stablecoin" },
+    ],
+    1135: [
+        { address: zeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
+        { address: "0xac485391EB2d7D88253a7F1eF18C37f4242D1A24", name: "Lisk", symbol: "LSK", decimals: 18, logoUrl: "/lsk.png", description: "Lisk native token" },
+    ],
+    42161: [
+        { address: zeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
+        { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "Native USD Coin" },
+    ],
+    8453: [
+        { address: zeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
+        { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "Native USD Coin" },
+    ]
+}
+
+export interface TokenConfiguration {
+    address: string
+    name: string
+    symbol: string
+    decimals: number
+    isNative?: boolean
+    logoUrl?: string
+    description?: string
+}
+
+export interface DistributionConfig {
+    model: 'equal' | 'custom_tiers' | 'quadratic'
+    totalWinners: number
+    tiers: Array<{ rankStart: number; rankEnd: number; amountPerUser: number }>
+}
+
+export interface QuestData {
+    title: string
+    description: string
+    imageUrl: string
+    rewardPool: string
+    distributionConfig: DistributionConfig
+    faucetAddress?: string
+    rewardTokenType?: 'native' | 'erc20'
+    tokenAddress?: string
+}
+
+// ==== UTILS ====
+const isAddress = (addr: string) => addr.startsWith('0x') && addr.length === 42
+const examplePoints = [10000, 8100, 6400, 4900, 3600]
+const weights = examplePoints.map(p => Math.sqrt(p))
+const totalWeight = weights.reduce((a, b) => a + b, 0)
+
+// ==== MOVED OUTSIDE: Image Upload Component ====
+const ImageUploadField: React.FC<{
+    imageUrl: string
+    onImageUrlChange: (url: string) => void
+    onFileUpload: (file: File) => Promise<void>
+    isUploading: boolean
+    uploadError: string | null
+    requiredResolution?: { width: number; height: number }
+}> = ({ imageUrl, onImageUrlChange, onFileUpload, isUploading, uploadError, requiredResolution }) => {
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const [previewUrl, setPreviewUrl] = useState(imageUrl)
+    const [resolutionError, setResolutionError] = useState<string | null>(null)
+    const maxWidth = requiredResolution?.width || 1280
+    const maxHeight = requiredResolution?.height || 1280
+
+    useEffect(() => setPreviewUrl(imageUrl), [imageUrl])
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setResolutionError(null)
+
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+            const img = new Image()
+            img.onload = () => {
+                if (img.width > maxWidth || img.height > maxHeight) {
+                    setResolutionError(`Image too large. Max: ${maxWidth}x${maxHeight}. Found: ${img.width}x${img.height}`)
+                    setPreviewUrl(null)
+                    if (fileInputRef.current) fileInputRef.current.value = ""
+                    return
+                }
+                setPreviewUrl(ev.target?.result as string)
+                onFileUpload(file)
+            }
+            img.src = ev.target?.result as string
+        }
+        reader.readAsDataURL(file)
+    }
+
+    const handleRemove = () => {
+        onImageUrlChange("")
+        setPreviewUrl(null)
+        setResolutionError(null)
+        if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+
+    const displayUrl = imageUrl || previewUrl
+
+    return (
+        <div className="space-y-2">
+            <Label>Quest Image/Logo (Max 5MB, ≤{maxWidth}x{maxHeight})</Label>
+            <div className="flex items-center space-x-3">
+                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading || !!resolutionError} className="flex-grow">
+                    {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                    {isUploading ? "Uploading..." : imageUrl ? "Change" : "Upload"}
+                </Button>
+                {imageUrl && <Button type="button" variant="destructive" size="icon" onClick={handleRemove} disabled={isUploading}><Trash2 className="h-4 w-4" /></Button>}
+                <Input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isUploading} />
+            </div>
+            {(displayUrl || uploadError || resolutionError) && (
+                <div className="flex items-start space-x-3 mt-2 border p-3 rounded-lg bg-white dark:bg-gray-800">
+                    <div className="h-16 w-16 rounded-lg overflow-hidden border bg-gray-100 dark:bg-gray-700">
+                        {displayUrl ? <img src={displayUrl} alt="Preview" className="h-full w-full object-contain" /> : <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">No Img</div>}
+                    </div>
+                    <div>
+                        {(uploadError || resolutionError) && <p className="text-xs text-red-500"><AlertTriangle className="h-3 w-3 inline mr-1" />{resolutionError || uploadError}</p>}
+                        {(!uploadError && !resolutionError && imageUrl) && <p className="text-xs text-green-500"><Check className="h-3 w-3 inline mr-1" />Uploaded successfully</p>}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ==== PHASE 1 COMPONENT ====
+interface Phase1Props<T extends QuestData> {
+    newQuest: T
+    setNewQuest: React.Dispatch<React.SetStateAction<T>>
+    selectedToken: TokenConfiguration | null
+    setSelectedToken: React.Dispatch<React.SetStateAction<TokenConfiguration | null>>
+    nameError: string | null
+    setNameError: React.Dispatch<React.SetStateAction<string | null>>
+    isCheckingName: boolean
+    setIsCheckingName: React.Dispatch<React.SetStateAction<boolean>>
+    isUploadingImage: boolean
+    setIsUploadingImage: React.Dispatch<React.SetStateAction<boolean>>
+    uploadImageError: string | null
+    setUploadImageError: React.Dispatch<React.SetStateAction<string | null>>
+    handleImageUpload: (file: File) => Promise<void>
+    onDraftSaved: (faucetAddress: string) => void
+    isSavingDraft: boolean
+    setIsSavingDraft: React.Dispatch<React.SetStateAction<boolean>>
+    setError: React.Dispatch<React.SetStateAction<string | null>>
+}
+
+export default function Phase1QuestDetailsRewards<T extends QuestData>({
+    newQuest,
+    setNewQuest,
+    selectedToken,
+    setSelectedToken,
+    nameError,
+    setNameError,
+    isCheckingName,
+    setIsCheckingName,
+    isUploadingImage,
+    setIsUploadingImage,
+    uploadImageError,
+    setUploadImageError,
+    handleImageUpload,
+    onDraftSaved,
+    isSavingDraft,
+    setIsSavingDraft,
+    setError
+}: Phase1Props<T>) {
+    const { address, isConnected, chainId } = useWallet()
+    const network = useMemo(() => networks.find(n => n.chainId === BigInt(chainId || 0)) || null, [chainId])
+    const availableTokens = chainId ? ALL_TOKENS_BY_CHAIN[Number(chainId)] || [] : []
+
+    const [isCustomToken, setIsCustomToken] = useState(false)
+    const [customTokenAddress, setCustomTokenAddress] = useState('')
+    const nameCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+    const checkNameAvailabilityAPI = useCallback(async (nameToValidate: string) => {
+        if (!nameToValidate.trim()) {
+            setNameError(null)
+            return
+        }
+        setIsCheckingName(true)
+        setNameError(null)
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/check-name?name=${encodeURIComponent(nameToValidate)}`)
+            const data = await response.json()
+            if (data.exists) {
+                setNameError(`The name "${nameToValidate}" is already taken.`)
+            } else {
+                setNameError(null)
+            }
+        } catch {
+            setNameError("Could not verify name availability.")
+        } finally {
+            setIsCheckingName(false)
+        }
+    }, [setNameError, setIsCheckingName])
+
+    const handleTitleChange = useCallback((value: string) => {
+        // @ts-ignore
+        setNewQuest(prev => ({ ...prev, title: value }))
+        if (nameCheckTimeoutRef.current) clearTimeout(nameCheckTimeoutRef.current)
+        if (value.trim().length >= 3) {
+            nameCheckTimeoutRef.current = setTimeout(() => checkNameAvailabilityAPI(value.trim()), 1000)
+        } else {
+            setNameError(null)
+        }
+    }, [checkNameAvailabilityAPI, setNewQuest, setNameError])
+
+    const handleTitleBlur = useCallback(() => {
+        if (nameCheckTimeoutRef.current) clearTimeout(nameCheckTimeoutRef.current)
+    }, [])
+
+    // Helpers
+    const titleSafe = newQuest.title || "";
+    const titleLength = titleSafe.trim().length;
+
+    const getAmountPerWinner = () => {
+        if (!newQuest.rewardPool || newQuest.distributionConfig.model !== 'equal') return '0'
+        return (parseFloat(newQuest.rewardPool) / newQuest.distributionConfig.totalWinners).toFixed(6)
+    }
+
+    const calculateTotalFromTiers = () => {
+        return newQuest.distributionConfig.tiers.reduce((acc, tier) => {
+            const count = tier.rankEnd - tier.rankStart + 1
+            return acc + count * tier.amountPerUser
+        }, 0)
+    }
+
+    const handleTierChange = (index: number, field: 'rankStart' | 'rankEnd' | 'amountPerUser', value: number) => {
+        const updated = [...newQuest.distributionConfig.tiers]
+        updated[index] = { ...updated[index], [field]: value }
+        // @ts-ignore
+        setNewQuest(prev => ({
+            ...prev,
+            distributionConfig: { ...prev.distributionConfig, tiers: updated }
+        }))
+    }
+
+    const addTier = () => {
+        const last = newQuest.distributionConfig.tiers[newQuest.distributionConfig.tiers.length - 1]
+        const start = last ? last.rankEnd + 1 : 1
+        // @ts-ignore
+        setNewQuest(prev => ({
+            ...prev,
+            distributionConfig: {
+                ...prev.distributionConfig,
+                tiers: [...prev.distributionConfig.tiers, { rankStart: start, rankEnd: start, amountPerUser: 0 }]
+            }
+        }))
+    }
+
+    const removeTier = (index: number) => {
+        // @ts-ignore
+        setNewQuest(prev => ({
+            ...prev,
+            distributionConfig: {
+                ...prev.distributionConfig,
+                tiers: prev.distributionConfig.tiers.filter((_, i) => i !== index)
+            }
+        }))
+    }
+
+    const handleSaveDraft = async () => {
+        if (!address || !isConnected || !selectedToken || (newQuest.title || "").trim().length < 3 || nameError || !newQuest.imageUrl || !newQuest.rewardPool || parseFloat(newQuest.rewardPool) <= 0) {
+            setError("Complete all required fields")
+            return
+        }
+
+        setIsSavingDraft(true)
+        try {
+            // Generate a temporary draft ID since we are NOT deploying yet
+            const draftId = newQuest.faucetAddress || `draft-${crypto.randomUUID()}`
+
+            const payload = {
+                creatorAddress: address,
+                title: newQuest.title.trim(),
+                description: newQuest.description,
+                imageUrl: newQuest.imageUrl,
+                rewardPool: newQuest.rewardPool,
+                rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
+                tokenAddress: selectedToken.address,
+                distributionConfig: newQuest.distributionConfig,
+                faucetAddress: draftId // Send Draft ID instead of real address
+            }
+
+            const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+
+            if (!res.ok) throw new Error(await res.text())
+
+            toast.success("Draft saved successfully!")
+            // Pass the draft ID to the next phase
+            onDraftSaved(draftId)
+        } catch (e: any) {
+            setError(e.message || "Draft save failed")
+        } finally {
+            setIsSavingDraft(false)
+        }
+    }
+
+    const poolAmount = parseFloat(newQuest.rewardPool || '0') || 10000
+
+    return (
+        <div className="space-y-12 max-w-5xl mx-auto py-8">
+            {/* Step 1 Content */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2"><Settings className="h-5 w-5" /> Step 1: Basic Quest Details</CardTitle>
+                    <CardDescription>The Title is used as the Faucet name.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                        <Label>Quest Title (Faucet Name)</Label>
+                        <div className="relative">
+                            <Input
+                                value={titleSafe}
+                                onChange={(e) => handleTitleChange(e.target.value)}
+                                onBlur={handleTitleBlur}
+                                placeholder="e.g. FaucetDrop Launch Campaign"
+                                className={nameError ? "border-red-500 pr-10" : (!isCheckingName && titleLength >= 3 && !nameError) ? "border-green-500 pr-10" : "pr-10"}
+                                disabled={isCheckingName}
+                            />
+                            {isCheckingName && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-500" />}
+                            {!isCheckingName && titleLength >= 3 && (nameError ? <AlertTriangle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" /> : <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />)}
+                        </div>
+                        {titleLength > 0 && titleLength < 3 && <p className="text-xs text-red-500">At least 3 characters</p>}
+                        {nameError && titleLength >= 3 && <p className="text-xs text-red-500">{nameError}</p>}
+                        {isCheckingName && <p className="text-xs text-blue-500">Checking availability...</p>}
+                    </div>
+
+                    <ImageUploadField
+                        imageUrl={newQuest.imageUrl}
+                        // @ts-ignore
+                        onImageUrlChange={(url) => setNewQuest(prev => ({ ...prev, imageUrl: url }))}
+                        onFileUpload={handleImageUpload}
+                        isUploading={isUploadingImage}
+                        uploadError={uploadImageError}
+                        requiredResolution={{ width: 1280, height: 1280 }}
+                    />
+
+                    <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Textarea
+                            value={newQuest.description || ""}
+                            // @ts-ignore
+                            onChange={(e) => setNewQuest(prev => ({ ...prev, description: e.target.value }))}
+                            placeholder="Describe your quest campaign"
+                            rows={3}
+                        />
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Step 2 Content */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2"><Coins className="h-5 w-5" /> Step 2: Rewards Configuration</CardTitle>
+                    <CardDescription>Choose token and distribution model</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                        <Label>Reward Token ({network?.name || 'Unknown'})</Label>
+                        <Select value={isCustomToken ? "custom" : selectedToken?.address} onValueChange={(v) => {
+                            if (v === "custom") {
+                                setIsCustomToken(true)
+                                setSelectedToken(null)
+                            } else {
+                                const token = availableTokens.find(t => t.address === v)
+                                if (token) {
+                                    setSelectedToken(token)
+                                    setIsCustomToken(false)
+                                    setCustomTokenAddress('')
+                                    // @ts-ignore
+                                    setNewQuest(prev => ({
+                                        ...prev,
+                                        rewardTokenType: token.isNative ? 'native' : 'erc20',
+                                        tokenAddress: token.address
+                                    }))
+                                }
+                            }
+                        }}>
+                            <SelectTrigger><SelectValue placeholder="Select token" /></SelectTrigger>
+                            <SelectContent>
+                                {availableTokens.map(t => <SelectItem key={t.address} value={t.address}>{t.name} ({t.symbol})</SelectItem>)}
+                                <SelectItem value="custom">+ Custom Token</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {isCustomToken && (
+                        <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                            <Label>Custom Token Address</Label>
+                            <div className="flex gap-2 mt-2">
+                                <Input value={customTokenAddress} onChange={(e) => setCustomTokenAddress(e.target.value)} placeholder="0x..." />
+                                <Button onClick={() => {
+                                    if (isAddress(customTokenAddress)) {
+                                        setSelectedToken({ address: customTokenAddress, name: 'Custom', symbol: 'TOK', decimals: 18 })
+                                        setIsCustomToken(false)
+                                        // @ts-ignore
+                                        setNewQuest(prev => ({ ...prev, rewardTokenType: 'erc20', tokenAddress: customTokenAddress }))
+                                    }
+                                }}>Set</Button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label>Number of Winners</Label>
+                                <Input type="number" min="1" value={newQuest.distributionConfig.totalWinners} onChange={(e) =>
+                                    // @ts-ignore
+                                    setNewQuest(prev => ({
+                                        ...prev,
+                                        distributionConfig: { ...prev.distributionConfig, totalWinners: parseInt(e.target.value) || 1 }
+                                    }))} />
+                            </div>
+                            <div>
+                                <Label>Distribution Model</Label>
+                                <Select value={newQuest.distributionConfig.model} onValueChange={(v: any) =>
+                                    // @ts-ignore
+                                    setNewQuest(prev => ({
+                                        ...prev,
+                                        distributionConfig: { ...prev.distributionConfig, model: v, tiers: v === 'custom_tiers' ? prev.distributionConfig.tiers : [] }
+                                    }))}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="equal">Equal</SelectItem>
+                                        <SelectItem value="quadratic">Quadratic</SelectItem>
+                                        <SelectItem value="custom_tiers">Custom Tiers</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        {newQuest.distributionConfig.model === 'equal' && (
+                            <>
+                                <div>
+                                    <Label>Total Reward Pool ({selectedToken?.symbol})</Label>
+                                    <Input type="number" value={newQuest.rewardPool} onChange={(e) =>
+                                        // @ts-ignore
+                                        setNewQuest(prev => ({ ...prev, rewardPool: e.target.value }))} />
+                                </div>
+                                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded">
+                                    <p>Each winner gets: <strong>{getAmountPerWinner()} {selectedToken?.symbol}</strong></p>
+                                    <p className="text-xs mt-2">Deposit needed (incl. 5% fee): <strong>{newQuest.rewardPool ? (parseFloat(newQuest.rewardPool) * 1.05).toFixed(4) : 0} {selectedToken?.symbol}</strong></p>
+                                </div>
+                            </>
+                        )}
+
+                        {newQuest.distributionConfig.model === 'quadratic' && (
+                            <>
+                                <div>
+                                    <Label>Total Reward Pool ({selectedToken?.symbol})</Label>
+                                    <Input type="number" value={newQuest.rewardPool} onChange={(e) =>
+                                        // @ts-ignore
+                                        setNewQuest(prev => ({ ...prev, rewardPool: e.target.value }))} />
+                                </div>
+                                <div className="border rounded overflow-hidden">
+                                    <div className="grid grid-cols-5 text-xs font-medium bg-gray-100 dark:bg-gray-800 p-3">
+                                        <div>Rank</div><div>Points</div><div>Weight</div><div>Share %</div><div>Reward</div>
+                                    </div>
+                                    {examplePoints.map((p, i) => {
+                                        const share = totalWeight ? (weights[i] / totalWeight * 100).toFixed(2) : 0
+                                        const reward = totalWeight ? (weights[i] / totalWeight * poolAmount).toFixed(4) : 0
+                                        return (
+                                            <div key={i} className="grid grid-cols-5 text-xs p-3 border-t">
+                                                <div>#{i + 1}</div>
+                                                <div>{p.toLocaleString()}</div>
+                                                <div>{weights[i].toFixed(2)}</div>
+                                                <div>{share}%</div>
+                                                <div>{reward}</div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </>
+                        )}
+
+                        {newQuest.distributionConfig.model === 'custom_tiers' && (
+                            <div className="space-y-3">
+                                <div className="flex justify-between">
+                                    <Label>Custom Tiers</Label>
+                                    <Button size="sm" variant="outline" onClick={addTier}><Plus className="h-4 w-4 mr-1" />Add Tier</Button>
+                                </div>
+                                {newQuest.distributionConfig.tiers.map((tier, i) => (
+                                    <div key={i} className="flex gap-2 items-end">
+                                        <Input type="number" placeholder="From" value={tier.rankStart} onChange={(e) => handleTierChange(i, 'rankStart', parseInt(e.target.value) || 1)} />
+                                        <Input type="number" placeholder="To" value={tier.rankEnd} onChange={(e) => handleTierChange(i, 'rankEnd', parseInt(e.target.value) || 1)} />
+                                        <Input type="number" placeholder="Amount" value={tier.amountPerUser} onChange={(e) => handleTierChange(i, 'amountPerUser', parseFloat(e.target.value) || 0)} />
+                                        <Button variant="ghost" size="icon" onClick={() => removeTier(i)}><Trash2 className="h-4 w-4" /></Button>
+                                    </div>
+                                ))}
+                                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded">
+                                    <p>Total Pool: <strong>{calculateTotalFromTiers().toFixed(4)} {selectedToken?.symbol}</strong></p>
+                                    <p className="text-xs">With 5% fee: <strong>{(calculateTotalFromTiers() * 1.05).toFixed(4)}</strong></p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="pt-8 border-t text-center">
+                        <Button size="lg" onClick={handleSaveDraft} disabled={isSavingDraft}>
+                            {isSavingDraft ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                            Save as Draft (No Deploy)
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}

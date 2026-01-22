@@ -12,55 +12,15 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Skeleton } from "@/components/ui/skeleton"
-import { motion } from "framer-motion"
 import { 
-    Settings, Search, Copy, ExternalLink, 
-    LayoutGrid, List as ListIcon, Wallet, Loader2
+    Settings, Search, Copy, Wallet, Loader2,
+    ScrollText, PencilRuler, Rocket, Trash2 // Added Trash2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 import { ProfileSettingsModal } from "@/components/profile-setting" 
 import { MyCreationsModal } from "@/components/my-creations-modal" 
 import { CreateNewModal } from "@/components/create-new-modal" 
-
-// // --- Christmas Bubble Animation Component ---
-// const ChristmasBackground = () => {
-//     const bubbles = useMemo(() => [...Array(15)].map((_, i) => ({
-//         id: i,
-//         size: Math.random() * 20 + 10,
-//         left: Math.random() * 100,
-//         delay: Math.random() * 5,
-//         duration: Math.random() * 10 + 10,
-//         emoji: ['🔴', '🟢', '❄️', '✨', '🎁', '🔔'][i % 6]
-//     })), []);
-
-//     return (
-//         <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-//             {bubbles.map((b) => (
-//                 <motion.div
-//                     key={b.id}
-//                     initial={{ y: -50, x: `${b.left}%`, opacity: 0 }}
-//                     animate={{ 
-//                         y: "110vh", 
-//                         opacity: [0, 1, 1, 0],
-//                         x: [`${b.left}%`, `${b.left + (Math.sin(b.id) * 5)}%`, `${b.left}%`]
-//                     }}
-//                     transition={{ 
-//                         duration: b.duration, 
-//                         repeat: Infinity, 
-//                         ease: "linear",
-//                         delay: b.delay 
-//                     }}
-//                     className="absolute select-none"
-//                     style={{ fontSize: b.size }}
-//                 >
-//                     {b.emoji}
-//                 </motion.div>
-//             ))}
-//         </div>
-//     );
-// };
 
 // --- Custom Icons ---
 const XIcon = ({ className }: { className?: string }) => (
@@ -87,6 +47,20 @@ interface FaucetData {
     createdAt?: string;
 }
 
+interface QuestData {
+    _id?: string;
+    id?: string;
+    title: string;
+    description: string;
+    imageUrl: string;
+    faucetAddress?: string;
+    creatorAddress?: string;
+    status?: 'draft' | 'published';
+    createdAt?: string;
+    participantCount?: number;
+    // ... any other fields
+}
+
 interface UserProfileData {
     wallet_address: string;
     username: string;
@@ -100,7 +74,7 @@ interface UserProfileData {
 }
 
 export default function DashboardPage() {
-    const backendUrl = "https://fauctdrop-backend.onrender.com"; 
+    const backendUrl = "http://127.0.0.1:8000"; 
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
@@ -109,19 +83,49 @@ export default function DashboardPage() {
     
     const targetUsername = params.username as string;
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    
+    // Data State
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
+    const [publishedQuests, setPublishedQuests] = useState<QuestData[]>([]);
+    const [draftQuests, setDraftQuests] = useState<QuestData[]>([]);
+    
     const [profile, setProfile] = useState<UserProfileData | null>(null);
-    const [questCount, setQuestCount] = useState<number>(0);
     const [quizCount, setQuizCount] = useState<number>(0);
     const [loading, setLoading] = useState(true);
+    
+    // Filters & UI State
     const [searchQuery, setSearchQuery] = useState("");
     const [networkFilter, setNetworkFilter] = useState("all");
+    const [activeTab, setActiveTab] = useState("faucets");
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
     const isOwner = useMemo(() => {
         if (!connectedAddress || !profile?.wallet_address) return false;
         return connectedAddress.toLowerCase() === profile.wallet_address.toLowerCase();
     }, [connectedAddress, profile]);
+
+    // --- FUNCTION: Delete Draft ---
+    const handleDeleteDraft = async (draftId: string) => {
+        if (!confirm("Are you sure you want to delete this draft?")) return;
+        
+        try {
+            const res = await fetch(`${backendUrl}/api/quests/draft/${draftId}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                toast({ title: "Draft deleted successfully" });
+                // Update State to remove item immediately
+                setDraftQuests(prev => prev.filter(q => q.faucetAddress !== draftId));
+            } else {
+                toast({ title: "Failed to delete draft", variant: "destructive" });
+            }
+        } catch (e) {
+            console.error(e);
+            toast({ title: "Error deleting draft", variant: "destructive" });
+        }
+    }
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -136,16 +140,44 @@ export default function DashboardPage() {
                 const userWallet = userProfile.wallet_address;
                 
                 if (userWallet) {
+                    // Fetch Faucets
                     const faucetData = await getUserFaucets(userWallet);
                     setFaucets(faucetData);
 
+                    // Fetch Quests
                     const questRes = await fetch(`${backendUrl}/api/quests`);
                     const qData = await questRes.json();
+                    
                     if (qData.success) {
+                        // Filter Published Quests
                         const myQuests = qData.quests.filter((q: any) => 
                             q.creatorAddress.toLowerCase() === userWallet.toLowerCase()
                         );
-                        setQuestCount(myQuests.length);
+                        setPublishedQuests(myQuests);
+                    }
+
+                    // Fetch Drafts (Only if viewing own profile)
+                    if (isConnected && connectedAddress && userWallet.toLowerCase() === connectedAddress.toLowerCase()) {
+                        try {
+                            const draftRes = await fetch(`${backendUrl}/api/quests/drafts/${userWallet}`);
+                            if (draftRes.ok) {
+                                const dData = await draftRes.json();
+                                if (dData.success) {
+                                    // MAP snake_case DB fields to camelCase for the UI
+                                    const formattedDrafts = dData.drafts.map((d: any) => ({
+                                        ...d,
+                                        faucetAddress: d.faucet_address, 
+                                        creatorAddress: d.creator_address,
+                                        imageUrl: d.image_url,
+                                        title: d.title,
+                                        description: d.description
+                                    }));
+                                    setDraftQuests(formattedDrafts);
+                                }
+                            }
+                        } catch (err) {
+                            console.log("No drafts found", err);
+                        }
                     }
                 }
             } else {
@@ -154,39 +186,27 @@ export default function DashboardPage() {
                 connectedAddress && 
                 targetUsername.toLowerCase() === connectedAddress.toLowerCase();
 
-            if (isViewingOwnNewProfile) {
-                setProfile({
-                    wallet_address: connectedAddress,
-                    username: "New User", // Placeholder until they save settings
-                    bio: "You haven't set up your profile yet. Click settings to get started!",
-                    avatar_url: "" 
-                });
-                
-                // Still try to fetch faucets for this address even if no profile exists
-                const faucetData = await getUserFaucets(connectedAddress);
-                setFaucets(faucetData);
-            } else {
-                toast({ title: "User not found", variant: "destructive" });
-                setProfile(null);
+                if (isViewingOwnNewProfile) {
+                    setProfile({
+                        wallet_address: connectedAddress,
+                        username: "New User", 
+                        bio: "You haven't set up your profile yet. Click settings to get started!",
+                        avatar_url: "" 
+                    });
+                    
+                    const faucetData = await getUserFaucets(connectedAddress);
+                    setFaucets(faucetData);
+                } else {
+                    toast({ title: "User not found", variant: "destructive" });
+                    setProfile(null);
+                }
             }
+        } catch (error) {
+            console.error("Dashboard load error:", error);
+        } finally {
+            setLoading(false);
         }
-    } catch (error) {
-        console.error("Dashboard load error:", error);
-    } finally {
-        setLoading(false);
-    }
-}, [targetUsername, connectedAddress, isConnected, backendUrl]);
-
-    useEffect(() => {
-    // If the profile is the fallback "New User" and it's the owner viewing it
-    if (profile && profile.username === "New User" && isOwner) {
-        // Optional: Add a slight delay for better UX
-        const timer = setTimeout(() => {
-            setIsSettingsOpen(true);
-        }, 1000);
-        return () => clearTimeout(timer);
-    }
-}, [profile, isOwner]);
+    }, [targetUsername, connectedAddress, isConnected, backendUrl]);
 
     useEffect(() => {
         if (targetUsername) fetchData();
@@ -231,8 +251,6 @@ export default function DashboardPage() {
 
     return (
         <main className="min-h-screen bg-background pb-20 relative overflow-x-hidden">
-            {/* <ChristmasBackground /> */}
-            
             <div className="container mx-auto px-4 py-8 relative z-10 max-w-7xl">
                 <Header pageTitle={isOwner ? "My Dashboard" : `${profile.username}'s Space`} />
 
@@ -240,15 +258,7 @@ export default function DashboardPage() {
                 <div className="mb-10">
                     <Card className="border-none bg-gradient-to-r from-primary/5 via-primary/10 to-background shadow-sm">
                         <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center gap-6">
-                            
-                            {/* Christmas Cap "Under" Image Logic */}
                             <div className="relative">
-                                {/* The Cap: z-0 (behind), peeking from top-right */}
-                                {/* <div className="absolute -top-6 -right-4 z-0 pointer-events-none rotate-[15deg] drop-shadow-md text-6xl">
-                                    ❄️
-                                </div> */}
-                                
-                                {/* Avatar: z-10 (on top) */}
                                 <Avatar className="h-24 w-24 border-4 border-background shadow-lg relative z-10">
                                     <AvatarImage src={profile.avatar_url} className="object-cover" />
                                     <AvatarFallback className="bg-primary text-white text-2xl">
@@ -268,53 +278,15 @@ export default function DashboardPage() {
                                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
                                         {profile.username}
                                     </h1>
-                                    
                                     <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
                                         {profile?.twitter_handle && (
-                                            <a 
-                                                href={getSocialUrl('twitter', profile.twitter_handle)} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="no-underline"
-                                            >
-                                                <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 hover:underline border-blue-100 gap-1.5 pl-2 pr-2.5 cursor-pointer transition-colors">
-                                                    <XIcon className="h-3 w-3" />
-                                                    {profile.twitter_handle.replace('@', '')}
+                                            <a href={getSocialUrl('twitter', profile.twitter_handle)} target="_blank" rel="noopener noreferrer" className="no-underline">
+                                                <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-100 gap-1.5 pl-2 pr-2.5 cursor-pointer">
+                                                    <XIcon className="h-3 w-3" /> {profile.twitter_handle.replace('@', '')}
                                                 </Badge>
                                             </a>
                                         )}
-                                        {profile?.telegram_handle && (
-                                            <a 
-                                                href={getSocialUrl('telegram', profile.telegram_handle)} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="no-underline"
-                                            >
-                                                <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 hover:underline border-sky-100 gap-1.5 pl-2 pr-2.5 cursor-pointer transition-colors">
-                                                    <TelegramIcon className="h-3 w-3" />
-                                                    {profile.telegram_handle.replace('@', '')}
-                                                </Badge>
-                                            </a>
-                                        )}
-                                        {profile?.farcaster_handle && (
-                                            <a 
-                                                href={getSocialUrl('farcaster', profile.farcaster_handle)} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer"
-                                                className="no-underline"
-                                            >
-                                                <Badge variant="secondary" className="bg-purple-50 text-purple-700 hover:bg-purple-100 hover:underline border-purple-100 gap-1.5 pl-2 pr-2.5 cursor-pointer transition-colors">
-                                                    <FarcasterIcon className="h-3 w-3" />
-                                                    {profile.farcaster_handle}
-                                                </Badge>
-                                            </a>
-                                        )}
-                                        {profile?.discord_handle && (
-                                            <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-100 gap-1.5 pl-2 pr-2.5 cursor-default transition-colors">
-                                                <DiscordIcon className="h-3 w-3" />
-                                                {profile.discord_handle}
-                                            </Badge>
-                                        )}
+                                        {/* Add other socials here as needed */}
                                     </div>
                                 </div>
 
@@ -326,11 +298,9 @@ export default function DashboardPage() {
                                     </Button>
                                 </div>
 
-                                {profile.bio ? (
-                                    <p className="text-sm text-muted-foreground max-w-2xl line-clamp-2">{profile.bio}</p>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground italic">No festive bio set yet.</p>
-                                )}
+                                <p className="text-sm text-muted-foreground max-w-2xl line-clamp-2">
+                                    {profile.bio || "No bio set yet."}
+                                </p>
                             </div>
 
                             {/* STATS SECTION */}
@@ -341,7 +311,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="h-10 w-[1px] bg-border" />
                                 <div className="text-center">
-                                    <div className="text-2xl font-bold">{questCount}</div> 
+                                    <div className="text-2xl font-bold">{publishedQuests.length}</div> 
                                     <div className="text-xs text-muted-foreground uppercase font-semibold">Quests</div>
                                 </div>
                                 <div className="h-10 w-[1px] bg-border" />
@@ -354,54 +324,133 @@ export default function DashboardPage() {
                     </Card>
                 </div>
 
-                {/* --- 2. ACTION BAR --- */}
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8">
-                    <div>
-                        <h2 className="text-2xl font-bold tracking-tight">Active Deployments</h2>
-                        <p className="text-muted-foreground mt-1">Token distributions on {targetUsername}&apos;s space.</p>
+                {/* --- 2. ACTION BAR & TABS --- */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+                    <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setActiveTab('faucets')}
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'faucets' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            Faucets ({faucets.length})
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('quests')}
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'quests' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            Quests ({publishedQuests.length + (isOwner ? draftQuests.length : 0)})
+                        </button>
                     </div>
+
                     {isOwner && (
-                        <div className="flex flex-wrap gap-3 mt-4 md:mt-0">
+                        <div className="flex flex-wrap gap-3">
                             <MyCreationsModal faucets={faucets} address={connectedAddress!} />
                             <CreateNewModal onSuccess={fetchData} />
                         </div>
                     )}
                 </div>
 
-                {/* --- 3. FILTERS --- */}
-                <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search deployments..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                    </div>
-                    <Select value={networkFilter} onValueChange={setNetworkFilter}>
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                            <SelectValue placeholder="All Networks" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Networks</SelectItem>
-                            {networks.map(n => <SelectItem key={n.chainId} value={n.chainId.toString()}>{n.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
+                {/* --- 3. MAIN CONTENT --- */}
+                
+                {/* TAB: FAUCETS */}
+                {activeTab === 'faucets' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                         <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Search faucets..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                            </div>
+                            <Select value={networkFilter} onValueChange={setNetworkFilter}>
+                                <SelectTrigger className="w-full sm:w-[180px]">
+                                    <SelectValue placeholder="All Networks" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Networks</SelectItem>
+                                    {networks.map(n => <SelectItem key={n.chainId} value={n.chainId.toString()}>{n.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                {/* --- 4. FAUCET LIST --- */}
-                <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "space-y-4"}>
-                    {filteredFaucets.map((faucet) => (
-                        <FaucetCard 
-                            key={faucet.faucetAddress} 
-                            faucet={faucet} 
-                            getNetworkName={getNetworkName}
-                            getNetworkColor={getNetworkColor}
-                            onManage={() => router.push(`/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`)}
-                            isOwner={isOwner}
-                        />
-                    ))}
-                </div>
+                        <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "space-y-4"}>
+                            {filteredFaucets.length > 0 ? filteredFaucets.map((faucet) => (
+                                <FaucetCard 
+                                    key={faucet.faucetAddress} 
+                                    faucet={faucet} 
+                                    getNetworkName={getNetworkName}
+                                    getNetworkColor={getNetworkColor}
+                                    onManage={() => router.push(`/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`)}
+                                    isOwner={isOwner}
+                                />
+                            )) : (
+                                <div className="col-span-full text-center py-10 text-muted-foreground">No faucets found matching your filters.</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* TAB: QUESTS */}
+                {activeTab === 'quests' && (
+                    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        
+                        {/* Section: Active Quests */}
+                        <div>
+                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                <Rocket className="h-5 w-5 text-blue-500" /> Published Quests
+                            </h3>
+                            {publishedQuests.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {publishedQuests.map((quest) => (
+                                        <QuestCard 
+                                            key={quest._id || quest.id} 
+                                            quest={quest} 
+                                            type="published"
+                                            onClick={() => router.push(`/quest/${quest._id || quest.id}`)}
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 border rounded-lg bg-muted/20 text-muted-foreground">
+                                    No published quests yet.
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Section: Drafts (Only for Owner) */}
+                        {isOwner && (
+                            <div>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                                        <PencilRuler className="h-5 w-5 text-orange-500" /> Drafts
+                                    </h3>
+                                    <Badge variant="outline" className="border-orange-200 text-orange-600 bg-orange-50">{draftQuests.length}</Badge>
+                                </div>
+                                
+                                {draftQuests.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {draftQuests.map((quest) => (
+                                            <QuestCard 
+                                                key={quest._id || quest.id} 
+                                                quest={quest} 
+                                                type="draft"
+                                                onClick={() => router.push(`/quest/create-quest?draftId=${quest.faucetAddress}`)}
+                                                onDelete={handleDeleteDraft}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 border border-dashed rounded-lg bg-muted/10 text-muted-foreground">
+                                        No drafts in progress.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </main>
     )
 }
+
+// --- SUB-COMPONENTS ---
 
 function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner }: any) {
     const networkName = getNetworkName(faucet.chainId)
@@ -411,7 +460,6 @@ function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner
         <Card className="hover:shadow-lg transition-all duration-200 flex flex-col group border-l-4" style={{ borderLeftColor: networkColor }}>
             <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
-                    {/* Network Badge Restored */}
                     <Badge variant="outline" className="mb-2 bg-background" style={{ borderColor: networkColor, color: networkColor }}>
                         <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: networkColor }}></span>
                         {networkName}
@@ -430,6 +478,62 @@ function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner
                     <Settings className="h-4 w-4 mr-2" /> {isOwner ? "Manage" : "View"} Distribution
                 </Button>
             </div>
+        </Card>
+    )
+}
+
+interface QuestCardProps {
+    quest: QuestData;
+    type: 'published' | 'draft';
+    onClick: () => void;
+    onDelete?: (id: string) => void;
+}
+
+function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
+    return (
+        <Card className={`hover:shadow-md transition-all group ${type === 'draft' ? 'border-dashed border-orange-200 bg-orange-50/10' : ''}`}>
+            <div className="relative h-32 w-full bg-muted overflow-hidden rounded-t-lg cursor-pointer" onClick={onClick}>
+                <img src={quest.imageUrl || "https://placehold.co/600x400?text=Quest"} alt={quest.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                
+                {/* Delete Button for Drafts */}
+                {type === 'draft' && onDelete && (
+                    <Button 
+                        variant="destructive" 
+                        size="icon" 
+                        className="absolute top-2 right-2 h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        onClick={(e) => {
+                            e.stopPropagation(); // Prevent card click
+                            if (quest.faucetAddress) {
+                                onDelete(quest.faucetAddress);
+                            }
+                        }}
+                    >
+                        <Trash2 className="h-3 w-3" />
+                    </Button>
+                )}
+                
+                <div className="absolute top-2 left-2">
+                    {type === 'draft' ? (
+                        <Badge className="bg-orange-500 text-white">Draft</Badge>
+                    ) : (
+                        <Badge className="bg-green-500 text-white">Active</Badge>
+                    )}
+                </div>
+            </div>
+            <CardContent className="p-4">
+                <h4 className="font-bold truncate text-base mb-1">{quest.title || "Untitled Draft"}</h4>
+                <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-3">
+                    {quest.description || "No description provided."}
+                </p>
+                
+                <Button variant={type === 'draft' ? "outline" : "default"} size="sm" className="w-full" onClick={onClick}>
+                    {type === 'draft' ? (
+                        <><PencilRuler className="h-3 w-3 mr-2" /> Continue Editing</>
+                    ) : (
+                        <><ScrollText className="h-3 w-3 mr-2" /> View Quest</>
+                    )}
+                </Button>
+            </CardContent>
         </Card>
     )
 }

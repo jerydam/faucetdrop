@@ -1,3 +1,4 @@
+// components/quest/questBasic.tsx
 "use client"
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
@@ -9,24 +10,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from 'sonner'
 import {
-    Upload,
-    Loader2,
-    Trash2,
-    Check,
-    AlertTriangle,
-    Coins,
-    Settings,
-    Save,
-    Plus
+    Upload, Loader2, Trash2, Check, AlertTriangle, Coins, Settings, Save, Plus, DollarSign
 } from "lucide-react"
 
 import { useWallet } from "@/hooks/use-wallet"
 import { ZeroAddress } from 'ethers'
 import { type Network } from "@/lib/faucet"
 
-// ==== SHARED CONFIG & TYPES ====
+// ==== CONFIG ====
 const API_BASE_URL = "http://127.0.0.1:8000"
-const zeroAddress = ZeroAddress
+const MIN_POOL_USD_VALUE = 50; // $50 Minimum
 
 const networks: Network[] = [
     {
@@ -59,17 +52,27 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
         { address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "USD Coin stablecoin" },
     ],
     1135: [
-        { address: zeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
+        { address: ZeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
         { address: "0xac485391EB2d7D88253a7F1eF18C37f4242D1A24", name: "Lisk", symbol: "LSK", decimals: 18, logoUrl: "/lsk.png", description: "Lisk native token" },
     ],
     42161: [
-        { address: zeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
+        { address: ZeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
         { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "Native USD Coin" },
     ],
     8453: [
-        { address: zeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
+        { address: ZeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
         { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "Native USD Coin" },
     ]
+}
+
+// Map tokens to CoinGecko IDs for price fetching
+const COINGECKO_IDS: Record<string, string> = {
+    "CELO": "celo",
+    "cUSD": "celo-dollar",
+    "USDT": "tether",
+    "USDC": "usd-coin",
+    "ETH": "ethereum",
+    "LSK": "lisk"
 }
 
 export interface TokenConfiguration {
@@ -227,6 +230,46 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     const [isCustomToken, setIsCustomToken] = useState(false)
     const [customTokenAddress, setCustomTokenAddress] = useState('')
     const nameCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    
+    // --- PRICE CALCULATION STATE ---
+    const [tokenPrice, setTokenPrice] = useState<number>(0)
+    const [isFetchingPrice, setIsFetchingPrice] = useState(false)
+
+    // --- FETCH TOKEN PRICE ---
+    const fetchTokenPrice = async (symbol: string) => {
+        setIsFetchingPrice(true)
+        try {
+            // Find CoinGecko ID or default to ethereum for unknown
+            const coingeckoId = COINGECKO_IDS[symbol] || "ethereum" 
+            
+            const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoId}&vs_currencies=usd`)
+            const data = await res.json()
+            
+            if (data[coingeckoId] && data[coingeckoId].usd) {
+                setTokenPrice(data[coingeckoId].usd)
+            } else {
+                setTokenPrice(0) // Price not found
+            }
+        } catch (e) {
+            console.error("Error fetching price", e)
+            setTokenPrice(0)
+        } finally {
+            setIsFetchingPrice(false)
+        }
+    }
+
+    // Trigger price fetch when token changes
+    useEffect(() => {
+        if (selectedToken) {
+            fetchTokenPrice(selectedToken.symbol)
+        }
+    }, [selectedToken])
+
+    // Calculate USD Value & Min Amount
+    const poolAmount = parseFloat(newQuest.rewardPool || '0')
+    const poolUsdValue = poolAmount * tokenPrice
+    const isBelowMin = poolUsdValue > 0 && poolUsdValue < MIN_POOL_USD_VALUE
+    const minTokenAmount = tokenPrice > 0 ? (MIN_POOL_USD_VALUE / tokenPrice).toFixed(4) : "0"
 
     const checkNameAvailabilityAPI = useCallback(async (nameToValidate: string) => {
         if (!nameToValidate.trim()) {
@@ -265,7 +308,6 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         if (nameCheckTimeoutRef.current) clearTimeout(nameCheckTimeoutRef.current)
     }, [])
 
-    // Helpers
     const titleSafe = newQuest.title || "";
     const titleLength = titleSafe.trim().length;
 
@@ -316,6 +358,12 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     }
 
     const handleSaveDraft = async () => {
+        // --- ADD VALIDATION HERE ---
+        if (isBelowMin) {
+            setError(`Reward pool must be at least $${MIN_POOL_USD_VALUE} USD (approx ${minTokenAmount} ${selectedToken?.symbol})`)
+            return
+        }
+
         if (!address || !isConnected || !selectedToken || (newQuest.title || "").trim().length < 3 || nameError || !newQuest.imageUrl || !newQuest.rewardPool || parseFloat(newQuest.rewardPool) <= 0) {
             setError("Complete all required fields")
             return
@@ -323,7 +371,6 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
 
         setIsSavingDraft(true)
         try {
-            // Generate a temporary draft ID since we are NOT deploying yet
             const draftId = newQuest.faucetAddress || `draft-${crypto.randomUUID()}`
 
             const payload = {
@@ -335,7 +382,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                 rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
                 tokenAddress: selectedToken.address,
                 distributionConfig: newQuest.distributionConfig,
-                faucetAddress: draftId // Send Draft ID instead of real address
+                faucetAddress: draftId 
             }
 
             const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
@@ -347,7 +394,6 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
             if (!res.ok) throw new Error(await res.text())
 
             toast.success("Draft saved successfully!")
-            // Pass the draft ID to the next phase
             onDraftSaved(draftId)
         } catch (e: any) {
             setError(e.message || "Draft save failed")
@@ -356,11 +402,8 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         }
     }
 
-    const poolAmount = parseFloat(newQuest.rewardPool || '0') || 10000
-
     return (
         <div className="space-y-12 max-w-5xl mx-auto py-8">
-            {/* Step 1 Content */}
             <Card>
                 <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2"><Settings className="h-5 w-5" /> Step 1: Basic Quest Details</CardTitle>
@@ -409,7 +452,6 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                 </CardContent>
             </Card>
 
-            {/* Step 2 Content */}
             <Card>
                 <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2"><Coins className="h-5 w-5" /> Step 2: Rewards Configuration</CardTitle>
@@ -494,10 +536,31 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                         {newQuest.distributionConfig.model === 'equal' && (
                             <>
                                 <div>
-                                    <Label>Total Reward Pool ({selectedToken?.symbol})</Label>
-                                    <Input type="number" value={newQuest.rewardPool} onChange={(e) =>
-                                        // @ts-ignore
-                                        setNewQuest(prev => ({ ...prev, rewardPool: e.target.value }))} />
+                                    <div className="flex justify-between">
+                                        <Label>Total Reward Pool ({selectedToken?.symbol})</Label>
+                                        {tokenPrice > 0 && <span className="text-xs text-muted-foreground font-mono">1 {selectedToken?.symbol} ≈ ${tokenPrice.toFixed(2)}</span>}
+                                    </div>
+                                    <div className="relative mt-1">
+                                        <Input 
+                                            type="number" 
+                                            value={newQuest.rewardPool} 
+                                            // @ts-ignore
+                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value }))} 
+                                            className={isBelowMin ? "border-red-500" : ""}
+                                        />
+                                        {tokenPrice > 0 && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground flex items-center gap-1">
+                                                <DollarSign className="h-3 w-3" />
+                                                {poolUsdValue.toFixed(2)}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {isBelowMin && (
+                                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            Minimum pool value is ${MIN_POOL_USD_VALUE} (~{minTokenAmount} {selectedToken?.symbol})
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded">
                                     <p>Each winner gets: <strong>{getAmountPerWinner()} {selectedToken?.symbol}</strong></p>
@@ -510,9 +573,27 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                             <>
                                 <div>
                                     <Label>Total Reward Pool ({selectedToken?.symbol})</Label>
-                                    <Input type="number" value={newQuest.rewardPool} onChange={(e) =>
-                                        // @ts-ignore
-                                        setNewQuest(prev => ({ ...prev, rewardPool: e.target.value }))} />
+                                    <div className="relative mt-1">
+                                        <Input 
+                                            type="number" 
+                                            value={newQuest.rewardPool} 
+                                            // @ts-ignore
+                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value }))} 
+                                            className={isBelowMin ? "border-red-500" : ""}
+                                        />
+                                        {tokenPrice > 0 && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground flex items-center gap-1">
+                                                <DollarSign className="h-3 w-3" />
+                                                {poolUsdValue.toFixed(2)}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {isBelowMin && (
+                                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            Minimum pool value is ${MIN_POOL_USD_VALUE} (~{minTokenAmount} {selectedToken?.symbol})
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="border rounded overflow-hidden">
                                     <div className="grid grid-cols-5 text-xs font-medium bg-gray-100 dark:bg-gray-800 p-3">
@@ -535,6 +616,8 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                             </>
                         )}
 
+                        {/* Custom Tiers logic uses calculateTotalFromTiers() instead of rewardPool state directly,
+                            so we check minimum against that calculation. */}
                         {newQuest.distributionConfig.model === 'custom_tiers' && (
                             <div className="space-y-3">
                                 <div className="flex justify-between">
@@ -549,17 +632,23 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                         <Button variant="ghost" size="icon" onClick={() => removeTier(i)}><Trash2 className="h-4 w-4" /></Button>
                                     </div>
                                 ))}
-                                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded">
+                                <div className={`bg-blue-50 dark:bg-blue-900/20 p-4 rounded ${calculateTotalFromTiers() * tokenPrice < MIN_POOL_USD_VALUE && tokenPrice > 0 ? 'border border-red-500' : ''}`}>
                                     <p>Total Pool: <strong>{calculateTotalFromTiers().toFixed(4)} {selectedToken?.symbol}</strong></p>
-                                    <p className="text-xs">With 5% fee: <strong>{(calculateTotalFromTiers() * 1.05).toFixed(4)}</strong></p>
+                                    {tokenPrice > 0 && <p className="text-xs text-muted-foreground">Value: ${(calculateTotalFromTiers() * tokenPrice).toFixed(2)}</p>}
+                                    
+                                    <p className="text-xs mt-1">With 5% fee: <strong>{(calculateTotalFromTiers() * 1.05).toFixed(4)}</strong></p>
+                                    
+                                    {calculateTotalFromTiers() * tokenPrice < MIN_POOL_USD_VALUE && tokenPrice > 0 && (
+                                        <p className="text-xs text-red-500 mt-2 font-bold">Total must exceed ${MIN_POOL_USD_VALUE}</p>
+                                    )}
                                 </div>
                             </div>
                         )}
                     </div>
                     <div className="pt-8 border-t text-center">
-                        <Button size="lg" onClick={handleSaveDraft} disabled={isSavingDraft}>
+                        <Button size="lg" onClick={handleSaveDraft} disabled={isSavingDraft || isBelowMin}>
                             {isSavingDraft ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
-                            Save as Draft (No Deploy)
+                            Save and Continue
                         </Button>
                     </div>
                 </CardContent>

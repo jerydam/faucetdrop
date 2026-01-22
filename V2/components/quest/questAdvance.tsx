@@ -96,7 +96,8 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
     ],
     Intermediate: [
         { title: "Refer 3 Friends", category: "referral", minReferrals: 3, points: 150, verificationType: "manual_link" },
-        { title: "Create Tutorial Video", category: "content", action: "upload", points: 200, verificationType: "manual_upload", description: "Create and share a tutorial video" },
+        // UPDATED DESCRIPTION TO REFLECT BOTH REQUIREMENTS
+        { title: "Create Tutorial Video", category: "content", action: "upload", points: 200, verificationType: "manual_upload", description: "Upload video file AND share link" },
     ],
     Advance: [
         { title: "Execute Swap", category: "swap", action: "swap", points: 200, verificationType: "auto_tx" },
@@ -473,8 +474,9 @@ export default function Phase2TimingTasksFinalize({
                                     <SelectContent>
                                         <SelectItem value="auto_social" disabled={!isSocialOrReferral}>Auto (Social API)</SelectItem>
                                         <SelectItem value="auto_tx" disabled={!isTrading}>Auto (Blockchain Tx)</SelectItem>
-                                        <SelectItem value="manual_link">Manual (Link Submission)</SelectItem>
-                                        <SelectItem value="manual_upload">Manual (Screenshot)</SelectItem>
+                                        <SelectItem value="manual_link">Manual (Link Only)</SelectItem>
+                                        {/* UPDATED LABEL HERE */}
+                                        <SelectItem value="manual_upload">Manual Review (Image & Link Required)</SelectItem>
                                         <SelectItem value="none">None (Click to Complete)</SelectItem>
                                     </SelectContent>
                                 </Select>

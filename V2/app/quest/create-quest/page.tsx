@@ -189,11 +189,42 @@ function QuestCreatorContent() {
     }, [newQuest.tasks])
 
     const handleImageUpload = async (file: File) => {
-        setIsUploadingImage(true)
-        setTimeout(() => {
-             setNewQuest(prev => ({ ...prev, imageUrl: URL.createObjectURL(file) }))
-             setIsUploadingImage(false)
-        }, 1000)
+        setIsUploadingImage(true);
+        setUploadImageError(null); // Reset error state
+
+        try {
+            // 1. Create FormData
+            const formData = new FormData();
+            formData.append("file", file);
+
+            // 2. Send to Backend
+            const response = await fetch(`${API_BASE_URL}/api/upload-image`, {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.detail || "Upload failed");
+            }
+
+            const data = await response.json();
+
+            if (data.success && data.url) {
+                // 3. Save the REAL Public URL
+                setNewQuest(prev => ({ ...prev, imageUrl: data.url }));
+                toast.success("Image uploaded successfully");
+            } else {
+                throw new Error("Invalid response from server");
+            }
+
+        } catch (error: any) {
+            console.error("Upload error:", error);
+            setUploadImageError(error.message || "Failed to upload image");
+            toast.error("Failed to upload image");
+        } finally {
+            setIsUploadingImage(false);
+        }
     }
 
     const handleDraftSaved = (faucetAddress: string) => {

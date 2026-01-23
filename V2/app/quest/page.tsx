@@ -11,7 +11,7 @@ import { useWallet } from '@/hooks/use-wallet'; // Ensure this hook exists and r
 // Assume Header is a component defined elsewhere
 import { Header } from "@/components/header"; 
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000"
 
 interface QuestOverview {
     faucetAddress: string;

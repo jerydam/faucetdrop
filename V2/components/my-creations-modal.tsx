@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Library, Droplets, ScrollText, BrainCircuit, ExternalLink, Loader2 } from "lucide-react"
 
 // Backend URL
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000"
 
 interface CreationItem {
   id: string

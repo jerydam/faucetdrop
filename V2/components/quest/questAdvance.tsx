@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation' // <--- 1. IMPORT ROUTER
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,51 +12,49 @@ import { Badge } from "@/components/ui/badge"
 import {
     Clock, Trash2, Loader2, Rocket,
     Plus, Zap, Lock, Unlock, Trophy, Settings,
-    LayoutList, GripVertical, Percent
+    LayoutList, GripVertical, Percent, ShieldAlert, CalendarClock, Users
 } from "lucide-react"
 import { useWallet } from "@/hooks/use-wallet"
 import { BrowserProvider } from 'ethers'
-import { createCustomFaucet, type Network } from "@/lib/faucet"
+import { createQuestReward, type Network } from "@/lib/faucet"
 import { ZeroAddress } from 'ethers'
 
-// ==== NETWORK CONFIG ====
 const networks: Network[] = [
     {
         name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png",
         factoryAddresses: ["0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"],
-        factories: { custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
+        factories: { quest: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
     },
     {
         name: "Lisk", symbol: "LSK", chainId: BigInt(1135), rpcUrl: "https://rpc.api.lisk.com", blockExplorer: "https://blockscout.lisk.com", explorerUrl: "https://blockscout.lisk.com", color: "#0D4477", logoUrl: "/lsk.png", iconUrl: "/lsk.png",
         factoryAddresses: ["0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7"],
-        factories: { custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+        factories: { quest: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
     },
     {
         name: "Arbitrum", symbol: "ARB", chainId: BigInt(42161), rpcUrl: "https://arb1.arbitrum.io/rpc", blockExplorer: "https://arbiscan.io", explorerUrl: "https://arbiscan.io", color: "#28A0F0", logoUrl: "/arb.jpeg", iconUrl: "/arb.jpeg",
         factoryAddresses: ["0x9D6f441b31FBa22700bb3217229eb89b13FB49de"],
-        factories: { custom: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+        factories: { quest: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
     },
     {
         name: "Base", symbol: "BASE", chainId: BigInt(8453), rpcUrl: "https://base.publicnode.com", blockExplorer: "https://basescan.org", explorerUrl: "https://basescan.org", color: "#0052FF", logoUrl: "/base.png", iconUrl: "/base.png",
         factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"],
-        factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+        factories: { quest: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
     }
 ]
-
 // ==== CONSTANTS & TYPES ====
 export type TaskStage = 'Beginner' | 'Intermediate' | 'Advance' | 'Legend' | 'Ultimate'
 export const TASK_STAGES: TaskStage[] = ['Beginner', 'Intermediate', 'Advance', 'Legend', 'Ultimate']
 
 const FIXED_PASS_RATIO = 0.7
 const STAGE_TASK_REQUIREMENTS: Record<TaskStage, { min: number; max: number }> = {
-    Beginner: { min: 5, max: 10 },
+    Beginner: { min: 2, max: 10 },
     Intermediate: { min: 3, max: 8 },
     Advance: { min: 2, max: 6 },
     Legend: { min: 2, max: 5 },
     Ultimate: { min: 1, max: 3 },
 }
 
-export type VerificationType = 'auto_social' | 'auto_tx' | 'manual_link' | 'manual_upload' | 'none'
+export type VerificationType = 'auto_social' | 'auto_tx' | 'manual_link' | 'manual_upload' | 'system_referral' | 'system_daily' | 'none'
 
 export type SocialPlatform = 'Twitter' | 'Facebook' | 'Tiktok' | 'Youtube' | 'Discord' | 'Thread' | 'Linkedin' | 'Farcaster' | 'Instagram' | 'Website'
 const SOCIAL_PLATFORMS: SocialPlatform[] = ['Twitter', 'Facebook', 'Tiktok', 'Youtube', 'Discord', 'Thread', 'Linkedin', 'Farcaster', 'Instagram', 'Website']
@@ -77,6 +76,9 @@ export interface QuestTask {
     targetChainId?: string
     stage: TaskStage
     minReferrals?: number | string
+    isSystem?: boolean
+    isRecurring?: boolean
+    recurrenceInterval?: number
 }
 
 export interface StagePassRequirements {
@@ -96,7 +98,6 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
     ],
     Intermediate: [
         { title: "Refer 3 Friends", category: "referral", minReferrals: 3, points: 150, verificationType: "manual_link" },
-        // UPDATED DESCRIPTION TO REFLECT BOTH REQUIREMENTS
         { title: "Create Tutorial Video", category: "content", action: "upload", points: 200, verificationType: "manual_upload", description: "Upload video file AND share link" },
     ],
     Advance: [
@@ -141,6 +142,39 @@ interface Phase2Props {
     setError: React.Dispatch<React.SetStateAction<string | null>>
     handleFinalize: (finalAddress?: string) => Promise<void>
 }
+const BACKEND_WALLET_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
+// ==== SYSTEM TASKS DEFINITION ====
+const SYSTEM_TASKS: QuestTask[] = [
+    {
+        id: 'sys_referral',
+        title: 'Refer Friends',
+        description: 'Share your unique referral link to earn points.',
+        points: 10,
+        required: false,
+        category: 'referral',
+        url: '',
+        action: 'refer',
+        verificationType: 'system_referral',
+        stage: 'Beginner',
+        isSystem: true,
+        minReferrals: 1
+    },
+    {
+        id: 'sys_daily',
+        title: 'Daily Check-in',
+        description: 'Return every 24 hours to claim free points.',
+        points: 10,
+        required: false,
+        category: 'general',
+        url: '',
+        action: 'checkin',
+        verificationType: 'system_daily',
+        stage: 'Beginner',
+        isSystem: true,
+        isRecurring: true,
+        recurrenceInterval: 24
+    }
+]
 
 export default function Phase2TimingTasksFinalize({
     newQuest,
@@ -159,6 +193,7 @@ export default function Phase2TimingTasksFinalize({
     handleFinalize
 }: Phase2Props) {
     const { isConnected, chainId } = useWallet()
+    const router = useRouter() // <--- 2. INITIALIZE ROUTER
     const [newTask, setNewTask] = useState<Partial<QuestTask>>(initialNewTaskForm)
     const [editingTask, setEditingTask] = useState<QuestTask | null>(null)
     const [isDeploying, setIsDeploying] = useState(false)
@@ -166,6 +201,22 @@ export default function Phase2TimingTasksFinalize({
     useEffect(() => {
         setNewTask(initialNewTaskForm)
     }, [initialNewTaskForm])
+
+    // ✅ INJECT SYSTEM TASKS AUTOMATICALLY
+    useEffect(() => {
+        setNewQuest((prev: any) => {
+            const existingIds = new Set(prev.tasks.map((t: QuestTask) => t.id));
+            const tasksToAdd = SYSTEM_TASKS.filter(st => !existingIds.has(st.id));
+
+            if (tasksToAdd.length > 0) {
+                return {
+                    ...prev,
+                    tasks: [...prev.tasks, ...tasksToAdd]
+                };
+            }
+            return prev;
+        });
+    }, [setNewQuest]);
 
     // ✅ AUTO-CALCULATE 70% REQUIREMENT
     useEffect(() => {
@@ -195,29 +246,64 @@ export default function Phase2TimingTasksFinalize({
         setError(null)
         try {
             if (!isConnected) throw new Error("Wallet not connected")
-
-            const currentNetwork = networks.find(n => n.chainId === BigInt(chainId || 0))
-            if (!currentNetwork || !currentNetwork.factories?.custom) {
-                throw new Error("Unsupported network or missing factory address")
+            
+            const hasReferral = newQuest.tasks.some((t: QuestTask) => t.id === 'sys_referral');
+            const hasCheckin = newQuest.tasks.some((t: QuestTask) => t.id === 'sys_daily');
+            
+            if (!hasReferral || !hasCheckin) {
+                throw new Error("System tasks (Referral/Daily) are missing. Please refresh.");
             }
 
+            const currentNetwork = networks.find(n => n.chainId === BigInt(chainId || 0))
+            // IMPORTANT: Check for 'quest' factory, not 'custom'
+            if (!currentNetwork || !currentNetwork.factories?.quest) {
+                throw new Error("Unsupported network or missing Quest Factory address")
+            }
+
+            // Convert Date Strings to Unix Timestamps
+            const startDate = new Date(`${newQuest.startDate}T${newQuest.startTime}:00`).getTime() / 1000;
+            const endDate = new Date(`${newQuest.endDate}T${newQuest.endTime}:00`).getTime() / 1000;
+            const claimWindow = parseInt(newQuest.claimWindowHours || "168");
+
             const provider = new BrowserProvider((window as any).ethereum)
-            const deployedAddress = await createCustomFaucet(
-                provider,
-                currentNetwork.factories.custom,
-                newQuest.title.trim(),
-                newQuest.tokenAddress
-            )
+            
+            // 🚀 CALLING THE NEW CONTRACT FUNCTION
+            // Ensure createCustomFaucet (or createQuestReward) in lib/faucet.ts 
+            // accepts these new parameters!
+            
+            const deployedAddress = await createQuestReward(
+            provider,
+            currentNetwork.factories.quest!, 
+            newQuest.title.trim(),
+            newQuest.tokenAddress,
+            endDate,       // 5. Quest End Time
+            claimWindow,   // 6. Claim Window Hours
+            BACKEND_WALLET_ADDRESS // <--- 7. NEW: The missing argument
+);
 
             setNewQuest((prev: any) => ({ ...prev, faucetAddress: deployedAddress }))
+            
+            // Wait for backend finalization
             await handleFinalize(deployedAddress)
+
+            // <--- UPDATED ROUTING LOGIC --->
+            const slug = newQuest.title
+                .toLowerCase()
+                .trim()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+
+            const targetUrl = slug 
+                ? `/quest/${slug}-${deployedAddress}` 
+                : `/quest/${deployedAddress}`;
+
+            router.push(targetUrl); 
 
         } catch (e: any) {
             console.error(e)
             setError(e.message || "Deployment failed")
-        } finally {
-            setIsDeploying(false)
-        }
+            setIsDeploying(false) 
+        } 
     }
 
     // Logic extracted from StepThreeTasks
@@ -345,6 +431,7 @@ export default function Phase2TimingTasksFinalize({
                                     <Select
                                         value={newTask.stage || "Beginner"}
                                         onValueChange={(v: TaskStage) => setNewTask(prev => ({ ...prev, stage: v }))}
+                                        disabled={!!editingTask?.isSystem}
                                     >
                                         <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                                         <SelectContent>
@@ -368,6 +455,7 @@ export default function Phase2TimingTasksFinalize({
                                     <Select
                                         value={newTask.category}
                                         onValueChange={(v: any) => setNewTask(prev => ({ ...prev, category: v, minReferrals: undefined }))}
+                                        disabled={!!editingTask?.isSystem}
                                     >
                                         <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                                         <SelectContent>
@@ -440,6 +528,7 @@ export default function Phase2TimingTasksFinalize({
                                         placeholder="Task Title (e.g., Join Telegram Group)"
                                         value={newTask.title || ""}
                                         onChange={(e) => setNewTask(prev => ({ ...prev, title: e.target.value }))}
+                                        disabled={!!editingTask?.isSystem}
                                     />
                                 )}
                             </div>
@@ -453,6 +542,7 @@ export default function Phase2TimingTasksFinalize({
                                         className="bg-background"
                                         value={newTask.points ?? ""}
                                         onChange={(e) => setNewTask(prev => ({ ...prev, points: e.target.value }))}
+                                        disabled={!!editingTask?.isSystem}
                                     />
                                 </div>
                                 <div className="col-span-2 space-y-2">
@@ -462,6 +552,7 @@ export default function Phase2TimingTasksFinalize({
                                         placeholder="https://..."
                                         value={newTask.url ?? ""}
                                         onChange={(e) => setNewTask(prev => ({ ...prev, url: e.target.value }))}
+                                        disabled={!!editingTask?.isSystem}
                                     />
                                 </div>
                             </div>
@@ -469,14 +560,19 @@ export default function Phase2TimingTasksFinalize({
                             {/* Verification Select */}
                             <div className="space-y-2">
                                 <Label className="text-xs font-medium uppercase text-muted-foreground">Verification Method</Label>
-                                <Select value={newTask.verificationType || "manual_link"} onValueChange={(v: VerificationType) => setNewTask(prev => ({ ...prev, verificationType: v }))}>
+                                <Select 
+                                    value={newTask.verificationType || "manual_link"} 
+                                    onValueChange={(v: VerificationType) => setNewTask(prev => ({ ...prev, verificationType: v }))}
+                                    disabled={!!editingTask?.isSystem}
+                                >
                                     <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="auto_social" disabled={!isSocialOrReferral}>Auto (Social API)</SelectItem>
                                         <SelectItem value="auto_tx" disabled={!isTrading}>Auto (Blockchain Tx)</SelectItem>
                                         <SelectItem value="manual_link">Manual (Link Only)</SelectItem>
-                                        {/* UPDATED LABEL HERE */}
                                         <SelectItem value="manual_upload">Manual Review (Image & Link Required)</SelectItem>
+                                        <SelectItem value="system_referral" disabled>System Referral (Auto)</SelectItem>
+                                        <SelectItem value="system_daily" disabled>System Daily Check-in (Auto)</SelectItem>
                                         <SelectItem value="none">None (Click to Complete)</SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -485,24 +581,35 @@ export default function Phase2TimingTasksFinalize({
                             {/* Add Button */}
                             <div className="pt-2 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    <Switch id="req" checked={newTask.required} onCheckedChange={(c) => setNewTask(prev => ({ ...prev, required: c }))} />
+                                    <Switch 
+                                        id="req" 
+                                        checked={newTask.required} 
+                                        onCheckedChange={(c) => setNewTask(prev => ({ ...prev, required: c }))} 
+                                        disabled={!!editingTask?.isSystem}
+                                    />
                                     <Label htmlFor="req" className="text-sm text-muted-foreground">Mandatory Task</Label>
                                 </div>
                                 <div className="flex gap-2">
                                     {editingTask && <Button variant="ghost" onClick={() => { setEditingTask(null); setNewTask(initialNewTaskForm); }}>Cancel</Button>}
-                                    <Button
-                                        onClick={editingTask ? () => { handleUpdateTask(); setEditingTask(null); setNewTask(initialNewTaskForm); } : () => { handleAddTask(newTask as QuestTask); setNewTask(initialNewTaskForm); }}
-                                        disabled={!newTask.title || !newTask.points || (enforceRules && !editingTask && isAtMax)}
-                                    >
-                                        {editingTask ? "Save Changes" : <><Plus className="mr-2 h-4 w-4" /> Add Task</>}
-                                    </Button>
+                                    {editingTask?.isSystem ? (
+                                        <div className="flex items-center gap-2 text-xs text-yellow-600 bg-yellow-500/10 px-3 py-2 rounded">
+                                            <ShieldAlert className="h-4 w-4" /> System tasks cannot be edited.
+                                        </div>
+                                    ) : (
+                                        <Button
+                                            onClick={editingTask ? () => { handleUpdateTask(); setEditingTask(null); setNewTask(initialNewTaskForm); } : () => { handleAddTask(newTask as QuestTask); setNewTask(initialNewTaskForm); }}
+                                            disabled={!newTask.title || !newTask.points || (enforceRules && !editingTask && isAtMax)}
+                                        >
+                                            {editingTask ? "Save Changes" : <><Plus className="mr-2 h-4 w-4" /> Add Task</>}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* RIGHT: Stage Tree & List (Takes 5 columns) */}
+                {/* RIGHT: Stage Tree & List */}
                 <div className="lg:col-span-5 flex flex-col h-full gap-6">
                     <Card className="flex-1 border-border/50 shadow-sm bg-card flex flex-col">
                         <CardHeader className="pb-2">
@@ -521,10 +628,8 @@ export default function Phase2TimingTasksFinalize({
 
                                 return (
                                     <div key={stage} className={`relative pl-4 ${index !== TASK_STAGES.length - 1 ? 'border-l-2 border-muted pb-6' : ''}`}>
-                                        {/* Timeline Dot */}
                                         <div className={`absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 bg-background ${isLocked ? 'border-muted' : 'border-primary'}`} />
 
-                                        {/* Stage Header Card */}
                                         <div className={`mb-3 p-3 rounded-lg border ${isLocked ? 'bg-muted/30 border-muted' : 'bg-card dark:bg-slate-900 border-border shadow-sm'}`}>
                                             <div className="flex justify-between items-start mb-2">
                                                 <div>
@@ -538,7 +643,6 @@ export default function Phase2TimingTasksFinalize({
                                                 {isLocked ? <Lock className="h-4 w-4 text-muted-foreground/50" /> : <Unlock className="h-4 w-4 text-green-500" />}
                                             </div>
 
-                                            {/* Pass Requirement Display (Read Only) */}
                                             <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
                                                 <Label className="text-[10px] whitespace-nowrap text-muted-foreground flex items-center gap-1">
                                                     <Percent className="h-3 w-3" /> Pass Requirement (70%)
@@ -552,12 +656,15 @@ export default function Phase2TimingTasksFinalize({
                                             </div>
                                         </div>
 
-                                        {/* Minimal Task List inside Stage */}
                                         <div className="space-y-1.5">
                                             {stageTasks.map((t: QuestTask) => (
-                                                <div key={t.id} className="group flex items-center justify-between p-2 rounded bg-muted/20 hover:bg-muted/40 border border-transparent hover:border-border/50 transition-all">
+                                                <div key={t.id} className={`group flex items-center justify-between p-2 rounded border transition-all ${t.isSystem ? 'bg-blue-50/50 border-blue-100 dark:bg-blue-900/10 dark:border-blue-900/30' : 'bg-muted/20 hover:bg-muted/40 border-transparent hover:border-border/50'}`}>
                                                     <div className="flex items-center gap-2 overflow-hidden">
-                                                        <GripVertical className="h-3 w-3 text-muted-foreground/30" />
+                                                        {t.isSystem ? (
+                                                            t.isRecurring ? <CalendarClock className="h-3 w-3 text-blue-500" /> : <Users className="h-3 w-3 text-blue-500" />
+                                                        ) : (
+                                                            <GripVertical className="h-3 w-3 text-muted-foreground/30" />
+                                                        )}
                                                         <span className={`text-xs truncate text-foreground/90 ${t.required ? 'font-medium' : ''}`}>
                                                             {t.title}
                                                         </span>
@@ -566,19 +673,22 @@ export default function Phase2TimingTasksFinalize({
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-[10px] font-mono text-muted-foreground">{t.points}</span>
                                                         <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
-                                                            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => { setEditingTask(t); setNewTask(t); }}>
-                                                                <Settings className="h-3 w-3 text-muted-foreground" />
-                                                            </Button>
-                                                            <Button size="icon" variant="ghost" className="h-5 w-5 hover:bg-red-500/10 text-destructive" onClick={() => handleRemoveTask(t.id)}>
-                                                                <Trash2 className="h-3 w-3" />
-                                                            </Button>
+                                                            {t.isSystem ? (
+                                                                <Lock className="h-3 w-3 text-muted-foreground" />
+                                                            ) : (
+                                                                <>
+                                                                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => { setEditingTask(t); setNewTask(t); }}>
+                                                                        <Settings className="h-3 w-3 text-muted-foreground" />
+                                                                    </Button>
+                                                                    <Button size="icon" variant="ghost" className="h-5 w-5 hover:bg-red-500/10 text-destructive" onClick={() => handleRemoveTask(t.id)}>
+                                                                        <Trash2 className="h-3 w-3" />
+                                                                    </Button>
+                                                                </>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
                                             ))}
-                                            {stageTasks.length === 0 && !isLocked && (
-                                                <div className="text-[10px] text-muted-foreground italic pl-2 opacity-50">No tasks yet</div>
-                                            )}
                                         </div>
                                     </div>
                                 )
@@ -593,14 +703,14 @@ export default function Phase2TimingTasksFinalize({
                     {isDeploying ? (
                         <>
                             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            Deploying Faucet...
+                            Creating Quest...
                         </>
                     ) : isFinalizing ? (
                         "Saving to Server..."
                     ) : (
                         <>
                             <Rocket className="mr-2 h-5 w-5" />
-                            Deploy & Finalize Quest
+                            Create & Finalize Quest
                         </>
                     )}
                 </Button>

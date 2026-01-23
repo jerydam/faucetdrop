@@ -20,7 +20,7 @@ import { useNetwork } from "@/hooks/use-network"
 const toast = console.log; // Using console.log as mock toast
 
 // --- CONSTANTS ---
-const API_BASE_URL = "http://127.0.0.1:8000"
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 // --- Data Structures ---
 interface QuestSummary {

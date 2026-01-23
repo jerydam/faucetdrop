@@ -5,7 +5,7 @@ import { useEffect } from "react"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "sonner"
 import { NetworkProvider } from "@/hooks/use-network"
 import { WalletProvider } from "@/components/wallet-provider"
 import { Footer } from "@/components/footer"
@@ -91,7 +91,7 @@ export default function RootLayout({
                     </main>
                     <Footer />
                   </div>
-                  <Toaster />
+                  <Toaster richColors position="top-center" closeButton />
                 </WalletProvider>
               </NetworkProvider>
             </QueryClientProvider>

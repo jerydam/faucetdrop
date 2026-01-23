@@ -19,7 +19,7 @@ import { ZeroAddress, isAddress as ethersIsAddress } from 'ethers'
 import { type Network } from "@/lib/faucet"
 
 // ==== CONFIG ====
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 const MIN_POOL_USD_VALUE = 50; // $50 Minimum
 
 const networks: Network[] = [
@@ -101,6 +101,7 @@ export interface QuestData {
     faucetAddress?: string
     rewardTokenType?: 'native' | 'erc20'
     tokenAddress?: string
+    tasks: any[]
 }
 
 // ==== UTILS ====
@@ -394,13 +395,13 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                 title: newQuest.title.trim(),
                 description: newQuest.description,
                 imageUrl: newQuest.imageUrl,
-                rewardPool: poolAmount.toString(), // Ensure we send the correct calculated pool for custom tiers
+                rewardPool: poolAmount.toString(),
                 rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
                 tokenAddress: selectedToken.address,
                 distributionConfig: newQuest.distributionConfig,
-                faucetAddress: draftId 
+                faucetAddress: draftId,
+                tasks: newQuest.tasks // <--- ADD THIS: Ensures System Tasks are saved in Step 1
             }
-
             const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

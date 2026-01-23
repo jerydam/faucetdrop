@@ -486,7 +486,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       // 2. Call Backend to clean up Database
       try {
         const response = await fetch(
-          "https://fauctdrop-backend.onrender.com/delete-faucet-metadata",
+          "http://127.0.0.1:8000/delete-faucet-metadata",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -728,7 +728,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       try {
         console.log("Calling backend to update parameters...");
         const response = await fetch(
-          "https://fauctdrop-backend.onrender.com/set-claim-parameters",
+          "http://127.0.0.1:8000/set-claim-parameters",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -807,7 +807,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     else if (hasTaskChanges) {
       // For "add-faucet-tasks", we likely only send the NEW ones to append
       const response = await fetch(
-        "https://fauctdrop-backend.onrender.com/add-faucet-tasks",
+        "http://127.0.0.1:8000/add-faucet-tasks",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1042,7 +1042,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     try {
       setIsGeneratingNewCode(true);
       const response = await fetch(
-        "https://fauctdrop-backend.onrender.com/generate-new-drop-code",
+        "http://127.0.0.1:8000/generate-new-drop-code",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

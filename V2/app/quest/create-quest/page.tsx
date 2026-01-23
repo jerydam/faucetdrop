@@ -21,7 +21,79 @@ import Phase2TimingTasksFinalize, {
 
 import { useWallet } from "@/hooks/use-wallet"
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+interface UserProfile {
+    wallet_address: string;
+    username: string | null;
+    avatar_url?: string;
+}
+
+const API_BASE_URL = "http://127.0.0.1:8000"
+
+// Helper to decode errors
+const getUserFriendlyError = (error: any): string => {
+    if (!error) return "An unexpected error occurred.";
+    
+    // Convert error to string for checking
+    const msg = (typeof error === 'string' ? error : error.message || JSON.stringify(error)).toLowerCase();
+
+    // 1. User Rejection
+    if (msg.includes("rejected") || msg.includes("4001") || msg.includes("denied")) {
+        return "Transaction cancelled. You declined the wallet request.";
+    }
+
+    // 2. Gas / Funds Issues
+    if (msg.includes("insufficient funds") || msg.includes("exceeds balance")) {
+        return "Insufficient funds. You don't have enough ETH/Native Token for gas fees.";
+    }
+    if (msg.includes("intrinsic gas too low") || msg.includes("gas limit")) {
+        return "Gas estimation failed. The network might be busy or the transaction is complex.";
+    }
+
+    // 3. Network / Connection
+    if (msg.includes("network") || msg.includes("disconnected") || msg.includes("provider")) {
+        return "Connection lost. Please check your internet or wallet network.";
+    }
+
+    // 4. Contract Logic
+    if (msg.includes("execution reverted")) {
+        return "Transaction failed on-chain. The contract rejected the request.";
+    }
+
+    // 5. Fallback: Return the raw message if it's short, otherwise generic
+    return msg.length < 100 ? error.message || error : "Something went wrong. Please try again.";
+};
+// ==== 1. DEFINE SYSTEM TASKS HERE (Moved from Phase 2) ====
+const SYSTEM_TASKS: QuestTask[] = [
+    {
+        id: 'sys_referral',
+        title: 'Refer Friends',
+        description: 'Share your unique referral link to earn points.',
+        points: 10,
+        required: false,
+        category: 'referral',
+        url: '',
+        action: 'refer',
+        verificationType: 'system_referral',
+        stage: 'Beginner',
+        isSystem: true,
+        minReferrals: 1
+    },
+    {
+        id: 'sys_daily',
+        title: 'Daily Check-in',
+        description: 'Return every 24 hours to claim free points.',
+        points: 10,
+        required: false,
+        category: 'general',
+        url: '',
+        action: 'checkin',
+        verificationType: 'system_daily',
+        stage: 'Beginner',
+        isSystem: true,
+        isRecurring: true,
+        recurrenceInterval: 24
+    }
+]
 
 // Extended Interface
 interface FullQuestState extends QuestData {
@@ -41,7 +113,7 @@ const initialNewQuest: FullQuestState = {
     imageUrl: "https://placehold.co/1280x1280/3b82f6/ffffff?text=Quest+Logo",
     rewardPool: "",
     distributionConfig: { model: 'equal', totalWinners: 100, tiers: [] },
-    tasks: [],
+    tasks: [], // Starts empty, but Effect below will fill it
     startDate: "",
     startTime: "",
     endDate: "",
@@ -70,6 +142,8 @@ function QuestCreatorContent() {
     // Check if we are editing a draft
     const draftId = searchParams.get('draftId')
 
+    // ✅ State Definitions (All inside the function)
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // <--- FIXED
     const [isLoadingDraft, setIsLoadingDraft] = useState(false)
     const [phase, setPhase] = useState(1)
     const [error, setError] = useState<string | null>(null)
@@ -88,6 +162,55 @@ function QuestCreatorContent() {
     const [isFinalizing, setIsFinalizing] = useState(false)
     const [showDraftSuccessModal, setShowDraftSuccessModal] = useState(false)
 
+    // Add this EFFECT to fetch the profile
+    useEffect(() => {
+        if (!address) return;
+
+        const fetchProfile = async () => {
+            try {
+                // Replace this URL with your actual API endpoint for user profiles
+                const res = await fetch(`${API_BASE_URL}/api/users/${address}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setUserProfile(data); // <--- This updates the state!
+                }
+            } catch (e) {
+                console.error("Failed to fetch user profile", e);
+            }
+        };
+
+        fetchProfile();
+    }, [address]);
+
+    // Error Handling Effect
+    useEffect(() => {
+        if (error) {
+            const friendlyMsg = getUserFriendlyError(error);
+            toast.error(friendlyMsg);
+            setError(null);
+        }
+    }, [error]);
+
+    // ==== 2. INJECT SYSTEM TASKS ON MOUNT ====
+    // This ensures they exist for Phase 1 Drafts AND Phase 2
+    useEffect(() => {
+        setNewQuest((prev) => {
+            const currentTasks = prev.tasks || [];
+            const existingIds = new Set(currentTasks.map((t) => t.id));
+            
+            // Only add system tasks if they are missing (prevents duplicates)
+            const tasksToAdd = SYSTEM_TASKS.filter(st => !existingIds.has(st.id));
+
+            if (tasksToAdd.length > 0) {
+                return {
+                    ...prev,
+                    tasks: [...currentTasks, ...tasksToAdd]
+                };
+            }
+            return prev;
+        });
+    }, []); 
+
     // --- EFFECT: Load Draft if draftId exists ---
    useEffect(() => {
         if (!draftId) return
@@ -101,11 +224,10 @@ function QuestCreatorContent() {
                 if (data.success && data.quest) {
                     const q = data.quest
                     
-                    // MAPPING (Handle snake_case from DB)
                     const titleVal = q.title || ""
                     const descVal = q.description || ""
                     let imageVal = q.imageUrl || q.image_url || initialNewQuest.imageUrl
-                    if (imageVal.startsWith('blob:')) imageVal = initialNewQuest.imageUrl // Reset bad blobs
+                    if (imageVal.startsWith('blob:')) imageVal = initialNewQuest.imageUrl 
 
                     const rewardPoolVal = q.rewardPool || q.reward_pool || ""
                     const startDateVal = q.startDate || q.start_date || ""
@@ -116,21 +238,32 @@ function QuestCreatorContent() {
                     const stageReqsVal = q.stagePassRequirements || q.stage_pass_requirements
                     const distConfigVal = q.distributionConfig || q.distribution_config || initialNewQuest.distributionConfig
 
-                    // 1. Populate State
+                    // Ensure fetched tasks are merged with system tasks logic
+                    const fetchedTasks = q.tasks || []
+                    
+                    // Create a Set of existing IDs to prevent duplicates
+                    const existingIds = new Set(fetchedTasks.map((t: QuestTask) => t.id));
+                    
+                    // Find which system tasks are missing from the DB data
+                    const missingSystemTasks = SYSTEM_TASKS.filter(st => !existingIds.has(st.id));
+                    
+                    // Combine them
+                    const mergedTasks = [...fetchedTasks, ...missingSystemTasks];
+
                     setNewQuest({
                         title: titleVal,
                         description: descVal,
                         imageUrl: imageVal,
                         rewardPool: String(rewardPoolVal),
                         distributionConfig: distConfigVal,
-                        tasks: q.tasks || [],
+                        tasks: mergedTasks, 
                         startDate: startDateVal,
                         startTime: "", 
                         endDate: endDateVal,
                         endTime: "",
                         claimWindowHours: String(claimWindowVal),
                         enforceStageRules: rulesVal,
-                        faucetAddress: draftId, // IMPORTANT: Keep draftId here so finalize knows it
+                        faucetAddress: draftId, 
                         rewardTokenType: 'erc20', 
                         tokenAddress: tokenAddrVal
                     })
@@ -146,14 +279,11 @@ function QuestCreatorContent() {
                          })
                     }
 
-                    toast.success("Draft loaded")
+                    toast.success("Draft loaded successfully")
                     
-                    // --- FORCE PHASE 2 SWITCH ---
-                    // If we successfully loaded a title, we go to Phase 2.
                     if (titleVal) {
                         setPhase(2)
                     }
-                    // ----------------------------
 
                 } else {
                     toast.error("Draft not found")
@@ -190,14 +320,12 @@ function QuestCreatorContent() {
 
     const handleImageUpload = async (file: File) => {
         setIsUploadingImage(true);
-        setUploadImageError(null); // Reset error state
+        setUploadImageError(null); 
 
         try {
-            // 1. Create FormData
             const formData = new FormData();
             formData.append("file", file);
 
-            // 2. Send to Backend
             const response = await fetch(`${API_BASE_URL}/api/upload-image`, {
                 method: "POST",
                 body: formData,
@@ -211,7 +339,6 @@ function QuestCreatorContent() {
             const data = await response.json();
 
             if (data.success && data.url) {
-                // 3. Save the REAL Public URL
                 setNewQuest(prev => ({ ...prev, imageUrl: data.url }));
                 toast.success("Image uploaded successfully");
             } else {
@@ -240,7 +367,7 @@ function QuestCreatorContent() {
 
     const handleContinueLater = () => {
         setShowDraftSuccessModal(false)
-        router.push('/dashboard') 
+        router.push('/dashboard/{username?}') 
     }
 
     const handleAddTask = (task: QuestTask) => { 
@@ -271,39 +398,14 @@ function QuestCreatorContent() {
     const getCategoryColor = (c: string) => 'text-blue-500'
     const getVerificationIcon = (t: VerificationType) => <CheckCircle2 className="h-4 w-4" />
 
+    // ==== 3. SIMPLIFIED HANDLE FINALIZE ====
+    // Since Phase 2 handles the API Call internally (via handleDeployAndFinalize),
+    // this function is mostly a placeholder or can be used for redirection if needed.
     const handleFinalize = async (deployedAddress?: string) => {
-        // NOTE: Phase2 component passes the deployedAddress when calling this
-        if (!newQuest.startDate || !newQuest.endDate) {
-            setError("Please select start and end dates.")
-            return
-        }
-        setIsFinalizing(true)
-        try {
-            const payload = {
-                faucetAddress: deployedAddress || newQuest.faucetAddress, // Real Address
-                draftId: draftId, // Pass the draftId from URL so backend can fetch data
-                creatorAddress: address,
-                // title/desc etc are now OPTIONAL in backend, but we can send them if we have them
-                title: newQuest.title, 
-                startDate: `${newQuest.startDate}T${newQuest.startTime || '00:00'}:00Z`,
-                endDate: `${newQuest.endDate}T${newQuest.endTime || '23:59'}:00Z`,
-                claimWindowHours: parseInt(newQuest.claimWindowHours || "168"),
-                tasks: newQuest.tasks,
-                stagePassRequirements,
-                enforceStageRules: newQuest.enforceStageRules
-            }
-            const res = await fetch(`${API_BASE_URL}/api/quests/finalize`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-            if (!res.ok) throw new Error(await res.text())
-            toast.success("Quest Campaign Finalized & Launched!")
-            router.push('/dashboard')
-        } catch(e: any) { 
-            setError(e.message || "Failed to finalize") 
-        } finally { 
-            setIsFinalizing(false) 
+        // If your Phase2 component calls this AFTER success, just redirect.
+        // We do NOT need to fetch here if Phase2 component is doing the fetching.
+        if(deployedAddress) {
+             router.push('/dashboard')
         }
     }
 
@@ -344,12 +446,7 @@ function QuestCreatorContent() {
                 </div>
             </div>
 
-            {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg mb-6 flex items-center gap-2">
-                    <ShieldAlert className="h-5 w-5" />
-                    {error}
-                </div>
-            )}
+            
 
             {phase === 1 && (
                 <Phase1QuestDetailsRewards<FullQuestState>
@@ -433,13 +530,23 @@ function QuestCreatorContent() {
                                     <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                                 </Button>
                                 
-                                <Button 
-                                    variant="outline" 
-                                    size="lg" 
-                                    onClick={handleContinueLater}
-                                    className="w-full hover:bg-gray-100 dark:hover:bg-gray-800"
+                               <Button size="lg"
+                                    // Customize styling to match your theme if needed
+                                    className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold h-12" 
+                                    onClick={() => {
+                                        // 1. Priority: Try Username first, then fallback to Wallet Address
+                                        const routeParam = userProfile?.username || address;
+                                        
+                                        // 2. Only navigate if we have a valid identifier
+                                        if (routeParam) {
+                                            setShowDraftSuccessModal(false); // Close the modal first
+                                            router.push(`/dashboard/${routeParam}`);
+                                        } else {
+                                            // Fallback for disconnected state
+                                            router.push('/dashboard');
+                                        }
+                                    }}
                                 >
-                                    <LayoutDashboard className="mr-2 h-4 w-4 text-muted-foreground" />
                                     Continue Later (Dashboard)
                                 </Button>
                             </div>

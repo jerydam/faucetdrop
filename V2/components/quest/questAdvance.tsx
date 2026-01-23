@@ -18,12 +18,13 @@ import { useWallet } from "@/hooks/use-wallet"
 import { BrowserProvider } from 'ethers'
 import { createQuestReward, type Network } from "@/lib/faucet"
 import { ZeroAddress } from 'ethers'
-
+import { toast } from 'sonner'
+const API_BASE_URL = "http://127.0.0.1:8000"
 const networks: Network[] = [
     {
         name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png",
         factoryAddresses: ["0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"],
-        factories: { quest: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
+        factories: { quest: "0xdC9b027B6453560ce8C4390E0B609b343a8eBd62" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
     },
     {
         name: "Lisk", symbol: "LSK", chainId: BigInt(1135), rpcUrl: "https://rpc.api.lisk.com", blockExplorer: "https://blockscout.lisk.com", explorerUrl: "https://blockscout.lisk.com", color: "#0D4477", logoUrl: "/lsk.png", iconUrl: "/lsk.png",
@@ -192,7 +193,7 @@ export default function Phase2TimingTasksFinalize({
     setError,
     handleFinalize
 }: Phase2Props) {
-    const { isConnected, chainId } = useWallet()
+   const { isConnected, chainId, address } = useWallet() // <--- Add address here
     const router = useRouter() // <--- 2. INITIALIZE ROUTER
     const [newTask, setNewTask] = useState<Partial<QuestTask>>(initialNewTaskForm)
     const [editingTask, setEditingTask] = useState<QuestTask | null>(null)
@@ -240,71 +241,104 @@ export default function Phase2TimingTasksFinalize({
 
     const enforceRules = newQuest.enforceStageRules ?? false
 
-    // ==== DEPLOYMENT LOGIC ====
-    const handleDeployAndFinalize = async () => {
-        setIsDeploying(true)
-        setError(null)
-        try {
-            if (!isConnected) throw new Error("Wallet not connected")
-            
-            const hasReferral = newQuest.tasks.some((t: QuestTask) => t.id === 'sys_referral');
-            const hasCheckin = newQuest.tasks.some((t: QuestTask) => t.id === 'sys_daily');
-            
-            if (!hasReferral || !hasCheckin) {
-                throw new Error("System tasks (Referral/Daily) are missing. Please refresh.");
-            }
+   // ==== DEPLOYMENT LOGIC ====
+   
+const handleDeployAndFinalize = async () => {
+    setIsDeploying(true);
+    setError(null);
+    
+    try {
+        if (!isConnected) throw new Error("Please connect your wallet first.");
 
-            const currentNetwork = networks.find(n => n.chainId === BigInt(chainId || 0))
-            // IMPORTANT: Check for 'quest' factory, not 'custom'
-            if (!currentNetwork || !currentNetwork.factories?.quest) {
-                throw new Error("Unsupported network or missing Quest Factory address")
-            }
+        // 1. SILENT DRAFT SAVE (Safety Net)
+        const draftPayload = {
+            creatorAddress: address, 
+            title: newQuest.title.trim(),
+            description: newQuest.description,
+            imageUrl: newQuest.imageUrl,
+            rewardPool: newQuest.rewardPool,
+            rewardTokenType: newQuest.rewardTokenType,
+            tokenAddress: newQuest.tokenAddress,
+            distributionConfig: newQuest.distributionConfig,
+            faucetAddress: newQuest.faucetAddress,
+            tasks: newQuest.tasks
+        };
 
-            // Convert Date Strings to Unix Timestamps
-            const startDate = new Date(`${newQuest.startDate}T${newQuest.startTime}:00`).getTime() / 1000;
-            const endDate = new Date(`${newQuest.endDate}T${newQuest.endTime}:00`).getTime() / 1000;
-            const claimWindow = parseInt(newQuest.claimWindowHours || "168");
+        const draftRes = await fetch(`${API_BASE_URL}/api/quests/draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(draftPayload)
+        });
 
-            const provider = new BrowserProvider((window as any).ethereum)
-            
-            // 🚀 CALLING THE NEW CONTRACT FUNCTION
-            // Ensure createCustomFaucet (or createQuestReward) in lib/faucet.ts 
-            // accepts these new parameters!
-            
-            const deployedAddress = await createQuestReward(
+        // 👇 FIX 2: CAPTURE THE DRAFT ID
+        // If we don't capture this, the backend won't know which draft to delete
+        // if this was a fresh quest (where newQuest.faucetAddress was initially null)
+        const draftJson = await draftRes.json();
+        const activeDraftId = draftJson.faucetAddress || newQuest.faucetAddress;
+
+        // 2. PREPARE & DEPLOY
+        const currentNetwork = networks.find(n => Number(n.chainId) === Number(chainId));
+        const targetFactory = currentNetwork?.factories?.quest;
+        if (!targetFactory) throw new Error("Quest Factory not found.");
+
+        const now = Math.floor(Date.now() / 1000);
+        const hoursInt = parseInt(newQuest.claimWindowHours || "168", 10);
+        const questEndTime = now + (hoursInt * 3600);
+
+        const provider = new BrowserProvider((window as any).ethereum);
+        
+        const deployedAddress = await createQuestReward(
             provider,
-            currentNetwork.factories.quest!, 
+            targetFactory, 
             newQuest.title.trim(),
             newQuest.tokenAddress,
-            endDate,       // 5. Quest End Time
-            claimWindow,   // 6. Claim Window Hours
-            BACKEND_WALLET_ADDRESS // <--- 7. NEW: The missing argument
-);
+            questEndTime,   
+            hoursInt,   
+            BACKEND_WALLET_ADDRESS 
+        );
 
-            setNewQuest((prev: any) => ({ ...prev, faucetAddress: deployedAddress }))
-            
-            // Wait for backend finalization
-            await handleFinalize(deployedAddress)
+        // 3. STRICT FINALIZE
+        const finalizePayload = {
+            faucetAddress: deployedAddress, // The Real Address
+            draftId: activeDraftId,         // <--- USE THE CAPTURED ID HERE
+            creatorAddress: address,
+            title: newQuest.title,
+            description: newQuest.description,
+            imageUrl: newQuest.imageUrl,
+            startDate: newQuest.startDate,
+            endDate: newQuest.endDate,
+            claimWindowHours: hoursInt,
+            tasks: newQuest.tasks,
+            stagePassRequirements: stagePassRequirements,
+            enforceStageRules: newQuest.enforceStageRules ?? false
+        };
 
-            // <--- UPDATED ROUTING LOGIC --->
-            const slug = newQuest.title
-                .toLowerCase()
-                .trim()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/^-+|-+$/g, '');
+        const res = await fetch(`${API_BASE_URL}/api/quests/finalize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(finalizePayload)
+        });
 
-            const targetUrl = slug 
-                ? `/quest/${slug}-${deployedAddress}` 
-                : `/quest/${deployedAddress}`;
+        if (!res.ok) throw new Error("Finalization failed.");
 
-            router.push(targetUrl); 
+        toast.success("Quest created successfully!");
+        
+        const slug = newQuest.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+        router.push(`/quest/${slug}-${deployedAddress}`);
 
-        } catch (e: any) {
-            console.error(e)
-            setError(e.message || "Deployment failed")
-            setIsDeploying(false) 
-        } 
-    }
+    } catch (e: any) {
+        console.error("Error:", e);
+        let msg = e.message || "Deployment failed";
+        
+        // Friendly Error Handling
+        if (e.code === 4001 || e.message?.includes("rejected")) {
+            msg = "Transaction cancelled. Your progress is saved as a draft.";
+        }
+        
+        toast.error(msg);
+        setIsDeploying(false); 
+    } 
+}
 
     // Logic extracted from StepThreeTasks
     const isSocialOrReferral = newTask.category === 'social' || newTask.category === 'referral'

@@ -56,7 +56,7 @@ export const networks: Network[] = [
       droplist: "0xF8707b53a2bEc818E96471DDdb34a09F28E0dE6D",
       dropcode: "0x8D1306b3970278b3AB64D1CE75377BDdf00f61da",
       custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5",
-      quest: "",
+      quest: "0xdC9b027B6453560ce8C4390E0B609b343a8eBd62",
       quiz: ""
     },
     tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",

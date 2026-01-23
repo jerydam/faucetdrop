@@ -2,20 +2,20 @@
 import React from "react";
 import TableOfContents from "./toc";
 import { Faq } from "./components/Faq";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const sections = [
   { id: "hero", title: "Quests" },
   { id: "hqw", title: "How Quests Work" },
-  { id: "categories", title: "Quest Categories" },
+  // { id: "categories", title: "Quest Categories" },
   { id: "point-system", title: "Point System" },
   { id: "distribution-model", title: "Distribution Model" },
   { id: "rules", title: "Rules" },
-  { id: "launchQuest", title: "Launch Your Own Quest Campaign" },
+  // { id: "launchQuest", title: "Launch Your Own Quest Campaign" },
   { id: "faq", title: "Frequently Ask Questions" },
 ];
 
-export default function page() {
+export default function QuestPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
       <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_280px] text-white mt-20">
@@ -36,25 +36,29 @@ export default function page() {
                 <p className="text-lg text-gray-400">
                   Complete tasks, accumulate points, and claim your rewards. Join thousands of community members earning through quests.
                 </p>
+                <div className="flex-1">
+                <div className="relative aspect-video bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
+                  {/* Replace with actual image */}
+                  <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+                    <span>Hero Image - Quest Platform Interface or walkthrough video</span>
+                  </div>
+                </div>
+              </div>
                 <p className="text-lg text-gray-400">
                 Participate in community quests, social challenges, and engagement
                 campaigns. The more you contribute, the more you earn. Winners are
                 selected based on accumulated points and receive their rewards
                 through dedicated faucets.
                 </p>
-                <div className="flex flex-wrap gap-4">
+                <Link 
+                href="https://app.faucetdrops.io/quest"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-wrap gap-4">
                   <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
                     Browse Active Quests
                   </button>
-                </div>
-              </div>
-              <div className="flex-1">
-                <div className="relative aspect-video bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
-                  {/* Replace with actual image */}
-                  <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                    <span>Hero Image - Quest Platform Interface</span>
-                  </div>
-                </div>
+                </Link>
               </div>
             </div>
           </section>
@@ -97,17 +101,11 @@ export default function page() {
           </section>
 
           {/* Quest Categories */}
-          <section className="space-y-6">
+          {/* <section className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 id="categories" className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
                 Quest Categories
               </h2>
-              {/* <button className="text-blue-400 hover:text-blue-300 text-sm font-medium flex items-center">
-                View All Categories
-                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button> */}
             </div>
 
             <div className="grid gap-6 md:grid-cols-2">
@@ -218,7 +216,7 @@ export default function page() {
                 </div>
               ))}
             </div>
-          </section>
+          </section> */}
 
           {/* Point System */}
           <section className="space-y-6">
@@ -370,7 +368,7 @@ export default function page() {
           </section>
 
           {/* CTA Section */}
-          <section className="bg-linear-to-r from-blue-900/30 to-purple-900/30 rounded-2xl p-8 md:p-12 my-12">
+          <section className="bg-linear-to-r from-blue-900/30 to-[#0052FF]/30 rounded-2xl p-8 md:p-12 my-12">
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <div className="max-w-3xl mx-auto">
                 <h2 className="text-3xl font-bold text-white mb-4">Ready to Start Earning?</h2>
@@ -378,9 +376,13 @@ export default function page() {
                   Join our community of Web3 enthusiasts and start completing quests to earn rewards today.
                 </p>
               </div>
-              <Button className="px-6 py-3 bg-white hover:bg-gray-100 text-gray-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
+              <Link
+               href="https://app.faucetdrops.io/quest"
+               target="_blank"
+               rel="noopener noreferrer"
+               className="px-6 py-3 bg-white hover:bg-gray-100 text-gray-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
                 Explore Quests
-              </Button>
+              </Link>
             </div>
           </section>
         </main>

@@ -551,7 +551,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="equal">Equal</SelectItem>
-                                        <SelectItem value="quadratic">Quadratic</SelectItem>
+                                        {/* <SelectItem value="quadratic">Quadratic</SelectItem> */}
                                         <SelectItem value="custom_tiers">Custom Tiers</SelectItem>
                                     </SelectContent>
                                 </Select>

@@ -42,7 +42,7 @@ export default function TableOfContents({
         ON THIS PAGE
       </h3>
 
-      <ul className="space-y-3 border-l border-border pl-4">
+      <ul className="space-y-5 border-l border-border pl-4">
         {sections.map(section => (
           <li key={section.id}>
             <button
@@ -54,7 +54,7 @@ export default function TableOfContents({
               }}
               className={`block text-base transition-all ${
                 activeId === section.id
-                  ? "border-l-2 border-blue-600 pl-3 font-semibold text-blue-600 -ml-4"
+                  ? "border-l-2 border-[#2563EB] pl-3 font-semibold text-[#2563EB] -ml-4"
                   : "text-muted-foreground hover:text-muted-foreground/70"
               }`}
             >

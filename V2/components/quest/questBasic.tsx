@@ -8,17 +8,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { toast } from 'sonner'
 import {
-    Upload, Loader2, Trash2, Check, AlertTriangle, Coins, Settings, Save, Plus, DollarSign
+    Upload, Loader2, Trash2, Check, AlertTriangle, Coins, Settings, Save, Plus, DollarSign, Wallet
 } from "lucide-react"
 
 import { useWallet } from "@/hooks/use-wallet"
-import { ZeroAddress } from 'ethers'
+import { ZeroAddress, isAddress as ethersIsAddress } from 'ethers'
 import { type Network } from "@/lib/faucet"
 
 // ==== CONFIG ====
-const API_BASE_URL = "http://127.0.0.1:8000"
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 const MIN_POOL_USD_VALUE = 50; // $50 Minimum
 
 const networks: Network[] = [
@@ -100,10 +101,17 @@ export interface QuestData {
     faucetAddress?: string
     rewardTokenType?: 'native' | 'erc20'
     tokenAddress?: string
+    tasks: any[]
 }
 
 // ==== UTILS ====
-const isAddress = (addr: string) => addr.startsWith('0x') && addr.length === 42
+const isAddress = (addr: string) => {
+    try {
+        return ethersIsAddress(addr);
+    } catch {
+        return false;
+    }
+}
 const examplePoints = [10000, 8100, 6400, 4900, 3600]
 const weights = examplePoints.map(p => Math.sqrt(p))
 const totalWeight = weights.reduce((a, b) => a + b, 0)
@@ -265,8 +273,19 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         }
     }, [selectedToken])
 
+    const calculateTotalFromTiers = () => {
+        if (!newQuest.distributionConfig.tiers || newQuest.distributionConfig.tiers.length === 0) return 0;
+        return newQuest.distributionConfig.tiers.reduce((acc, tier) => {
+            const count = Math.max(0, tier.rankEnd - tier.rankStart + 1)
+            return acc + count * tier.amountPerUser
+        }, 0)
+    }
+
     // Calculate USD Value & Min Amount
-    const poolAmount = parseFloat(newQuest.rewardPool || '0')
+    const poolAmount = newQuest.distributionConfig.model === 'custom_tiers' 
+        ? calculateTotalFromTiers()
+        : parseFloat(newQuest.rewardPool || '0')
+        
     const poolUsdValue = poolAmount * tokenPrice
     const isBelowMin = poolUsdValue > 0 && poolUsdValue < MIN_POOL_USD_VALUE
     const minTokenAmount = tokenPrice > 0 ? (MIN_POOL_USD_VALUE / tokenPrice).toFixed(4) : "0"
@@ -287,15 +306,14 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                 setNameError(null)
             }
         } catch {
-            setNameError("Could not verify name availability.")
+            // setNameError("Could not verify name availability.")
         } finally {
             setIsCheckingName(false)
         }
     }, [setNameError, setIsCheckingName])
 
     const handleTitleChange = useCallback((value: string) => {
-        // @ts-ignore
-        setNewQuest(prev => ({ ...prev, title: value }))
+        setNewQuest(prev => ({ ...prev, title: value } as T))
         if (nameCheckTimeoutRef.current) clearTimeout(nameCheckTimeoutRef.current)
         if (value.trim().length >= 3) {
             nameCheckTimeoutRef.current = setTimeout(() => checkNameAvailabilityAPI(value.trim()), 1000)
@@ -312,49 +330,43 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     const titleLength = titleSafe.trim().length;
 
     const getAmountPerWinner = () => {
-        if (!newQuest.rewardPool || newQuest.distributionConfig.model !== 'equal') return '0'
-        return (parseFloat(newQuest.rewardPool) / newQuest.distributionConfig.totalWinners).toFixed(6)
-    }
-
-    const calculateTotalFromTiers = () => {
-        return newQuest.distributionConfig.tiers.reduce((acc, tier) => {
-            const count = tier.rankEnd - tier.rankStart + 1
-            return acc + count * tier.amountPerUser
-        }, 0)
+        const total = parseFloat(newQuest.rewardPool || '0');
+        const winners = newQuest.distributionConfig.totalWinners || 1;
+        if (!total || total <= 0) return '0';
+        return (total / winners).toFixed(6);
     }
 
     const handleTierChange = (index: number, field: 'rankStart' | 'rankEnd' | 'amountPerUser', value: number) => {
         const updated = [...newQuest.distributionConfig.tiers]
         updated[index] = { ...updated[index], [field]: value }
-        // @ts-ignore
+        
         setNewQuest(prev => ({
             ...prev,
             distributionConfig: { ...prev.distributionConfig, tiers: updated }
-        }))
+        } as T))
     }
 
     const addTier = () => {
         const last = newQuest.distributionConfig.tiers[newQuest.distributionConfig.tiers.length - 1]
         const start = last ? last.rankEnd + 1 : 1
-        // @ts-ignore
+        
         setNewQuest(prev => ({
             ...prev,
             distributionConfig: {
                 ...prev.distributionConfig,
                 tiers: [...prev.distributionConfig.tiers, { rankStart: start, rankEnd: start, amountPerUser: 0 }]
             }
-        }))
+        } as T))
     }
 
     const removeTier = (index: number) => {
-        // @ts-ignore
         setNewQuest(prev => ({
             ...prev,
             distributionConfig: {
                 ...prev.distributionConfig,
                 tiers: prev.distributionConfig.tiers.filter((_, i) => i !== index)
             }
-        }))
+        } as T))
     }
 
     const handleSaveDraft = async () => {
@@ -364,9 +376,14 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
             return
         }
 
-        if (!address || !isConnected || !selectedToken || (newQuest.title || "").trim().length < 3 || nameError || !newQuest.imageUrl || !newQuest.rewardPool || parseFloat(newQuest.rewardPool) <= 0) {
+        if (!address || !isConnected || !selectedToken || (newQuest.title || "").trim().length < 3 || nameError || !newQuest.imageUrl) {
             setError("Complete all required fields")
             return
+        }
+
+        if(poolAmount <= 0) {
+             setError("Reward pool amount must be greater than zero.")
+             return
         }
 
         setIsSavingDraft(true)
@@ -378,13 +395,13 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                 title: newQuest.title.trim(),
                 description: newQuest.description,
                 imageUrl: newQuest.imageUrl,
-                rewardPool: newQuest.rewardPool,
+                rewardPool: poolAmount.toString(),
                 rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
                 tokenAddress: selectedToken.address,
                 distributionConfig: newQuest.distributionConfig,
-                faucetAddress: draftId 
+                faucetAddress: draftId,
+                tasks: newQuest.tasks // <--- ADD THIS: Ensures System Tasks are saved in Step 1
             }
-
             const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -431,8 +448,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
 
                     <ImageUploadField
                         imageUrl={newQuest.imageUrl}
-                        // @ts-ignore
-                        onImageUrlChange={(url) => setNewQuest(prev => ({ ...prev, imageUrl: url }))}
+                        onImageUrlChange={(url) => setNewQuest(prev => ({ ...prev, imageUrl: url } as T))}
                         onFileUpload={handleImageUpload}
                         isUploading={isUploadingImage}
                         uploadError={uploadImageError}
@@ -443,8 +459,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                         <Label>Description</Label>
                         <Textarea
                             value={newQuest.description || ""}
-                            // @ts-ignore
-                            onChange={(e) => setNewQuest(prev => ({ ...prev, description: e.target.value }))}
+                            onChange={(e) => setNewQuest(prev => ({ ...prev, description: e.target.value } as T))}
                             placeholder="Describe your quest campaign"
                             rows={3}
                         />
@@ -454,12 +469,21 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2"><Coins className="h-5 w-5" /> Step 2: Rewards Configuration</CardTitle>
-                    <CardDescription>Choose token and distribution model</CardDescription>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <CardTitle className="text-lg flex items-center gap-2"><Coins className="h-5 w-5" /> Step 2: Rewards Configuration</CardTitle>
+                            <CardDescription>Choose token and distribution model</CardDescription>
+                        </div>
+                        {network && (
+                            <Badge variant="outline" className="flex items-center gap-1" style={{ borderColor: network.color, color: network.color }}>
+                                <Wallet className="h-3 w-3" /> {network.name}
+                            </Badge>
+                        )}
+                    </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     <div className="space-y-2">
-                        <Label>Reward Token ({network?.name || 'Unknown'})</Label>
+                        <Label>Reward Token ({network?.name || 'Unknown Network'})</Label>
                         <Select value={isCustomToken ? "custom" : selectedToken?.address} onValueChange={(v) => {
                             if (v === "custom") {
                                 setIsCustomToken(true)
@@ -470,12 +494,12 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                     setSelectedToken(token)
                                     setIsCustomToken(false)
                                     setCustomTokenAddress('')
-                                    // @ts-ignore
+                                    
                                     setNewQuest(prev => ({
                                         ...prev,
                                         rewardTokenType: token.isNative ? 'native' : 'erc20',
                                         tokenAddress: token.address
-                                    }))
+                                    } as T))
                                 }
                             }
                         }}>
@@ -488,19 +512,21 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                     </div>
 
                     {isCustomToken && (
-                        <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                        <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900 border-dashed border-gray-300 dark:border-gray-700">
                             <Label>Custom Token Address</Label>
                             <div className="flex gap-2 mt-2">
                                 <Input value={customTokenAddress} onChange={(e) => setCustomTokenAddress(e.target.value)} placeholder="0x..." />
-                                <Button onClick={() => {
+                                <Button variant="secondary" onClick={() => {
                                     if (isAddress(customTokenAddress)) {
                                         setSelectedToken({ address: customTokenAddress, name: 'Custom', symbol: 'TOK', decimals: 18 })
-                                        setIsCustomToken(false)
-                                        // @ts-ignore
-                                        setNewQuest(prev => ({ ...prev, rewardTokenType: 'erc20', tokenAddress: customTokenAddress }))
+                                        setNewQuest(prev => ({ ...prev, rewardTokenType: 'erc20', tokenAddress: customTokenAddress } as T))
+                                        toast.success("Custom token address set")
+                                    } else {
+                                        toast.error("Invalid token address")
                                     }
-                                }}>Set</Button>
+                                }}>Set Address</Button>
                             </div>
+                            <p className="text-xs text-muted-foreground mt-2">Make sure this is a valid ERC20 token on {network?.name}.</p>
                         </div>
                     )}
 
@@ -509,24 +535,24 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                             <div>
                                 <Label>Number of Winners</Label>
                                 <Input type="number" min="1" value={newQuest.distributionConfig.totalWinners} onChange={(e) =>
-                                    // @ts-ignore
+                                    
                                     setNewQuest(prev => ({
                                         ...prev,
-                                        distributionConfig: { ...prev.distributionConfig, totalWinners: parseInt(e.target.value) || 1 }
-                                    }))} />
+                                        distributionConfig: { ...prev.distributionConfig, totalWinners: Math.max(1, parseInt(e.target.value) || 1) }
+                                    } as T))} />
                             </div>
                             <div>
                                 <Label>Distribution Model</Label>
                                 <Select value={newQuest.distributionConfig.model} onValueChange={(v: any) =>
-                                    // @ts-ignore
+                                    
                                     setNewQuest(prev => ({
                                         ...prev,
                                         distributionConfig: { ...prev.distributionConfig, model: v, tiers: v === 'custom_tiers' ? prev.distributionConfig.tiers : [] }
-                                    }))}>
+                                    } as T))}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="equal">Equal</SelectItem>
-                                        <SelectItem value="quadratic">Quadratic</SelectItem>
+                                        {/* <SelectItem value="quadratic">Quadratic</SelectItem> */}
                                         <SelectItem value="custom_tiers">Custom Tiers</SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -544,8 +570,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                         <Input 
                                             type="number" 
                                             value={newQuest.rewardPool} 
-                                            // @ts-ignore
-                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value }))} 
+                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value } as T))} 
                                             className={isBelowMin ? "border-red-500" : ""}
                                         />
                                         {tokenPrice > 0 && (
@@ -577,8 +602,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                         <Input 
                                             type="number" 
                                             value={newQuest.rewardPool} 
-                                            // @ts-ignore
-                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value }))} 
+                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value } as T))} 
                                             className={isBelowMin ? "border-red-500" : ""}
                                         />
                                         {tokenPrice > 0 && (
@@ -612,12 +636,13 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                             </div>
                                         )
                                     })}
+                                    <div className="p-3 text-xs text-muted-foreground text-center bg-gray-50 dark:bg-gray-900 border-t">
+                                        Previewing Top 5. Rewards scale down non-linearly.
+                                    </div>
                                 </div>
                             </>
                         )}
 
-                        {/* Custom Tiers logic uses calculateTotalFromTiers() instead of rewardPool state directly,
-                            so we check minimum against that calculation. */}
                         {newQuest.distributionConfig.model === 'custom_tiers' && (
                             <div className="space-y-3">
                                 <div className="flex justify-between">
@@ -626,27 +651,39 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                 </div>
                                 {newQuest.distributionConfig.tiers.map((tier, i) => (
                                     <div key={i} className="flex gap-2 items-end">
-                                        <Input type="number" placeholder="From" value={tier.rankStart} onChange={(e) => handleTierChange(i, 'rankStart', parseInt(e.target.value) || 1)} />
-                                        <Input type="number" placeholder="To" value={tier.rankEnd} onChange={(e) => handleTierChange(i, 'rankEnd', parseInt(e.target.value) || 1)} />
-                                        <Input type="number" placeholder="Amount" value={tier.amountPerUser} onChange={(e) => handleTierChange(i, 'amountPerUser', parseFloat(e.target.value) || 0)} />
-                                        <Button variant="ghost" size="icon" onClick={() => removeTier(i)}><Trash2 className="h-4 w-4" /></Button>
+                                        <div className="flex-1">
+                                            <span className="text-xs text-muted-foreground">Rank From</span>
+                                            <Input type="number" value={tier.rankStart} onChange={(e) => handleTierChange(i, 'rankStart', parseInt(e.target.value) || 1)} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <span className="text-xs text-muted-foreground">Rank To</span>
+                                            <Input type="number" value={tier.rankEnd} onChange={(e) => handleTierChange(i, 'rankEnd', parseInt(e.target.value) || 1)} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <span className="text-xs text-muted-foreground">Amount</span>
+                                            <Input type="number" value={tier.amountPerUser} onChange={(e) => handleTierChange(i, 'amountPerUser', parseFloat(e.target.value) || 0)} />
+                                        </div>
+                                        <Button variant="ghost" size="icon" onClick={() => removeTier(i)} className="mb-0.5"><Trash2 className="h-4 w-4" /></Button>
                                     </div>
                                 ))}
-                                <div className={`bg-blue-50 dark:bg-blue-900/20 p-4 rounded ${calculateTotalFromTiers() * tokenPrice < MIN_POOL_USD_VALUE && tokenPrice > 0 ? 'border border-red-500' : ''}`}>
+                                <div className={`bg-blue-50 dark:bg-blue-900/20 p-4 rounded ${isBelowMin ? 'border border-red-500' : ''}`}>
                                     <p>Total Pool: <strong>{calculateTotalFromTiers().toFixed(4)} {selectedToken?.symbol}</strong></p>
-                                    {tokenPrice > 0 && <p className="text-xs text-muted-foreground">Value: ${(calculateTotalFromTiers() * tokenPrice).toFixed(2)}</p>}
+                                    {tokenPrice > 0 && <p className="text-xs text-muted-foreground">Value: ${poolUsdValue.toFixed(2)}</p>}
                                     
-                                    <p className="text-xs mt-1">With 5% fee: <strong>{(calculateTotalFromTiers() * 1.05).toFixed(4)}</strong></p>
+                                    <p className="text-xs mt-1">Deposit needed (incl. 5% fee): <strong>{(calculateTotalFromTiers() * 1.05).toFixed(4)}</strong></p>
                                     
-                                    {calculateTotalFromTiers() * tokenPrice < MIN_POOL_USD_VALUE && tokenPrice > 0 && (
-                                        <p className="text-xs text-red-500 mt-2 font-bold">Total must exceed ${MIN_POOL_USD_VALUE}</p>
+                                    {isBelowMin && (
+                                        <p className="text-xs text-red-500 mt-2 font-bold flex items-center gap-1">
+                                            <AlertTriangle className="h-3 w-3"/>
+                                            Total must exceed ${MIN_POOL_USD_VALUE}
+                                        </p>
                                     )}
                                 </div>
                             </div>
                         )}
                     </div>
                     <div className="pt-8 border-t text-center">
-                        <Button size="lg" onClick={handleSaveDraft} disabled={isSavingDraft || isBelowMin}>
+                        <Button size="lg" onClick={handleSaveDraft} disabled={isSavingDraft || isBelowMin} className="w-full sm:w-auto">
                             {isSavingDraft ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
                             Save and Continue
                         </Button>

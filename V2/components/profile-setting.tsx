@@ -15,7 +15,7 @@ import { Settings, Loader2, Save, Upload, Check, Edit2, RefreshCw, AlertCircle, 
 import { useToast } from "@/hooks/use-toast"
 
 // Backend URL
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 interface UserProfile {
   username: string

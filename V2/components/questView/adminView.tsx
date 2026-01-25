@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 // IMPORTANT: Update this to match your backend URL
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 interface QuestTask {
   id: string;

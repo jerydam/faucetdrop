@@ -1,5 +1,5 @@
-import {Interface, type BrowserProvider, Contract, JsonRpcProvider, ZeroAddress, isAddress, getAddress } from "ethers"
-import { FAUCET_ABI_DROPCODE, FAUCET_ABI_CUSTOM, FAUCET_ABI_DROPLIST, ERC20_ABI, CHECKIN_ABI, FACTORY_ABI_DROPCODE, FACTORY_ABI_DROPLIST, FACTORY_ABI_CUSTOM, STORAGE_ABI} from "./abis"
+import {Interface, type BrowserProvider, Contract, JsonRpcProvider, ZeroAddress,type ContractTransactionResponse, isAddress, getAddress } from "ethers"
+import { FAUCET_ABI_DROPCODE, FAUCET_ABI_CUSTOM, FAUCET_ABI_DROPLIST, ERC20_ABI, CHECKIN_ABI, FACTORY_ABI_DROPCODE, FACTORY_ABI_DROPLIST,QUEST_FACTORY_ABI, FACTORY_ABI_CUSTOM, STORAGE_ABI} from "./abis"
 import { appendDivviReferralData, reportTransactionToDivvi, getDivviStatus, isSupportedNetwork } from "./divvi-integration"
 
 // Fetch faucets for a specific network using getAllFaucets and getFaucetDetails
@@ -2145,7 +2145,62 @@ async function deleteFaucetMetadata(faucetAddress: string, userAddress: string, 
         console.error(`Error communicating with backend for metadata deletion:`, error);
     }
 }
+export async function createQuestReward(
+    provider: BrowserProvider,
+    factoryAddress: string,
+    name: string,
+    tokenAddress: string,
+    questEndTime: number,
+    claimWindowHours: number,
+    backendAddress: string // <--- 🚨 NEW: CRITICAL PARAMETER
+): Promise<string> {
+    const signer = await provider.getSigner();
+    const factory = new Contract(factoryAddress, QUEST_FACTORY_ABI, signer);
 
+    try {
+        console.log("Deploying Quest:", { name, tokenAddress, backendAddress, questEndTime, claimWindowHours });
+
+        const tx: ContractTransactionResponse = await factory.createQuestReward(
+            name,
+            tokenAddress,
+            backendAddress, // <--- Pass the real backend address here
+            questEndTime,
+            claimWindowHours
+        );
+
+        console.log("Transaction sent:", tx.hash);
+        const receipt = await tx.wait();
+
+        if (!receipt) throw new Error("Transaction failed");
+
+        let deployedAddress = "";
+        
+        for (const log of receipt.logs) {
+            try {
+                const parsed = factory.interface.parseLog({
+                    topics: [...log.topics],
+                    data: log.data
+                });
+                if (parsed?.name === "QuestRewardCreated") {
+                    deployedAddress = parsed.args[0];
+                    break;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        if (!deployedAddress) {
+            throw new Error("Could not retrieve Quest address from events");
+        }
+
+        return deployedAddress;
+
+    } catch (error) {
+        console.error("Quest creation failed:", error);
+        throw error;
+    }
+}
 export async function createFaucet(
   provider: BrowserProvider,
   factoryAddress: string,

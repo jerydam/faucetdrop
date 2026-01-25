@@ -26,7 +26,7 @@ import { Contract, BrowserProvider, parseEther } from 'ethers';
 import { Header } from "@/components/header"; 
 
 import { FAUCET_ABI_CUSTOM } from '@/lib/abis';
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 // ============= TYPES =============
 interface QuestTask {
@@ -154,7 +154,14 @@ export default function QuestDetailsPage() {
         if (now > claimWindowEnd) return { isActive: false, message: "Claim ended" };
         return { isActive: true, message: "Claim Live" };
     }, [questData]);
+   
+    const allParticipants = leaderboard.filter(entry => 
+        entry.walletAddress.toLowerCase() !== questData.creatorAddress.toLowerCase()
+    );
 
+    const leaderboardForDisplay = allParticipants.filter(entry => 
+        entry.points > 0
+    );
     // ============= 1. CHECK USER PROFILE =============
     useEffect(() => {
         if (!userWalletAddress) {
@@ -897,9 +904,14 @@ export default function QuestDetailsPage() {
                                     <CardContent><div className="text-3xl font-bold text-orange-600">{pendingSubmissions.length}</div></CardContent>
                                 </Card>
                                 <Card className="border-slate-200 dark:border-slate-800">
-                                    <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total Participants</CardTitle></CardHeader>
-                                    <CardContent><div className="text-3xl font-bold">{filteredLeaderboard.length}</div></CardContent>
-                                </Card>
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Participants</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    {/* Use the list that INCLUDES 0 point users */}
+                                    <div className="text-3xl font-bold">{allParticipants.length}</div>
+                                </CardContent>
+                            </Card>
                                 <Card className="border-slate-200 dark:border-slate-800">
                                     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Quest Status</CardTitle></CardHeader>
                                     <CardContent>

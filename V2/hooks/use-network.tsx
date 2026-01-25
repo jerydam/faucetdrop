@@ -19,6 +19,8 @@ export interface Network {
     dropcode?: string
     droplist?: string
     custom?: string
+    quest?: string
+    quiz?: string
   }
   tokenAddress: string
   nativeCurrency: {
@@ -53,7 +55,9 @@ export const networks: Network[] = [
     factories: {
       droplist: "0xF8707b53a2bEc818E96471DDdb34a09F28E0dE6D",
       dropcode: "0x8D1306b3970278b3AB64D1CE75377BDdf00f61da",
-      custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"
+      custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5",
+      quest: "0xdC9b027B6453560ce8C4390E0B609b343a8eBd62",
+      quiz: ""
     },
     tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
     nativeCurrency: {
@@ -83,7 +87,9 @@ export const networks: Network[] = [
     factories: {
       droplist: "0x0837EACf85472891F350cba74937cB02D90E60A4",
       dropcode: "0xd6Cb67dF496fF739c4eBA2448C1B0B44F4Cf0a7C",
-      custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7"
+      custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7",
+      quest: "",
+      quiz: ""  
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
@@ -111,7 +117,9 @@ export const networks: Network[] = [
     factories: {
       droplist: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
       dropcode: "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
-      custom: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de"
+      custom: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
+      quest: "",
+      quiz: ""
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
@@ -139,7 +147,9 @@ export const networks: Network[] = [
     factories: {
       droplist: "0x945431302922b69D500671201CEE62900624C6d5",
       dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
-      custom: "0x587b840140321DD8002111282748acAdaa8fA206"
+      custom: "0x587b840140321DD8002111282748acAdaa8fA206",
+      quest: "",
+      quiz: ""
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
@@ -323,7 +333,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       })
       return
     }
-
+    
     // Already on target network (compare parsed)
     const currentParsed = parseChainId(currentRawChainId)
     if (currentParsed === targetChainId) {
@@ -396,20 +406,21 @@ export function getNetworkByChainId(chainId: number) {
   return networks.find(network => network.chainId === chainId)
 }
 
-export function isFactoryTypeAvailable(chainId: number, factoryType: 'dropcode' | 'droplist' | 'custom'): boolean {
-  const network = getNetworkByChainId(chainId)
-  if (!network) return false
-  return !!network.factories[factoryType]
+export function isFactoryTypeAvailable(chainId: number, factoryType: 'dropcode' | 'droplist' | 'custom' | 'quest'): boolean {
+  const network = getNetworkByChainId(chainId)
+  if (!network) return false
+  return !!network.factories[factoryType]
 }
 
+// ✅ UPDATED TYPE HERE
 export function getAvailableFactoryTypes(chainId: number): ('dropcode' | 'droplist' | 'custom')[] {
-  const network = getNetworkByChainId(chainId)
-  if (!network) return []
+  const network = getNetworkByChainId(chainId)
+  if (!network) return []
   
-  const availableTypes: ('dropcode' | 'droplist' | 'custom')[] = []
-  if (network.factories.dropcode) availableTypes.push('dropcode')
-  if (network.factories.droplist) availableTypes.push('droplist')
-  if (network.factories.custom) availableTypes.push('custom')
-  
-  return availableTypes
+ const availableTypes: ('dropcode' | 'droplist' | 'custom')[] = []
+  if (network.factories.dropcode) availableTypes.push('dropcode')
+  if (network.factories.droplist) availableTypes.push('droplist')
+  if (network.factories.custom) availableTypes.push('custom')
+  
+  return availableTypes
 }

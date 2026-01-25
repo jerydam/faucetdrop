@@ -24,14 +24,10 @@ export default function AboutUs() {
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_280px] text-white">
           {/* MAIN CONTENT */}
           <main className="space-y-16">
-            <div className="space-y-8">
-              <h1 className="text-5xl md:text-6xl font-bold tracking-tight bg-linear-to-r from-blue-400 to-[#0052FF] bg-clip-text text-transparent">
+            <div className="space-y-10">
+              <h1 className="text-5xl md:text-6xl font-bold tracking-tight bg-[#2563EB] bg-clip-text text-transparent">
                 About FaucetDrops
               </h1>
-              <p className="text-xl text-gray-300 max-w-3xl">
-                Empowering Web3 projects with automated engagement and reward
-                distribution
-              </p>
               <div className="relative aspect-16/5 rounded-2xl border border-gray-700/50 overflow-hidden shadow-xl hover:shadow-blue-500/20 transition-all duration-300">
                 <Image
                   src="/banner.jpeg"
@@ -40,28 +36,16 @@ export default function AboutUs() {
                   className="object-cover opacity-90 hover:opacity-100 transition-opacity duration-500"
                   priority
                 />
-                {/* <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 to-transparent" />
-                <div className="absolute bottom-0 left-0 p-8">
-                  <h2 className="text-2xl font-bold text-white">
-                    Transforming Web3 Engagement
-                  </h2>
-                  <p className="text-blue-200 mt-2">
-                    Automated. Transparent. Scalable.
-                  </p>
-                </div> */}
               </div>
             </div>
 
             {/* Who we are */}
-            <section
-              id="who"
-              className="group relative bg-gray-800/50 p-8 rounded-2xl border border-gray-700/50 hover:border-blue-500/50 transition-all duration-300"
-            >
+            <section id="who" className="group relative rounded-2xl">
               <div className="absolute -inset-0.5 rounded-2xl opacity-0 group-hover:opacity-20 blur transition duration-300 group-hover:duration-200"></div>
               <div className="relative">
                 <div className="flex items-center mb-6">
-                  <div className="h-10 w-1 bg-linear-to-b from-blue-400 to-[#0052FF] rounded-full mr-4"></div>
-                  <h2 className="text-3xl font-bold bg-linear-to-r from-blue-400 to-[#0052FF] bg-clip-text text-transparent">
+                  <div className="h-10 w-1 bg-[#2563EB] rounded-full mr-4"></div>
+                  <h2 className="text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
                     Who We Are
                   </h2>
                 </div>
@@ -79,15 +63,12 @@ export default function AboutUs() {
             </section>
 
             {/* Mission */}
-            <section
-              id="mission"
-              className="group relative bg-gray-800/50 p-8 rounded-2xl border border-gray-700/50 hover:border-blue-500/50 transition-all duration-300"
-            >
+            <section id="mission" className="group relative rounded-2xl">
               <div className="absolute -inset-0.5 rounded-2xl opacity-0 group-hover:opacity-20 blur transition duration-300 group-hover:duration-200"></div>
               <div className="relative">
                 <div className="flex items-center mb-6">
-                  <div className="h-10 w-1 bg-linear-to-b from-[#0052FF] to-blue-500 rounded-full mr-4"></div>
-                  <h2 className="text-3xl font-bold bg-linear-to-r from-[#0052FF] to-blue-500 bg-clip-text text-transparent">
+                  <div className="h-10 w-1 bg-[#2563EB] rounded-full mr-4"></div>
+                  <h2 className="text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
                     Our Mission
                   </h2>
                 </div>
@@ -98,30 +79,27 @@ export default function AboutUs() {
                   powerful platform. We&apos;re on a mission to make Web3 more
                   accessible and engaging for everyone.
                 </p>
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <span className="px-4 py-2 bg-blue-900/30 text-blue-300 rounded-full text-sm font-medium border border-blue-800/50">
+                {/* <div className="mt-6 flex flex-wrap gap-3">
+                  <span className="px-4 py-2 bg-[#2563EB]/30 text-gray-300 rounded-full text-sm font-medium border border-[#2563EB]/50">
                     Automation
                   </span>
-                  <span className="px-4 py-2 bg-purple-900/30 text-purple-300 rounded-full text-sm font-medium border border-purple-800/50">
+                  <span className="px-4 py-2 bg-[#2563EB]/30 text-gray-300 rounded-full text-sm font-medium border border-[#2563EB]/50">
                     Engagement
                   </span>
-                  <span className="px-4 py-2 bg-pink-900/30 text-pink-300 rounded-full text-sm font-medium border border-pink-800/50">
+                  <span className="px-4 py-2 bg-[#2563EB]/30 text-gray-300 rounded-full text-sm font-medium border border-[#2563EB]/50">
                     Innovation
                   </span>
-                </div>
+                </div> */}
               </div>
             </section>
 
             {/* Problem */}
-            <section
-              id="problem"
-              className="group relative bg-gray-800/50 p-8 rounded-2xl border border-gray-700/50 hover:border-blue-500/50 transition-all duration-300"
-            >
-              <div className="absolute -inset-0.5 bg-linear-to-r from-red-500/50 to-orange-900/50 rounded-2xl opacity-0 group-hover:opacity-20 blur transition duration-300 group-hover:duration-200"></div>
+            <section id="problem" className="group relative">
+              <div className="absolute transition duration-300"></div>
               <div className="relative">
                 <div className="flex items-center mb-6">
-                  <div className="h-10 w-1 bg-linear-to-b from-red-400 to-orange-700 rounded-full mr-4"></div>
-                  <h2 className="text-3xl font-bold bg-linear-to-r from-red-400 to-orange-700 bg-clip-text text-transparent">
+                  <div className="h-10 w-1 bg-[#2563EB] rounded-full mr-4"></div>
+                  <h2 className="text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
                     The Challenge We&apos;re Solving
                   </h2>
                 </div>
@@ -132,14 +110,14 @@ export default function AboutUs() {
                     thriving communities without errors and drowning in manual
                     work?
                   </p>
-                  <div className="bg-gray-900/50 p-4 rounded-lg border-l-4 border-red-500">
-                    <p className="text-red-300 font-medium">
+                  <div className="bg-gray-900/50 p-4 mx-10 rounded-lg border-l-4 border-[#2563EB]">
+                    <p className="text-[#2563EB] font-medium">
                       The current state of Web3 distribution:
                     </p>
                     <ul className="mt-2 space-y-2 text-gray-300">
                       <li className="flex items-start">
                         <svg
-                          className="h-5 w-5 text-red-400 mr-2 mt-0.5 shrink-0"
+                          className="h-5 w-5 text-[#2563EB] mr-2 mt-0.5 shrink-0"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -156,7 +134,7 @@ export default function AboutUs() {
                       </li>
                       <li className="flex items-start">
                         <svg
-                          className="h-5 w-5 text-red-400 mr-2 mt-0.5 shrink-0"
+                          className="h-5 w-5 text-[#2563EB] mr-2 mt-0.5 shrink-0"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -173,7 +151,7 @@ export default function AboutUs() {
                       </li>
                       <li className="flex items-start">
                         <svg
-                          className="h-5 w-5 text-red-400 mr-2 mt-0.5 shrink-0"
+                          className="h-5 w-5 text-[#2563EB] mr-2 mt-0.5 shrink-0"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -247,8 +225,8 @@ export default function AboutUs() {
               <div className="absolute -inset-0.5 bg-blue-500/20 rounded-2xl opacity-0 group-hover:opacity-20 transition duration-300 group-hover:duration-200"></div>
               <div className="relative">
                 <div className="flex items-center mb-8">
-                  <div className="h-10 w-1 bg-linear-to-b from-blue-400 to-[#0052FF] rounded-full mr-4"></div>
-                  <h2 className="text-3xl font-bold bg-linear-to-r from-blue-400 to-[#0052FF] bg-clip-text text-transparent">
+                  <div className="h-10 w-1 bg-[#2563EB] rounded-full mr-4"></div>
+                  <h2 className="text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
                     Why Choose FaucetDrops?
                   </h2>
                 </div>
@@ -349,23 +327,12 @@ export default function AboutUs() {
                       className="group-hover:blur-xs hover:blur-none transition-all duration-300 bg-gray-800/20 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 hover:border-transparent hover:shadow-lg hover:shadow-blue-500/10 hover:bg-linear-to-br from-gray-800/80 to-gray-900/80"
                     >
                       <div
-                        className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center bg-linear-to-br ${feature.color}/20`}
+                        className={`w-12 h-12 rounded-lg mb-4 flex items-center justify-center bg-[#2563EB]/20`}
                       >
                         {feature.icon}
                       </div>
                       <h3 className="text-xl font-semibold text-white mb-2">
-                        <span
-                          // className="bg-linear-to-r bg-clip-text text-transparent"
-                          style={{
-                            backgroundImage: `linear-gradient(to right, ${feature.color
-                              .split(" ")[0]
-                              .replace("from-", "#")}, ${feature.color
-                              .split(" ")[1]
-                              .replace("to-", "#")})`,
-                          }}
-                        >
-                          {feature.title}
-                        </span>
+                        <span>{feature.title}</span>
                       </h3>
                       <p className="text-gray-300 leading-relaxed">
                         {feature.description}
@@ -386,7 +353,7 @@ export default function AboutUs() {
                       "Arbitrum"
                     ].map((chain, i) => (
                       <div key={i} className="flex items-center text-gray-300 hover:text-white transition-colors">
-                        <div className="w-2 h-2 rounded-full bg-blue-400 mr-2"></div>
+                        <div className="w-2 h-2 rounded-full bg-[#2563EB] mr-2"></div>
                         <span>{chain}</span>
                       </div>
                     ))}
@@ -417,7 +384,7 @@ export default function AboutUs() {
                   <Card key={i} className="border-none">
                     <CardHeader>
                       <div className="flex-1 items-center align-center justify-center gap-2">
-                        <p className="text-2xl font-bold text-[#0052FF]">{item.label}</p>
+                        <p className="text-2xl font-bold text-[#2563EB]">{item.label}</p>
                         <p className="text-lg text-foreground">{item.text}</p>
                       </div>
                     </CardHeader>

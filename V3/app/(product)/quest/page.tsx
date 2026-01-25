@@ -2,7 +2,6 @@
 import React from "react";
 import TableOfContents from "./toc";
 import { Faq } from "./components/Faq";
-import Link from "next/link";
 
 const sections = [
   { id: "hero", title: "Quests" },
@@ -29,7 +28,7 @@ export default function QuestPage() {
           <section className="space-y-6">
             <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="flex-1 space-y-6">
-                <h1 id="hero" className="text-4xl font-bold tracking-tight sm:text-5xl bg-linear-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                <h1 id="hero" className="text-4xl font-bold tracking-tight sm:text-5xl bg-linear-to-r from-blue-400 to-[#0052FF] bg-clip-text text-transparent">
                   Quests
                 </h1>
                 <p className="text-2xl text-gray-300">Get Rewarded for Web3 Engagement</p>
@@ -50,15 +49,13 @@ export default function QuestPage() {
                 selected based on accumulated points and receive their rewards
                 through dedicated faucets.
                 </p>
-                <Link 
-                href="https://app.faucetdrops.io/quest"
-                target="_blank"
-                rel="noopener noreferrer"
+                <button 
+                onClick={() => window.open("https://app.faucetdrops.io/quest", "_blank", "noopener noreferrer")}
                 className="flex flex-wrap gap-4">
                   <button className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
                     Browse Active Quests
                   </button>
-                </Link>
+                </button>
               </div>
             </div>
           </section>
@@ -376,13 +373,11 @@ export default function QuestPage() {
                   Join our community of Web3 enthusiasts and start completing quests to earn rewards today.
                 </p>
               </div>
-              <Link
-               href="https://app.faucetdrops.io/quest"
-               target="_blank"
-               rel="noopener noreferrer"
+              <button
+               onClick={() => window.open("https://app.faucetdrops.io/quest", "_blank", "noopener noreferrer")}
                className="px-6 py-3 bg-white hover:bg-gray-100 text-gray-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
                 Explore Quests
-              </Link>
+              </button>
             </div>
           </section>
         </main>

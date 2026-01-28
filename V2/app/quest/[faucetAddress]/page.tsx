@@ -58,7 +58,7 @@ import { Contract, BrowserProvider, parseEther } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ============= TYPES =============
 export type VerificationType =
@@ -1084,7 +1084,7 @@ const questStatusGuard = useMemo(() => {
 
        
        {/* ============= GLOBAL STATUS OVERLAY ============= */}
-{/* {(questStatusGuard.blocked || !participantData) && (
+{(questStatusGuard.blocked || !participantData) && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md transition-all">
     <Card className="max-w-md w-full border-0 bg-transparent text-white shadow-none text-center">
       <CardContent className="space-y-6">
@@ -1117,7 +1117,7 @@ const questStatusGuard = useMemo(() => {
       </CardContent>
     </Card>
   </div>
-)} */}
+)}
 
         {/* ============= TABS (with overlay blocking interaction if not joined) ============= */}
         <div className="relative">

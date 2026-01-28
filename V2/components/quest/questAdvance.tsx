@@ -19,7 +19,7 @@ import { BrowserProvider } from 'ethers'
 import { createQuestReward, type Network } from "@/lib/faucet"
 import { ZeroAddress } from 'ethers'
 import { toast } from 'sonner'
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 const networks: Network[] = [
     {
         name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png",

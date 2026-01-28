@@ -131,7 +131,7 @@ const getUserCustomClaimAmount = async (provider: any, userAddress: string, fauc
 
 const loadSocialMediaLinks = async (faucetAddress: string): Promise<SocialMediaLink[]> => {
     try {
-        const apiUrl = `http://127.0.0.1:8000/faucet-tasks/${faucetAddress}`;
+        const apiUrl = `https://fauctdrop-backend.onrender.com/faucet-tasks/${faucetAddress}`;
         const response = await fetch(apiUrl);
         
         if (!response.ok) {
@@ -162,7 +162,7 @@ const loadSocialMediaLinks = async (faucetAddress: string): Promise<SocialMediaL
 
 const loadFaucetMetadata = async (faucetAddress: string): Promise<{description: string, imageUrl: string}> => {
   try {
-    const response = await fetch(`http://127.0.0.1:8000/faucet-metadata/${faucetAddress}`);
+    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-metadata/${faucetAddress}`);
     if (!response.ok) {
       if (response.status === 404) {
         return {description: '', imageUrl: DEFAULT_FAUCET_IMAGE};
@@ -190,7 +190,7 @@ const loadCustomXPostTemplate = async (faucetAddress: string): Promise<string> =
 
 const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {
     try {
-        const response = await fetch("http://127.0.0.1:8000/admin-popup-preference", {
+        const response = await fetch("https://fauctdrop-backend.onrender.com/admin-popup-preference", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userAddress: userAddr, faucetAddress: faucetAddr, dontShowAgain: dontShow }),
@@ -207,7 +207,7 @@ const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, do
 const getAdminPopupPreference = async (userAddr: string, faucetAddr: string): Promise<boolean> => {
     try {
         const response = await fetch(
-            `http://127.0.0.1:8000/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+            `https://fauctdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
         )
         if (!response.ok) return false
         const result = await response.json()

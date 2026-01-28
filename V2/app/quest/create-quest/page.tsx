@@ -27,7 +27,7 @@ interface UserProfile {
     avatar_url?: string;
 }
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 
 // Helper to decode errors
 const getUserFriendlyError = (error: any): string => {
@@ -77,6 +77,19 @@ const SYSTEM_TASKS: QuestTask[] = [
         stage: 'Beginner',
         isSystem: true,
         minReferrals: 1
+    },
+    {
+        id: 'sys_share_x',
+        title: 'Quote Quest on X',
+        description: 'Share  quest on X with @faucetdrops to earn extra points.',
+        points: 20,
+        required: false,
+        category: 'social',
+        url: 'https://x.com/faucetdrops', // This points to your main account or specific tweet
+        action: 'quote',
+        verificationType: 'auto_social',
+        stage: 'Beginner',
+        isSystem: true,
     },
     {
         id: 'sys_daily',
@@ -297,7 +310,94 @@ function QuestCreatorContent() {
 
         fetchDraft()
     }, [draftId])
+    // Add this function inside QuestCreatorContent
+const saveDraftProgress = async (quest: any) => {
+    if (!quest.faucetAddress || !address) return;
 
+    try {
+        const payload = {
+            creatorAddress: address,
+            faucetAddress: quest.faucetAddress,
+            title: quest.title?.trim() || "",
+            description: quest.description || "",
+            imageUrl: quest.imageUrl || "",
+            rewardPool: quest.rewardPool || "",
+            rewardTokenType: quest.rewardTokenType,
+            tokenAddress: quest.tokenAddress,
+            distributionConfig: quest.distributionConfig,
+            tasks: quest.tasks,
+            // You can add more fields here later (startDate, endDate, etc.)
+        };
+
+        const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            console.error("Auto-save failed", await res.text());
+        }
+    } catch (e) {
+        console.error("Auto-save error:", e);
+    }
+};
+
+// Updated task handlers (make them async and auto-save)
+const handleAddTask = async (task: QuestTask) => {
+    if (!task?.title) return;
+
+    const newTaskWithId: QuestTask = {
+        ...task,
+        id: crypto.randomUUID(),
+        points: Number(task.points || 0),
+    };
+
+    const updatedQuest = {
+        ...newQuest,
+        tasks: [...newQuest.tasks, newTaskWithId],
+    };
+
+    setNewQuest(updatedQuest);
+
+    if (newQuest.faucetAddress) {
+        await saveDraftProgress(updatedQuest);
+    }
+};
+
+const handleUpdateTask = async (updatedTask: QuestTask) => {
+    if (!updatedTask?.id) return; // safety check
+
+    const updatedTasks = newQuest.tasks.map((t) =>
+        t.id === updatedTask.id
+            ? { ...updatedTask, points: Number(updatedTask.points || 0) }
+            : t
+    );
+
+    const updatedQuest = {
+        ...newQuest,
+        tasks: updatedTasks,
+    };
+
+    setNewQuest(updatedQuest);
+
+    if (newQuest.faucetAddress) {
+        await saveDraftProgress(updatedQuest);
+    }
+};
+
+const handleRemoveTask = async (taskId: string) => {
+    const updatedQuest = {
+        ...newQuest,
+        tasks: newQuest.tasks.filter((t) => t.id !== taskId),
+    };
+
+    setNewQuest(updatedQuest);
+
+    if (newQuest.faucetAddress) {
+        await saveDraftProgress(updatedQuest);
+    }
+};
     const stageTotals = useMemo(() => {
         const totals = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0 }
         newQuest.tasks.forEach(task => {
@@ -370,24 +470,6 @@ function QuestCreatorContent() {
         router.push('/dashboard/{username?}') 
     }
 
-    const handleAddTask = (task: QuestTask) => { 
-        if (!task || !task.title) return 
-        
-        const strictTask: QuestTask = {
-            ...task,
-            id: crypto.randomUUID(),
-            points: Number(task.points)
-        }
-        
-        setNewQuest(prev => ({ ...prev, tasks: [...prev.tasks, strictTask] }))
-        toast.success("Task added")
-    }
-
-    const handleRemoveTask = (taskId: string) => {
-        setNewQuest(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) }))
-    }
-    
-    const handleUpdateTask = () => { }
     const handleEditTask = (task: QuestTask) => { }
     const validateTask = () => true
     const handleUseSuggestedTask = (t: any) => { }
@@ -488,10 +570,10 @@ function QuestCreatorContent() {
                         stageTaskCounts={stageTaskCounts}
                         initialNewTaskForm={initialNewTaskForm}
                         validateTask={validateTask}
-                        handleAddTask={handleAddTask} 
-                        handleEditTask={handleEditTask}
+                        handleAddTask={handleAddTask}
                         handleUpdateTask={handleUpdateTask}
                         handleRemoveTask={handleRemoveTask}
+                        saveDraftProgress={saveDraftProgress}
                         handleStagePassRequirementChange={handleStagePassRequirementChange}
                         getStageColor={getStageColor}
                         getCategoryColor={getCategoryColor}

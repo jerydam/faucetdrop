@@ -78,18 +78,7 @@ export default function AboutUs() {
                   campaigns, and onboard real users at scale - all in one
                   powerful platform. We&apos;re on a mission to make Web3 more
                   accessible and engaging for everyone.
-                </p>
-                {/* <div className="mt-6 flex flex-wrap gap-3">
-                  <span className="px-4 py-2 bg-[#2563EB]/30 text-gray-300 rounded-full text-sm font-medium border border-[#2563EB]/50">
-                    Automation
-                  </span>
-                  <span className="px-4 py-2 bg-[#2563EB]/30 text-gray-300 rounded-full text-sm font-medium border border-[#2563EB]/50">
-                    Engagement
-                  </span>
-                  <span className="px-4 py-2 bg-[#2563EB]/30 text-gray-300 rounded-full text-sm font-medium border border-[#2563EB]/50">
-                    Innovation
-                  </span>
-                </div> */}
+                </p> 
               </div>
             </section>
 

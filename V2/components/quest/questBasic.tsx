@@ -280,7 +280,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
             return acc + count * tier.amountPerUser
         }, 0)
     }
-
+    
     // Calculate USD Value & Min Amount
     const poolAmount = newQuest.distributionConfig.model === 'custom_tiers' 
         ? calculateTotalFromTiers()
@@ -335,7 +335,14 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         if (!total || total <= 0) return '0';
         return (total / winners).toFixed(6);
     }
-
+    const isPhase1Valid = useMemo(() => {
+    const hasValidTitle = (newQuest.title || "").trim().length >= 3 && !nameError;
+    const hasImage = !!newQuest.imageUrl && !newQuest.imageUrl.includes('placehold.co');
+    const hasToken = !!selectedToken;
+    const hasValidPool = poolAmount > 0 && !isBelowMin;
+    
+    return hasValidTitle && hasImage && hasToken && hasValidPool && isConnected;
+}, [newQuest.title, nameError, newQuest.imageUrl, selectedToken, poolAmount, isBelowMin, isConnected]);
     const handleTierChange = (index: number, field: 'rankStart' | 'rankEnd' | 'amountPerUser', value: number) => {
         const updated = [...newQuest.distributionConfig.tiers]
         updated[index] = { ...updated[index], [field]: value }
@@ -390,18 +397,19 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         try {
             const draftId = newQuest.faucetAddress || `draft-${crypto.randomUUID()}`
 
-            const payload = {
-                creatorAddress: address,
-                title: newQuest.title.trim(),
-                description: newQuest.description,
-                imageUrl: newQuest.imageUrl,
-                rewardPool: poolAmount.toString(),
-                rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
-                tokenAddress: selectedToken.address,
-                distributionConfig: newQuest.distributionConfig,
-                faucetAddress: draftId,
-                tasks: newQuest.tasks // <--- ADD THIS: Ensures System Tasks are saved in Step 1
-            }
+         const payload = {
+            creatorAddress: address,
+            title: newQuest.title.trim(),
+            description: newQuest.description,
+            imageUrl: newQuest.imageUrl,
+            rewardPool: poolAmount.toString(),
+            rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
+            tokenAddress: selectedToken.address,
+            tokenSymbol: selectedToken.symbol,           // ← ADD THIS
+            distributionConfig: newQuest.distributionConfig,
+            faucetAddress: draftId,
+            tasks: newQuest.tasks
+        };
             const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -683,7 +691,12 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                         )}
                     </div>
                     <div className="pt-8 border-t text-center">
-                        <Button size="lg" onClick={handleSaveDraft} disabled={isSavingDraft || isBelowMin} className="w-full sm:w-auto">
+                        <Button 
+                            size="lg" 
+                            onClick={handleSaveDraft} 
+                            disabled={isSavingDraft || !isPhase1Valid} 
+                            className="w-full sm:w-auto"
+                        >
                             {isSavingDraft ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
                             Save and Continue
                         </Button>

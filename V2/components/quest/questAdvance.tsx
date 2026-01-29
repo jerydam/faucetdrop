@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation' // <--- 1. IMPORT ROUTER
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import {
     Clock, Trash2, Loader2, Rocket,
     Plus, Zap, Lock, Unlock, Trophy, Settings,
-    LayoutList, GripVertical, Percent, ShieldAlert, CalendarClock, Users
+    LayoutList, GripVertical, Percent, ShieldAlert, CalendarClock, Users, AlertTriangle
 } from "lucide-react"
 import { useWallet } from "@/hooks/use-wallet"
 import { BrowserProvider } from 'ethers'
@@ -42,7 +42,7 @@ const networks: Network[] = [
         factories: { quest: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
     }
 ]
-// ==== CONSTANTS & TYPES ====
+// ==== CONSTANTS & TYPES ====Cannot find name 'useMemo'.
 export type TaskStage = 'Beginner' | 'Intermediate' | 'Advance' | 'Legend' | 'Ultimate'
 export const TASK_STAGES: TaskStage[] = ['Beginner', 'Intermediate', 'Advance', 'Legend', 'Ultimate']
 
@@ -55,11 +55,11 @@ const STAGE_TASK_REQUIREMENTS: Record<TaskStage, { min: number; max: number }> =
     Ultimate: { min: 1, max: 3 },
 }
 
-export type VerificationType = 'auto_social' | 'auto_tx' | 'manual_link' | 'manual_upload' | 'system_referral' | 'system_daily' | 'none'
+export type VerificationType = 'auto_social' | 'auto_tx' | 'manual_link' | 'manual_upload' | 'system_referral' | 'system_daily' | 'none' | 'system_x_share'
 
 export type SocialPlatform = 'Twitter' | 'Facebook' | 'Tiktok' | 'Youtube' | 'Discord' | 'Thread' | 'Linkedin' | 'Farcaster' | 'Instagram' | 'Website'
 const SOCIAL_PLATFORMS: SocialPlatform[] = ['Twitter', 'Facebook', 'Tiktok', 'Youtube', 'Discord', 'Thread', 'Linkedin', 'Farcaster', 'Instagram', 'Website']
-const SOCIAL_ACTIONS = ['follow', 'retweet', 'like', 'join', 'subscribe', 'visit']
+const SOCIAL_ACTIONS = ['follow', 'retweet', 'like', 'join', 'subscribe', 'visit', 'comment', 'quote']
 
 export interface QuestTask {
     id: string
@@ -70,12 +70,16 @@ export interface QuestTask {
     category: 'social' | 'trading' | 'swap' | 'referral' | 'content' | 'general'
     url: string
     action: string
+    minTxCount?: number | string
+    minDays?: number | string
+    minDurationHours?: number | string
     verificationType: VerificationType
     targetPlatform?: string
     targetHandle?: string
     targetContractAddress?: string
     targetChainId?: string
     stage: TaskStage
+    minAmount?: number | string
     minReferrals?: number | string
     isSystem?: boolean
     isRecurring?: boolean
@@ -91,34 +95,247 @@ export interface StagePassRequirements {
 }
 
 // Suggested tasks
-const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
-    Beginner: [
-        { title: "Visit our Website", category: "social", action: "visit", targetPlatform: "Website", points: 30, verificationType: "manual_link" },
-        { title: "Follow us on Twitter", category: "social", action: "follow", targetPlatform: "Twitter", points: 50, verificationType: "manual_link" },
-        { title: "Join our Discord Server", category: "social", action: "join", targetPlatform: "Discord", points: 50, verificationType: "manual_link" },
-    ],
-    Intermediate: [
-        { title: "Refer 3 Friends", category: "referral", minReferrals: 3, points: 150, verificationType: "manual_link" },
-        { title: "Create Tutorial Video", category: "content", action: "upload", points: 200, verificationType: "manual_upload", description: "Upload video file AND share link" },
-    ],
-    Advance: [
-        { title: "Execute Swap", category: "swap", action: "swap", points: 200, verificationType: "auto_tx" },
-    ],
-    Legend: [
-        { title: "Refer 10 Active Users", category: "referral", minReferrals: 10, points: 500, verificationType: "manual_link" },
-    ],
-    Ultimate: [
-        { title: "Become Ambassador", category: "general", points: 1000, verificationType: "manual_link", description: "Complete all requirements and apply for ambassador role" },
-    ],
-}
 
-const generateSocialTaskTitle = (platform: string | undefined, action: string | undefined): string => {
-    if (!platform || !action) return ""
-    const actionMap: Record<string, string> = {
-        follow: 'Follow', retweet: 'Retweet/Share', like: 'Like', join: 'Join', subscribe: 'Subscribe to', visit: 'Visit',
-    }
-    const capitalizedAction = actionMap[action] || action.charAt(0).toUpperCase() + action.slice(1)
-    return `${capitalizedAction} our ${platform}`
+const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
+  Beginner: [
+    {
+      title: "Visit Project Homepage",
+      description: "Check out our official website to learn more about the project.",
+      category: "social",
+      action: "visit",
+      targetPlatform: "Website",
+      points: 30,
+      verificationType: "none",
+    },
+    {
+      title: "Follow us on X (Twitter)",
+      description: "Follow our official X account for updates and announcements.",
+      category: "social",
+      action: "follow",
+      targetPlatform: "Twitter",
+      points: 50,
+      verificationType: "auto_social",
+    },
+    {
+      title: "Quote Quest on X",
+      description: "Quote our quest tweet with {@handle} to earn points.",
+      category: "social",
+      action: "quote", // <--- New Action
+      targetPlatform: "Twitter",
+      points: 20,
+      verificationType: "auto_social",
+    },
+    {
+      title: "Join our Discord Server",
+      description: "Become part of the community on Discord.",
+      category: "social",
+      action: "join",
+      targetPlatform: "Discord",
+      points: 50,
+      verificationType: "auto_social",
+    },
+    {
+      title: "Join Telegram Group",
+      description: "Join our Telegram channel for real-time updates.",
+      category: "social",
+      action: "join",
+      targetPlatform: "Telegram",
+      points: 40,
+      verificationType: "manual_upload",
+      
+    },
+    {
+      title: "Watch Intro Video",
+      description: "Watch our short introduction video (2–3 minutes).",
+      category: "content",
+      action: "watch",
+      points: 30,
+      verificationType: "none",
+    },
+  ],
+
+  Intermediate: [
+    {
+      title: "Follow us on Instagram",
+      description: "Follow our Instagram for visuals and community highlights.",
+      category: "social",
+      action: "follow",
+      targetPlatform: "Instagram",
+      points: 40,
+      verificationType: "manual_upload",
+    },
+    {
+      title: "Subscribe to YouTube Channel",
+      description: "Subscribe to our YouTube channel and turn on notifications.",
+      category: "social",
+      action: "subscribe",
+      targetPlatform: "Youtube",
+      points: 60,
+      verificationType: "manual_upload",
+    },
+    {
+      title: "Hold at least 0.01 ETH / native token",
+      description: "Hold a small amount of the chain's native token in your wallet.",
+      category: "trading",
+      action: "hold_balance",
+      points: 80,
+      verificationType: "auto_tx",
+      minAmount: "0.01",
+      targetChainId: "any", // will use connected chain
+    },
+    {
+      title: "Make 1 Swap on DEX",
+      description: "Execute at least one swap on a decentralized exchange.",
+      category: "swap",
+      action: "swap",
+      points: 120,
+      verificationType: "auto_tx",
+    },
+    {
+      title: "Bridge at least 0.005 ETH",
+      description: "Use a bridge to move at least 0.005 ETH/native across chains.",
+      category: "trading",
+      action: "bridge",
+      points: 150,
+      verificationType: "auto_tx",
+      minAmount: "0.005",
+    },
+  ],
+
+  Advance: [
+    {
+      title: "Provide Liquidity ($50+ value)",
+      description: "Add liquidity to any pool with at least $50 equivalent value.",
+      category: "trading",
+      action: "add_liquidity",
+      points: 250,
+      verificationType: "auto_tx",
+      minAmount: "50", // in USD approximate
+    },
+    {
+      title: "Stake Tokens in a Pool",
+      description: "Stake any amount of tokens in an official staking contract.",
+      category: "trading",
+      action: "stake",
+      points: 300,
+      verificationType: "auto_tx",
+    },
+    {
+      title: "Hold an NFT from our Collection",
+      description: "Own at least 1 NFT from the official collection.",
+      category: "trading",
+      action: "hold_nft",
+      points: 200,
+      verificationType: "auto_tx",
+      targetContractAddress: "0x...your-nft-collection...", // you can override later
+    },
+    {
+      title: "Make 3+ On-chain Transactions",
+      description: "Complete at least 3 transactions on the target chain.",
+      category: "trading",
+      action: "tx_count",
+      points: 180,
+      verificationType: "auto_tx",
+      minTxCount: 3,
+    },
+  ],
+
+  Legend: [
+    {
+      title: "Provide Liquidity for 7+ days",
+      description: "Add liquidity and maintain position for at least 7 days.",
+      category: "trading",
+      action: "provide_liquidity_duration",
+      points: 500,
+      verificationType: "auto_tx",
+      minDurationHours: 168, // 7 days
+    },
+    {
+      title: "Cross-chain Bridge (2+ chains)",
+      description: "Bridge assets between at least two different chains.",
+      category: "trading",
+      action: "bridge",
+      points: 600,
+      verificationType: "auto_tx",
+    },
+    {
+      title: "Claim Staking Rewards",
+      description: "Claim rewards from any staking pool or farm.",
+      category: "trading",
+      action: "claim_rewards",
+      points: 450,
+      verificationType: "auto_tx",
+    },
+    {
+      title: "Interact with our Smart Contract",
+      description: "Send at least one transaction to our main contract.",
+      category: "trading",
+      action: "interact_contract",
+      points: 350,
+      verificationType: "auto_tx",
+      targetContractAddress: "0x...your-contract...", // override per quest
+    },
+  ],
+
+  Ultimate: [
+    {
+      title: "High Volume Trader ($10,000+ traded)",
+      description: "Execute swaps with a cumulative value of $10k or more.",
+      category: "swap",
+      action: "swap",
+      points: 1500,
+      verificationType: "auto_tx",
+      minAmount: "10000", // cumulative USD value
+    },
+    {
+      title: "Become an Ambassador",
+      category: "general",
+      action: "apply",
+      points: 1000,
+      verificationType: "manual_upload",
+      description: "Upload proof of Ambassador role assignment.",
+    },
+    {
+      title: "Wallet Age > 90 days + 50+ tx",
+      description: "Have an aged wallet with significant on-chain history.",
+      category: "trading",
+      action: "wallet_age_and_tx",
+      points: 1200,
+      verificationType: "auto_tx",
+      minDays: 90,
+      minTxCount: 50,
+    },
+  ],
+};
+const generateSocialTaskTitle = (platform: string, action: string): string => {
+  if (!platform || !action) return ""
+  const actionMap: Record<string, string> = {
+    'follow': 'Follow',
+    'retweet': 'Retweet/Share',
+    'like': 'Like',
+    'quote': 'Quote',
+    'join': 'Join',
+    'subscribe': 'Subscribe to',
+    'visit': 'Visit',
+    'swap': 'Execute Swap on',
+    'stake': 'Stake Tokens on',
+    'deposit': 'Deposit Assets on',
+    'lend': 'Lend/Borrow on',
+  }
+  const capitalizedAction = actionMap[action] || action.charAt(0).toUpperCase() + action.slice(1)
+  if (['follow', 'like', 'retweet'].includes(action) && platform === 'Twitter') {
+    return `${capitalizedAction} our post on X (Twitter)`
+  }
+  if (action === 'join' && platform === 'Discord') {
+    return `Join our Official Discord Server`
+  }
+  if (action === 'subscribe' && platform === 'Youtube') {
+    return `Subscribe to our YouTube Channel`
+  }
+  if (action === 'quote' && platform === 'Twitter') {
+    return `Quote our Quest on X (Twitter)`
+  }
+  return `${capitalizedAction} our ${platform}`
 }
 
 interface Phase2Props {
@@ -130,10 +347,9 @@ interface Phase2Props {
     stageTaskCounts: Record<TaskStage, number>
     initialNewTaskForm: Partial<QuestTask>
     validateTask: () => boolean
-    handleAddTask: (task: QuestTask) => void
-    handleEditTask: (task: QuestTask) => void
-    handleUpdateTask: () => void
-    handleRemoveTask: (taskId: string) => void
+    handleAddTask: (task: QuestTask) => Promise<void>
+    handleUpdateTask: (task: QuestTask) => Promise<void>   // ← Accepts the updated task
+    handleRemoveTask: (taskId: string) => Promise<void>
     handleStagePassRequirementChange: (stage: TaskStage, value: number) => void
     getStageColor: (stage: TaskStage) => string
     getCategoryColor: (category: string) => string
@@ -142,7 +358,9 @@ interface Phase2Props {
     isFinalizing: boolean
     setError: React.Dispatch<React.SetStateAction<string | null>>
     handleFinalize: (finalAddress?: string) => Promise<void>
+    saveDraftProgress: (quest: any) => Promise<void>
 }
+
 const BACKEND_WALLET_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 // ==== SYSTEM TASKS DEFINITION ====
 const SYSTEM_TASKS: QuestTask[] = [
@@ -200,8 +418,19 @@ export default function Phase2TimingTasksFinalize({
     const [isDeploying, setIsDeploying] = useState(false)
 
     useEffect(() => {
+        if (newTask.category === 'trading' || newTask.category === 'swap') {
+        setNewTask(prev => ({
+            ...prev,
+            verificationType: 'auto_tx',
+            // Optional: pre-fill some defaults
+            targetChainId: chainId?.toString() || "8453", // default to current connected chain (Base in your list)
+        }));
+        }
+    }, [newTask.category, chainId]);
+
+    useEffect(() => {
         setNewTask(initialNewTaskForm)
-    }, [initialNewTaskForm])
+    }, [initialNewTaskForm]);
 
     // ✅ INJECT SYSTEM TASKS AUTOMATICALLY
     useEffect(() => {
@@ -242,8 +471,51 @@ export default function Phase2TimingTasksFinalize({
     const enforceRules = newQuest.enforceStageRules ?? false
 
    // ==== DEPLOYMENT LOGIC ====
-   
+       const timingErrors = useMemo(() => {
+    const errors: string[] = [];
+    const now = new Date();
+    
+    if (newQuest.startDate && newQuest.startTime) {
+        const start = new Date(`${newQuest.startDate}T${newQuest.startTime}`);
+        if (start < now) errors.push("Start time must be in the future.");
+    }
+    
+    if (newQuest.endDate && newQuest.endTime) {
+        const end = new Date(`${newQuest.endDate}T${newQuest.endTime}`);
+        if (end <= now) errors.push("End time must be in the future.");
+        
+        if (newQuest.startDate && newQuest.startTime) {
+            const start = new Date(`${newQuest.startDate}T${newQuest.startTime}`);
+            if (end <= start) errors.push("End time must be after start time.");
+        }
+    } else {
+        errors.push("End date and time are required.");
+    }
+
+    return errors;
+}, [newQuest.startDate, newQuest.startTime, newQuest.endDate, newQuest.endTime]);
+
+const hasUserTask = useMemo(() => {
+    return newQuest.tasks.some((t: QuestTask) => !t.isSystem);
+}, [newQuest.tasks]);
+
+const canFinalize = useMemo(() => {
+    return timingErrors.length === 0 && hasUserTask && !isDeploying && !isFinalizing;
+}, [timingErrors, hasUserTask, isDeploying, isFinalizing]);
+
 const handleDeployAndFinalize = async () => {
+    const now = new Date();
+    const startTime = new Date(`${newQuest.startDate}T${newQuest.startTime}`);
+    const endTime = new Date(`${newQuest.endDate}T${newQuest.endTime}`);
+
+    if (startTime < now) {
+        toast.error("Start time must be in the future.");
+        return;
+    }
+    if (endTime <= startTime) {
+        toast.error("End time must be after start time.");
+        return;
+    }
     setIsDeploying(true);
     setError(null);
     
@@ -297,6 +569,7 @@ const handleDeployAndFinalize = async () => {
             BACKEND_WALLET_ADDRESS 
         );
 
+
         // 3. STRICT FINALIZE
         const finalizePayload = {
             faucetAddress: deployedAddress, // The Real Address
@@ -347,13 +620,30 @@ const handleDeployAndFinalize = async () => {
     const availableCategories = ['social', 'trading', 'swap', 'referral', 'content', 'general']
     const suggestedTasks = SUGGESTED_TASKS_BY_STAGE[newTask.stage || 'Beginner'] || []
 
-    const handleUseSuggestedTaskInternal = (suggestion: Partial<QuestTask>) => {
-        setNewTask(prev => ({
-            ...prev,
-            ...suggestion,
-            stage: suggestion.stage || prev.stage
-        }))
+   const handleUseSuggestedTaskInternal = (suggestion: Partial<QuestTask>) => {
+    let updated = { ...suggestion };
+
+    // Logic to prevent "dirty" URLs from previous task edits
+    if (suggestion.action === 'quote' && suggestion.targetPlatform === 'Twitter') {
+        // This is the link users will quote
+        updated.url = "https://x.com/faucetdrops"; 
     }
+
+    if (suggestion.category === 'trading' || suggestion.category === 'swap') {
+        updated.verificationType = 'auto_tx';
+        updated.targetChainId = chainId?.toString();
+    }
+
+    if (suggestion.targetPlatform === 'Twitter' || suggestion.targetPlatform === 'Discord') {
+        updated.verificationType = 'auto_social';
+    }
+
+    setNewTask(prev => ({
+        ...prev,
+        ...updated, // This overwrites prev.url with the new cleaned URL
+        stage: updated.stage || prev.stage || 'Beginner',
+    }));
+    };
 
     const isStageUnlocked = (targetStage: TaskStage): boolean => {
         if (!enforceRules) return true;
@@ -408,7 +698,12 @@ const handleDeployAndFinalize = async () => {
                             </div>
                         </div>
                     </div>
-
+                    {timingErrors.length > 0 && (
+    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-600 dark:text-red-400 text-sm mb-4">
+        <AlertTriangle className="h-4 w-4" />
+        <ul>{timingErrors.map((err, i) => <li key={i}>{err}</li>)}</ul>
+    </div>
+)}
                     <div className="space-y-2">
                         <Label className="text-muted-foreground">Claim Window (hours after end)</Label>
                         <div className="flex items-center gap-4">
@@ -592,8 +887,15 @@ const handleDeployAndFinalize = async () => {
                             </div>
 
                             {/* Verification Select */}
-                            <div className="space-y-2">
-                                <Label className="text-xs font-medium uppercase text-muted-foreground">Verification Method</Label>
+                           <div className="space-y-2">
+                                <Label className="text-xs font-medium uppercase text-muted-foreground flex justify-between">
+                                    Verification Method
+                                    {newTask.verificationType === 'none' && (
+                                        <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20 text-[10px]">
+                                            Auto-complete on Click
+                                        </Badge>
+                                    )}
+                                </Label>
                                 <Select 
                                     value={newTask.verificationType || "manual_link"} 
                                     onValueChange={(v: VerificationType) => setNewTask(prev => ({ ...prev, verificationType: v }))}
@@ -601,15 +903,23 @@ const handleDeployAndFinalize = async () => {
                                 >
                                     <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="auto_social" disabled={!isSocialOrReferral}>Auto (Social API)</SelectItem>
-                                        <SelectItem value="auto_tx" disabled={!isTrading}>Auto (Blockchain Tx)</SelectItem>
-                                        <SelectItem value="manual_link">Manual (Link Only)</SelectItem>
-                                        <SelectItem value="manual_upload">Manual Review (Image & Link Required)</SelectItem>
-                                        <SelectItem value="system_referral" disabled>System Referral (Auto)</SelectItem>
-                                        <SelectItem value="system_daily" disabled>System Daily Check-in (Auto)</SelectItem>
-                                        <SelectItem value="none">None (Click to Complete)</SelectItem>
+                                        {/* Auto options */}
+                                        <SelectItem value="auto_social" disabled={!isSocialOrReferral}>API Auto-Verify (X/Discord)</SelectItem>
+                                        <SelectItem value="auto_tx" disabled={!isTrading && !isSocialOrReferral}>On-chain Auto-Verify</SelectItem>
+                                        
+                                        {/* Manual options */}
+                                        <SelectItem value="manual_upload">Manual Review (Recommended for {newTask.targetPlatform})</SelectItem>
+                                        <SelectItem value="manual_link">Link Submission Only</SelectItem>
+                                        
+                                        {/* The "Mark as done on click" option */}
+                                        <SelectItem value="none">Auto-mark as Done (on click)</SelectItem>
                                     </SelectContent>
                                 </Select>
+                                {['Instagram', 'Youtube', 'Telegram'].includes(newTask.targetPlatform || '') && newTask.verificationType === 'none' && (
+                                    <p className="text-[10px] text-yellow-600 italic">
+                                        Note: "Auto" for this platform only tracks the click. Manual Review is safer.
+                                    </p>
+                                )}
                             </div>
 
                             {/* Add Button */}
@@ -631,7 +941,29 @@ const handleDeployAndFinalize = async () => {
                                         </div>
                                     ) : (
                                         <Button
-                                            onClick={editingTask ? () => { handleUpdateTask(); setEditingTask(null); setNewTask(initialNewTaskForm); } : () => { handleAddTask(newTask as QuestTask); setNewTask(initialNewTaskForm); }}
+                                            onClick={async () => {
+                                                const taskToSave = newTask as QuestTask;
+                                                
+                                                if (!taskToSave.title || !taskToSave.points || (enforceRules && !editingTask && isAtMax)) {
+                                                    return; // validation failed
+                                                }
+
+                                                try {
+                                                    if (editingTask) {
+                                                        // Preserve the original ID (it was copied when editing started)
+                                                        await handleUpdateTask(taskToSave);
+                                                        toast.success("Task updated — progress auto-saved");
+                                                    } else {
+                                                        await handleAddTask(taskToSave);
+                                                        toast.success("Task added — progress auto-saved");
+                                                    }
+                                                } catch (e) {
+                                                    toast.error("Failed to save task");
+                                                } finally {
+                                                    setEditingTask(null);
+                                                    setNewTask(initialNewTaskForm);
+                                                }
+                                            }}
                                             disabled={!newTask.title || !newTask.points || (enforceRules && !editingTask && isAtMax)}
                                         >
                                             {editingTask ? "Save Changes" : <><Plus className="mr-2 h-4 w-4" /> Add Task</>}
@@ -714,9 +1046,14 @@ const handleDeployAndFinalize = async () => {
                                                                     <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => { setEditingTask(t); setNewTask(t); }}>
                                                                         <Settings className="h-3 w-3 text-muted-foreground" />
                                                                     </Button>
-                                                                    <Button size="icon" variant="ghost" className="h-5 w-5 hover:bg-red-500/10 text-destructive" onClick={() => handleRemoveTask(t.id)}>
-                                                                        <Trash2 className="h-3 w-3" />
-                                                                    </Button>
+                                                                    <Button
+                                                                            size="icon"
+                                                                            variant="ghost"
+                                                                            className="h-5 w-5 hover:bg-red-500/10 text-destructive"
+                                                                            onClick={async () => await handleRemoveTask(t.id)}  // ← Made async
+                                                                        >
+                                                                            <Trash2 className="h-3 w-3" />
+                                                                        </Button>
                                                                 </>
                                                             )}
                                                         </div>
@@ -731,23 +1068,18 @@ const handleDeployAndFinalize = async () => {
                     </Card>
                 </div>
             </div>
-
+                
             <div className="flex justify-center pt-8 border-t border-border/50">
-                <Button size="lg" className="w-full sm:w-auto min-w-[200px]" onClick={handleDeployAndFinalize} disabled={isFinalizing || isDeploying || newQuest.tasks.length === 0}>
-                    {isDeploying ? (
-                        <>
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            Creating Quest...
-                        </>
-                    ) : isFinalizing ? (
-                        "Saving to Server..."
-                    ) : (
-                        <>
-                            <Rocket className="mr-2 h-5 w-5" />
-                            Create & Finalize Quest
-                        </>
-                    )}
-                </Button>
+                <Button 
+                size="lg" 
+                className="w-full sm:w-auto min-w-[200px]" 
+                onClick={handleDeployAndFinalize} 
+                disabled={!canFinalize}
+            >
+                {!hasUserTask ? "Add at least 1 custom task" : 
+                timingErrors.length > 0 ? "Fix timing errors" : 
+                isDeploying ? "Creating Quest..." : "Create & Finalize Quest"}
+            </Button>
             </div>
         </div>
     )

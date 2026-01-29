@@ -153,7 +153,7 @@ export function ProfileSettingsModal() {
     }
   }
 
-  // Helper to check uniqueness against backend
+  // ✅ CRITICAL FIX: Include current_wallet in the body
   const checkUniqueness = async (field: keyof UserProfile, value: string) => {
     if (!value || value.trim() === "") {
         // Reset status if empty
@@ -169,7 +169,11 @@ export function ProfileSettingsModal() {
         const res = await fetch(`${API_BASE_URL}/api/profile/check-availability`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ field, value, current_wallet: address })
+            body: JSON.stringify({ 
+                field, 
+                value, 
+                current_wallet: address // <--- SEND WALLET ADDRESS HERE
+            })
         });
         const data = await res.json();
         
@@ -238,25 +242,19 @@ export function ProfileSettingsModal() {
         body: JSON.stringify(payload)
       })
 
-      // Inside handleSave in ProfileSettingsModal
-    const result = await res.json()
+      const result = await res.json()
       if (!res.ok) throw new Error(result.detail || "Update failed")
 
       toast({ title: "Success", description: "Profile updated successfully!" })
       setIsOpen(false)
 
-      // This triggers the fetchProfile function in your WalletConnectButton
+      // Notify app to refresh profile
       window.dispatchEvent(new Event("profileUpdated"));
 
-      if (res.ok) {
-  window.dispatchEvent(new Event("profileUpdated"));
-  
-  // If the user just set a username for the first time, 
-  // redirect them to the new URL
-  if (formData.username && formData.username.toLowerCase() !== "anonymous") {
+      // Redirect if username set for the first time
+      if (formData.username && formData.username.toLowerCase() !== "anonymous") {
           router.push(`/dashboard/${formData.username}`);
       }
-}
 
     } catch (error: any) {
       console.error(error)

@@ -8,7 +8,7 @@ import { Plus, Settings, Users, ArrowRight, Coins, Loader2, Calendar, Sparkles }
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header"; 
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 
 interface QuestOverview {
     faucetAddress: string;
@@ -22,7 +22,7 @@ interface QuestOverview {
     startDate: string;
     endDate: string;
     tasksCount: number;
-    // MATCHING BACKEND KEY:
+    // Strictly use the name from your Quest Details API
     totalParticipants: number; 
     imageUrl?: string;
 }
@@ -227,8 +227,10 @@ export default function QuestHomePage() {
                                                     <Users className="h-4 w-4" />
                                                 </div>
                                                 <span>
-                                                    {/* CORRECTED PROPERTY NAME HERE */}
-                                                    <span className="font-bold text-foreground">{quest.totalParticipants || 0}</span> Participants
+                                                    {/* Prioritize totalParticipants */}
+                                                    <span className="font-bold text-foreground">
+                                                        {quest.totalParticipants ?? 0}
+                                                    </span> Participants
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2 sm:justify-end">

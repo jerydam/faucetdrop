@@ -1084,48 +1084,7 @@ const questStatusGuard = useMemo(() => {
 
        
        {/* ============= GLOBAL STATUS OVERLAY ============= */}
-{(questStatusGuard.blocked || !participantData) && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md transition-all">
-    <Card className="max-w-md w-full border-0 bg-transparent text-white shadow-none text-center">
-      <CardContent className="space-y-6">
-        {questStatusGuard.blocked ? (
-          <>
-            <div className="mx-auto w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center border border-red-500/50">
-              <AlertTriangle className="h-10 w-10 text-red-500" />
-            </div>
-            <h2 className="text-3xl font-bold">{questStatusGuard.title}</h2>
-            
-            {/* Dynamic Description based on Role */}
-            <p className="text-slate-400">
-              {isCreator 
-                ? "You are yet to fund the reward pool for this quest." 
-                : "The creator has not funded the reward pool yet."
-              }
-            </p>
-
-            {isCreator && !questData?.isFunded && (
-                <Button size="lg" className="bg-green-600 hover:bg-green-700" onClick={() => setShowFundModal(true)}>
-                    Fund Now to Activate
-                </Button>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="mx-auto w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center border border-primary/50">
-              <Lock className="h-10 w-10 text-primary" />
-            </div>
-            <h2 className="text-3xl font-bold">Join the Quest</h2>
-            <p className="text-slate-400">Complete tasks and climb the leaderboard to earn rewards!</p>
-            <Button size="lg" onClick={handleJoin} disabled={isJoining} className="w-full h-14 text-lg">
-              {isJoining ? <Loader2 className="mr-2 h-6 w-6 animate-spin" /> : <Sparkles className="mr-2 h-6 w-6" />}
-              Join Quest Now
-            </Button>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  </div>
-)}
+          
 
         {/* ============= TABS (with overlay blocking interaction if not joined) ============= */}
         <div className="relative">
@@ -1502,34 +1461,76 @@ const questStatusGuard = useMemo(() => {
                   {/* CASE 1: AUTO SOCIAL (Click to Verify) */}
                   {selectedTask.verificationType === "auto_social" && (
                     <div className="space-y-4 animate-in slide-in-from-top-2">
+                      {/* STEP 1: DYNAMIC ACTION BUTTON */}
                       <Button
                         variant="outline"
-                        className="w-full h-12 border-blue-400 text-blue-600"
+                        className="w-full h-12 border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between px-6"
                         onClick={() => {
-                          window.open(selectedTask.url, "_blank");
+                          // Only trigger X logic if the task is an X task
+                          if (selectedTask.category?.toLowerCase() === "x" || selectedTask.category?.toLowerCase() === "twitter") {
+                            if (selectedTask.action === "quote" || selectedTask.id === "sys_share_x") {
+                              handleXShareAction(selectedTask);
+                            } else {
+                              window.open(selectedTask.url, "_blank");
+                            }
+                          } else {
+                            // Discord or other platforms just open the Invite/Link
+                            window.open(selectedTask.url, "_blank");
+                          }
                           setHasOpenedLink((prev) => ({ ...prev, [selectedTask.id]: true }));
                         }}
                       >
-                        <span className="flex items-center gap-2"><ExternalLink className="h-4 w-4" /> 1. Perform {selectedTask.action} on X</span>
+                        <span className="flex items-center gap-2">
+                          <ExternalLink className="h-4 w-4" /> 
+                          1. {selectedTask.category?.toLowerCase() === "discord" ? "Join Discord Server" : `Perform ${selectedTask.action} on X`}
+                        </span>
+                        {hasOpenedLink[selectedTask.id] && <CheckCircle2 className="h-4 w-4 text-green-500" />}
                       </Button>
 
-                      {selectedTask.action === "quote" && (
-                        <div className="space-y-2">
-                          <Label className="text-sm font-semibold text-orange-600">Paste your Quote Tweet Link</Label>
-                          <Input
-                            placeholder="https://x.com/yourusername/status/..."
-                            value={submissionData.proofUrl}
-                            onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
-                          />
+                      {/* STEP 2: DYNAMIC INFO/INPUT BOX */}
+                      {selectedTask.category?.toLowerCase() === "discord" ? (
+                        <div className="flex items-start gap-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-dashed border-indigo-300 dark:border-indigo-800">
+                          <Users className="h-4 w-4 text-indigo-600 mt-1 shrink-0" />
+                          <div className="text-xs text-muted-foreground leading-relaxed">
+                        
+                            Make sure you've joined before clicking verify.
+                          </div>
                         </div>
+                      ) : (
+                        /* EXISTING X LOGIC */
+                        (selectedTask.action === "quote" || selectedTask.id === "sys_share_x") ? (
+                          <div className="space-y-2 animate-in fade-in zoom-in-95">
+                            <Label className="text-xs font-bold text-orange-600 flex items-center gap-1">
+                              <Sparkles className="h-3 w-3" /> PASTE YOUR POST LINK
+                            </Label>
+                            <Input
+                              placeholder="https://x.com/yourname/status/..."
+                              value={submissionData.proofUrl}
+                              onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
+                              className="border-orange-200 focus:border-orange-500"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-dashed border-slate-300 dark:border-slate-600">
+                            <Shield className="h-4 w-4 text-primary mt-1 shrink-0" />
+                            <div className="text-xs text-muted-foreground">
+                              Verifying <strong>{selectedTask.action}</strong> for @{userProfile?.twitter_handle || userProfile?.username}
+                            </div>
+                          </div>
+                        )
                       )}
 
+                      {/* STEP 3: VERIFY BUTTON */}
                       <Button
-                        className="w-full h-12 bg-primary"
+                        className="w-full h-12 bg-primary text-white"
                         onClick={handleSubmitTask}
                         disabled={isSubmitting || (selectedTask.action === "quote" && !submissionData.proofUrl)}
                       >
-                        {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "2. Verify Completion"}
+                        {isSubmitting ? (
+                          <><Loader2 className="animate-spin mr-2 h-4 w-4" /> Verifying...</>
+                        ) : (
+                          <><Shield className="mr-2 h-4 w-4" /> 2. Verify {selectedTask.category === "discord" ? "Membership" : "Completion"}</>
+                        )}
                       </Button>
                     </div>
                   )}
@@ -1556,45 +1557,6 @@ const questStatusGuard = useMemo(() => {
                     </div>
                   )}
 
-                  {selectedTask.verificationType === "auto_social" && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2">
-                      <Button
-                        variant="outline"
-                        className="w-full h-12 border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between px-6"
-                        onClick={() => {
-                          window.open(selectedTask.url, "_blank");
-                          setHasOpenedLink((prev) => ({ ...prev, [selectedTask.id]: true }));
-                        }}
-                      >
-                        <span className="flex items-center gap-2"><ExternalLink className="h-4 w-4" /> 1. Perform Action on X</span>
-                        {hasOpenedLink[selectedTask.id] && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                      </Button>
-
-                      <div className="flex items-start gap-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-dashed border-slate-300 dark:border-slate-600">
-                        <Sparkles className="h-4 w-4 text-primary mt-1 shrink-0" />
-                        <div className="text-xs text-muted-foreground leading-relaxed">
-                          Our bot will verify handle: <span className="font-bold text-foreground">@{userProfile?.twitter_handle || userProfile?.username}</span>.
-                          Ensure you've completed the task before clicking verify.
-                        </div>
-                      </div>
-
-                      <Button
-                        className="w-full h-12 bg-primary text-white hover:bg-primary/90"
-                        onClick={() => {
-                          console.log("Verify button clicked!"); // Add this to debug in F12 console
-                          handleSubmitTask();
-                        }}
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <><Loader2 className="animate-spin mr-2 h-4 w-4" /> Verifying...</>
-                        ) : (
-                          <><Shield className="mr-2 h-4 w-4" /> 2. Verify Completion</>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-
                   {/* CASE 3: MANUAL UPLOAD */}
                   {selectedTask.verificationType === "manual_upload" && (
                     <div className="space-y-4 animate-in slide-in-from-top-2">
@@ -1610,96 +1572,7 @@ const questStatusGuard = useMemo(() => {
                     </div>
                   )}
 
-                  {/* Additional auto_social variants and UI are left as-is for creator-specified flows */}
-                  {selectedTask.verificationType === "auto_social" && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2">
-                      <Button
-                        variant="outline"
-                        className="w-full h-12 border-blue-400 text-blue-600"
-                        onClick={() => {
-                          if (selectedTask.action === "quote" || selectedTask.id === "sys_share_x") {
-                            handleXShareAction(selectedTask);
-                          } else {
-                            window.open(selectedTask.url, "_blank");
-                          }
-                          setHasOpenedLink((prev) => ({ ...prev, [selectedTask.id]: true }));
-                        }}
-                      >
-                        <span className="flex items-center gap-2">
-                          <ExternalLink className="h-4 w-4" /> 1. Open X & Perform {selectedTask.action}
-                        </span>
-                        {hasOpenedLink[selectedTask.id] && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                      </Button>
-
-                      {(selectedTask.action === "quote" || selectedTask.id === "sys_share_x") && (
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold text-orange-600 flex items-center gap-1">
-                            <Sparkles className="h-3 w-3" /> PASTE YOUR POST LINK
-                          </Label>
-                          <Input
-                            placeholder="https://x.com/yourname/status/..."
-                            value={submissionData.proofUrl}
-                            onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
-                            className="border-orange-200 focus:border-orange-500"
-                          />
-                          <p className="text-[10px] text-muted-foreground italic">
-                            Go to your post on X, copy the link, for verification.
-                          </p>
-                        </div>
-                      )}
-
-                      <Button
-                        className="w-full h-12 bg-primary"
-                        onClick={handleSubmitTask}
-                        disabled={isSubmitting || ((selectedTask.action === "quote" || selectedTask.id === "sys_share_x") && !submissionData.proofUrl)}
-                      >
-                        {isSubmitting ? (
-                          <><Loader2 className="animate-spin mr-2 h-4 w-4" /> Verifying...</>
-                        ) : (
-                          <><Shield className="mr-2 h-4 w-4" /> 2. Verify Completion</>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* CASE 4: MANUAL LINK / DEFAULT (post + paste) */}
-                  {selectedTask.verificationType === "auto_social" && (
-                    <div className="space-y-4">
-                      <Button
-                        variant="outline"
-                        className="w-full h-12 border-blue-400 text-blue-600"
-                        onClick={() => {
-                          if (selectedTask.action === "quote" || selectedTask.id === "sys_share_x") {
-                            handleXShareAction(selectedTask);
-                          } else {
-                            window.open(selectedTask.url, "_blank");
-                          }
-                          setHasOpenedLink((prev) => ({ ...prev, [selectedTask.id]: true }));
-                        }}
-                      >
-                        <span className="flex items-center gap-2">
-                          <ExternalLink className="h-4 w-4" /> 1. Post Quote on X
-                        </span>
-                      </Button>
-
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold text-orange-600">PASTE YOUR POST LINK BELOW</Label>
-                        <Input
-                          placeholder="https://x.com/yourname/status/..."
-                          value={submissionData.proofUrl}
-                          onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
-                        />
-                      </div>
-
-                      <Button
-                        className="w-full h-12 bg-primary"
-                        onClick={handleSubmitTask}
-                        disabled={isSubmitting || !submissionData.proofUrl}
-                      >
-                        {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "2. Verify My Post"}
-                      </Button>
-                    </div>
-                  )}
+                  
                 </div>
 
                 {/* SHARED NOTES FIELD */}

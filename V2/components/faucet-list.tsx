@@ -772,7 +772,7 @@ export function FaucetList() {
             <div className="flex justify-center items-center py-10 sm:py-12">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-primary mx-auto"></div>
-                <p className="mt-4 text-sm sm:text-base">Loading drops from multi-ABI factory contracts...</p>
+                <p className="mt-4 text-sm sm:text-base">Loading drops...</p>
               </div>
             </div>
           ) : claims.length === 0 ? (

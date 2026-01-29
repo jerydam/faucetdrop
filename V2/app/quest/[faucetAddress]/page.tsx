@@ -58,7 +58,7 @@ import { Contract, BrowserProvider, parseEther } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
 
 // ============= TYPES =============
 export type VerificationType =

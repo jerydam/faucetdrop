@@ -22,7 +22,8 @@ interface QuestOverview {
     startDate: string;
     endDate: string;
     tasksCount: number;
-    participantsCount: number;
+    // MATCHING BACKEND KEY:
+    totalParticipants: number; 
     imageUrl?: string;
 }
 
@@ -64,7 +65,8 @@ export default function QuestHomePage() {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/api/quests`);
+            // Force fetch fresh data to get updated counts
+            const response = await fetch(`${API_BASE_URL}/api/quests?cache_bust=${Date.now()}`);
             if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
             
             const data: QuestsResponse = await response.json();
@@ -83,17 +85,11 @@ export default function QuestHomePage() {
         fetchQuests();
     }, []);
 
-    // --- STRICT FILTERING LOGIC ---
     const filteredQuests = useMemo(() => {
         return quests.filter(quest => {
-            // 1. DATA INTEGRITY CHECK: Hide quests without a valid 0x address
-            // This prevents rendering broken cards or invalid routing links.
             if (!quest.faucetAddress || !quest.faucetAddress.startsWith("0x")) {
                 return false;
             }
-
-            // 2. BUSINESS LOGIC CHECK: Only show Active quests on the Public Hub.
-            // Drafts (isActive === false) are hidden here and only seen in Dashboard.
             return quest.isActive === true; 
         });
     }, [quests]);
@@ -108,7 +104,6 @@ export default function QuestHomePage() {
         <Header pageTitle='Quest Hub' />
         <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-8">
             
-            {/* Header Section */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                <div>
                     <div className="flex items-center gap-3">
@@ -138,7 +133,6 @@ export default function QuestHomePage() {
                 </div>
             </div>
 
-            {/* Content Area */}
             {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                     <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
@@ -169,7 +163,6 @@ export default function QuestHomePage() {
                             <Card key={quest.faucetAddress} className="group hover:shadow-lg transition-all duration-300 border-slate-200 dark:border-slate-800 overflow-hidden">
                                 <div className="flex flex-col md:flex-row">
                                     
-                                    {/* Image Section */}
                                     {quest.imageUrl && (
                                         <div className="w-full md:w-48 h-48 md:h-auto bg-slate-100 dark:bg-slate-900 relative shrink-0">
                                              <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
@@ -218,7 +211,6 @@ export default function QuestHomePage() {
                                             </div>
                                         </div>
 
-                                        {/* Stats Footer */}
                                         <div className="mt-auto pt-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs sm:text-sm text-muted-foreground">
                                             <div className="flex items-center gap-2">
                                                 <div className="p-1.5 bg-blue-50 text-blue-600 rounded-md">
@@ -226,7 +218,7 @@ export default function QuestHomePage() {
                                                 </div>
                                                 <span>
                                                     Pool: <span className="font-bold text-foreground">
-                                                        {quest.rewardPool} {quest.tokenSymbol || "ETH"}
+                                                        {quest.rewardPool} {quest.tokenSymbol || "Tokens"}
                                                     </span>
                                                 </span>
                                             </div>
@@ -235,7 +227,8 @@ export default function QuestHomePage() {
                                                     <Users className="h-4 w-4" />
                                                 </div>
                                                 <span>
-                                                    <span className="font-bold text-foreground">{quest.participantsCount}</span> Participants
+                                                    {/* CORRECTED PROPERTY NAME HERE */}
+                                                    <span className="font-bold text-foreground">{quest.totalParticipants || 0}</span> Participants
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2 sm:justify-end">

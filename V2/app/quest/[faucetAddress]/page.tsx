@@ -1094,7 +1094,15 @@ const questStatusGuard = useMemo(() => {
               <AlertTriangle className="h-10 w-10 text-red-500" />
             </div>
             <h2 className="text-3xl font-bold">{questStatusGuard.title}</h2>
-            <p className="text-slate-400">{questStatusGuard.desc}</p>
+            
+            {/* Dynamic Description based on Role */}
+            <p className="text-slate-400">
+              {isCreator 
+                ? "You are yet to fund the reward pool for this quest." 
+                : "The creator has not funded the reward pool yet."
+              }
+            </p>
+
             {isCreator && !questData?.isFunded && (
                 <Button size="lg" className="bg-green-600 hover:bg-green-700" onClick={() => setShowFundModal(true)}>
                     Fund Now to Activate

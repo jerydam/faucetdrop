@@ -29,6 +29,12 @@ export interface Network {
     decimals: number
   }
   isTestnet?: boolean
+defaultTokens?: {
+    address: string;
+    name: string;
+    symbol: string;
+    decimals: number;
+  }[];
 }
 
 export const networks: Network[] = [

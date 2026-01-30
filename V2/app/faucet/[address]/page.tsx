@@ -65,7 +65,7 @@ const getDefaultFaucetDescription = (networkName: string, ownerAddress: string):
 const getNativeTokenSymbol = (networkName: string): string => {
     switch (networkName) {
         case "Celo": return "CELO"
-        case "Lisk": return "LISK"
+        case "Lisk": return "ETH"
         case "Arbitrum": case "Base": case "Ethereum": return "ETH"
         case "Polygon": return "MATIC"
         case "Optimism": return "ETH"
@@ -298,7 +298,7 @@ export default function FaucetDetails() {
     }, [router])
 
     // --- Core Data Loader ---
-    const loadFaucetDetails = useCallback(async (): Promise<void> => {
+ const loadFaucetDetails = useCallback(async (): Promise<void> => {
       if (!faucetAddress || !networkId) { setLoading(false); return }
       try {
         setLoading(true)
@@ -315,7 +315,30 @@ export default function FaucetDetails() {
         const details = await getFaucetDetails(detailsProvider, faucetAddress, detectedType)
         if (!details || details.error) { throw new Error(details?.error || "Failed to fetch faucet details") }
         setFaucetDetails(details)
-        setTokenSymbol(details.tokenSymbol || getNativeTokenSymbol(targetNetwork.name))
+
+        // --- UPDATED SYMBOL RESOLUTION LOGIC ---
+        // 1. Check if the on-chain details already returned a specific symbol
+        // 2. If not, check if the token address matches one of your 'defaultTokens' (like LSK)
+        // 3. Fallback to the native currency symbol (e.g., ETH for Lisk/Base)
+       let resolvedSymbol = details.tokenSymbol;
+
+        // 1. Check if it's the native token (Address is Zero Address)
+        const isNative = details.token === "0x0000000000000000000000000000000000000000";
+
+        if (isNative || !resolvedSymbol || resolvedSymbol === "TOKEN") {
+            // Force native symbol based on network name
+            resolvedSymbol = getNativeTokenSymbol(targetNetwork.name); 
+        } else {
+            // 2. Only check defaultTokens if it's NOT a native faucet
+            const knownToken = targetNetwork.defaultTokens?.find(
+                (t: any) => t.address.toLowerCase() === details.token?.toLowerCase()
+            );
+            if (knownToken) resolvedSymbol = knownToken.symbol;
+        }
+
+        setTokenSymbol(resolvedSymbol);
+
+        setTokenSymbol(resolvedSymbol)
         setTokenDecimals(details.tokenDecimals || 18)
         setBackendMode(details.backendMode || false)
         

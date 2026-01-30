@@ -2,6 +2,7 @@
 import React from "react";
 import TableOfContents from "./toc";
 import { Faq } from "./components/Faq";
+import Image from "next/image";
 
 const sections = [
   { id: "hero", title: "Quests" },
@@ -39,8 +40,13 @@ export default function QuestPage() {
                 <div className="relative aspect-video bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
                   {/* Replace with actual image */}
                   <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                    <span>Hero Image - Quest Platform Interface or walkthrough video</span>
-                  </div>
+                  <Image 
+                  src="/questShot.png" 
+                  alt="Quest Platform" 
+                  width={1000} 
+                  height={1000} 
+                  className="w-full h-auto rounded-xl"
+                />                  </div>
                 </div>
               </div>
                 <p className="text-lg text-gray-400">
@@ -375,7 +381,7 @@ export default function QuestPage() {
               </div>
               <button
                onClick={() => window.open("https://app.faucetdrops.io/quest", "_blank", "noopener noreferrer")}
-               className="px-6 py-3 bg-white hover:bg-gray-100 text-gray-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
+               className="px-6 py-3 bg-white hover:bg-gray-100 text-gray-900 font-medium rounded-lg transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
                 Explore Quests
               </button>
             </div>

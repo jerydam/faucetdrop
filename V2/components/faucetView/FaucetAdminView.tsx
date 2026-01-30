@@ -33,7 +33,7 @@ import {
   Menu,
 } from "lucide-react";
 import { formatUnits, parseUnits, type BrowserProvider } from "ethers";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -198,7 +198,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   router,
   faucetMetadata,
 }) => {
-  const { toast } = useToast();
+  
 
   // --- UI States ---
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
@@ -320,11 +320,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       setTransactions(sortedTxs);
     } catch (error: any) {
       console.error("Error loading Activity Log:", error);
-      toast({
-        title: "Failed to load Activity Log",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to load Activity Log");
     }
   }, [
     provider,
@@ -451,19 +447,12 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(Number(selectedNetwork.chainId)),
         faucetType || undefined
       );
-      toast({
-        title: "Faucet name updated",
-        description: `Faucet name has been updated to ${newFaucetName}`,
-      });
+      toast.success("Faucet name updated");
       setShowEditNameDialog(false);
       await loadFaucetDetails();
     } catch (error: any) {
       console.error("Error updating faucet name:", error);
-      toast({
-        title: "Failed to update faucet name",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to update faucet name");
     } finally {
       setIsUpdatingName(false);
     }
@@ -507,20 +496,13 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         console.error("Failed to sync deletion with backend:", apiError);
       }
 
-      toast({
-        title: "Faucet deleted",
-        description: "Faucet has been successfully deleted",
-      });
+      toast.success("Faucet deleted successfully");
 
       setShowDeleteDialog(false);
       router.push("/");
     } catch (error: any) {
       console.error("Error deleting faucet:", error);
-      toast({
-        title: "Failed to delete faucet",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to delete faucet");
     } finally {
       setIsDeletingFaucet(false);
     }
@@ -546,24 +528,14 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(Number(selectedNetwork.chainId)),
         faucetType || undefined
       );
-      toast({
-        title: "Faucet funded successfully",
-        description: `You added ${formatUnits(
-          amount,
-          tokenDecimals
-        )} ${tokenSymbol} to the faucet (minus 3% platform fee)`,
-      });
+      toast.success("Faucet funded successfully");
       setFundAmount("");
       setShowFundPopup(false);
       await loadFaucetDetails();
       await loadTransactionHistory();
     } catch (error: any) {
       console.error("Error funding faucet:", error);
-      toast({
-        title: "Failed to fund faucet",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to fund faucet");
     } finally {
       setIsFunding(false);
     }
@@ -589,20 +561,13 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(Number(selectedNetwork.chainId)),
         faucetType || undefined
       );
-      toast({
-        title: "Tokens withdrawn successfully",
-        description: `You withdrew ${withdrawAmount} ${tokenSymbol}.`,
-      });
+      toast.success("Tokens withdrawn successfully");
       setWithdrawAmount("");
       await loadFaucetDetails();
       await loadTransactionHistory();
     } catch (error: any) {
       console.error("Error withdrawing tokens:", error);
-      toast({
-        title: "Failed to withdraw tokens",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to withdraw tokens");
     } finally {
       setIsWithdrawing(false);
     }
@@ -636,38 +601,22 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     isClaimAmountChanged || isStartTimeChanged || isEndTimeChanged;
 
   if (!hasTaskChanges && !hasBlockchainChanges) {
-    toast({
-      title: "No Changes",
-      description: "No parameters or tasks were modified.",
-      variant: "default",
-    });
+    toast.warning("No changes made");
     return;
   }
 
   // Input Validation
   if (hasBlockchainChanges) {
     if (faucetType !== "custom" && !claimAmount) {
-      toast({
-        title: "Invalid Input",
-        description: "Please fill in the drop amount",
-        variant: "destructive",
-      });
+      toast.warning("Please fill in the drop amount");
       return;
     }
     if (!startTime || !endTime) {
-      toast({
-        title: "Invalid Input",
-        description: "Please fill in the start and end times",
-        variant: "destructive",
-      });
+      toast.warning("Please fill in the start and end times");
       return;
     }
     if (startTimeError) {
-      toast({
-        title: "Invalid Start Time",
-        description: startTimeError,
-        variant: "destructive",
-      });
+      toast.error("Please fix the start time error before proceeding");
       return;
     }
   }
@@ -760,44 +709,22 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             setCurrentSecretCode(newCode);
             setShowNewCodeDialog(true);
 
-            toast({
-              title: "Parameters Updated & Code Generated",
-              description: "Blockchain updated and new Drop Code created.",
-            });
+            toast.success("Parameters and new Drop Code generated successfully");
           } else {
-            toast({
-              title: "Parameters Updated",
-              description:
-                "Blockchain updated, but no new code was returned by server.",
-              variant: "destructive",
-            });
+            toast.success("Parameters updated, but no Drop Code received");
           }
         } else {
           // For non-dropcode faucets, just show success message
-          toast({
-            title: "Parameters Updated Successfully",
-            description:
-              "Blockchain parameters have been updated successfully.",
-          });
+          toast.success("Parameters updated successfully");
         }
       } catch (backendError: any) {
         console.error("Backend Sync Error:", backendError);
 
         // UPDATED LOGIC: Different messages based on faucet type
         if (faucetType === "dropcode") {
-          toast({
-            title: "Blockchain Updated, Backend Failed",
-            description:
-              "The contract is updated, but the secret code wasn't saved. Please try 'Generate New Code' in Admin Power.",
-            variant: "destructive",
-          });
+          toast.success("Parameters updated on chain");
         } else {
-          toast({
-            title: "Parameters Updated (Partial)",
-            description:
-              "Blockchain updated successfully, but backend sync encountered an issue.",
-            variant: "default",
-          });
+          toast.success("Parameters updated on chain, but backend sync failed");
         }
       }
     }
@@ -825,23 +752,14 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         throw new Error(errorData.detail || "Failed to save tasks");
       }
 
-      toast({
-        title: "Tasks Updated",
-        description:
-          "Social tasks updated successfully. Drop Code remains unchanged.",
-      });
+      toast.success("Social tasks updated successfully. Drop Code remains unchanged.");
     }
 
     setNewSocialLinks([]); // Clear new links queue
     await loadFaucetDetails(); // Refresh faucet details
   } catch (error: any) {
     console.error("Error updating parameters:", error);
-    toast({
-      title: "Update Failed",
-      description:
-        error.message || "Failed to update parameters on chain or backend.",
-      variant: "destructive",
-    });
+    toast.error("Failed to update claim parameters");
   } finally {
     setIsUpdatingParameters(false);
   }
@@ -872,22 +790,13 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(Number(selectedNetwork.chainId)),
         faucetType || undefined
       );
-      toast({
-        title: "Drop-list updated",
-        description: `${addresses.length} addresses have been ${
-          isWhitelistEnabled ? "added to" : "removed from"
-        } the Drop-list`,
-      });
+      toast.success("Drop-list updated successfully");
       setWhitelistAddresses("");
       await loadFaucetDetails();
       await loadTransactionHistory();
     } catch (error: any) {
       console.error("Error updating Drop-list:", error);
-      toast({
-        title: "Failed to update Drop-list",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to update Drop-list");
     } finally {
       setIsUpdatingWhitelist(false);
     }
@@ -904,19 +813,12 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(Number(selectedNetwork.chainId)),
         faucetType || undefined
       );
-      toast({
-        title: "All claims reset",
-        description: "All users can now claim again",
-      });
+      toast.success("All claims reset successfully");
       await loadFaucetDetails();
       await loadTransactionHistory();
     } catch (error: any) {
       console.error("Error resetting all claims:", error);
-      toast({
-        title: "Failed to reset all claims",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to reset all claims");
     } finally {
       setIsResettingClaims(false);
     }
@@ -946,11 +848,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       newAdminAddress.toLowerCase() === faucetDetails?.owner.toLowerCase() ||
       newAdminAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()
     ) {
-      toast({
-        title: "Cannot modify special addresses",
-        description: "Owner and backend addresses are protected.",
-        variant: "destructive",
-      });
+      toast.error("Cannot add/remove the owner as admin");
       return;
     }
     try {
@@ -964,10 +862,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           BigInt(Number(selectedNetwork.chainId)),
           faucetType || undefined
         );
-        toast({
-          title: "Admin added",
-          description: `Address ${newAdminAddress} has been added as an admin`,
-        });
+        toast.success(`Address ${newAdminAddress} has been added as an admin`);
       } else {
         removeAdmin(
           provider as BrowserProvider,
@@ -977,21 +872,14 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           BigInt(Number(selectedNetwork.chainId)),
           faucetType || undefined
         );
-        toast({
-          title: "Admin removed",
-          description: `Address ${newAdminAddress} has been removed as an admin`,
-        });
+        toast.success(`Address ${newAdminAddress} has been removed from admins`);
       }
       setNewAdminAddress("");
       setShowAddAdminDialog(false);
       await loadFaucetDetails();
     } catch (error: any) {
       console.error("Error managing admin:", error);
-      toast({
-        title: `Failed to ${isAddingAdmin ? "add" : "remove"} admin`,
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to manage admin");
     } finally {
       setIsManagingAdmin(false);
     }
@@ -1011,19 +899,10 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       setCurrentSecretCode(data.secretCode);
       setShowCurrentSecretDialog(true);
 
-      toast({
-        title: "Drop Code Retrieved",
-        description: data.isFuture
-          ? "This code is scheduled for the future."
-          : "Current active code retrieved.",
-      });
+      toast.success("Drop code retrieved successfully");
     } catch (error: any) {
       console.error("Retrieval error:", error);
-      toast({
-        title: "Failed to retrieve Drop code",
-        description: error.message || "Ensure you are the owner or admin.",
-        variant: "destructive",
-      });
+      toast.error("Failed to retrieve the drop code. Please try again.");
     } finally {
       setIsRetrievingSecret(false);
     }
@@ -1032,11 +911,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const handleGenerateNewDropCode = async (): Promise<void> => {
     if (!faucetType || !faucetAddress || !address || !chainId) return;
     if (!isOwnerOrAdmin) {
-      toast({
-        title: "Unauthorized",
-        description: "Only owner/admin can generate new codes",
-        variant: "destructive",
-      });
+      toast.error("Only the owner or admins can generate a new drop code");
       return;
     }
     try {
@@ -1061,17 +936,10 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       const newCode = result.secretCode;
       setNewlyGeneratedCode(newCode);
       setShowNewCodeDialog(true);
-      toast({
-        title: "New Drop Code Generated! ",
-        description: "A fresh drop code is now active",
-      });
+      toast.success("New Drop code generated successfully");
     } catch (error: any) {
       console.error(" Failed to generate new drop code:", error);
-      toast({
-        title: "Failed to generate Drop code",
-        description: error.message || "Unknown error occurred",
-        variant: "destructive",
-      });
+      toast.error("Failed to generate new drop code");
     } finally {
       setIsGeneratingNewCode(false);
     }
@@ -1088,35 +956,19 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
       await navigator.clipboard.writeText(url);
 
-      toast({
-        title: "Link Copied",
-        description: `${
-          type === "web" ? "Web" : "Farcaster"
-        } link has been copied to clipboard.`,
-      });
+      toast.success("Faucet link has been copied to your clipboard.");
     } catch (error) {
-      toast({
-        title: "Copy Failed",
-        description: "Failed to copy the link. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Failed to copy the link. Please try again.");
     }
   };
   const handleCopySecretCode = async (code: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(code);
-      toast({
-        title: "Code Copied",
-        description: "Drop code has been copied to your clipboard.",
-      });
+      toast.success("Drop code has been copied to your clipboard.");
       setShowNewCodeDialog(false);
       setShowCurrentSecretDialog(false);
     } catch (error) {
-      toast({
-        title: "Copy Failed",
-        description: "Failed to copy the code. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Failed to copy the drop code. Please try again.");
     }
   };
 
@@ -1750,18 +1602,19 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                         BigInt(Number(selectedNetwork.chainId)),
                         faucetType || undefined
                       );
-                      toast({
-                        title: "Custom claim amounts set",
-                        description: `Successfully set custom amounts for ${addresses.length} addresses`,
-                      });
+                      toast.success(
+                        "Custom claim amounts have been set successfully"
+                      );
                       await loadFaucetDetails();
                       await loadTransactionHistory();
                     } catch (error: any) {
-                      toast({
-                        title: "Failed to set custom claim amounts",
-                        description: error.message || "Unknown error occurred",
-                        variant: "destructive",
-                      });
+                      toast.error(
+                        "Failed to set custom claim amounts. Please try again."
+                      );
+                      console.error(
+                        "Error setting custom claim amounts:",
+                        error
+                      );
                     }
                   }}
                   onCancel={() => {}}
@@ -2051,19 +1904,11 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
               faucetMetadata={simulatedFaucetDetails.faucetMetadata}
               customXPostTemplate={customXPostTemplate}
               handleBackendClaim={() => {
-                toast({
-                  title: "Action Disabled",
-                  description: "This is a non-functional preview.",
-                  variant: "destructive",
-                });
+                toast.warning("Preview Mode: Claim disabled.");
                 return Promise.resolve();
               }}
               handleFollowAll={() =>
-                toast({
-                  title: "Preview Mode",
-                  description: "Tasks are disabled in preview.",
-                  variant: "default",
-                })
+                toast.warning("Preview Mode: Follow disabled.")
               }
               generateXPostContent={(a) => `Preview: ${a} ${tokenSymbol}`}
               txHash={null}

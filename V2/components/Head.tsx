@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { Plus, Users, Loader2, Menu, X } from "lucide-react"
 import {  WalletConnectButton } from "@/components/wallet-connect"
 import { useWallet } from "@/hooks/use-wallet"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from 'sonner'
 import { appendDivviReferralData, reportTransactionToDivvi } from "../lib/divvi-integration"
 import { Contract } from "ethers"
 import Link from 'next/link'
@@ -131,7 +131,7 @@ export default function Head() {
 
   const router = useRouter()
   const { address, isConnected, signer, chainId, ensureCorrectNetwork } = useWallet()
-  const { toast } = useToast()
+  
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   // Loading State
@@ -169,11 +169,7 @@ export default function Head() {
     
     if (!isConnected || !address || !signer) {
       setDroplistNotification("Please connect your wallet first")
-      toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet to join the droplist",
-        variant: "destructive",
-      })
+      toast.warning("Please connect your wallet first")
       return
     }
 
@@ -181,11 +177,7 @@ export default function Head() {
     const isCorrectNetwork = await ensureCorrectNetwork(42220)
     if (!isCorrectNetwork) {
       setDroplistNotification("Please switch to the Celo network to join the droplist")
-      toast({
-        title: "Incorrect network",
-        description: "Please switch to the Celo network (chain ID 42220)",
-        variant: "destructive",
-      })
+      toast.warning("Please switch to the Celo network to join the droplist")
       return
     }
 
@@ -228,20 +220,12 @@ export default function Head() {
 
       setDroplistNotification("Successfully joined the droplist!")
       setIsDivviSubmitted(true)
-      toast({
-        title: "Success",
-        description: "You have successfully joined the droplist!",
-      })
-
+      toast.success("Successfully joined the droplist!")
     } catch (error) {
       console.error('Droplist join error:', getErrorInfo(error))
       const errorInfo = getErrorInfo(error)
       setDroplistNotification(`Failed to join droplist: ${errorInfo.message}`)
-      toast({
-        title: "Error",
-        description: `Failed to join droplist: ${errorInfo.message}`,
-        variant: "destructive",
-      })
+      toast.error(`Failed to join droplist: ${errorInfo.message}`)
     } finally {
       setIsJoiningDroplist(false)
     }

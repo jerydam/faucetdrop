@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { TokenBalance } from "@/components/token-balance";
 import { formatUnits } from 'ethers';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useToast } from "@/hooks/use-toast"; 
+import { toast } from 'sonner';
 
 // Helper functions 
 const getPlatformIcon = (platform: string): string => {
@@ -35,13 +35,13 @@ const getActionText = (platform: string): string => {
   }
 }
 
-const handleCopyFaucetLink = async (toast: any): Promise<void> => {
+const handleCopyFaucetLink = async (): Promise<void> => {
     try {
         const currentUrl = window.location.href
         await navigator.clipboard.writeText(currentUrl)
-        toast({ title: "Link Copied", description: "Faucet link has been copied to your clipboard.", })
+        toast.success("Faucet link copied to clipboard!")
     } catch (error) {
-        toast({ title: "Copy Failed", description: "Failed to copy the link. Please try again.", variant: "destructive", })
+        toast.error("Failed to copy the link. Please try again.")
     }
 }
 
@@ -123,7 +123,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     handleVerifyAllTasks,
     handleGoBack, 
 }) => {
-    const { toast } = useToast();
+   
 
     // --- NEW STATE FOR SIMULATION ---
     const [simulationAttempt, setSimulationAttempt] = useState(0);
@@ -215,7 +215,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
                 </Button>
                 <Button
                     variant="outline"
-                    onClick={() => handleCopyFaucetLink(toast)}
+                    onClick={() => handleCopyFaucetLink()}
                     className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
                 >
                     <Link className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />

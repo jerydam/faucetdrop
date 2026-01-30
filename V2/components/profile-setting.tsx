@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Settings, Loader2, Save, Upload, Check, Edit2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 
 // Backend URL
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
@@ -58,7 +58,7 @@ const GENERATED_SEEDS = [
 export function ProfileSettingsModal() {
   const { address, isConnected } = useAppKitAccount()
   const { walletProvider } = useAppKitProvider('eip155')
-  const { toast } = useToast()
+  
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -142,12 +142,12 @@ export function ProfileSettingsModal() {
       const data = await response.json()
       if (data.success) {
         setFormData(prev => ({ ...prev, avatar_url: data.imageUrl }))
-        toast({ title: "Image Uploaded", description: "Your custom avatar is ready to save." })
+        toast.success("Image Uploaded,Your custom avatar is ready to save.")
       } else {
         throw new Error(data.message)
       }
     } catch (error: any) {
-      toast({ title: "Upload Failed", description: error.message, variant: "destructive" })
+      toast.error(`Upload failed: ${error.message}`)
     } finally {
       setUploading(false)
     }
@@ -192,12 +192,12 @@ export function ProfileSettingsModal() {
 
   const handleSave = async () => {
     if (!isConnected || !walletProvider || !address) {
-      toast({ title: "Error", description: "Wallet not connected", variant: "destructive" })
+      toast.error("Wallet not connected")
       return
     }
 
     if (!isFormValid) {
-        toast({ title: "Missing Information", description: "Email and X (Twitter) are required.", variant: "destructive" })
+        toast.error("Email and X (Twitter) are required.")
         return
     }
 
@@ -216,7 +216,7 @@ export function ProfileSettingsModal() {
     // If any validation failed (returned false), stop
     if (validations.includes(false)) {
         setSaving(false);
-        toast({ title: "Validation Failed", description: "Some details are already in use.", variant: "destructive" });
+        toast.error("Validation Failed: Some details are already in use.");
         return;
     }
 
@@ -245,7 +245,7 @@ export function ProfileSettingsModal() {
       const result = await res.json()
       if (!res.ok) throw new Error(result.detail || "Update failed")
 
-      toast({ title: "Success", description: "Profile updated successfully!" })
+      toast.success("Profile updated successfully!")
       setIsOpen(false)
 
       // Notify app to refresh profile
@@ -258,11 +258,7 @@ export function ProfileSettingsModal() {
 
     } catch (error: any) {
       console.error(error)
-      toast({ 
-        title: "Save Failed", 
-        description: error.message || "Could not save profile", 
-        variant: "destructive" 
-      })
+      toast.error("Could not save profile")
     } finally {
       setSaving(false)
     }

@@ -5,12 +5,12 @@ import { useNetwork, type Network } from "@/hooks/use-network"
 import { useAppKit, useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
 import { useSwitchChain } from 'wagmi'
 import { useRouter, usePathname } from "next/navigation"
-
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle, Loader2 } from "lucide-react"
 import { useState } from "react"
-import { useToast } from "@/hooks/use-toast"
+
 
 // Network image component with fallback
 interface NetworkImageProps {
@@ -105,7 +105,7 @@ export function NetworkSelector({
   const { open } = useAppKit()
   const { isConnected, address } = useAppKitAccount()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
-  const { toast } = useToast()
+  
   
   const router = useRouter()
   const pathname = usePathname()
@@ -204,10 +204,7 @@ export function NetworkSelector({
     // Switch directly using wagmi
     try {
       await switchChain({ chainId: net.chainId })
-      toast({
-        title: "Network Switched",
-        description: `Switched to ${net.name}`,
-      })
+      toast.success( `Network Switched to ${net.name}`)
       
       // Routing Logic
       const isLandingPage = pathname === '/'
@@ -219,11 +216,7 @@ export function NetworkSelector({
 
     } catch (error: any) {
       console.error('Network switch error:', error)
-      toast({
-        title: "Switch Failed",
-        description: error.message || "Failed to switch network",
-        variant: "destructive",
-      })
+      toast.error( `Switch Failed: ${error.message || "Failed to switch network"}` )
     }
   }
 
@@ -377,7 +370,7 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
   const { open } = useAppKit()
   const { isConnected, address } = useAppKitAccount()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
-  const { toast } = useToast()
+ 
   
   const router = useRouter()
   const pathname = usePathname()
@@ -396,10 +389,7 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
     
     try {
       await switchChain({ chainId: net.chainId })
-      toast({
-        title: "Network Switched",
-        description: `Switched to ${net.name}`,
-      })
+      toast.success( `Network Switched to ${net.name}`)
 
       // Routing Logic
       const isLandingPage = pathname === '/'
@@ -410,11 +400,7 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
       }
     } catch (error: any) {
       console.error('Network switch error:', error)
-      toast({
-        title: "Switch Failed",
-        description: error.message || "Failed to switch network",
-        variant: "destructive",
-      })
+       toast.error( `Switch Failed: ${error.message || "Failed to switch network"}` )
     }
   }
   
@@ -562,7 +548,7 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
   const { open } = useAppKit()
   const { isConnected, address } = useAppKitAccount()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
-  const { toast } = useToast()
+
   
   const router = useRouter()
   const pathname = usePathname()
@@ -579,11 +565,8 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
     
     try {
       await switchChain({ chainId: net.chainId })
-      toast({
-        title: "Network Switched",
-        description: `Switched to ${net.name}`,
-      })
-      
+       toast.success( `Network Switched to ${net.name}`)
+       
       // Routing Logic
       const isLandingPage = pathname === '/'
       const isCreatePage = pathname?.startsWith('/create')
@@ -593,11 +576,7 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
       }
     } catch (error: any) {
       console.error('Network switch error:', error)
-      toast({
-        title: "Switch Failed",
-        description: error.message || "Failed to switch network",
-        variant: "destructive",
-      })
+       toast.error( `Switch Failed: ${error.message || "Failed to switch network"}` )
     }
   }
   

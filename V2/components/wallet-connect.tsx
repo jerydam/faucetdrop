@@ -24,7 +24,7 @@ import {
   Sparkles
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 
 // Backend URL
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com" 
@@ -32,7 +32,7 @@ const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 export function WalletConnectButton() {
   const { open } = useAppKit()
   const { address, isConnected } = useAppKitAccount()
-  const { toast } = useToast()
+  
 
   const [username, setUsername] = useState<string>("Anonymous")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -145,7 +145,7 @@ export function WalletConnectButton() {
 
           <DropdownMenuItem onClick={() => {
             navigator.clipboard.writeText(address);
-            toast({ title: "Copied!", description: "Address on clipboard" });
+            toast.success("Address copied to clipboard!");
           }} className="cursor-pointer flex items-center gap-2">
             <Copy className="h-4 w-4" />
             <span>Copy Address</span>

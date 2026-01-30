@@ -7,7 +7,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { useNetwork, isFactoryTypeAvailable, getFactoryAddress } from "@/hooks/use-network"
 import { useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
 import { useChainId } from 'wagmi'
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   createFaucet,
@@ -564,7 +564,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
   const { address, isConnected } = useAppKitAccount()
   const chainId = useChainId()
   const { chainId: appKitChainId } = useAppKitNetwork()
-  const { toast } = useToast()
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const effectiveChainId = (chainId || appKitChainId) as number
@@ -667,20 +667,12 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     if (!file) return
 
     if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File Type",
-        description: "Please select an image file (PNG, JPG, GIF, etc.)",
-        variant: "destructive",
-      })
+      toast.error("Invalid File Type. Please select an image file.")
       return
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File Too Large",
-        description: "Please select an image smaller than 5MB",
-        variant: "destructive",
-      })
+      toast.error("File Too Large. Please select an image smaller than 5MB")
       return
     }
 
@@ -690,16 +682,9 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       const uploadedUrl = await uploadImageToServer(file)
       setFaucetImageUrl(uploadedUrl)
-      toast({
-        title: "Image Uploaded Successfully",
-        description: "Your faucet image has been uploaded",
-      })
+      toast.success("Image uploaded successfully")
     } catch (error) {
-      toast({
-        title: "Upload Failed",
-        description: "Failed to upload image. Please try again.",
-        variant: "destructive",
-      })
+      toast.error("Image upload failed. Please try again.")
       setSelectedImageFile(null)
     } finally {
       setIsUploadingImage(false)
@@ -740,11 +725,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
         
     } catch (error: any) {
       console.error('❌ Error saving faucet metadata:', error)
-      toast({
-        title: "Warning",
-        description: "Faucet created but metadata failed to save. You can add it later.",
-        variant: "default",
-      })
+      toast.warning("Faucet created, but failed to save metadata. You can update it later in the dashboard.")
     }
   }
 
@@ -893,11 +874,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     } catch (error: any) {
       console.error('❌ Error registering faucet in backend:', error)
       // We don't block the UI here, just log/toast warning, as the on-chain faucet is already created
-      toast({
-        title: "Database Sync Warning",
-        description: "Faucet created on-chain, but failed to register in dashboard. It may not appear in your list immediately.",
-        variant: "default", // or "destructive" if you prefer
-      })
+      toast.error("Faucet created on-chain, but failed to register in dashboard. It may not appear in your list immediately.")
     }
   }
   // Name validation
@@ -1051,11 +1028,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     setCreationError(null)
     if (wizardState.selectedFaucetType && !isFaucetTypeAvailableOnNetwork(wizardState.selectedFaucetType as FaucetType)) {
       setWizardState(prev => ({ ...prev, selectedFaucetType: '' }))
-      toast({
-        title: "Faucet Type Unavailable",
-        description: `${wizardState.selectedFaucetType} faucets are not available on ${matchedNetwork.name}`,
-        variant: "destructive",
-      })
+      toast.warning(`Selected faucet type is not available on ${matchedNetwork.name}. Please choose another type.`)
     }
   }, [effectiveChainId, networks, wizardState.selectedFaucetType, toast])
 
@@ -1112,11 +1085,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
   const selectFaucetType = (type: FaucetType) => {
     if (!isFaucetTypeAvailableOnNetwork(type)) {
       console.warn(`❌ Cannot select ${type} - not available on current network`)
-      toast({
-        title: "Faucet Type Unavailable",
-        description: `${type} faucets are not available on chain ${effectiveChainId}`,
-        variant: "destructive",
-      })
+      toast.warning(`The selected faucet type is not available on the current network. Please choose another type.`)
       return
     }
     console.log(`✅ Selected faucet type: ${type}`)
@@ -1288,10 +1257,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
       )
 
       const selectedToken = getSelectedTokenConfiguration()
-      toast({
-        title: "Faucet Created Successfully! 🎉",
-        description: `Your ${selectedToken?.symbol || "token"} faucet (${mappedFactoryType}) has been created at ${createdFaucetAddress}`,
-      })
+      toast.success(`Faucet "${wizardState.formData.faucetName}" created successfully! Dispensing ${selectedToken ? selectedToken.symbol : 'tokens'}.`)
 
       // -------------------------------------------------------------
       // IMPORTANT: TRIGGER THE DASHBOARD REFRESH HERE
@@ -1316,10 +1282,8 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     } catch (error: any) {
       console.error("❌ Error creating faucet:", error)
       let errorMessage = error.message || "Failed to create faucet"
-      toast({
-        title: "Failed to create faucet",
+      toast.error("Failed to create faucet", {
         description: errorMessage,
-        variant: "destructive",
       })
       setCreationError(errorMessage)
     } finally {
@@ -2055,11 +2019,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
                 className="max-h-40 rounded object-contain mx-auto"
                 onError={() => {
                   if (faucetImageUrl) {
-                    toast({
-                      title: "Invalid Image",
-                      description: "The image cannot be loaded. Default will be used.",
-                      variant: "destructive",
-                    })
+                    toast.error("The image cannot be loaded. Default will be useding a file.")
                   }
                 }}
               />

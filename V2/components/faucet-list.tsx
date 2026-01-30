@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useNetwork } from "@/hooks/use-network";
-import { useToast } from "@/hooks/use-toast";
+import {toast} from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -513,7 +513,7 @@ function isCacheValid(): boolean {
 
 export function FaucetList() {
   const { networks } = useNetwork();
-  const { toast } = useToast();
+ 
   
   const [claims, setClaims] = useState<ClaimType[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(true);
@@ -645,20 +645,13 @@ export function FaucetList() {
         await fetchFaucetNames(claimsData);
         
         if (forceRefresh) {
-          toast({
-            title: "Drops refreshed",
-            description: `Loaded ${claimsData.length} total drops from all factory types`,
-          });
+          toast.success("Drops refreshed successfully");
         }
       }
       
     } catch (error) {
       console.error("Error loading drops:", error);
-      toast({
-        title: "Failed to load drops",
-        description: error instanceof Error ? error.message : "Please try again later.",
-        variant: "destructive",
-      });
+      toast.error("Failed to load drops. Please try again later.");
     } finally {
       setLoadingClaims(false);
       setRefreshing(false);

@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
-import { useToast } from "@/hooks/use-toast"
+import { toast} from "sonner"
 import { useWallet } from "@/hooks/use-wallet"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -222,7 +222,6 @@ export default function FaucetDetails() {
     const { address: faucetAddress } = useParams<{ address: string }>()
     const searchParams = useSearchParams()
     const networkId = searchParams.get("networkId")
-    const { toast } = useToast()
     const router = useRouter()
     const { address, chainId, isConnected, provider } = useWallet()
     const { networks, setNetwork } = useNetwork()
@@ -278,14 +277,13 @@ export default function FaucetDetails() {
     
     const checkNetwork = useCallback((skipToast = false): boolean => {
       if (!chainId) {
-        if (!skipToast) toast({ title: "Network not detected", description: "Please ensure your wallet is connected.", variant: "destructive" });
+        if (!skipToast) toast.error("Please connect your wallet to proceed.")
         return false
       }
       if (networkId && Number(networkId) !== chainId) {
         const targetNetwork = networks.find((n) => n.chainId === Number(networkId))
         if (targetNetwork) {
-          if (!skipToast) toast({ title: "Wrong Network", description: "Switch to the network to perform operation", variant: "destructive", action: (<Button onClick={() => setNetwork(targetNetwork)} variant="outline">Switch to {targetNetwork.name}</Button>), });
-          return false
+            if (!skipToast) toast.error(`Please switch your network to ${targetNetwork.name} to proceed.`)
         }
       }
       return true
@@ -369,7 +367,7 @@ export default function FaucetDetails() {
         }
         
       } catch (error: any) {
-        toast({ title: "Failed to load faucet details", description: error.message || "Unknown error occurred", variant: "destructive", })
+        toast.error(error.message || "Error loading faucet details")
       } finally {
         setLoading(false)
       }
@@ -386,7 +384,7 @@ export default function FaucetDetails() {
 
     const handleFollowAll = (): void => {
       if (dynamicTasks.length === 0) {
-        toast({ title: "No Tasks", description: "This faucet does not require social media verification.", variant: "default" })
+        toast.info("No social media tasks to follow.")
         return
       }
       setShowFollowDialog(true)
@@ -396,7 +394,7 @@ export default function FaucetDetails() {
     const handleVerifyAllTasks = async (): Promise<void> => {
         const allUsernamesProvided = dynamicTasks.every(task => usernames[getTaskKey(task)] && usernames[getTaskKey(task)].trim().length > 0)
         if (!allUsernamesProvided) {
-          toast({ title: "Missing Information", description: "Please enter usernames for all required tasks.", variant: "destructive", })
+          toast.error("Please provide all required usernames/handles before verifying.")
           return
         }
 
@@ -412,18 +410,14 @@ export default function FaucetDetails() {
               setShowVerificationDialog(false)
               setHasAttemptedVerification(true) // Mark as attempted so next time it succeeds
               
-              toast({
-                  title: "Verification Failed",
-                  description: "Can't verify. Please complete the tasks and try again.",
-                  variant: "destructive",
-              })
+              toast.error("Verification Failed", { description: "Some tasks could not be verified. Please ensure you have completed all tasks and try again." })  
           } else {
               // SECOND+ ATTEMPT: SUCCEED
               const newVerificationStates: Record<string, boolean> = {}
               dynamicTasks.forEach(task => { newVerificationStates[getTaskKey(task)] = true })
               setVerificationStates(newVerificationStates)
               setIsVerifying(false)
-              toast({ title: "All Tasks Verified", description: "All required tasks have been verified successfully!", })
+              toast.success("All tasks verified successfully!")
               setTimeout(() => {
                 setShowVerificationDialog(false)
                 setShowFollowDialog(false)
@@ -442,14 +436,14 @@ export default function FaucetDetails() {
       return content
     }
 
-    async function handleBackendClaim(): Promise<void> {
-      if (!isConnected || !address || !faucetDetails) { toast({ title: "Wallet not connected", description: "Please connect your wallet.", variant: "destructive", }); return; }
+        async function handleBackendClaim(): Promise<void> {
+          if (!isConnected || !address || !faucetDetails) { toast.error("Wallet not connected. Please connect your wallet."); return; }
       if (!checkNetwork()) return;
 
-      if (faucetType === 'dropcode' && backendMode && !isSecretCodeValid) { toast({ title: "Invalid Drop code", description: "Please enter a valid 6-character alphanumeric Drop code", variant: "destructive", }); return; }
-      if (faucetType === 'droplist' && !userIsWhitelisted) { toast({ title: "Not Drop-listed", description: "You are not Drop-listed to claim.", variant: "destructive", }); return; }
-      if (faucetType === 'custom' && !hasCustomAmount) { toast({ title: "No Custom Allocation", description: "You don't have a custom amount allocated.", variant: "destructive", }); return; }
-      if (!allAccountsVerified) { toast({ title: "Verification Required", description: "Please complete and verify all required tasks before claiming", variant: "destructive", }); return; }
+      if (faucetType === 'dropcode' && backendMode && !isSecretCodeValid) { toast.error("Please enter a valid 6-character secret code to claim."); return; }
+      if (faucetType === 'droplist' && !userIsWhitelisted) { toast.error("You are not Drop-listed to claim."); return; }
+      if (faucetType === 'custom' && !hasCustomAmount) { toast.error("You don't have a custom amount allocated."); return; }
+      if (!allAccountsVerified) { toast.error("Please complete and verify all required tasks before claiming"); return; }
 
       try {
         setIsVerifying(true);
@@ -472,14 +466,14 @@ export default function FaucetDetails() {
           ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
           : "tokens";
 
-        toast({ title: "Tokens dripped successfully", description: `You have dripped ${claimedAmount} ${tokenSymbol}.`, });
+        toast.success("Tokens dripped successfully", { description: `You have dripped ${claimedAmount} ${tokenSymbol}.` });
         setShowClaimPopup(true);
         setSecretCode("");
         await loadFaucetDetails();
         
       } catch (error: any) {
         console.error("Error dropping tokens:", error);
-        toast({ title: "Failed to drop tokens", description: error.message || "Unknown error occurred", variant: "destructive", });
+        toast.error("Failed to drop tokens", { description: error.message || "Unknown error occurred" });
       } finally {
         setIsVerifying(false);
       }
@@ -489,7 +483,7 @@ export default function FaucetDetails() {
       if (dontShowAdminPopupAgain && faucetAddress && address) {
         const saved = await saveAdminPopupPreference(address, faucetAddress, true)
         if (saved) {
-          toast({ title: "Preference Saved", description: "Your popup preference has been saved." })
+          toast.success("Preference Saved", { description: "Your popup preference has been saved." })
         }
       }
       setShowAdminPopup(false)

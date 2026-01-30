@@ -421,7 +421,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
                         {simulatingState === 'verifying' && (
                             <>
                                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                                <p className="text-sm text-muted-foreground">Checking username with task api...</p>
+                                <p className="text-sm text-muted-foreground">verifying Task ....</p>
                             </>
                         )}
 

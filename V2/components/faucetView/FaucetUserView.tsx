@@ -109,8 +109,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     usernames,
     setUsernames,
     verificationStates,
-    // We ignore the parent's 'isVerifying' prop for the dialog visual 
-    // because we are managing a local simulation state.
+    isVerifying,
     faucetMetadata,
     handleBackendClaim,
     handleFollowAll,
@@ -129,7 +128,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     // --- NEW STATE FOR SIMULATION ---
     const [simulationAttempt, setSimulationAttempt] = useState(0);
     const [simulatingState, setSimulatingState] = useState<'idle' | 'verifying' | 'error'>('idle');
-
+    const [isDripping, setIsDripping] = useState(false);
     // --- LOGIC: Custom Verification Handler ---
     const startVerificationSimulation = () => {
         // Close the follow dialog and open verification dialog
@@ -329,12 +328,23 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
                         {allAccountsVerified ? (<><Check className="h-4 w-4 mr-2" /> All Tasks Verified ✓</>) : (<><AlertCircle className="h-4 w-4 mr-2" /> Complete Tasks to Unlock Drops</>)}
                     </Button>
                     <Button
-                        className="w-full h-8 sm:h-9 text-xs sm:text-sm"
+                        className="w-full h-8 sm:h-9 text-xs sm:text-sm gap-2"
                         variant="outline"
                         onClick={handleBackendClaim}
-                        disabled={!address || !canClaim}
+                        // Disable if wallet not connected, requirements not met, or currently dripping
+                        disabled={!address || !canClaim || isVerifying} 
                     >
-                        {!address ? "Connect Wallet to Drip" : hasClaimed ? "Already dripped" : "Drip Tokens"}
+                        {/* Optional: Add a spinner icon when dripping */}
+                        {isVerifying && <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />}
+                        
+                        {!address 
+                            ? "Connect Wallet to Drip" 
+                            : isVerifying 
+                                ? "Dripping..." 
+                                : hasClaimed 
+                                    ? "Already dripped" 
+                                    : "Drip Tokens"
+                        }
                     </Button>
                 </CardFooter>
             </Card>

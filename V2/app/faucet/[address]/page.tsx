@@ -55,7 +55,7 @@ interface SocialMediaLink {
 
 const DEFAULT_FAUCET_IMAGE = "/default.jpeg";
 const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
-const BACKEND_URL = "http://127.0.0.1:8000";
+const BACKEND_URL = "https://faucetdrop-backend.onrender.com";
 const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
 
 // --- Helper Functions ---

@@ -156,33 +156,30 @@ export function WalletConnectButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button 
-          variant="outline" 
-          size="sm"
-          className="flex items-center gap-2 pl-1 pr-3 border-primary/20 hover:bg-primary/5 transition-all rounded-full h-9 relative"
-        >
-          {/* Christmas Cap Overlay - Using standard Santa Hat Emoji positioned as a cap */}
-          <div className="relative">
-            {/* <span className="absolute -top-[14px] -left-[6px] text-[20px] z-20 pointer-events-none -rotate-[15deg] drop-shadow-sm"
-                role="img" 
-                aria-label="Christmas Cap"
-            >
-                ❄️
-            </span> */}
-            <Avatar className="h-7 w-7 border border-background shadow-sm">
-              <AvatarImage src={avatarUrl || ""} className="object-cover" />
-              <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                {username.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          </div>
+      <Button 
+        variant="outline" 
+        size="sm"
+        // Reduced padding and height for a more compact mobile look
+        className="flex items-center gap-2 p-1 sm:pr-3 border-primary/20 hover:bg-primary/5 transition-all rounded-full h-9 relative"
+      >
+        <div className="relative">
+          <Avatar className="h-7 w-7 border border-background shadow-sm">
+            <AvatarImage src={avatarUrl || ""} className="object-cover" />
+            <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+              {username.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        </div>
 
-          <span className="text-xs sm:text-sm font-medium max-w-[100px] truncate">
-            {loading ? "..." : username}
-          </span>
-          <ChevronDown className="h-3 w-3 opacity-50" />
-        </Button>
-      </DropdownMenuTrigger>
+        {/* 'hidden' hides the username and arrow on mobile.
+            'sm:flex' or 'sm:block' restores them on larger screens.
+        */}
+        <span className="hidden sm:block text-xs sm:text-sm font-medium max-w-[100px] truncate">
+          {loading ? "..." : username}
+        </span>
+        <ChevronDown className="hidden sm:block h-3 w-3 opacity-50" />
+      </Button>
+    </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">

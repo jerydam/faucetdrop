@@ -601,14 +601,56 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
   )
 }
 
-export function MiniNetworkIndicator({ className }: { className?: string }) {
-  const { network } = useNetwork()
-  
-  if (!network) return null
-  
+export function MiniNetworkIndicator({ className = "" }: { className?: string }) {
+  const { networks } = useNetwork()
+  const { chainId } = useAppKitNetwork()
+  const { isConnected } = useAppKitAccount()
+  const { switchChain } = useSwitchChain()
+  const currentNetwork = networks.find((net) => net.chainId === chainId)
+
+  // Only show if the wallet is actually connected
+  if (!isConnected) return null
+
   return (
-    <div className={`flex items-center ${className}`} title={network.name}>
-      <NetworkImage network={network} size="xs" />
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button 
+          className={`flex items-center justify-center outline-none border border-white/10 rounded-full bg-white/5 hover:bg-white/10 transition-all h-9 w-9 shrink-0 ${className}`}
+        >
+          {currentNetwork ? (
+            <NetworkImage network={currentNetwork} size="sm" />
+          ) : (
+            <div className="w-5 h-5 rounded-full bg-white/10 animate-pulse flex items-center justify-center">
+               <NetworkIcon size={12} className="text-gray-500" />
+            </div>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64 bg-[#0d121f] border-white/10 text-white z-[110] shadow-2xl">
+        <div className="px-4 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest border-b border-white/5">
+          Switch Network
+        </div>
+        {networks.map((net) => (
+          <DropdownMenuItem
+            key={net.chainId}
+            onClick={() => switchChain({ chainId: net.chainId })}
+            className="flex items-center gap-3 p-4 focus:bg-white/5 cursor-pointer"
+          >
+            <NetworkImage network={net} size="sm" />
+            <div className="flex flex-col">
+               <span className="text-sm font-bold">{net.name}</span>
+               {net.isTestnet && <span className="text-[9px] text-orange-400 font-medium">Testnet</span>}
+            </div>
+            {chainId === net.chainId && (
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="text-[10px] text-green-400 font-bold uppercase tracking-tighter">Active</span>
+                <div className="w-2 h-2 bg-green-500 rounded-full" />
+              </div>
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
+

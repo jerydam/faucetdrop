@@ -158,7 +158,7 @@ export default function QuestHomePage() {
                                 <div className="flex flex-col md:flex-row">
                                     
                                     {quest.imageUrl && (
-                                        <div className="w-full md:w-48 h-48 md:h-auto bg-slate-100 dark:bg-slate-900 relative shrink-0">
+                                        <div className="w-full md:w-48 h-48 md:h-48 bg-slate-100 dark:bg-slate-900 relative shrink-0">
                                              <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
                                         </div>
                                     )}

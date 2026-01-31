@@ -128,8 +128,8 @@ const ImageUploadField: React.FC<{
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [previewUrl, setPreviewUrl] = useState(imageUrl)
     const [resolutionError, setResolutionError] = useState<string | null>(null)
-    const maxWidth = requiredResolution?.width || 1280
-    const maxHeight = requiredResolution?.height || 1280
+    const maxWidth = requiredResolution?.width || 1024
+    const maxHeight = requiredResolution?.height || 1024
 
     useEffect(() => setPreviewUrl(imageUrl), [imageUrl])
 
@@ -167,7 +167,7 @@ const ImageUploadField: React.FC<{
 
     return (
         <div className="space-y-2">
-            <Label>Quest Image/Logo (Max 5MB, ≤{maxWidth}x{maxHeight})</Label>
+            <Label>Quest Image/Logo (Max 5MB, Recommended: {maxWidth}x{maxHeight} Square)</Label>
             <div className="flex items-center space-x-3">
                 <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading || !!resolutionError} className="flex-grow">
                     {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
@@ -460,7 +460,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                         onFileUpload={handleImageUpload}
                         isUploading={isUploadingImage}
                         uploadError={uploadImageError}
-                        requiredResolution={{ width: 1280, height: 1280 }}
+                        requiredResolution={{ width: 1024, height: 1024 }}
                     />
 
                     <div className="space-y-2">

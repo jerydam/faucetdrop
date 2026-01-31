@@ -27,7 +27,7 @@ const CAMPAIGNS = [
     title: "Faucets", 
     desc: "Smart token distribution with flexible access controls.", 
     points: "100+ Faucets", 
-    color: "from-[#1a1a2e] to-[#16213e]",
+    
     path: "/faucet",
     bgImage: "/faucet-bg.png",
     cta: "Create Faucet"
@@ -38,7 +38,7 @@ const CAMPAIGNS = [
     title: "Quests", 
     desc: "Engage users with interactive missions.", 
     points: "20+ Quests", 
-    color: "from-[#0f172a] to-[#1e293b]",
+    
     path: "/quest",
     bgImage: "/quest-bg.png",
     cta: "Launch Quest"
@@ -49,7 +49,7 @@ const CAMPAIGNS = [
     title: "Quizzes", 
     desc: "Educate and reward users through challenges.", 
     points: "50+ Quizzes", 
-    color: "from-[#064e3b] to-[#065f46]",
+    
     path: "/quiz",
     bgImage: "/quiz-bg.png",
     cta: "Build Quiz"
@@ -181,7 +181,7 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
           >
         {CAMPAIGNS.map((c) => (
   <Link href={c.path} key={c.id}>
-    <div className={`min-w-[85vw] sm:min-w-[400px] h-64 sm:h-72 rounded-2xl p-6 sm:p-8 bg-gradient-to-br ${c.color} border border-white/10 flex flex-col justify-between snap-center cursor-pointer transition-transform duration-300 hover:scale-[1.01] overflow-hidden relative group`}>
+    <div className={`min-w-[85vw] sm:min-w-[400px] h-64 sm:h-72 rounded-2xl p-6 sm:p-8 bg-gradient-to-br  border border-white/10 flex flex-col justify-between snap-center cursor-pointer transition-transform duration-300 hover:scale-[1.01] overflow-hidden relative group`}>
       
       {/* Background Image Layer */}
       <div className="absolute inset-0 z-0 opacity-20 group-hover:opacity-30 transition-opacity">

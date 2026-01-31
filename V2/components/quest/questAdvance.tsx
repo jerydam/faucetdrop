@@ -508,6 +508,7 @@ const handleDeployAndFinalize = async () => {
     const startTime = new Date(`${newQuest.startDate}T${newQuest.startTime}`);
     const endTime = new Date(`${newQuest.endDate}T${newQuest.endTime}`);
 
+    // 1. Pre-deployment Guards
     if (startTime < now) {
         toast.error("Start time must be in the future.");
         return;
@@ -516,13 +517,14 @@ const handleDeployAndFinalize = async () => {
         toast.error("End time must be after start time.");
         return;
     }
+    
     setIsDeploying(true);
     setError(null);
     
     try {
         if (!isConnected) throw new Error("Please connect your wallet first.");
 
-        // 1. SILENT DRAFT SAVE (Safety Net)
+        // 2. SILENT DRAFT SAVE (Captures the ID for backend clean-up)
         const draftPayload = {
             creatorAddress: address, 
             title: newQuest.title.trim(),
@@ -542,23 +544,22 @@ const handleDeployAndFinalize = async () => {
             body: JSON.stringify(draftPayload)
         });
 
-        // 👇 FIX 2: CAPTURE THE DRAFT ID
-        // If we don't capture this, the backend won't know which draft to delete
-        // if this was a fresh quest (where newQuest.faucetAddress was initially null)
         const draftJson = await draftRes.json();
+        // The backend uses faucetAddress as the primary key for drafts
         const activeDraftId = draftJson.faucetAddress || newQuest.faucetAddress;
 
-        // 2. PREPARE & DEPLOY
+        // 3. BLOCKCHAIN DEPLOYMENT
         const currentNetwork = networks.find(n => Number(n.chainId) === Number(chainId));
         const targetFactory = currentNetwork?.factories?.quest;
-        if (!targetFactory) throw new Error("Quest Factory not found.");
+        if (!targetFactory) throw new Error("Quest Factory not found for this network.");
 
-        const now = Math.floor(Date.now() / 1000);
         const hoursInt = parseInt(newQuest.claimWindowHours || "168", 10);
-        const questEndTime = now + (hoursInt * 3600);
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const questEndTime = nowInSeconds + (hoursInt * 3600);
 
         const provider = new BrowserProvider((window as any).ethereum);
         
+        // This triggers the wallet transaction
         const deployedAddress = await createQuestReward(
             provider,
             targetFactory, 
@@ -569,13 +570,23 @@ const handleDeployAndFinalize = async () => {
             BACKEND_WALLET_ADDRESS 
         );
 
+        // 4. UNIQUE SLUG GENERATION
+        // Standardize title + append last 4 of address to prevent 23505 Duplicate Key Errors
+        const baseSlug = newQuest.title
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+        
+        const finalSlug = `${baseSlug}-${deployedAddress.slice(-4).toLowerCase()}`;
 
-        // 3. STRICT FINALIZE
+        // 5. FINALIZE & SYNC WITH DATABASE
         const finalizePayload = {
-            faucetAddress: deployedAddress, // The Real Address
-            draftId: activeDraftId,         // <--- USE THE CAPTURED ID HERE
+            faucetAddress: deployedAddress, // The live contract address
+            draftId: activeDraftId,         // Tells backend which draft to delete/convert
+            slug: finalSlug,                // The unique URL key
             creatorAddress: address,
-            title: newQuest.title,
+            title: newQuest.title.trim(),
             description: newQuest.description,
             imageUrl: newQuest.imageUrl,
             startDate: newQuest.startDate,
@@ -592,26 +603,29 @@ const handleDeployAndFinalize = async () => {
             body: JSON.stringify(finalizePayload)
         });
 
-        if (!res.ok) throw new Error("Finalization failed.");
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.detail || "Finalization failed.");
+        }
 
-        toast.success("Quest created successfully!");
+        toast.success("Quest published successfully!");
         
-        const slug = newQuest.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
-        router.push(`/quest/${slug}-${deployedAddress}`);
+        // 6. REDIRECT TO THE NEW SLUG ROUTE
+        router.push(`/quest/${finalSlug}`);
 
     } catch (e: any) {
-        console.error("Error:", e);
-        let msg = e.message || "Deployment failed";
+        console.error("Deployment Error:", e);
+        let msg = e.message || "An unexpected error occurred.";
         
-        // Friendly Error Handling
+        // Handle User Rejection
         if (e.code === 4001 || e.message?.includes("rejected")) {
-            msg = "Transaction cancelled. Your progress is saved as a draft.";
+            msg = "Transaction rejected. Your progress is saved in drafts.";
         }
         
         toast.error(msg);
         setIsDeploying(false); 
     } 
-}
+};
 
     // Logic extracted from StepThreeTasks
     const isSocialOrReferral = newTask.category === 'social' || newTask.category === 'referral'

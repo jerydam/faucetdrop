@@ -8,7 +8,7 @@ import { Plus, Settings, Users, ArrowRight, Coins, Loader2, Calendar, Sparkles }
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header"; 
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 
 interface QuestOverview {
     faucetAddress: string;
@@ -96,7 +96,7 @@ export default function QuestHomePage() {
 
     const handleNavigate = (faucetAddress: string, title: string) => {
         const slug = createSlug(title);
-        router.push(`/quest/${slug}-${faucetAddress}`);
+        router.push(`/quest/${slug}`);
     };
 
     return (
@@ -123,13 +123,7 @@ export default function QuestHomePage() {
                     >
                         My Dashboard
                     </Button>
-                    <Button 
-                        onClick={() => router.push('/quest/create-quest')} 
-                        className="flex-1 md:flex-none flex items-center gap-2 bg-green-600 hover:bg-green-700 shadow-md"
-                    >
-                        <Plus className="h-4 w-4" />
-                        Create
-                    </Button>
+                    
                 </div>
             </div>
 

@@ -13,83 +13,146 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { 
   Wallet, 
   LayoutDashboard, 
   LogOut, 
-  User2,
   Copy, 
   ChevronDown,
-  ExternalLink,
-  Sparkles
+  Mail,
+  UserPlus,
+  Zap,
+  Sparkles,
+  ExternalLink
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 
-// Backend URL
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com" 
 
 export function WalletConnectButton() {
   const { open } = useAppKit()
   const { address, isConnected } = useAppKitAccount()
   
-
   const [username, setUsername] = useState<string>("Anonymous")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
 
   useEffect(() => {
-  if (isConnected && address) {
-    // 1. Initial fetch when wallet connects
-    fetchProfile();
-
-    // 2. Listen for the "signal" from the Modal
-    const handleUpdate = () => {
-      console.log("Profile update signal received! Re-fetching...");
+    if (isConnected && address) {
       fetchProfile();
-    };
-
-    window.addEventListener("profileUpdated", handleUpdate);
-    return () => window.removeEventListener("profileUpdated", handleUpdate);
-  } else {
-    setUsername("Anonymous");
-    setAvatarUrl(null);
-  }
-}, [address, isConnected]);
- 
-  const fetchProfile = async () => {
-  if (!address) return;
-  setLoading(true);
-  try {
-    // Add the timestamp to bust cache on refresh
-    const res = await fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}?t=${Date.now()}`);
-    const data = await res.json();
-    
-    if (data.success && data.profile && data.profile.username) {
-      setUsername(data.profile.username);
-      setAvatarUrl(data.profile.avatar_url || null);
+      setIsAuthModalOpen(false); // Close the popup automatically on connect
+      
+      const handleUpdate = () => fetchProfile();
+      window.addEventListener("profileUpdated", handleUpdate);
+      return () => window.removeEventListener("profileUpdated", handleUpdate);
     } else {
-      // Keep it Anonymous if no profile record exists in DB
       setUsername("Anonymous");
       setAvatarUrl(null);
     }
-  } catch (error) {
-    console.error("Profile fetch error", error);
-    setUsername("Anonymous");
-  } finally {
-    setLoading(false);
-  }
-};
+  }, [address, isConnected]);
+ 
+  const fetchProfile = async () => {
+    if (!address) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}?t=${Date.now()}`);
+      const data = await res.json();
+      if (data.success && data.profile?.username) {
+        setUsername(data.profile.username);
+        setAvatarUrl(data.profile.avatar_url || null);
+      }
+    } catch (error) {
+      console.error("Profile fetch error", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  // --- UNAUTHENTICATED STATE WITH POPUP ---
   if (!isConnected || !address) {
     return (
-      <Button onClick={() => open()} size="sm" className="flex items-center gap-2 font-semibold">
-        <Wallet className="h-4 w-4" />
-        Connect Wallet
-      </Button>
+      <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
+        <DialogTrigger asChild>
+          <Button 
+            size="sm" 
+            className="px-12 py-5  bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xl transition-all shadow-xl shadow-blue-900/20 flex items-center gap-3 disabled:opacity-50"
+            
+          >
+            <Sparkles className="h-4 w-4 fill-white group-hover:rotate-12 transition-transform" />
+            Get Started
+          </Button>
+        </DialogTrigger>
+        
+        <DialogContent className="sm:max-w-[400px] bg-[#080d19] border-white/10 text-white rounded-[2rem] overflow-hidden">
+          <DialogHeader className="items-center text-center pb-2">
+            <div className="w-14 h-14 bg-blue-600/20 rounded-2xl flex items-center justify-center mb-4 border border-blue-500/20">
+              <Zap className="text-blue-500 h-7 w-7" fill="currentColor" />
+            </div>
+            <DialogTitle className="text-2xl font-bold tracking-tight">Join FaucetDrops</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Choose your preferred way to start your onchain journey.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 py-6">
+            {/* Wallet Connect Path */}
+            <Button 
+              onClick={() => { open(); }}
+              variant="outline" 
+              className="h-16 justify-start gap-4 border-white/5 bg-white/5 hover:bg-blue-600/10 hover:border-blue-500/50 transition-all rounded-2xl px-5 group"
+            >
+              <div className="bg-blue-500 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
+                <Wallet className="h-5 w-5 text-white" />
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-sm">Connect Wallet</div>
+                <div className="text-[10px] text-gray-500 font-medium">MetaMask, Phantom, or Mobile App</div>
+              </div>
+            </Button>
+
+            <div className="relative py-4">
+              <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-white/5" /></div>
+              <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-black"><span className="bg-[#080d19] px-3 text-gray-600">Secure Web2 Auth</span></div>
+            </div>
+
+            {/* Email Path */}
+            <div className="grid grid-cols-2 gap-3">
+               <Button 
+                variant="outline" 
+                className="h-12 gap-2 border-white/5 bg-white/5 hover:bg-white/10 rounded-xl font-bold text-xs"
+              >
+                <Mail className="h-4 w-4 text-emerald-500" />
+                Login
+              </Button>
+              <Button 
+                variant="outline" 
+                className="h-12 gap-2 border-white/5 bg-white/5 hover:bg-white/10 rounded-xl font-bold text-xs"
+              >
+                <UserPlus className="h-4 w-4 text-purple-500" />
+                Sign Up
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-center text-[10px] text-gray-600">
+            By connecting, you agree to our Terms of Service.
+          </p>
+        </DialogContent>
+      </Dialog>
     )
   }
 
+  // --- AUTHENTICATED DROPDOWN ---
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

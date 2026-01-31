@@ -58,7 +58,7 @@ import { Contract, BrowserProvider, parseEther } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ============= TYPES =============
 export type VerificationType =
@@ -128,17 +128,12 @@ export default function QuestDetailsPage() {
   const rawSlug = (params.addresss || params.faucetAddress) as
     | string
     | undefined;
-  const faucetAddress = useMemo(() => {
-    if (!rawSlug) return undefined;
-    const addressPattern = /(0x[a-fA-F0-9]{40})/i;
-    const match = rawSlug.match(addressPattern);
-    return match ? match[1] : /^0x[a-fA-F0-9]{40}$/i.test(rawSlug)
-      ? rawSlug
-      : undefined;
-  }, [rawSlug]);
+  
 
   // ============= STATE =============
   const [questData, setQuestData] = useState<any | null>(null);
+  const [faucetAddress, setFaucetAddress] = useState<string | undefined>(undefined);
+  
   const [userProgress, setUserProgress] = useState<UserProgress>({
     totalPoints: 0,
     stagePoints: {},
@@ -200,7 +195,83 @@ export default function QuestDetailsPage() {
     questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
 
   const stages = ["Beginner", "Intermediate", "Advance", "Legend", "Ultimate"];
+useEffect(() => {
+    // Correctly access the slug from params
+    const slug = params.slug as string;
+    if (!slug) return;
 
+    const loadQuestBySlug = async () => {
+      setIsLoading(true);
+      try {
+        // 1. Fetch from your NEW slug-based endpoint
+        const response = await fetch(`${API_BASE_URL}/api/quests/by-slug/${slug}`);
+        const json = await response.json();
+
+        if (json.success && json.quest) {
+          setQuestData(json.quest);
+          // Set the internal faucetAddress state from the DB result
+          setFaucetAddress(json.quest.faucetAddress);
+          
+          // Sync edit form
+          setEditForm({
+            title: json.quest.title,
+            description: json.quest.description,
+            rewardPool: json.quest.rewardPool,
+            imageUrl: json.quest.imageUrl || "",
+            isActive: json.quest.isActive,
+          });
+        } else {
+          toast.error("Quest not found");
+        }
+      } catch (error) {
+        console.error("Fetch error:", error);
+        toast.error("Failed to load quest details");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadQuestBySlug();
+  }, [params.slug]);
+  useEffect(() => {
+    // Only run these once we have the faucetAddress from the slug lookup
+    if (!faucetAddress) return;
+
+    const loadLiveStats = async () => {
+      try {
+        const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+        const lbJson = await lbRes.json();
+        if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+      } catch (e) {
+        console.error("Leaderboard fetch failed", e);
+      }
+    };
+
+    loadLiveStats();
+  }, [faucetAddress]);
+
+  useEffect(() => {
+    if (!faucetAddress || !userWalletAddress || !hasUsername) return;
+    
+    const fetchUserSpecifics = async () => {
+      try {
+        const progRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/progress/${userWalletAddress}`);
+        const progJson = await progRes.json();
+        if (progJson.success) setUserProgress(progJson.progress);
+        
+        // Handle admin rehydration if applicable
+        if (isCreator) {
+          const pendingRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/pending`);
+          const pendingJson = await pendingRes.json();
+          // ... (rest of your pending submissions mapping logic)
+        }
+      } catch (e) {
+        console.error("Progress fetch failed", e);
+      }
+    };
+
+    fetchUserSpecifics();
+  }, [faucetAddress, userWalletAddress, hasUsername, isCreator]);
   // ============= TOKEN SYMBOL LOGIC =============
   const tokenSymbol = questData?.tokenSymbol || "Tokens";
 

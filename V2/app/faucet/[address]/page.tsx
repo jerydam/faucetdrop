@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
-import { toast} from "sonner"
+import { toast } from "sonner"
 import { useWallet } from "@/hooks/use-wallet"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -25,8 +25,9 @@ import {
     addAdmin,
     removeAdmin,
     getFaucetTransactionHistory,
+    detectFaucetType,
 } from "@/lib/faucet"
-import { formatUnits, parseUnits, type BrowserProvider, JsonRpcProvider } from "ethers"
+import { formatUnits, parseUnits, type BrowserProvider, JsonRpcProvider, Contract } from "ethers"
 import { Checkbox } from "@/components/ui/checkbox"
 import { claimViaBackend, claimNoCodeViaBackend, claimCustomViaBackend } from "@/lib/backend-service"
 import { useNetwork } from "@/hooks/use-network"
@@ -42,7 +43,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 
-// Faucet type definitions
+// --- Constants & Types ---
 type FaucetType = 'dropcode' | 'droplist' | 'custom'
 
 interface SocialMediaLink {
@@ -52,9 +53,10 @@ interface SocialMediaLink {
     action: string;
 }
 
-// Default faucet metadata constants
 const DEFAULT_FAUCET_IMAGE = "/default.jpeg";
 const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
+const BACKEND_URL = "http://127.0.0.1:8000";
+const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
 
 // --- Helper Functions ---
 
@@ -73,164 +75,22 @@ const getNativeTokenSymbol = (networkName: string): string => {
     }
 }
 
-const checkIsAdmin = async (provider: any, faucetAddress: string, userAddress: string, type: FaucetType): Promise<boolean> => {
-    if (userAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()) {
-        return true
-    }
-    try {
-        const { Contract } = await import("ethers")
-        let abi: any[]
-        if (type === 'dropcode') { const { FAUCET_ABI_DROPCODE } = await import("@/lib/abis"); abi = FAUCET_ABI_DROPCODE } 
-        else if (type === 'droplist') { const { FAUCET_ABI_DROPLIST } = await import("@/lib/abis"); abi = FAUCET_ABI_DROPLIST } 
-        else if (type === 'custom') { const { FAUCET_ABI_CUSTOM } = await import("@/lib/abis"); abi = FAUCET_ABI_CUSTOM } 
-        else { return false }
-        const contract = new Contract(faucetAddress, abi, provider)
-        const isContractAdmin = await contract.isAdmin(userAddress)
-        return isContractAdmin
-    } catch (error) {
-        console.warn("Error checking admin status:", error)
-        return false
-    }
-}
-
-const detectFaucetType = async (provider: any, address: string): Promise<FaucetType> => {
-    try {
-        const { Contract } = await import("ethers")
-        const basicABI = [{ "inputs": [], "name": "faucetType", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }]
-        const contract = new Contract(address, basicABI, provider)
-        const contractType = (await contract.faucetType()).toLowerCase()
-        return (contractType === 'dropcode' || contractType === 'droplist' || contractType === 'custom') ? contractType : 'dropcode'
-    } catch (error) {
-        console.error("Error getting faucet type from contract, defaulting:", error)
-        return 'dropcode' 
-    }
-}
-
-const getUserCustomClaimAmount = async (provider: any, userAddress: string, faucetAddress: string, tokenDecimals: number): Promise<{ amount: bigint, hasCustom: boolean }> => {
-    try {
-        const { FAUCET_ABI_CUSTOM } = await import("@/lib/abis")
-        const { Contract } = await import("ethers")
-        const faucetContract = new Contract(faucetAddress, FAUCET_ABI_CUSTOM, provider)
-        
-        // Simulate check
-        const isOwnerOrAdmin = await checkIsAdmin(provider, faucetAddress, userAddress, 'custom');
-        if (isOwnerOrAdmin) {
-            return { amount: BigInt(0), hasCustom: false } 
-        }
-        
-        const hasCustom = await faucetContract.hasCustomClaimAmount(userAddress)
-        if (hasCustom) {
-            const customAmount = await faucetContract.getCustomClaimAmount(userAddress)
-            return { amount: customAmount, hasCustom: true }
-        }
-        return { amount: BigInt(0), hasCustom: false }
-    } catch {
-        return { amount: BigInt(0), hasCustom: false }
-    }
-}
-
-const loadSocialMediaLinks = async (faucetAddress: string): Promise<SocialMediaLink[]> => {
-    try {
-        const apiUrl = `https://fauctdrop-backend.onrender.com/faucet-tasks/${faucetAddress}`;
-        const response = await fetch(apiUrl);
-        
-        if (!response.ok) {
-            if (response.status === 404) {
-                return [];
-            }
-            throw new Error(`Failed to fetch tasks: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-        
-        if (!Array.isArray(result.tasks)) {
-             return [];
-        }
-
-        return result.tasks.map((task: any) => ({
-            platform: task.platform || 'link',
-            url: task.url,
-            handle: task.handle,
-            action: task.action || 'check'
-        })) || [];
-
-    } catch (error) {
-        console.error('Error fetching dynamic tasks:', error);
-        return [];
-    }
-}
-
-const loadFaucetMetadata = async (faucetAddress: string): Promise<{description: string, imageUrl: string}> => {
-  try {
-    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-metadata/${faucetAddress}`);
-    if (!response.ok) {
-      if (response.status === 404) {
-        return {description: '', imageUrl: DEFAULT_FAUCET_IMAGE};
-      }
-      throw new Error(`Failed to fetch metadata: ${response.statusText}`);
-    }
-    const result = await response.json();
-    return {
-      description: result.description || '',
-      imageUrl: result.imageUrl || DEFAULT_FAUCET_IMAGE
-    };
-  } catch (error) {
-    console.error('Error fetching metadata:', error);
-    return {description: '', imageUrl: DEFAULT_FAUCET_IMAGE};
-  }
-};
-
-// Update the constant to remove the fixed prefix and restructure the template
-const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
-
-const loadCustomXPostTemplate = async (faucetAddress: string): Promise<string> => {
-    // Default template with placeholders for handle and hashtag
-    return `Drip created by {@handle} for {#hashtag}, Verify Drop 💧: {explorer}`
-}
-
-const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {
-    try {
-        const response = await fetch("https://fauctdrop-backend.onrender.com/admin-popup-preference", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userAddress: userAddr, faucetAddress: faucetAddr, dontShowAgain: dontShow }),
-        })
-        if (!response.ok) throw new Error(`Failed to save preference`)
-        const result = await response.json()
-        return result.success
-    } catch (error) {
-        console.error("Error saving admin popup preference:", error)
-        return false
-    }
-}
-
-const getAdminPopupPreference = async (userAddr: string, faucetAddr: string): Promise<boolean> => {
-    try {
-        const response = await fetch(
-            `https://fauctdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
-        )
-        if (!response.ok) return false
-        const result = await response.json()
-        return result.dontShowAgain || false
-    } catch (error) {
-        return false
-    }
-}
-
 // --- Main Component ---
 export default function FaucetDetails() {
-    const { address: faucetAddress } = useParams<{ address: string }>()
-    const searchParams = useSearchParams()
-    const networkId = searchParams.get("networkId")
+    const { slug } = useParams<{ slug: string }>()
     const router = useRouter()
     const { address, chainId, isConnected, provider } = useWallet()
-    const { networks, setNetwork } = useNetwork()
+    const { networks } = useNetwork()
     
+    // --- Resolution States ---
+    const [resolvedAddress, setResolvedAddress] = useState<string | null>(null)
+    const [resolvedChainId, setResolvedChainId] = useState<number | null>(null)
+    const [selectedNetwork, setSelectedNetwork] = useState<any>(null)
+
     // --- Main State ---
     const [faucetDetails, setFaucetDetails] = useState<any>(null)
     const [faucetType, setFaucetType] = useState<FaucetType | null>(null)
     const [loading, setLoading] = useState(true)
-    const [selectedNetwork, setSelectedNetwork] = useState<any>(null)
     
     // --- User-Specific State ---
     const [userIsAdmin, setUserIsAdmin] = useState(false)
@@ -242,15 +102,9 @@ export default function FaucetDetails() {
     const [usernames, setUsernames] = useState<Record<string, string>>({})
     const [verificationStates, setVerificationStates] = useState<Record<string, boolean>>({})
     const [isVerifying, setIsVerifying] = useState(false)
-    const [showFollowDialog, setShowFollowDialog] = useState(false)
-    const [showVerificationDialog, setShowVerificationDialog] = useState(false)
-    const [showClaimPopup, setShowClaimPopup] = useState(false)
-    const [txHash, setTxHash] = useState<string | null>(null)
-    
-    // --- Verification Logic State ---
     const [hasAttemptedVerification, setHasAttemptedVerification] = useState(false)
 
-    // --- Admin-Specific State (Passed down) ---
+    // --- Admin-Specific State ---
     const [adminList, setAdminList] = useState<string[]>([])
     const [backendMode, setBackendMode] = useState(true)
     const [tokenSymbol, setTokenSymbol] = useState("ETH")
@@ -266,384 +120,334 @@ export default function FaucetDetails() {
     const [startTime, setStartTime] = useState("")
     const [endTime, setEndTime] = useState("")
 
-    // --- Derived State ---
-    const isOwner = address && faucetDetails?.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase()
-    const isBackendAddress = address && address.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()
-    const canAccessAdminControls = isOwner || userIsAdmin || isBackendAddress
-    
-    const getTaskKey = (task: SocialMediaLink) => task.platform;
-    const isSecretCodeValid = secretCode.length === 6 && /^[A-Z0-9]{6}$/.test(secretCode)
-    const allAccountsVerified = dynamicTasks.length === 0 ? true : dynamicTasks.every(task => verificationStates[getTaskKey(task)])
-    
-    const checkNetwork = useCallback((skipToast = false): boolean => {
-      if (!chainId) {
-        if (!skipToast) toast.error("Please connect your wallet to proceed.")
-        return false
-      }
-      if (networkId && Number(networkId) !== chainId) {
-        const targetNetwork = networks.find((n) => n.chainId === Number(networkId))
-        if (targetNetwork) {
-            if (!skipToast) toast.error(`Please switch your network to ${targetNetwork.name} to proceed.`)
+    // --- Dialog States ---
+    const [showFollowDialog, setShowFollowDialog] = useState(false)
+    const [showVerificationDialog, setShowVerificationDialog] = useState(false)
+    const [showClaimPopup, setShowClaimPopup] = useState(false)
+    const [txHash, setTxHash] = useState<string | null>(null)
+
+    // --- Core Logic: Slug Resolution ---
+    const resolveSlugData = useCallback(async (faucetSlug: string) => {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/faucets/by-slug/${faucetSlug}`);
+            if (!response.ok) return null;
+            return await response.json();
+        } catch (error) {
+            console.error("Resolution error:", error);
+            return null;
         }
-      }
-      return true
-    }, [chainId, networkId, networks, setNetwork, toast])
-    
-    const handleGoBack = useCallback((): void => {
-      if (window.history.length > 1) {
-        router.back()
-      } else {
-        router.push("/")
-      }
-    }, [router])
+    }, []);
 
     // --- Core Data Loader ---
- const loadFaucetDetails = useCallback(async (): Promise<void> => {
-      if (!faucetAddress || !networkId) { setLoading(false); return }
-      try {
-        setLoading(true)
-        const targetNetworkId = Number(networkId)
-        const targetNetwork = networks.find((n) => n.chainId === targetNetworkId)
-        if (!targetNetwork) { router.push("/"); return }
-        
-        setSelectedNetwork(targetNetwork)
-        const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
-        
-        const detectedType = await detectFaucetType(detailsProvider, faucetAddress)
-        setFaucetType(detectedType)
-        
-        const details = await getFaucetDetails(detailsProvider, faucetAddress, detectedType)
-        if (!details || details.error) { throw new Error(details?.error || "Failed to fetch faucet details") }
-        setFaucetDetails(details)
+    const loadFaucetDetails = useCallback(async (): Promise<void> => {
+        if (!slug) return;
+        setLoading(true);
 
-        // --- UPDATED SYMBOL RESOLUTION LOGIC ---
-        // 1. Check if the on-chain details already returned a specific symbol
-        // 2. If not, check if the token address matches one of your 'defaultTokens' (like LSK)
-        // 3. Fallback to the native currency symbol (e.g., ETH for Lisk/Base)
-       let resolvedSymbol = details.tokenSymbol;
+        try {
+            const resolution = await resolveSlugData(slug);
+            if (!resolution || !resolution.success) {
+                toast.error("Faucet not found or invalid slug");
+                router.push("/");
+                return;
+            }
 
-        // 1. Check if it's the native token (Address is Zero Address)
-        const isNative = details.token === "0x0000000000000000000000000000000000000000";
+            const contractAddr = resolution.faucetAddress;
+            const targetChainId = resolution.chainId;
+            setResolvedAddress(contractAddr);
+            setResolvedChainId(targetChainId);
 
-        if (isNative || !resolvedSymbol || resolvedSymbol === "TOKEN") {
-            // Force native symbol based on network name
-            resolvedSymbol = getNativeTokenSymbol(targetNetwork.name); 
-        } else {
-            // 2. Only check defaultTokens if it's NOT a native faucet
-            const knownToken = targetNetwork.defaultTokens?.find(
-                (t: any) => t.address.toLowerCase() === details.token?.toLowerCase()
-            );
-            if (knownToken) resolvedSymbol = knownToken.symbol;
+            const targetNetwork = networks.find((n) => n.chainId === targetChainId);
+            if (!targetNetwork) {
+                toast.error("Network configuration missing");
+                return;
+            }
+            setSelectedNetwork(targetNetwork);
+
+            const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl);
+            const type = await detectFaucetType(detailsProvider, contractAddr);
+            setFaucetType(type);
+
+            const details = await getFaucetDetails(detailsProvider, contractAddr, type);
+            if (!details || details.error) throw new Error("On-chain details missing");
+            setFaucetDetails(details);
+
+            // Token Info Resolution
+            let resolvedSymbol = details.tokenSymbol;
+            const isNative = details.token === "0x0000000000000000000000000000000000000000";
+            if (isNative || !resolvedSymbol || resolvedSymbol === "TOKEN") {
+                resolvedSymbol = getNativeTokenSymbol(targetNetwork.name);
+            }
+            setTokenSymbol(resolvedSymbol);
+            setTokenDecimals(details.tokenDecimals || 18);
+            setBackendMode(details.backendMode || false);
+
+            // Load External Data (Tasks, Meta, Prefs)
+            const [tasksRes, metaRes, prefRes] = await Promise.all([
+                fetch(`${BACKEND_URL}/faucet-tasks/${contractAddr}`),
+                fetch(`${BACKEND_URL}/faucet-metadata/${contractAddr}`),
+                address ? fetch(`${BACKEND_URL}/admin-popup-preference?userAddress=${address}&faucetAddress=${contractAddr}`) : null
+            ]);
+
+            if (tasksRes.ok) {
+                const taskData = await tasksRes.json();
+                setDynamicTasks(taskData.tasks || []);
+            }
+            
+            if (metaRes.ok) {
+                const metaData = await metaRes.json();
+                setFaucetMetadata({
+                    description: metaData.description || getDefaultFaucetDescription(targetNetwork.name, details.owner),
+                    imageUrl: metaData.imageUrl || DEFAULT_FAUCET_IMAGE
+                });
+            } else {
+                setFaucetMetadata({ description: getDefaultFaucetDescription(targetNetwork.name, details.owner), imageUrl: DEFAULT_FAUCET_IMAGE });
+            }
+
+            setCustomXPostTemplate(`Drip created by {@handle} for {#hashtag}, Verify Drop 💧: {explorer}`);
+
+            // User Permissions
+            if (address) {
+                const { FAUCET_ABI_DROPCODE, FAUCET_ABI_DROPLIST, FAUCET_ABI_CUSTOM } = await import("@/lib/abis");
+                let abi = type === 'dropcode' ? FAUCET_ABI_DROPCODE : type === 'droplist' ? FAUCET_ABI_DROPLIST : FAUCET_ABI_CUSTOM;
+                const contract = new Contract(contractAddr, abi, detailsProvider);
+                
+                const isAdmin = (address.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()) || await contract.isAdmin(address);
+                setUserIsAdmin(isAdmin);
+                setHasClaimed(details.hasClaimed || false);
+
+                if (type === 'droplist') setUserIsWhitelisted(await contract.isWhitelisted(address));
+                if (type === 'custom') {
+                    const hasC = await contract.hasCustomClaimAmount(address);
+                    setHasCustomAmount(hasC);
+                    if (hasC) setUserCustomClaimAmount(await contract.getCustomClaimAmount(address));
+                }
+
+                if ((isAdmin || address.toLowerCase() === details.owner.toLowerCase()) && prefRes?.ok) {
+                    const pref = await prefRes.json();
+                    if (!pref.dontShowAgain) setShowAdminPopup(true);
+                } else if (isAdmin || address.toLowerCase() === details.owner.toLowerCase()) {
+                    setShowAdminPopup(true);
+                }
+            }
+
+            const admins = await getAllAdmins(detailsProvider, contractAddr, type);
+            const allAdmins = [...admins];
+            if (details.owner && !allAdmins.some(a => a.toLowerCase() === details.owner.toLowerCase())) allAdmins.unshift(details.owner);
+            if (!allAdmins.some(a => a.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase())) allAdmins.push(FACTORY_OWNER_ADDRESS);
+            setAdminList(allAdmins);
+
+            if (details.claimAmount) setClaimAmount(formatUnits(details.claimAmount, details.tokenDecimals || 18));
+            if (details.startTime) setStartTime(new Date(Number(details.startTime) * 1000).toISOString().slice(0, 16));
+            if (details.endTime) setEndTime(new Date(Number(details.endTime) * 1000).toISOString().slice(0, 16));
+
+        } catch (error: any) {
+            toast.error(error.message || "Error loading faucet details");
+        } finally {
+            setLoading(false);
         }
-
-        setTokenSymbol(resolvedSymbol);
-
-        setTokenSymbol(resolvedSymbol)
-        setTokenDecimals(details.tokenDecimals || 18)
-        setBackendMode(details.backendMode || false)
-        
-        setDynamicTasks(await loadSocialMediaLinks(faucetAddress))
-        setCustomXPostTemplate(await loadCustomXPostTemplate(faucetAddress))
-        
-        const metadata = await loadFaucetMetadata(faucetAddress);
-        setFaucetMetadata({ 
-            description: metadata.description || getDefaultFaucetDescription(targetNetwork.name, details.owner),
-            imageUrl: metadata.imageUrl
-        })
-
-        if (address) {
-          setHasClaimed(details.hasClaimed || false)
-          if (detectedType === 'droplist') {
-            const whitelisted = await isWhitelisted(detailsProvider, faucetAddress, address, detectedType)
-            setUserIsWhitelisted(whitelisted)
-          }
-          if (detectedType === 'custom') {
-            const customClaimInfo = await getUserCustomClaimAmount(detailsProvider, address, faucetAddress, details.tokenDecimals || 18)
-            setUserCustomClaimAmount(customClaimInfo.amount)
-            setHasCustomAmount(customClaimInfo.hasCustom)
-          }
-          const adminStatus = await checkIsAdmin(detailsProvider, faucetAddress, address, detectedType)
-          setUserIsAdmin(adminStatus)
-          
-          if (adminStatus || isOwner) {
-              const dontShow = await getAdminPopupPreference(address, faucetAddress)
-              if (!dontShow) setShowAdminPopup(true)
-          }
-        }
-        
-        const admins = await getAllAdmins(detailsProvider, faucetAddress, detectedType)
-        const allAdmins = [...admins]
-        if (details.owner && !allAdmins.some(a => a.toLowerCase() === details.owner.toLowerCase())) { allAdmins.unshift(details.owner) }
-        if (!allAdmins.some(a => a.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase())) { allAdmins.push(FACTORY_OWNER_ADDRESS) }
-        setAdminList(allAdmins)
-
-        if (details.claimAmount) {
-            setClaimAmount(formatUnits(details.claimAmount, details.tokenDecimals || 18))
-        }
-        if (details.startTime) {
-            const date = new Date(Number(details.startTime) * 1000)
-            setStartTime(date.toISOString().slice(0, 16))
-        }
-        if (details.endTime) {
-            const date = new Date(Number(details.endTime) * 1000)
-            setEndTime(date.toISOString().slice(0, 16))
-        }
-        
-      } catch (error: any) {
-        toast.error(error.message || "Error loading faucet details")
-      } finally {
-        setLoading(false)
-      }
-    }, [
-        faucetAddress, networkId, networks, router, toast, address, isOwner, 
-        setClaimAmount, setStartTime, setEndTime, setTokenSymbol, setTokenDecimals, setBackendMode,
-        setDynamicTasks, setCustomXPostTemplate, setFaucetMetadata, setUserIsAdmin, setHasClaimed,
-        setUserIsWhitelisted, setUserCustomClaimAmount, setHasCustomAmount, setAdminList, setShowAdminPopup
-    ])
+    }, [slug, networks, address, router, resolveSlugData]);
 
     useEffect(() => {
-      if (faucetAddress && networkId) loadFaucetDetails()
-    }, [faucetAddress, networkId, loadFaucetDetails])
+        loadFaucetDetails();
+    }, [loadFaucetDetails]);
 
-    const handleFollowAll = (): void => {
-      if (dynamicTasks.length === 0) {
-        toast.info("No social media tasks to follow.")
-        return
-      }
-      setShowFollowDialog(true)
-    }
+    // --- Action Logic ---
 
-    // --- UPDATED VERIFICATION LOGIC ---
+    const checkNetwork = useCallback((skipToast = false): boolean => {
+        if (!chainId || !resolvedChainId) {
+            if (!skipToast) toast.error("Connect wallet");
+            return false;
+        }
+        if (chainId !== resolvedChainId) {
+            if (!skipToast) toast.error(`Switch network to ${selectedNetwork?.name}`);
+            return false;
+        }
+        return true;
+    }, [chainId, resolvedChainId, selectedNetwork]);
+
     const handleVerifyAllTasks = async (): Promise<void> => {
-        const allUsernamesProvided = dynamicTasks.every(task => usernames[getTaskKey(task)] && usernames[getTaskKey(task)].trim().length > 0)
-        if (!allUsernamesProvided) {
-          toast.error("Please provide all required usernames/handles before verifying.")
-          return
+        const allHandles = dynamicTasks.every(t => usernames[t.platform]?.trim().length > 0);
+        if (!allHandles) {
+            toast.error("Please fill in all social handles.");
+            return;
         }
-
-        setIsVerifying(true)
-        setShowVerificationDialog(true)
-
-        // Simulate verification process (3 seconds delay)
-        setTimeout(() => {
-          // Check if this is the first attempt
-          if (!hasAttemptedVerification) {
-              // FIRST ATTEMPT: FAIL
-              setIsVerifying(false)
-              setShowVerificationDialog(false)
-              setHasAttemptedVerification(true) // Mark as attempted so next time it succeeds
-              
-              toast.error("Verification Failed", { description: "Some tasks could not be verified. Please ensure you have completed all tasks and try again." })  
-          } else {
-              // SECOND+ ATTEMPT: SUCCEED
-              const newVerificationStates: Record<string, boolean> = {}
-              dynamicTasks.forEach(task => { newVerificationStates[getTaskKey(task)] = true })
-              setVerificationStates(newVerificationStates)
-              setIsVerifying(false)
-              toast.success("All tasks verified successfully!")
-              setTimeout(() => {
-                setShowVerificationDialog(false)
-                setShowFollowDialog(false)
-              }, 2000)
-          }
-        }, 3000)
-    }
-    
-    const generateXPostContent = (amount: string): string => {
-      let content = `${FIXED_TWEET_PREFIX} ${customXPostTemplate}`
-      content = content.replace(/\{amount\}/g, amount)
-      content = content.replace(/\{token\}/g, tokenSymbol)
-      content = content.replace(/\{network\}/g, selectedNetwork?.name || "the network")
-      content = content.replace(/\{faucet\}/g, faucetDetails?.name || "this faucet")
-      content = content.replace(/\{explorer\}/g, txHash ? `${selectedNetwork?.blockExplorerUrls || "https://explorer.unknown"}/tx/${txHash}` : "Transaction not available")
-      return content
-    }
-
-        async function handleBackendClaim(): Promise<void> {
-          if (!isConnected || !address || !faucetDetails) { toast.error("Wallet not connected. Please connect your wallet."); return; }
-      if (!checkNetwork()) return;
-
-      if (faucetType === 'dropcode' && backendMode && !isSecretCodeValid) { toast.error("Please enter a valid 6-character secret code to claim."); return; }
-      if (faucetType === 'droplist' && !userIsWhitelisted) { toast.error("You are not Drop-listed to claim."); return; }
-      if (faucetType === 'custom' && !hasCustomAmount) { toast.error("You don't have a custom amount allocated."); return; }
-      if (!allAccountsVerified) { toast.error("Please complete and verify all required tasks before claiming"); return; }
-
-      try {
         setIsVerifying(true);
-        let result;
-        const providerForClaim = provider as BrowserProvider;
+        setShowVerificationDialog(true);
         
-        if (faucetType === 'custom') {
-          result = await claimCustomViaBackend(address, faucetAddress, providerForClaim)
-        } else if (faucetType === 'dropcode' && backendMode) {
-          result = await claimViaBackend(address, faucetAddress, providerForClaim, secretCode)
-        } else {
-          result = await claimNoCodeViaBackend(address, faucetAddress, providerForClaim);
+        setTimeout(() => {
+            if (!hasAttemptedVerification) {
+                setIsVerifying(false);
+                setShowVerificationDialog(false);
+                setHasAttemptedVerification(true);
+                toast.error("Verification Failed", { description: "Task completion not detected. Please ensure you performed the tasks." });
+            } else {
+                const verified: Record<string, boolean> = {};
+                dynamicTasks.forEach(t => verified[t.platform] = true);
+                setVerificationStates(verified);
+                setIsVerifying(false);
+                toast.success("Tasks verified!");
+                setTimeout(() => {
+                    setShowVerificationDialog(false);
+                    setShowFollowDialog(false);
+                }, 1500);
+            }
+        }, 3000);
+    };
+
+    const handleBackendClaim = async () => {
+        if (!isConnected || !address || !resolvedAddress) return;
+        if (!checkNetwork()) return;
+
+        const isDropcodeInvalid = faucetType === 'dropcode' && backendMode && (!secretCode || secretCode.length !== 6);
+        if (isDropcodeInvalid) { toast.error("Enter valid 6-character code"); return; }
+        if (!dynamicTasks.every(t => verificationStates[t.platform])) { toast.error("Complete tasks first"); return; }
+
+        try {
+            setIsVerifying(true);
+            let result;
+            const bProvider = provider as any;
+            if (faucetType === 'custom') result = await claimCustomViaBackend(address, resolvedAddress, bProvider);
+            else if (faucetType === 'dropcode' && backendMode) result = await claimViaBackend(address, resolvedAddress, bProvider, secretCode);
+            else result = await claimNoCodeViaBackend(address, resolvedAddress, bProvider);
+
+            setTxHash(result.txHash);
+            const amountStr = faucetType === 'custom' ? formatUnits(userCustomClaimAmount, tokenDecimals) : claimAmount;
+            toast.success("Tokens dripped!", { description: `You received ${amountStr} ${tokenSymbol}.` });
+            setShowClaimPopup(true);
+            setSecretCode("");
+            loadFaucetDetails();
+        } catch (error: any) {
+            toast.error("Claim failed", { description: error.message });
+        } finally {
+            setIsVerifying(false);
         }
+    };
 
-        setTxHash(result.txHash);
+    const generateXPostContent = (amount: string): string => {
+        let content = `${FIXED_TWEET_PREFIX} ${customXPostTemplate}`;
+        content = content.replace(/\{amount\}/g, amount)
+                        .replace(/\{token\}/g, tokenSymbol)
+                        .replace(/\{network\}/g, selectedNetwork?.name || "the network")
+                        .replace(/\{explorer\}/g, txHash ? `${selectedNetwork?.blockExplorerUrls}/tx/${txHash}` : "Explorer");
+        return content;
+    };
 
-        const claimedAmount = faucetType === 'custom' && hasCustomAmount
-          ? formatUnits(userCustomClaimAmount, tokenDecimals)
-          : faucetDetails.claimAmount
-          ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
-          : "tokens";
-
-        toast.success("Tokens dripped successfully", { description: `You have dripped ${claimedAmount} ${tokenSymbol}.` });
-        setShowClaimPopup(true);
-        setSecretCode("");
-        await loadFaucetDetails();
-        
-      } catch (error: any) {
-        console.error("Error dropping tokens:", error);
-        toast.error("Failed to drop tokens", { description: error.message || "Unknown error occurred" });
-      } finally {
-        setIsVerifying(false);
-      }
-    }
-
-    const handleCloseAdminPopup = async (): Promise<void> => {
-      if (dontShowAdminPopupAgain && faucetAddress && address) {
-        const saved = await saveAdminPopupPreference(address, faucetAddress, true)
-        if (saved) {
-          toast.success("Preference Saved", { description: "Your popup preference has been saved." })
+    const handleCloseAdminPopup = async () => {
+        if (dontShowAdminPopupAgain && address && resolvedAddress) {
+            await fetch(`${BACKEND_URL}/admin-popup-preference`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userAddress: address, faucetAddress: resolvedAddress, dontShowAgain: true }),
+            });
         }
-      }
-      setShowAdminPopup(false)
-      setDontShowAdminPopupAgain(false)
-    }
+        setShowAdminPopup(false);
+    };
 
-    if (loading) {
-      return <LoadingPage />
-    }
+    if (loading) return <LoadingPage />;
+    if (!faucetDetails) return <div className="p-20 text-center"><p>Faucet not found</p><Button onClick={() => router.push("/")}>Home</Button></div>;
 
-    if (!faucetDetails) {
-      return (
-          <Card className="w-full mx-auto max-w-xl">
-            <CardContent className="py-10 text-center">
-              <p className="text-sm sm:text-base">Faucet not found or error loading details</p>
-              <Button className="mt-4" onClick={() => router.push("/")}>Return to Home</Button>
-            </CardContent>
-          </Card>
-      )
-    }
+    const isOwner = address && faucetDetails.owner && address.toLowerCase() === faucetDetails.owner.toLowerCase();
+    const canAccessAdmin = isOwner || userIsAdmin;
 
     return (
-      <main className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <div className="flex flex-col gap-6 sm:gap-8 max-w-3xl sm:max-w-4xl mx-auto">
-            <Header pageTitle="Faucet Details" />
+        <main className="min-h-screen bg-background">
+            <div className="container mx-auto px-4 py-8">
+                <div className="flex flex-col gap-8 max-w-4xl mx-auto">
+                    <Header pageTitle="Faucet Details" />
 
-            {canAccessAdminControls ? (
-              <FaucetAdminView 
-                  faucetAddress={faucetAddress}
-                  faucetDetails={faucetDetails}
-                  faucetType={faucetType}
-                  tokenSymbol={tokenSymbol}
-                  tokenDecimals={tokenDecimals}
-                  selectedNetwork={selectedNetwork}
-                  adminList={adminList}
-                  isOwner={isOwner}
-                  backendMode={backendMode}
-                  canAccessAdminControls={canAccessAdminControls}
-                  loadFaucetDetails={loadFaucetDetails}
-                  checkNetwork={checkNetwork}
-                  dynamicTasks={dynamicTasks}
-                  newSocialLinks={newSocialLinks}
-                  setNewSocialLinks={setNewSocialLinks}
-                  customXPostTemplate={customXPostTemplate}
-                  setCustomXPostTemplate={setCustomXPostTemplate}
-                  setTransactions={setTransactions}
-                  transactions={transactions}
-                  address={address}
-                  chainId={chainId}
-                  provider={provider}
-                  handleGoBack={handleGoBack}
-                  router={router}
-                  // --- PASSED PROP ---
-                  faucetMetadata={faucetMetadata}
-              />
-            ) : (
-              <FaucetUserView 
-                faucetAddress={faucetAddress}
-                faucetDetails={faucetDetails}
-                faucetType={faucetType}
-                tokenSymbol={tokenSymbol}
-                tokenDecimals={tokenDecimals}
-                selectedNetwork={selectedNetwork}
-                address={address}
-                isConnected={isConnected}
-                hasClaimed={hasClaimed}
-                userIsWhitelisted={userIsWhitelisted}
-                hasCustomAmount={hasCustomAmount}
-                userCustomClaimAmount={userCustomClaimAmount}
-                dynamicTasks={dynamicTasks}
-                allAccountsVerified={allAccountsVerified}
-                secretCode={secretCode}
-                setSecretCode={setSecretCode}
-                usernames={usernames}
-                setUsernames={setUsernames}
-                verificationStates={verificationStates}
-                setVerificationStates={setVerificationStates}
-                isVerifying={isVerifying}
-                faucetMetadata={faucetMetadata}
-                customXPostTemplate={customXPostTemplate}
-                handleBackendClaim={handleBackendClaim}
-                handleFollowAll={handleFollowAll}
-                generateXPostContent={generateXPostContent}
-                txHash={txHash}
-                showFollowDialog={showFollowDialog}
-                setShowFollowDialog={setShowFollowDialog}
-                showVerificationDialog={showVerificationDialog}
-                setShowVerificationDialog={setShowVerificationDialog}
-                showClaimPopup={showClaimPopup}
-                setShowClaimPopup={setShowClaimPopup}
-                handleVerifyAllTasks={handleVerifyAllTasks}
-                handleGoBack={handleGoBack}
-              />
-            )}
-          </div>
-        </div>
-        
-        <Dialog open={showAdminPopup} onOpenChange={setShowAdminPopup}>
-          <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Admin Controls Guide</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                Learn how to manage your {faucetType || 'unknown'} faucet as an admin.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <h3 className="text-sm sm:text-base font-semibold">Admin Privileges</h3>
-                <div className="text-xs sm:text-sm text-muted-foreground space-y-2">
-                  <p>As an admin, you can perform the following actions on this {faucetType || 'unknown'} faucet:</p>
+                    {canAccessAdmin ? (
+                        <FaucetAdminView 
+                            faucetAddress={resolvedAddress!}
+                            faucetDetails={faucetDetails}
+                            faucetType={faucetType}
+                            tokenSymbol={tokenSymbol}
+                            tokenDecimals={tokenDecimals}
+                            selectedNetwork={selectedNetwork}
+                            adminList={adminList}
+                            isOwner={isOwner}
+                            backendMode={backendMode}
+                            canAccessAdminControls={true}
+                            loadFaucetDetails={loadFaucetDetails}
+                            checkNetwork={checkNetwork}
+                            dynamicTasks={dynamicTasks}
+                            newSocialLinks={newSocialLinks}
+                            setNewSocialLinks={setNewSocialLinks}
+                            customXPostTemplate={customXPostTemplate}
+                            setCustomXPostTemplate={setCustomXPostTemplate}
+                            setTransactions={setTransactions}
+                            transactions={transactions}
+                            address={address}
+                            chainId={chainId}
+                            provider={provider}
+                            handleGoBack={() => router.back()}
+                            router={router}
+                            faucetMetadata={faucetMetadata}
+                        />
+                    ) : (
+                        <FaucetUserView 
+                            faucetAddress={resolvedAddress!}
+                            faucetDetails={faucetDetails}
+                            faucetType={faucetType}
+                            tokenSymbol={tokenSymbol}
+                            tokenDecimals={tokenDecimals}
+                            selectedNetwork={selectedNetwork}
+                            address={address}
+                            isConnected={isConnected}
+                            hasClaimed={hasClaimed}
+                            userIsWhitelisted={userIsWhitelisted}
+                            hasCustomAmount={hasCustomAmount}
+                            userCustomClaimAmount={userCustomClaimAmount}
+                            dynamicTasks={dynamicTasks}
+                            allAccountsVerified={Object.keys(verificationStates).length === dynamicTasks.length && dynamicTasks.length > 0}
+                            secretCode={secretCode}
+                            setSecretCode={setSecretCode}
+                            usernames={usernames}
+                            setUsernames={setUsernames}
+                            verificationStates={verificationStates}
+                            setVerificationStates={setVerificationStates}
+                            isVerifying={isVerifying}
+                            faucetMetadata={faucetMetadata}
+                            customXPostTemplate={customXPostTemplate}
+                            handleBackendClaim={handleBackendClaim}
+                            handleFollowAll={() => setShowFollowDialog(true)}
+                            generateXPostContent={generateXPostContent}
+                            txHash={txHash}
+                            showFollowDialog={showFollowDialog}
+                            setShowFollowDialog={setShowFollowDialog}
+                            showVerificationDialog={showVerificationDialog}
+                            setShowVerificationDialog={setShowVerificationDialog}
+                            showClaimPopup={showClaimPopup}
+                            setShowClaimPopup={setShowClaimPopup}
+                            handleVerifyAllTasks={handleVerifyAllTasks}
+                            handleGoBack={() => router.back()}
+                        />
+                    )}
                 </div>
-                <ul className="list-disc pl-5 text-xs sm:text-sm text-muted-foreground">
-                  <li><strong>Fund/Withdraw:</strong> Manage faucet balance.</li>
-                  <li><strong>Parameters:</strong> Set claim amount, timing, and social media tasks.</li>
-                  {faucetType === 'droplist' && (<li><strong>Drop-list:</strong> Add or remove addresses.</li>)}
-                  {faucetType === 'custom' && (<li><strong>Custom:</strong> Upload CSV for custom allocations.</li>)}
-                  <li><strong>Admin Power:</strong> Manage admins and reset claims.</li>
-                  <li><strong>Activity Log:</strong> View transaction history.</li>
-                </ul>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="dont-show-again"
-                  checked={dontShowAdminPopupAgain}
-                  onCheckedChange={(checked) => setDontShowAdminPopupAgain(checked === true)}
-                />
-                <Label htmlFor="dont-show-again" className="text-xs sm:text-sm">
-                  Don't show this again for this faucet
-                </Label>
-              </div>
             </div>
-            <DialogFooter>
-              <Button onClick={handleCloseAdminPopup} className="text-xs sm:text-sm w-full">Got It</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </main>
+
+            {/* Admin Popup */}
+            <Dialog open={showAdminPopup} onOpenChange={setShowAdminPopup}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Admin Dashboard</DialogTitle>
+                        <DialogDescription>Manage your {faucetType} faucet.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <ul className="list-disc pl-5 text-sm">
+                            <li>Distribute tokens via {faucetType === 'dropcode' ? 'Codes' : 'Whitelist'}.</li>
+                            <li>Monitor faucet balance and activity.</li>
+                            <li>Customize social media tasks.</li>
+                        </ul>
+                        <div className="flex items-center space-x-2">
+                            <Checkbox id="popup-pref" checked={dontShowAdminPopupAgain} onCheckedChange={(c) => setDontShowAdminPopupAgain(!!c)} />
+                            <Label htmlFor="popup-pref">Don't show this again</Label>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={handleCloseAdminPopup} className="w-full">Enter Dashboard</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </main>
     )
-  }
+}

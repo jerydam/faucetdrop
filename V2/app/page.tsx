@@ -29,6 +29,7 @@ const CAMPAIGNS = [
     points: "100+ Faucets", 
     color: "from-[#1a1a2e] to-[#16213e]",
     path: "/faucet",
+    bgImage: "/faucet-bg.png",
     cta: "Create Faucet"
   },
   { 
@@ -39,6 +40,7 @@ const CAMPAIGNS = [
     points: "20+ Quests", 
     color: "from-[#0f172a] to-[#1e293b]",
     path: "/quest",
+    bgImage: "/quest-bg.png",
     cta: "Launch Quest"
   },
   { 
@@ -49,6 +51,7 @@ const CAMPAIGNS = [
     points: "50+ Quizzes", 
     color: "from-[#064e3b] to-[#065f46]",
     path: "/quiz",
+    bgImage: "/quiz-bg.png",
     cta: "Build Quiz"
   },
 ];  
@@ -177,25 +180,37 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
             className="flex gap-4 overflow-x-auto pb-4 no-scrollbar snap-x snap-mandatory shadow-inner"
           >
         {CAMPAIGNS.map((c) => (
-          <Link href={c.path} key={c.id}>
-            <div className={`min-w-[85vw] sm:min-w-[400px] h-64 sm:h-72 rounded-2xl p-6 sm:p-8 bg-gradient-to-br ${c.color} border border-white/10 flex flex-col justify-between snap-center cursor-pointer transition-transform duration-300 hover:scale-[1.01]`}>
-              <div>
-                <div className="mb-2">{c.icon}</div>
-                <h3 className="text-xl sm:text-2xl font-bold mt-2 leading-tight">{c.title}</h3>
-                <p className="text-xs sm:text-sm text-gray-300 mt-2 line-clamp-2">{c.desc}</p>
-              </div>
-              
-              <div className="flex justify-between items-end">
-                <button className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-xs sm:text-sm transition-colors">
-                  {c.cta}
-                </button>
-                <div className="bg-black/40 px-3 py-1 rounded-md text-[10px] sm:text-xs font-mono">
-                  {c.points}
-                </div>
-              </div>
-            </div>
-          </Link>
-        ))}
+  <Link href={c.path} key={c.id}>
+    <div className={`min-w-[85vw] sm:min-w-[400px] h-64 sm:h-72 rounded-2xl p-6 sm:p-8 bg-gradient-to-br ${c.color} border border-white/10 flex flex-col justify-between snap-center cursor-pointer transition-transform duration-300 hover:scale-[1.01] overflow-hidden relative group`}>
+      
+      {/* Background Image Layer */}
+      <div className="absolute inset-0 z-0 opacity-20 group-hover:opacity-30 transition-opacity">
+        <Image 
+          src={c.bgImage} 
+          alt="pattern" 
+          fill 
+          className="object-cover"
+        />
+      </div>
+
+      {/* Content Layer (Ensure z-10 so it stays on top of the bg) */}
+      <div className="relative z-10">
+        <div className="mb-2">{c.icon}</div>
+        <h3 className="text-xl sm:text-2xl font-bold mt-2 leading-tight">{c.title}</h3>
+        <p className="text-xs sm:text-sm text-gray-300 mt-2 line-clamp-2">{c.desc}</p>
+      </div>
+      
+      <div className="flex justify-between items-end relative z-10">
+        <button className="px-4 sm:px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold text-xs sm:text-sm transition-colors">
+          {c.cta}
+        </button>
+        <div className="bg-black/40 px-3 py-1 rounded-md text-[10px] sm:text-xs font-mono">
+          {c.points}
+        </div>
+      </div>
+    </div>
+  </Link>
+))}
         </motion.div>
       </div>
     </div>

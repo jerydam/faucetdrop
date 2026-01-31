@@ -317,7 +317,7 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
             </div>
 
             <div className="lg:w-2/3 w-full grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[{ label: "Total Faucets", val: "80+", icon: <Droplets /> }, { label: "Transactions", val: "5K+", icon: <Gamepad2 /> }, { label: "Active Users", val: "2K+", icon: <Lightbulb /> }].map((stat) => (
+              {[{ label: "Total Faucets", val: "100+", icon: <Droplets /> }, { label: "Transactions", val: "8K+", icon: <Gamepad2 /> }, { label: "Active Users", val: "2K+", icon: <Lightbulb /> }].map((stat) => (
                 <div key={stat.label} className="p-6 sm:p-8 rounded-2xl bg-[#030712] border border-white/5 flex flex-col items-center lg:items-start group hover:border-blue-500/50 transition-all">
                   <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400 mb-4 group-hover:scale-110 transition-transform">{stat.icon}</div>
                   <div className="text-3xl sm:text-4xl font-black">{stat.val}</div>

@@ -1,145 +1,154 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-'use client'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { useState, useMemo } from 'react'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
-type PieData = {
-  networkData: { name: string; value: number }[];
-  timeData: { name: string; value: number }[];
-};
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
-
-const RADIAN = Math.PI / 180;
-const renderCustomizedLabel = ({
-  cx,
-  cy,
-  midAngle,
-  innerRadius,
-  outerRadius,
-  percent,
-  index,
-  name
-}: any) => {
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN) * 1.3;
-  const y = cy + radius * Math.sin(-midAngle * RADIAN) * 1.3;
-
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="white"
-      textAnchor="middle"
-      dominantBaseline="central"
-      className="text-xs font-medium"
-    >
-      {`${(percent * 100).toFixed(0)}%`}
-    </text>
-  );
-};
+type AreaData = {
+  date: string;
+  [network: string]: number | string;
+}[];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white p-3 border border-gray-200 rounded shadow-lg">
-        <p className="font-semibold">{payload[0].name}</p>
-        <p className="text-sm">
-          Claims: <span className="font-medium">{payload[0].value}</span>
-        </p>
-        <p className="text-sm">
-          {`${((payload[0].value / payload[0].payload.total) * 100).toFixed(1)}% of total`}
-        </p>
+      <div className="bg-white p-4 border border-gray-200 rounded shadow-lg">
+        <p className="font-semibold mb-2">{label}</p>
+        {payload
+          .sort((a: any, b: any) => (b.value as number) - (a.value as number))
+          .map((entry: any, index: number) => (
+            <div key={`tooltip-${index}`} className="flex justify-between">
+              <div className="flex items-center">
+                <div 
+                  className="w-3 h-3 rounded-full mr-2" 
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-sm">{entry.name}:</span>
+              </div>
+              <span className="font-medium ml-2">{entry.value}</span>
+            </div>
+          ))}
       </div>
     );
   }
   return null;
 };
 
-// In GraphChart2.tsx
-const TwoLevelPieChart = ({ 
-  data = { networkData: [], timeData: [] } ,
-}: { 
-  data: PieData 
-}) => {
-  // Ensure we have valid data
-  const { networkData = [], timeData = [] } = data || {};
-  
+const StackedAreaChart = ({ data }: { data: AreaData }) => {
+  const [selectedMonths, setSelectedMonths] = useState<number>(1); // Default to last month
 
+  const filteredData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+    if (selectedMonths === 0) return data; // Show all data
+    
+    const currentDate = new Date();
+    const monthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - selectedMonths, currentDate.getDate());
+    
+    const filtered = data.filter(item => {
+      const itemDate = new Date(item.date);
+      return itemDate >= monthsAgo;
+    });
+    return filtered;
+  }, [data, selectedMonths]);
 
-// const TwoLevelPieChart = ({ data }: { data: PieData }) => {
-//   const { networkData = [], timeData = [] } = data;
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-[400px] flex items-center justify-center text-gray-500">
+        No data available
+      </div>
+    );
+  }
 
-  // Calculate total for percentage calculations
-  const networkTotal = networkData.reduce((sum, item) => sum + item.value, 0);
-  const timeTotal = timeData.reduce((sum, item) => sum + item.value, 0);
+  // Get all network names from the first data point (excluding 'date')
+  const networkNames = Object.keys(data[0] || {}).filter(key => key !== 'date');
 
-  // Add percentage and total to each data point
-  const enhancedNetworkData = networkData.map(item => ({
-    ...item,
-    percent: (item.value / networkTotal) * 100,
-    total: networkTotal
-  }));
+  // Format date for better readability
+  const formatXAxis = (date: string) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric'
+    });
+  };
 
-  const enhancedTimeData = timeData.map(item => ({
-    ...item,
-    percent: (item.value / timeTotal) * 100,
-    total: timeTotal
-  }));
+  // Generate a color palette for networks
+  const getNetworkColor = (index: number) => {
+    const colors = [
+      '#4f46e5', '#10b981', '#f59e0b', '#ef4444', 
+      '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'
+    ];
+    return colors[index % colors.length];
+  };
 
   return (
-    <div className="w-full h-[500px] flex flex-col md:flex-row gap-8 p-4 justify-center items-center">
-      <div className="w-full md:w-1/2 h-[400px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={enhancedNetworkData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={renderCustomizedLabel}
-              outerRadius={120}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {enhancedNetworkData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
+    <div className="w-full h-[400px] p-4">
+      <div className="flex items-center space-x-2 mb-4">
+        <label htmlFor="monthFilter" className="text-sm text-gray-600">
+          Show last:
+        </label>
+        <select
+          id="monthFilter"
+          value={selectedMonths}
+          onChange={(e) => setSelectedMonths(Number(e.target.value))}
+          className="border border-gray-400 font-semibold rounded px-2 py-1 text-sm bg-gray-400 "
+        >
+          <option value={1}>This Month</option>
+          <option value={2}>Two Months</option>
+          <option value={3}>Three Months</option>
+          <option value={12}>One Year</option>
+          <option value={0}>All Time</option>
+        </select>
       </div>
-      
-      {/* <div className="w-full md:w-1/2 h-[400px]">
-        <h3 className="text-center font-medium mb-2">Distribution by Time of Day</h3>
+
+      {filteredData.length > 0 ? (
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={enhancedTimeData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={renderCustomizedLabel}
-              outerRadius={120}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {enhancedTimeData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={COLORS[(index + 3) % COLORS.length]} 
-                />
-              ))}
-            </Pie>
+          <AreaChart
+            data={filteredData}
+            margin={{
+              top: 10,
+              right: 30,
+              left: 0,
+              bottom: 0,
+            }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis 
+              dataKey="date" 
+              tickFormatter={formatXAxis}
+              tick={{ fontSize: 12 }}
+              tickMargin={10}
+            />
+            <YAxis 
+              tick={{ fontSize: 12 }}
+              tickFormatter={(value) => value.toLocaleString()}
+            />
             <Tooltip content={<CustomTooltip />} />
-            <Legend />
-          </PieChart>
+            <Legend 
+              verticalAlign="top"
+              height={36}
+              formatter={(value) => (
+                <span className="text-sm">{value}</span>
+              )}
+            />
+            {networkNames.map((network, index) => (
+              <Area
+                key={network}
+                type="monotone"
+                dataKey={network}
+                stackId="1"
+                stroke={getNetworkColor(index)}
+                fill={getNetworkColor(index)}
+                fillOpacity={0.2}
+                strokeWidth={2}
+                name={network}
+              />
+            ))}
+          </AreaChart>
         </ResponsiveContainer>
-      </div> */}
+      ) : (
+        <div className="h-[400px] flex items-center justify-center text-gray-500">
+          No data available for selected period
+        </div>
+      )}
     </div>
   );
 };
 
-export default TwoLevelPieChart;
+export default StackedAreaChart;

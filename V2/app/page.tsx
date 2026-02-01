@@ -4,9 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Contract } from "ethers";
 import { 
-  Droplets, Gamepad2, Lightbulb, Users, 
+  Droplets, PackageCheck, GraduationCap, Users, 
   ChevronRight, Zap, Layers, 
-  CheckCircle2, Loader2, Globe, ArrowRight
+  CheckCircle2, Loader2, Globe, ArrowRight,
+  DropletIcon
 } from 'lucide-react';
 import { CHECKIN_ABI } from '@/lib/abis';
 import { toast } from 'sonner';
@@ -34,7 +35,7 @@ const CAMPAIGNS = [
   },
   { 
     id: 2, 
-    icon: <Gamepad2 className="h-4 w-4 text-blue-400" />, 
+    icon: <PackageCheck className="h-4 w-4 text-blue-400" />, 
     title: "Quests", 
     desc: "Engage users with interactive missions.", 
     points: "20+ Quests", 
@@ -45,7 +46,7 @@ const CAMPAIGNS = [
   },
   { 
     id: 3, 
-    icon: <Lightbulb className="h-4 w-4 text-blue-400" />, 
+    icon: <GraduationCap className="h-4 w-4 text-blue-400" />, 
     title: "Quizzes", 
     desc: "Educate and reward users through challenges.", 
     points: "50+ Quizzes", 
@@ -144,9 +145,9 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
       {/* --- HERO SECTION --- */}
 <div className="flex flex-col lg:flex-row gap-8 items-stretch"> {/* Changed to items-stretch to align card heights */}
   <div className="flex-1 w-full overflow-hidden"> {/* Added overflow-hidden to prevent carousel bleed */}
-    <h1 className="text-2xl sm:text-4xl lg:text-5xl font-bold mb-6 tracking-tight leading-tight text-center lg:text-left">
-      The all-in-one stack for your <br className="hidden sm:block" /> 
-      Web3 Growth & Rewards.
+    <h1 className="text-xl sm:text-xl lg:text-xl font-bold mb-6 tracking-tight leading-tight text-center lg:text-left">
+      The all-in-one stack for your Web3 Growth,  <br className="hidden sm:block" /> 
+      Engagment and Reward Distribution.
     </h1>
     
     <div className="relative group">
@@ -223,7 +224,7 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
       
       <div className="flex flex-col gap-6"> {/* Changed to column gap for better vertical spacing against large cards */}
         <div className="flex items-center gap-3">
-           <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><Layers size={18}/></div>
+           <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><DropletIcon size={18}/></div>
            <div className="flex flex-col">
               <span className="text-xs font-bold text-white">Earn   Drop Points</span>
               <span className="text-[10px] text-gray-500">Coming Soon</span>
@@ -246,7 +247,7 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
         {/* --- HOT SPACES --- */}
         <section>
           <div className="flex justify-between items-center mb-6 px-2">
-            <h2 className="text-xl sm:text-2xl font-bold">Hot Spaces</h2>
+            <h2 className="text-xl sm:text-2xl font-bold">Trending Quests</h2>
             <Link href="#" className="flex items-center gap-1 text-gray-400 text-xs sm:text-sm">View All <ChevronRight size={14} /></Link>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-x-12 bg-[#080d19]/40 rounded-2xl sm:rounded-[2rem] border border-white/5 p-4 sm:p-8">
@@ -268,7 +269,7 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
         {/* --- NEW SPACES RESTORED --- */}
         <section>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl sm:text-2xl font-bold">New Spaces</h2>
+            <h2 className="text-xl sm:text-2xl font-bold">New Quests</h2>
             <div className="flex items-center gap-2 text-gray-400 text-sm hover:text-white cursor-pointer"><ArrowRight size={20} /></div>
           </div>
           <motion.div 
@@ -308,25 +309,94 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
         </section>
 
         {/* --- STATS SECTION --- */}
-        <section className="py-12 sm:py-24 bg-white/[0.02] rounded-2xl sm:rounded-[3rem] border border-white/5 px-6 sm:px-12">
-          <div className="flex flex-col lg:flex-row gap-10 sm:gap-20 items-center">
-            <div className="lg:w-1/3 text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase mb-6">Live Network Stats</div>
-              <h2 className="text-3xl sm:text-5xl font-bold mb-6 tracking-tight">Trusted by Top Web3 Protocols</h2>
-              <p className="text-gray-400 text-sm sm:text-base">Powering growth for Celo, Lisk, Self Protocol & more through verifiable metrics.</p>
-            </div>
-
-            <div className="lg:w-2/3 w-full grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[{ label: "Total Faucets", val: "100+", icon: <Droplets /> }, { label: "Transactions", val: "8K+", icon: <Gamepad2 /> }, { label: "Active Users", val: "2K+", icon: <Lightbulb /> }].map((stat) => (
-                <div key={stat.label} className="p-6 sm:p-8 rounded-2xl bg-[#030712] border border-white/5 flex flex-col items-center lg:items-start group hover:border-blue-500/50 transition-all">
-                  <div className="p-3 bg-blue-500/10 rounded-xl text-blue-400 mb-4 group-hover:scale-110 transition-transform">{stat.icon}</div>
-                  <div className="text-3xl sm:text-4xl font-black">{stat.val}</div>
-                  <div className="text-[10px] uppercase tracking-widest text-gray-500 mt-1">{stat.label}</div>
+        <section className="py-24 bg-white/[0.02] border-y border-white/5">
+            {/* Changed max-w-[98%] to a fixed max-width and increased padding for better "breathability" */}
+            <div className="max-w-[1400px] mx-auto px-8 sm:px-12 lg:px-16">
+              <div className="flex flex-col lg:flex-row gap-20 items-start">
+                
+                {/* Left Content */}
+                <div className="lg:w-1/3">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] mb-6">
+                    Live Network Stats
+                  </div>
+                  <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
+                    Trusted by Top Web3 Protocols
+                  </h2>
+                  <p className="text-gray-400 mb-8 leading-relaxed max-w-md">
+                    Powering growth for Celo, Lisk, Self Protocol & more through verifiable onchain metrics.
+                  </p>
+                  
                 </div>
-              ))}
+
+                {/* Right Content: Unified Grid */}
+                <div className="lg:w-2/3 w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  
+                  {/* FAUCETS */}
+                  <div className="p-8 rounded-[2rem] bg-[#030712] border border-white/5 group hover:border-blue-500/50 transition-all duration-500">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400 group-hover:scale-110 transition-transform">
+                        <Droplets size={20} />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Faucets</span>
+                    </div>
+                    <div className="text-4xl font-black mb-1 tracking-tighter text-white">100+</div>
+                    <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Total Faucets</div>
+                  </div>
+
+                  {/* QUESTS */}
+                  <div className="p-8 rounded-[2rem] bg-[#030712] border border-white/5 group hover:border-blue-500/50 transition-all duration-500">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400 group-hover:scale-110 transition-transform">
+                        <PackageCheck size={20} />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Quests</span>
+                    </div>
+                    <div className="text-4xl font-black mb-1 tracking-tighter text-white">8K+</div>
+                    <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Transactions</div>
+                  </div>
+
+                  {/* QUIZZES */}
+                  <div className="p-8 rounded-[2rem] bg-[#030712] border border-white/5 group hover:border-blue-500/50 transition-all duration-500">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-400 group-hover:scale-110 transition-transform">
+                        <GraduationCap size={20} />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Quizzes</span>
+                    </div>
+                    <div className="text-4xl font-black mb-1 tracking-tighter text-white">2K+</div>
+                    <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Active Users</div>
+                  </div>
+
+                  {/* SHARED DROPS - Full width */}
+                  <div className="sm:col-span-2 lg:col-span-3 p-8 rounded-[2.5rem] bg-[#030712] border border-white/5 group hover:border-blue-500/50 transition-all duration-500 flex flex-col sm:flex-row sm:items-center justify-between gap-8">
+                    <div className="flex items-center gap-6">
+                      <div className="p-4 bg-blue-500/10 rounded-2xl text-blue-400 group-hover:rotate-12 transition-transform">
+                        <Globe size={28} />
+                      </div>
+                      <div>
+                        <div className="text-4xl font-black tracking-tighter text-white">2,000+</div>
+                        <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Total Drops Distributed</div>
+                      </div>
+                    </div>
+                    
+                    <div className="hidden sm:block h-12 w-px bg-white/10" />
+                    
+                    <div className="flex gap-12">
+                        <div>
+                            <div className="text-xl font-bold text-white tracking-tight">4.9/5</div>
+                            <div className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Satisfaction</div>
+                        </div>
+                        <div>
+                            <div className="text-xl font-bold text-white tracking-tight">99.9%</div>
+                            <div className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Uptime</div>
+                        </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
       </main>
     </div>

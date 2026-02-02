@@ -19,12 +19,12 @@ export function Header({ pageTitle }: { pageTitle: string }) {
 
   const getActionConfig = () => {
     if (pathname.includes('/quest')) {
-      return { label: "Create Quest", icon: <Rocket className="h-4 w-4" />, path: "/quest/create-quest" };
+      return { label: "Create Quest", path: "/quest/create-quest" };
     }
     if (pathname.includes('/quiz')) {
-      return { label: "Create Quiz", icon: <BookOpen className="h-4 w-4" />, path: "/quiz/create-quiz" };
+      return { label: "Create Quiz", path: "/quiz/create-quiz" };
     }
-    return { label: "Create Faucet", icon: <Droplets className="h-4 w-4" />, path: "/faucet/create-faucet" };
+    return { label: "Create Faucet", path: "/faucet/create-faucet" };
   };
 
   const action = getActionConfig();
@@ -112,9 +112,9 @@ export function Header({ pageTitle }: { pageTitle: string }) {
                 router.push(action.path);
                 setIsMenuOpen(false);
               }}
-              className="w-full bg-blue-600 hover:bg-blue-500 font-black uppercase text-xs tracking-widest py-6"
+              className="bg-transparent border-white text-white hover:border-blue-500 hover:bg-blue-500/10 text-xs font-bold uppercase tracking-widest px-6"
             >
-              {action.icon}
+             
               <span className="ml-2">{action.label}</span>
             </Button>
           )}

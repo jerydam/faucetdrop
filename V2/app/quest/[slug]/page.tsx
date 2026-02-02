@@ -51,6 +51,9 @@ import {
   Copy,
   CalendarClock,
   Users,
+  Twitter,
+  Play,
+  Link,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
@@ -77,6 +80,7 @@ interface QuestTask {
   targetHandle?: string;
   points: number;
   category: string;
+  targetContractAddress: string;
   // UPDATED THIS LINE:
   verificationType: VerificationType;
   url: string;
@@ -322,21 +326,15 @@ useEffect(() => {
     }
   };
   const handleXShareAction = (task: QuestTask) => {
-    // 1. Determine the target handle
-    const targetHandle = task.isSystem ? "@faucetdrops" : task.targetHandle || "@faucetdrops";
-
-    // 2. Get the participant's referral link
+    const targetHandle = "@faucetdrops";
+    // Constructing the message with the user's referral link
     const referralLink = `${window.location.origin}${window.location.pathname}?ref=${participantData?.referral_id}`;
-
-    // 3. Construct the FULL message including the link
-    // We put the link inside the text string so it's guaranteed to show up
-    const message = `I am participating in a quest on ${targetHandle}, join me using this link: ${referralLink}`;
-
-    // 4. Build the intent URL using ONLY the text parameter for maximum reliability
+    
+    const message = `I am participating in a quest on ${targetHandle}. Join me and earn rewards here: ${referralLink}`;
+    
     const xIntentUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(message)}`;
-
     window.open(xIntentUrl, "_blank");
-  };
+};
   const handleJoin = async () => {
     if (!userWalletAddress || !faucetAddress) return;
     setIsJoining(true);
@@ -652,66 +650,83 @@ useEffect(() => {
   };
 
   const handleSubmitTask = async () => {
-    if (!selectedTask || !userWalletAddress) return;
-    setIsSubmitting(true);
+  if (!selectedTask || !userWalletAddress) return;
+  setIsSubmitting(true);
 
-    try {
-      const formData = new FormData();
-      formData.append("walletAddress", userWalletAddress);
-      formData.append("taskId", selectedTask.id);
-      formData.append("submissionType", selectedTask.verificationType);
+  try {
+    const formData = new FormData();
+    formData.append("walletAddress", userWalletAddress);
+    formData.append("taskId", selectedTask.id);
+    formData.append("submissionType", selectedTask.verificationType);
 
-      // FIX: For quote tasks, we MUST use the user-inputted proofUrl.
-      // For standard auto_social (follow/like), we use the task's preset URL.
-      const finalProofUrl =
-        selectedTask.action === "quote" || selectedTask.verificationType === "manual_link"
-          ? submissionData.proofUrl
-          : selectedTask.url;
+    const finalProofUrl =
+      selectedTask.action === "quote" || selectedTask.verificationType === "manual_link"
+        ? submissionData.proofUrl
+        : selectedTask.url;
 
-      formData.append("submittedData", finalProofUrl);
+    formData.append("submittedData", finalProofUrl || "");
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-      const result = await response.json();
-
-      if (!result.success) throw new Error("Failed to initialize submission");
-
-      if (selectedTask.verificationType === "auto_social") {
-        const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            submissionId: result.submissionId,
-            faucetAddress: faucetAddress,
-            walletAddress: userWalletAddress,
-            handle: userProfile?.twitter_handle || userProfile?.username || "",
-            proofUrl: finalProofUrl, // Bot will check this URL
-            taskType: selectedTask.action,
-          }),
-        });
-
-        const verifyJson = await verifyRes.json();
-
-        if (verifyJson.verified) {
-          toast.success("Task verified! Points added.");
-          await loadUserProgress();
-          setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null }); // CLEAR FORM
-        } else {
-          toast.error(verifyJson.message || "Verification failed.");
-        }
+    const response = await fetch(
+      `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
+      {
+        method: "POST",
+        body: formData,
       }
-    } catch (error: any) {
-      toast.error(error.message || "An error occurred");
-    } finally {
-      setIsSubmitting(false);
+    );
+    const result = await response.json();
+
+    if (!result.success) throw new Error(result.message || "Failed to submit task");
+
+    // CASE 1: AUTO SOCIAL (Twitter/X Bot)
+    if (selectedTask.verificationType === "auto_social") {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: result.submissionId,
+          faucetAddress: faucetAddress,
+          walletAddress: userWalletAddress,
+          handle: userProfile?.twitter_handle || userProfile?.username || "",
+          proofUrl: finalProofUrl,
+          taskType: selectedTask.action,
+        }),
+      });
+
+      const verifyJson = await verifyRes.json();
+      if (verifyJson.verified) {
+        toast.success("Task verified! Points added.");
+      } else {
+        toast.error(verifyJson.message || "Verification failed.");
+      }
+    } 
+    
+    // CASE 2: NO VERIFICATION (Watch/Visit)
+    // If the backend is set to auto-approve 'none' types, we just need to refresh
+    else if (selectedTask.verificationType === "none") {
+      toast.success("Task completed! Points added.");
+    } 
+    
+    // CASE 3: MANUAL
+    else {
+      toast.info("Task submitted for manual review.");
     }
-  };
+
+    // ALWAYS refresh progress and leaderboard after a submission attempt
+    await loadUserProgress();
+    // Refresh Leaderboard to show updated "Tasks Done" and "Points"
+    const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+    const lbJson = await lbRes.json();
+    if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+
+    setShowSubmitModal(false);
+    setSubmissionData({ proofUrl: "", notes: "", file: null });
+
+  } catch (error: any) {
+    toast.error(error.message || "An error occurred");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected") => {
     try {
@@ -1512,159 +1527,360 @@ const questStatusGuard = useMemo(() => {
             </div>
           </div>
         )}
-
-        {/* ============= SUBMISSION MODAL ============= */}
+                {/* SUBMISSION MODAL */}
         {showSubmitModal && selectedTask && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <Card className="w-full max-w-lg shadow-2xl scale-100 animate-in zoom-in-95 duration-200 border-0 dark:bg-slate-900">
-              <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-4">
-                <CardTitle className="text-xl">Complete Task</CardTitle>
-                <CardDescription className="text-base font-medium">{selectedTask.title}</CardDescription>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+            <Card className="w-full max-w-lg shadow-2xl border-0 dark:bg-slate-900 animate-in zoom-in-95 duration-200">
+              <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-5 relative">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-4 top-4 h-8 w-8 rounded-full"
+                  onClick={() => setShowSubmitModal(false)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+
+                <CardTitle className="text-xl pr-10">{selectedTask.title}</CardTitle>
+                <CardDescription className="text-base font-medium mt-1">
+                  {selectedTask.description}
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 pt-6">
+
+              <CardContent className="pt-6 space-y-6">
+                {/* Warning / description box */}
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 flex gap-3">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>{selectedTask.description}</div>
                 </div>
 
-                {/* DYNAMIC CONTENT PER VERIFICATION TYPE */}
-                <div className="space-y-4">
-                  {/* CASE 1: AUTO SOCIAL (Click to Verify) */}
-                  {selectedTask.verificationType === "auto_social" && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2">
-                      {/* STEP 1: DYNAMIC ACTION BUTTON */}
+                {/* ────────────────────────────────────────────────
+                    1. SYSTEM SHARE ON X (manual review)
+                ──────────────────────────────────────────────── */}
+                {(selectedTask.id === "sys_share_x" || selectedTask.action === "share_quest") && (
+                  <div className="space-y-6">
+                    <div className="p-6 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/40 dark:to-yellow-950/30 rounded-xl border border-amber-200 dark:border-amber-800 text-center">
+                      <div className="mx-auto w-16 h-16 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-4 shadow-md">
+                        <Twitter className="h-8 w-8 text-[#1DA1F2]" />
+                      </div>
+                      <h4 className="text-lg font-semibold mb-3">Share this Quest on X</h4>
+                      <p className="text-sm text-muted-foreground mb-5">
+                        Post about this quest including @faucetdrops and your referral link
+                      </p>
+
                       <Button
-                        variant="outline"
-                        className="w-full h-12 border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between px-6"
+                        size="lg"
+                        className="bg-[#1DA1F2] hover:bg-[#0c8cdf] text-white w-full mb-5"
                         onClick={() => {
-                          // Only trigger X logic if the task is an X task
-                          if (selectedTask.category?.toLowerCase() === "x" || selectedTask.category?.toLowerCase() === "twitter") {
-                            if (selectedTask.action === "quote" || selectedTask.id === "sys_share_x") {
-                              handleXShareAction(selectedTask);
-                            } else {
-                              window.open(selectedTask.url, "_blank");
-                            }
-                          } else {
-                            // Discord or other platforms just open the Invite/Link
-                            window.open(selectedTask.url, "_blank");
+                          if (!participantData?.referral_id) {
+                            toast.error("Referral link not available – please join first");
+                            return;
                           }
-                          setHasOpenedLink((prev) => ({ ...prev, [selectedTask.id]: true }));
+                          const cleanUrl = window.location.href.split("?")[0];
+                          const refLink = `${cleanUrl}?ref=${participantData.referral_id}`;
+                          const text = `I'm participating in this awesome quest on @faucetdrops!\nJoin me here: ${refLink}`;
+                          window.open(
+                            `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`,
+                            "_blank",
+                            "noopener,noreferrer"
+                          );
                         }}
                       >
-                        <span className="flex items-center gap-2">
-                          <ExternalLink className="h-4 w-4" /> 
-                          1. {selectedTask.category?.toLowerCase() === "discord" ? "Join Discord Server" : `Perform ${selectedTask.action} on X`}
-                        </span>
-                        {hasOpenedLink[selectedTask.id] && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                        <Twitter className="mr-2 h-5 w-5" />
+                        Compose & Post on X
                       </Button>
 
-                      {/* STEP 2: DYNAMIC INFO/INPUT BOX */}
-                      {selectedTask.category?.toLowerCase() === "discord" ? (
-                        <div className="flex items-start gap-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-dashed border-indigo-300 dark:border-indigo-800">
-                          <Users className="h-4 w-4 text-indigo-600 mt-1 shrink-0" />
-                          <div className="text-xs text-muted-foreground leading-relaxed">
-                        
-                            Make sure you've joined before clicking verify.
-                          </div>
-                        </div>
-                      ) : (
-                        /* EXISTING X LOGIC */
-                        (selectedTask.action === "quote" || selectedTask.id === "sys_share_x") ? (
-                          <div className="space-y-2 animate-in fade-in zoom-in-95">
-                            <Label className="text-xs font-bold text-orange-600 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" /> PASTE YOUR POST LINK
-                            </Label>
-                            <Input
-                              placeholder="https://x.com/yourname/status/..."
-                              value={submissionData.proofUrl}
-                              onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
-                              className="border-orange-200 focus:border-orange-500"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-start gap-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-dashed border-slate-300 dark:border-slate-600">
-                            <Shield className="h-4 w-4 text-primary mt-1 shrink-0" />
-                            <div className="text-xs text-muted-foreground">
-                              Verifying <strong>{selectedTask.action}</strong> for @{userProfile?.twitter_handle || userProfile?.username}
-                            </div>
-                          </div>
-                        )
-                      )}
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Make sure your tweet contains @faucetdrops and the referral link
+                      </p>
+                    </div>
 
-                      {/* STEP 3: VERIFY BUTTON */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium flex items-center gap-2">
+                        <Link className="h-4 w-4" />
+                        Paste link to your tweet (required)
+                      </Label>
+                      <Input
+                        placeholder="https://x.com/yourusername/status/..."
+                        value={submissionData.proofUrl}
+                        onChange={(e) =>
+                          setSubmissionData((prev) => ({ ...prev, proofUrl: e.target.value.trim() }))
+                        }
+                        className="font-mono text-sm focus-visible:ring-amber-500"
+                      />
+                      <p className="text-xs text-muted-foreground italic">
+                        This link will be reviewed manually.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ────────────────────────────────────────────────
+                    2. WATCH VIDEO – preview + mark done
+                ──────────────────────────────────────────────── */}
+                {selectedTask.action === "watch" && selectedTask.verificationType === "none" && (
+                  <div className="space-y-6">
+                    <div className="rounded-xl overflow-hidden border bg-black aspect-video relative shadow-lg">
+                      {(selectedTask.url.includes("youtube.com") || selectedTask.url.includes("youtu.be")) ? (
+                        <iframe
+                          width="100%"
+                          height="100%"
+                          src={
+                            selectedTask.url
+                              .replace("watch?v=", "embed/")
+                              .replace("youtu.be/", "www.youtube.com/embed/")
+                              .split("&")[0]
+                          }
+                          title="Introduction Video"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white/70 bg-gradient-to-b from-black/60 to-black/90">
+                          <Play className="h-16 w-16 opacity-70 mb-4" />
+                          <p className="text-lg font-medium">Video preview not available</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4">
                       <Button
-                        className="w-full h-12 bg-primary text-white"
-                        onClick={handleSubmitTask}
-                        disabled={isSubmitting || (selectedTask.action === "quote" && !submissionData.proofUrl)}
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => window.open(selectedTask.url, "_blank", "noopener,noreferrer")}
                       >
-                        {isSubmitting ? (
-                          <><Loader2 className="animate-spin mr-2 h-4 w-4" /> Verifying...</>
-                        ) : (
-                          <><Shield className="mr-2 h-4 w-4" /> 2. Verify {selectedTask.category === "discord" ? "Membership" : "Completion"}</>
-                        )}
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Open Original Video
+                      </Button>
+
+                      <Button
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => {
+                          handleSubmitTask();
+                          toast.success("Video marked as watched!");
+                          setShowSubmitModal(false);
+                        }}
+                        disabled={isSubmitting}
+                      >
+                        I've Watched It – Mark as Done
                       </Button>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* CASE 2: AUTO TX (On-Chain) */}
-                  {selectedTask.verificationType === "auto_tx" && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2">
+                {/* ────────────────────────────────────────────────
+                    3. VISIT PAGE – auto complete, no reviewing
+                ──────────────────────────────────────────────── */}
+                {selectedTask.action === "visit" && selectedTask.verificationType === "none" && (
+                  <div className="space-y-6 text-center">
+                    <div className="p-10 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-2xl border border-blue-100 dark:border-blue-900/50">
+                      <ExternalLink className="mx-auto h-14 w-14 text-blue-500 mb-5 opacity-90" />
+                      <h4 className="text-xl font-semibold mb-3">Visit Project Website</h4>
+                      <p className="text-muted-foreground mb-8 max-w-sm mx-auto">
+                        Page will open in new tab. Task will be auto-completed shortly.
+                      </p>
+
+                      <Button
+                        size="lg"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-12"
+                        onClick={() => {
+                          window.open(selectedTask.url, "_blank", "noopener,noreferrer");
+                          setTimeout(() => {
+                            handleSubmitTask();
+                            toast.success("Visit completed!");
+                            setShowSubmitModal(false);
+                          }, 5000); // 5 seconds – natural feel
+                        }}
+                      >
+                        Open Page & Confirm
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ────────────────────────────────────────────────
+                    4. MANUAL TRADING / ON-CHAIN TASKS
+                ──────────────────────────────────────────────── */}
+                {selectedTask.category === "trading" && selectedTask.verificationType !== "auto_tx" && (
+                  <div className="space-y-6">
+                    <div className="space-y-4 p-5 bg-slate-50 dark:bg-slate-950/50 rounded-xl border">
+                      {/* Tx Hash */}
                       <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Transaction Hash (TxHash)</Label>
+                        <Label className="text-sm font-medium">Transaction Hash (required)</Label>
                         <Input
-                          placeholder="0x..."
+                          placeholder="0x1234567890abcdef..."
                           value={submissionData.proofUrl}
-                          onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
-                          className="h-11 font-mono text-xs"
+                          onChange={(e) =>
+                            setSubmissionData((prev) => ({ ...prev, proofUrl: e.target.value.trim() }))
+                          }
+                          className="font-mono text-sm focus-visible:ring-green-500"
                         />
                       </div>
-                      <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20">
-                        <Shield className="h-3 w-3 text-green-600" />
-                        <p className="text-[10px] text-green-700 dark:text-green-400 font-medium">Automatic on-chain verification will check this hash.</p>
+
+                      {/* Screenshot upload */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Upload Proof / Screenshot (optional but recommended)</Label>
+                        <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-6 text-center hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-colors">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            id="tx-proof-upload"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 5 * 1024 * 1024) {
+                                  toast.error("File too large (max 5MB)");
+                                  return;
+                                }
+                                setSubmissionData((prev) => ({ ...prev, file }));
+                              }
+                            }}
+                          />
+                          <label htmlFor="tx-proof-upload" className="cursor-pointer block">
+                            <Upload className="mx-auto h-10 w-10 text-slate-400 mb-3" />
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Click or drag image here
+                            </p>
+                            {submissionData.file && (
+                              <p className="text-xs text-green-600 mt-2 font-medium">
+                                {submissionData.file.name}
+                              </p>
+                            )}
+                          </label>
+                        </div>
                       </div>
-                      <Button className="w-full h-11 bg-slate-900 text-white" onClick={handleSubmitTask} disabled={!submissionData.proofUrl || isSubmitting}>
-                        {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "Verify Transaction"}
-                      </Button>
                     </div>
-                  )}
 
-                  {/* CASE 3: MANUAL UPLOAD */}
-                  {selectedTask.verificationType === "manual_upload" && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2">
-                      <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 flex flex-col items-center justify-center relative bg-slate-50/50 dark:bg-slate-900">
-                        <Input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer h-full" onChange={handleFileSelect} />
-                        <Upload className="h-8 w-8 text-slate-400 mb-2" />
-                        <p className="text-sm font-semibold">Click to upload screenshot</p>
-                        {submissionData.file && <Badge className="mt-2 bg-green-500">{submissionData.file.name}</Badge>}
+                    {selectedTask.targetContractAddress && (
+                      <div className="text-xs bg-slate-100 dark:bg-slate-900 p-3 rounded border font-mono break-all">
+                        <span className="font-semibold">Target contract:</span>{" "}
+                        {selectedTask.targetContractAddress.slice(0, 6)}...{selectedTask.targetContractAddress.slice(-4)}
                       </div>
-                      <Button className="w-full h-11" onClick={handleSubmitTask} disabled={!submissionData.file || isSubmitting}>
-                        {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "Submit for Review"}
-                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* ────────────────────────────────────────────────
+                    5. AUTO TX (unchanged – keep your original)
+                ──────────────────────────────────────────────── */}
+                {selectedTask.verificationType === "auto_tx" && (
+                  <div className="space-y-4 animate-in slide-in-from-top-2">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Transaction Hash (TxHash)</Label>
+                      <Input
+                        placeholder="0x..."
+                        value={submissionData.proofUrl}
+                        onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
+                        className="h-11 font-mono text-xs"
+                      />
                     </div>
-                  )}
+                    <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20">
+                      <Shield className="h-3 w-3 text-green-600" />
+                      <p className="text-[10px] text-green-700 dark:text-green-400 font-medium">
+                        Automatic on-chain verification will check this hash.
+                      </p>
+                    </div>
+                    <Button
+                      className="w-full h-11 bg-slate-900 text-white"
+                      onClick={handleSubmitTask}
+                      disabled={!submissionData.proofUrl || isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                      ) : (
+                        "Verify Transaction"
+                      )}
+                    </Button>
+                  </div>
+                )}
 
-                  
-                </div>
+                {/* ────────────────────────────────────────────────
+                    6. MANUAL UPLOAD (unchanged – keep your original)
+                ──────────────────────────────────────────────── */}
+                {selectedTask.verificationType === "manual_upload" && (
+                  <div className="space-y-4 animate-in slide-in-from-top-2">
+                    <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 flex flex-col items-center justify-center relative bg-slate-50/50 dark:bg-slate-900">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-0 opacity-0 cursor-pointer h-full"
+                        onChange={handleFileSelect}
+                      />
+                      <Upload className="h-8 w-8 text-slate-400 mb-2" />
+                      <p className="text-sm font-semibold">Click to upload screenshot</p>
+                      {submissionData.file && <Badge className="mt-2 bg-green-500">{submissionData.file.name}</Badge>}
+                    </div>
+                    <Button
+                      className="w-full h-11"
+                      onClick={handleSubmitTask}
+                      disabled={!submissionData.file || isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                      ) : (
+                        "Submit for Review"
+                      )}
+                    </Button>
+                  </div>
+                )}
 
-                {/* SHARED NOTES FIELD */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium uppercase text-muted-foreground">Notes (Optional)</Label>
-                  <Textarea
-                    placeholder="Add extra details..."
-                    value={submissionData.notes}
-                    onChange={(e) => setSubmissionData({ ...submissionData, notes: e.target.value })}
-                    className="resize-none dark:bg-slate-950"
-                    rows={2}
-                  />
-                </div>
+                {/* ────────────────────────────────────────────────
+                    SHARED NOTES (shown for most manual tasks)
+                ──────────────────────────────────────────────── */}
+                {selectedTask.verificationType !== "none" && (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium uppercase text-muted-foreground">
+                      Notes (Optional)
+                    </Label>
+                    <Textarea
+                      placeholder="Add any extra details or comments..."
+                      value={submissionData.notes}
+                      onChange={(e) => setSubmissionData({ ...submissionData, notes: e.target.value })}
+                      className="resize-none dark:bg-slate-950 min-h-[80px]"
+                      rows={3}
+                    />
+                  </div>
+                )}
               </CardContent>
-              <CardFooter className="justify-center border-t p-4">
-                <Button variant="ghost" size="sm" onClick={() => setShowSubmitModal(false)}>Close Modal</Button>
+
+              {/* Footer with Submit / Cancel */}
+              <CardFooter className="justify-between border-t p-5 dark:border-slate-800">
+                <Button variant="outline" onClick={() => setShowSubmitModal(false)}>
+                  Cancel
+                </Button>
+
+                {/* Only show submit button for tasks that require manual action */}
+                {selectedTask.verificationType !== "none" && (
+                  <Button
+                    onClick={handleSubmitTask}
+                    disabled={
+                      isSubmitting ||
+                      // Require proof URL for share-on-X and manual tx tasks
+                      ((selectedTask.id === "sys_share_x" || selectedTask.action === "share_quest") &&
+                        !submissionData.proofUrl.trim()) ||
+                      (selectedTask.category === "trading" &&
+                        selectedTask.verificationType !== "auto_tx" &&
+                        !submissionData.proofUrl.trim())
+                    }
+                    className="bg-primary hover:bg-primary/90 min-w-[160px]"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Submit Task"
+                    )}
+                  </Button>
+                )}
               </CardFooter>
             </Card>
           </div>
         )}
-
+        
         {/* ============= FUNDING MODAL ============= */}
         {showFundModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">

@@ -187,38 +187,38 @@ export function NetworkSelector({
 
   // Direct network switching without modal
   const handleNetworkSelect = async (net: Network) => {
-    console.log('Direct network switch to:', net.name, net.chainId)
-    
-    // If not connected, open wallet modal first
-    if (!hasWalletConnected) {
-      await open()
-      return
-    }
-    
-    // Already on this network
-    if (chainId === net.chainId) {
-      console.log('Already on', net.name)
-      return
-    }
-    
-    // Switch directly using wagmi
-    try {
-      await switchChain({ chainId: net.chainId })
-      toast.success( `Network Switched to ${net.name}`)
-      
-      // Routing Logic
-      const isLandingPage = pathname === '/'
-      const isCreatePage = pathname?.startsWith('/create')
-      
-      if (!isLandingPage && !isCreatePage) {
-        router.push(`/network/${net.chainId}`)
-      }
-
-    } catch (error: any) {
-      console.error('Network switch error:', error)
-      toast.error( `Switch Failed: ${error.message || "Failed to switch network"}` )
-    }
+  // 1. Initial Checks
+  if (!hasWalletConnected) {
+    await open();
+    return;
   }
+  
+  if (chainId === net.chainId) return; // Already on this network
+  
+  try {
+    // 2. Trigger Wallet Switch
+    await switchChain({ chainId: net.chainId });
+    toast.success(`Network Switched to ${net.name}`);
+    
+    // 3. Conditional Routing Logic
+    // We only route if we are currently on a network-specific page (/network/...)
+    const isNetworkPage = pathname?.startsWith('/network/');
+    
+    if (isNetworkPage) {
+      // Check if the current URL path already contains the target chainId
+      const isAlreadyOnTargetNetworkPage = pathname === `/network/${net.chainId}`;
+      
+      if (!isAlreadyOnTargetNetworkPage) {
+        router.push(`/network/${net.chainId}`);
+      }
+    }
+    // If not on a /network/ page (e.g., Home or Create), we do nothing (no route)
+
+  } catch (error: any) {
+    console.error('Network switch error:', error);
+    toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`);
+  }
+};
 
   return (
     <DropdownMenu>

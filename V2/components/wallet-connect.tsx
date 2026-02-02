@@ -35,6 +35,7 @@ import {
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
+import Image from "next/image"
 
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com" 
 
@@ -85,24 +86,32 @@ export function WalletConnectButton() {
         <DialogTrigger asChild>
           <Button 
             size="sm" 
-            className="px-12 py-5  bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xl transition-all shadow-xl shadow-blue-900/20 flex items-center gap-3 disabled:opacity-50"
-            
+             className="bg-transparent border-white hover:border-blue-500 border  text-white hover:bg-blue-500/10 text-xs font-bold shadow-blue-900/20 uppercase tracking-widest px-6"
           >
-            <Sparkles className="h-4 w-4 fill-white group-hover:rotate-12 transition-transform" />
             Get Started
           </Button>
         </DialogTrigger>
         
         <DialogContent className="sm:max-w-[400px] bg-[#080d19] border-white/10 text-white rounded-[2rem] overflow-hidden">
-          <DialogHeader className="items-center text-center pb-2">
-            <div className="w-14 h-14 bg-blue-600/20 rounded-2xl flex items-center justify-center mb-4 border border-blue-500/20">
-              <Zap className="text-blue-500 h-7 w-7" fill="currentColor" />
-            </div>
-            <DialogTitle className="text-2xl font-bold tracking-tight">Join FaucetDrops</DialogTitle>
-            <DialogDescription className="text-gray-400">
-              Choose your preferred way to start your onchain journey.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogHeader className="items-center text-center pb-2">
+          {/* The container maintains the same 14x14 (56px) size and rounded styling */}
+          <div className="w-14 h-14 flex items-center justify-center mb-4  overflow-hidden">
+            <Image
+              src="/favicon.png" // Replace with your square logo path if you have one
+              alt="FaucetDrops Favicon"
+              width={40}
+              height={40}
+              className="object-contain"
+              priority
+            />
+          </div>
+          <DialogTitle className="text-2xl font-bold tracking-tight">
+            Join FaucetDrops
+          </DialogTitle>
+          <DialogDescription className="text-gray-400">
+            Choose your preferred way to start your onchain journey.
+          </DialogDescription>
+        </DialogHeader>
 
           <div className="grid gap-3 py-6">
             {/* Wallet Connect Path */}

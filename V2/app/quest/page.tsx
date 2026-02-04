@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Settings, Users, ArrowRight, Coins, Loader2, Calendar, Sparkles } from 'lucide-react';
+import { Settings, ArrowRight, Coins, Loader2, Calendar, Sparkles, Users } from 'lucide-react'; // Fixed imports
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header"; 
 
@@ -12,6 +12,8 @@ const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 interface QuestOverview {
     faucetAddress: string;
+    // 1. Add slug to the interface
+    slug: string; 
     title: string;
     description: string;
     isActive: boolean;
@@ -22,7 +24,6 @@ interface QuestOverview {
     startDate: string;
     endDate: string;
     tasksCount: number;
-    // Strictly use the name from your Quest Details API
     totalParticipants: number; 
     imageUrl?: string;
 }
@@ -32,14 +33,6 @@ interface QuestsResponse {
     quests: QuestOverview[];
     count: number;
     message?: string;
-}
-
-function createSlug(title: string): string {
-    return title
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .trim()
-        .replace(/\s+/g, '-');
 }
 
 const getQuestStatus = (quest: QuestOverview) => {
@@ -65,7 +58,6 @@ export default function QuestHomePage() {
         setIsLoading(true);
         setError(null);
         try {
-            // Force fetch fresh data to get updated counts
             const response = await fetch(`${API_BASE_URL}/api/quests?cache_bust=${Date.now()}`);
             if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
             
@@ -94,8 +86,8 @@ export default function QuestHomePage() {
         });
     }, [quests]);
 
-    const handleNavigate = (faucetAddress: string, title: string) => {
-        const slug = createSlug(title);
+    // 2. Updated handler to use the database slug directly
+    const handleNavigate = (slug: string) => {
         router.push(`/quest/${slug}`);
     };
 
@@ -123,7 +115,6 @@ export default function QuestHomePage() {
                     >
                         My Dashboard
                     </Button>
-                    
                 </div>
             </div>
 
@@ -189,7 +180,8 @@ export default function QuestHomePage() {
                                                                 ? "bg-primary text-white hover:bg-primary/90" 
                                                                 : "bg-secondary text-secondary-foreground"
                                                     }`}
-                                                    onClick={() => handleNavigate(quest.faucetAddress, quest.title)}
+                                                    /* 3. Pass the correct database slug here */
+                                                    onClick={() => handleNavigate(quest.slug || quest.faucetAddress)}
                                                 >
                                                     {isOwner ? (
                                                         <>
@@ -221,7 +213,6 @@ export default function QuestHomePage() {
                                                     <Users className="h-4 w-4" />
                                                 </div>
                                                 <span>
-                                                    {/* Prioritize totalParticipants */}
                                                     <span className="font-bold text-foreground">
                                                         {quest.totalParticipants ?? 0}
                                                     </span> Participants

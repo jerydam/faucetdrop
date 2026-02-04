@@ -54,6 +54,7 @@ import {
   Twitter,
   Play,
   Link,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
@@ -62,16 +63,17 @@ import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
-
+const VERIFIER_API_URL = "https://fauctdrop-backend.onrender.com"; // <--- New Link
 // ============= TYPES =============
 export type VerificationType =
   | "auto_social"
-  | "auto_tx" // <--- ADD THIS HERE
+  | "auto_tx"
   | "manual_link"
   | "manual_upload"
   | "system_referral"
   | "system_daily"
-  | "none";
+  | "none"
+  | "onchain";
 
 interface QuestTask {
   id: string;
@@ -81,12 +83,11 @@ interface QuestTask {
   points: number;
   category: string;
   targetContractAddress: string;
-  // UPDATED THIS LINE:
   verificationType: VerificationType;
   url: string;
   stage: string;
   required: boolean;
-  action: string; // <--- ADD THIS LINE (fixes the 'action' error)
+  action: string;
   isSystem?: boolean;
 }
 interface UserProgress {
@@ -100,8 +101,8 @@ interface UserProgress {
 interface LeaderboardEntry {
   rank: number;
   walletAddress: string;
-  username: string | null; // Allow null
-  avatarUrl?: string | null; // Allow null and make optional
+  username: string | null;
+  avatarUrl?: string | null;
   points: number;
   completedTasks: number;
 }
@@ -110,7 +111,7 @@ interface UserProfile {
   wallet_address: string;
   username: string | null;
   avatar_url?: string;
-  twitter_handle?: string; // <--- ADD THIS
+  twitter_handle?: string;
 }
 
 interface ParticipantData {
@@ -119,7 +120,6 @@ interface ParticipantData {
   last_checkin_at: string | null;
   points: number;
 }
-
 // ============= COMPONENT =============
 export default function QuestDetailsPage() {
   const params = useParams();
@@ -310,21 +310,27 @@ useEffect(() => {
       entry.walletAddress.toLowerCase() !== questData?.creatorAddress.toLowerCase()
   );
 
-  const totalPoints = participantData?.points || userProgress.totalPoints || 0;
+  // Add them together instead of picking one
+const totalPoints = participantData?.points || 0;
 
   // ============= HELPER FUNCTIONS =============
   const loadUserProgress = async () => {
-    if (!faucetAddress || !userWalletAddress) return;
-    try {
-      const progRes = await fetch(
-        `${API_BASE_URL}/api/quests/${faucetAddress}/progress/${userWalletAddress}`
-      );
-      const progJson = await progRes.json();
-      if (progJson.success) setUserProgress(progJson.progress);
-    } catch (e) {
-      console.error("Failed to reload progress");
+  if (!faucetAddress || !userWalletAddress) return;
+  try {
+    const res = await fetch(
+  `${API_BASE_URL}/api/quests/${faucetAddress}/progress/${userWalletAddress}?t=${Date.now()}`,
+  { cache: "no-store", credentials: "include" } // if using auth
+);
+
+    const json = await res.json();
+    if (json.success) {
+      setUserProgress(json.progress); // This is what triggers the UI update
     }
-  };
+  } catch (e) {
+    console.error("Reload failed", e);
+  }
+};
+
   const handleXShareAction = (task: QuestTask) => {
     const targetHandle = "@faucetdrops";
     // Constructing the message with the user's referral link
@@ -517,45 +523,58 @@ useEffect(() => {
   }, [questData]);
 
   // 2. Leaderboard Filter (Hides Admin completely)
-  const displayLeaderboard = useMemo(() => {
-    // 1. Start with the raw list from the backend
-    let list = [...leaderboard];
+const displayLeaderboard = useMemo(() => {
+  let list = [...leaderboard];
 
-    // 2. If you are logged in and not the creator, find or add yourself
-    if (userWalletAddress && participantData && !isCreator) {
-      const myWalletLower = userWalletAddress.toLowerCase();
-      const myIndex = list.findIndex(
-        (e) => e.walletAddress.toLowerCase() === myWalletLower
-      );
+  if (userWalletAddress && participantData && !isCreator) {
+    const myWalletLower = userWalletAddress.toLowerCase();
 
-      const myEntry = {
-        rank: 0,
-        walletAddress: userWalletAddress,
-        username: userProfile?.username || "You",
-        avatarUrl: userProfile?.avatar_url || null,
-        points: participantData.points || 0,
-        completedTasks: userProgress?.completedTasks?.length || 0,
+    // Always build fresh "me" entry from **current** state
+    const myLatestEntry = {
+      rank: 0,
+      walletAddress: userWalletAddress,
+      username: userProfile?.username || "You",
+      avatarUrl: userProfile?.avatar_url || null,
+      points: participantData.points || 0,
+      // ─── Use current (fresh) userProgress here ───
+      completedTasks: userProgress?.completedTasks?.length || 0,
+    };
+
+    const myIndex = list.findIndex(e => e.walletAddress.toLowerCase() === myWalletLower);
+
+    if (myIndex !== -1) {
+      // Merge: keep server rank/points if available, but force completedTasks from local
+      list[myIndex] = {
+        ...list[myIndex],
+        ...myLatestEntry,
+        // Preserve server rank if it exists
+        rank: list[myIndex].rank || 0,
       };
-
-      if (myIndex > -1) {
-        // Update existing entry with live local data
-        list[myIndex] = { ...list[myIndex], ...myEntry };
-      } else {
-        // Add yourself if you aren't in the Top 50 yet
-        list.push(myEntry);
-      }
+    } else {
+      // Not in top list yet → add at bottom
+      list.push(myLatestEntry);
     }
+  }
 
-    // 3. Final Filter: Ensure Creator is hidden, but keep users with 0 points
-    return list
-      .filter((entry) => {
-        const entryWallet = entry.walletAddress.toLowerCase();
-        const creatorWallet = questData?.creatorAddress?.toLowerCase();
-        return entryWallet !== creatorWallet;
-      })
-      .sort((a, b) => b.points - a.points)
-      .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
-  }, [leaderboard, participantData, userWalletAddress, userProfile, userProgress, questData, isCreator]);
+  // Final filter (hide creator) + sort + assign ranks
+  return list
+    .filter(entry => {
+      const entryWallet = entry.walletAddress.toLowerCase();
+      const creatorWallet = questData?.creatorAddress?.toLowerCase();
+      return entryWallet !== creatorWallet;
+    })
+    .sort((a, b) => b.points - a.points)
+    .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+
+}, [
+  leaderboard,           // when server leaderboard updates
+  participantData,       // when referral/check-in updates points
+  userProgress,          // ← critical: when completedTasks changes
+  userWalletAddress,
+  userProfile,
+  questData,
+  isCreator
+]);
 
   // ============= 3. LOAD USER PROGRESS =============
   useEffect(() => {
@@ -649,84 +668,114 @@ useEffect(() => {
     };
   };
 
-  const handleSubmitTask = async () => {
-  if (!selectedTask || !userWalletAddress) return;
-  setIsSubmitting(true);
+const handleSubmitTask = async () => {
+    if (!selectedTask || !userWalletAddress) return;
+    const taskId = selectedTask.id;
+    const taskPoints = selectedTask.points;
 
-  try {
-    const formData = new FormData();
-    formData.append("walletAddress", userWalletAddress);
-    formData.append("taskId", selectedTask.id);
-    formData.append("submissionType", selectedTask.verificationType);
-
-    const finalProofUrl =
-      selectedTask.action === "quote" || selectedTask.verificationType === "manual_link"
-        ? submissionData.proofUrl
-        : selectedTask.url;
-
-    formData.append("submittedData", finalProofUrl || "");
-
-    const response = await fetch(
-      `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
-      {
-        method: "POST",
-        body: formData,
-      }
-    );
-    const result = await response.json();
-
-    if (!result.success) throw new Error(result.message || "Failed to submit task");
-
-    // CASE 1: AUTO SOCIAL (Twitter/X Bot)
-    if (selectedTask.verificationType === "auto_social") {
-      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submissionId: result.submissionId,
-          faucetAddress: faucetAddress,
-          walletAddress: userWalletAddress,
-          handle: userProfile?.twitter_handle || userProfile?.username || "",
-          proofUrl: finalProofUrl,
-          taskType: selectedTask.action,
-        }),
-      });
-
-      const verifyJson = await verifyRes.json();
-      if (verifyJson.verified) {
-        toast.success("Task verified! Points added.");
-      } else {
-        toast.error(verifyJson.message || "Verification failed.");
-      }
-    } 
-    
-    // CASE 2: NO VERIFICATION (Watch/Visit)
-    // If the backend is set to auto-approve 'none' types, we just need to refresh
-    else if (selectedTask.verificationType === "none") {
-      toast.success("Task completed! Points added.");
-    } 
-    
-    // CASE 3: MANUAL
-    else {
-      toast.info("Task submitted for manual review.");
-    }
-
-    // ALWAYS refresh progress and leaderboard after a submission attempt
-    await loadUserProgress();
-    // Refresh Leaderboard to show updated "Tasks Done" and "Points"
-    const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
-    const lbJson = await lbRes.json();
-    if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+    // 1. Optimistic Update (Show it as done immediately)
+    setUserProgress((prev) => {
+      if (prev.completedTasks.includes(taskId)) return prev;
+      // Add fake pending submission visually
+      const newSubs = prev.submissions ? [...prev.submissions, { 
+          taskId, 
+          status: selectedTask.verificationType === "none" || selectedTask.verificationType === "onchain" ? "approved" : "pending", 
+          submittedAt: new Date().toISOString() 
+      }] : [];
+      
+      return {
+        ...prev,
+        // Only add points locally if it's instant or we assume success
+        completedTasks: [...prev.completedTasks, taskId], 
+        submissions: newSubs, 
+      };
+    });
 
     setShowSubmitModal(false);
-    setSubmissionData({ proofUrl: "", notes: "", file: null });
+    setIsSubmitting(true);
 
-  } catch (error: any) {
-    toast.error(error.message || "An error occurred");
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+    try {
+      const formData = new FormData();
+      formData.append("walletAddress", userWalletAddress);
+      formData.append("taskId", taskId);
+      formData.append("submissionType", selectedTask.verificationType);
+
+      // Handle Proof URL logic
+      let finalProofUrl = "";
+      if (selectedTask.verificationType === "manual_link" || selectedTask.action === "quote" || selectedTask.action === "share_quest") {
+          finalProofUrl = submissionData.proofUrl.trim();
+      } else if (selectedTask.verificationType === "onchain") {
+          finalProofUrl = "onchain-check"; 
+      } else {
+          finalProofUrl = selectedTask.url || "";
+      }
+      
+      formData.append("submittedData", finalProofUrl);
+      if (submissionData.notes) formData.append("notes", submissionData.notes);
+      if (submissionData.file) formData.append("file", submissionData.file);
+
+      // 2. Create Submission in DB
+      const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      if (!result.success) throw new Error(result.message || "Submission failed");
+
+      // 3. Handle Auto Social Verification
+      if (selectedTask.verificationType === "auto_social") {
+         const verifyRes = await fetch(`${VERIFIER_API_URL}/api/bot/verify-social`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            submissionId: result.submissionId,
+            faucetAddress,
+            walletAddress: userWalletAddress,
+            handle: userProfile?.twitter_handle || userProfile?.username || "",
+            proofUrl: finalProofUrl,
+            taskType: selectedTask.action,
+            taskId: selectedTask.id
+          }),
+        });
+        
+        const verifyJson = await verifyRes.json();
+        
+        if (verifyJson.verified) {
+            toast.success(`Verified! +${taskPoints} points added.`);
+        } else {
+            // IF BOT FAILS: Throw error to trigger the catch block below
+            throw new Error(verifyJson.message || "Social verification failed");
+        }
+      }
+
+      // 4. Force Reload Progress from Backend (To sync persisted data)
+      await loadUserProgress();
+      
+      // Update Leaderboard
+      const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+      const lbJson = await lbRes.json();
+      if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+
+    } catch (error: any) {
+      console.error("Task submission error:", error);
+      toast.error(error.message || "Failed to submit task.");
+
+      // 5. ROLLBACK on Failure
+      // Remove the task from 'completedTasks' and remove the submission from state
+      setUserProgress((prev) => {
+        return {
+          ...prev,
+          totalPoints: prev.totalPoints, // Keep points, let loadUserProgress sync real points
+          completedTasks: prev.completedTasks.filter((id) => id !== taskId), // Remove ID
+          submissions: prev.submissions.filter((s) => s.taskId !== taskId) // Remove submission entry
+        };
+      });
+    } finally {
+      setIsSubmitting(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
+    }
+  };
 
   const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected") => {
     try {
@@ -860,18 +909,24 @@ const questStatusGuard = useMemo(() => {
 }, [questData]);
 
   const getTaskStatus = (task: QuestTask) => {
-    if (!participantData) return "locked";
+  if (!participantData) return "locked";
 
-    if (userProgress.completedTasks.includes(task.id)) return "completed";
-    const pending = userProgress.submissions.find((s) => s.taskId === task.id && s.status === "pending");
-    if (pending) return "pending";
+  // 1. If the task ID is in the completed array, it's definitely Done
+  if (userProgress.completedTasks.includes(task.id)) return "completed";
 
-    const stageIndex = stages.indexOf(task.stage);
-    const userStageIndex = stages.indexOf(userProgress.currentStage);
-    if (stageIndex > userStageIndex) return "locked";
+  // 2. Check for pending submissions
+  const pending = userProgress.submissions.find(
+    (s) => s.taskId === task.id && s.status === "pending"
+  );
+  if (pending) return "pending";
 
-    return "available";
-  };
+  // 3. Stage Locking logic
+  const stageIndex = stages.indexOf(task.stage);
+  const userStageIndex = stages.indexOf(userProgress.currentStage);
+  if (stageIndex > userStageIndex) return "locked";
+
+  return "available";
+};
 
   // ============= RENDER STATES =============
   if (isLoading || isProfileLoading) {
@@ -961,7 +1016,7 @@ const questStatusGuard = useMemo(() => {
   const currentStageData = questData.stagePassRequirements || {};
   const pointsForCurrentStage = userProgress.stagePoints[userProgress.currentStage] || 0;
   const requiredForCurrent = currentStageData[userProgress.currentStage] || 100;
-  const progressPercent = Math.min((pointsForCurrentStage / requiredForCurrent) * 100, 100);
+const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
 
   const filteredLeaderboard = leaderboard.filter(
     (entry) =>
@@ -1155,7 +1210,7 @@ const questStatusGuard = useMemo(() => {
                     <Badge variant="outline" className="text-primary border-primary bg-primary/5">{userProgress.currentStage}</Badge>
                   </h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Earn <strong>{Math.max(0, requiredForCurrent - pointsForCurrentStage)}</strong> more points to level up.
+                    Earn <strong>{Math.max(0, requiredForCurrent - totalPoints)}</strong> more points to level up.
                   </p>
                 </div>
                 <div className="text-right">
@@ -1308,31 +1363,49 @@ const questStatusGuard = useMemo(() => {
                               <div className="mt-auto pt-4 border-t flex items-center justify-between">
                                 {/* Verification Badge */}
                                 <div className="text-[10px] font-bold text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
-                                  {task.verificationType === "auto_social" && <Sparkles className="h-3 w-3 text-blue-500" />}
-                                  {task.verificationType === "auto_tx" && <Shield className="h-3 w-3 text-green-500" />}
-                                  {task.verificationType === "manual_link" && <ExternalLink className="h-3 w-3" />}
-                                  {task.verificationType === "manual_upload" && <Upload className="h-3 w-3" />}
-                                  {task.verificationType.replace("manual_", "").replace("auto_", "")}
+                                   {task.verificationType === "auto_social" && <Sparkles className="h-3 w-3 text-blue-500" />}
+                                   {task.verificationType === "auto_tx" && <Shield className="h-3 w-3 text-green-500" />}
+                                   {task.verificationType === "onchain" && <Zap className="h-3 w-3 text-purple-500" />}
+                                   {task.verificationType === "manual_link" && <ExternalLink className="h-3 w-3" />}
+                                   {task.verificationType.replace("manual_", "").replace("auto_", "")}
                                 </div>
 
+                                {/* Find the button section inside your task mapping loop */}
                                 {status === "completed" ? (
-                                  <div className="flex items-center text-green-600 text-sm font-bold"><CheckCircle2 className="h-4 w-4 mr-1" /> Done</div>
+                                  <Button
+                                    size="sm"
+                                    disabled
+                                    className="bg-green-100 text-green-700 border-green-200 cursor-default hover:bg-green-100"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                                    Done
+                                  </Button>
                                 ) : status === "pending" ? (
-                                  <div className="flex items-center text-orange-600 text-sm font-bold"><Clock className="h-4 w-4 mr-1" /> Reviewing</div>
+                                  <div className="flex items-center text-orange-600 text-sm font-bold">
+                                    <Clock className="h-4 w-4 mr-1" /> 
+                                    Reviewing
+                                  </div>
                                 ) : isLocked || !participantData ? (
-                                  <span className="text-sm text-muted-foreground">{!participantData ? "Join Required" : "Locked"}</span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {!participantData ? "Join Required" : "Locked"}
+                                  </span>
                                 ) : (
                                   !isCreator ? (
                                     <Button
                                       size="sm"
-                                      onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }}
-                                      disabled={!participantData || !questTiming.isLive || status !== "available" || isCreator}
+                                      onClick={() => {
+                                        setSelectedTask(task);
+                                        setShowSubmitModal(true);
+                                      }}
+                                      disabled={!participantData || !questTiming.isLive || status !== "available"}
                                       className="bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"
                                     >
                                       {questTiming.notStartedYet ? "Starts Soon" : "Open Task"}
                                     </Button>
                                   ) : (
-                                    <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Preview Mode</span>
+                                    <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                                      Preview Mode
+                                    </span>
                                   )
                                 )}
                               </div>
@@ -1527,32 +1600,43 @@ const questStatusGuard = useMemo(() => {
             </div>
           </div>
         )}
-                {/* SUBMISSION MODAL */}
+            {/* ============= SUBMISSION MODAL (UPDATED) ============= */}
         {showSubmitModal && selectedTask && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
             <Card className="w-full max-w-lg shadow-2xl border-0 dark:bg-slate-900 animate-in zoom-in-95 duration-200">
               <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-5 relative">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-4 top-4 h-8 w-8 rounded-full"
-                  onClick={() => setShowSubmitModal(false)}
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-
+                <Button variant="ghost" size="icon" className="absolute right-4 top-4 h-8 w-8 rounded-full" onClick={() => setShowSubmitModal(false)}><X className="h-5 w-5" /></Button>
                 <CardTitle className="text-xl pr-10">{selectedTask.title}</CardTitle>
-                <CardDescription className="text-base font-medium mt-1">
-                  {selectedTask.description}
-                </CardDescription>
+                <CardDescription className="text-base font-medium mt-1">{selectedTask.description}</CardDescription>
               </CardHeader>
 
               <CardContent className="pt-6 space-y-6">
-                {/* Warning / description box */}
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 flex gap-3">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>{selectedTask.description}</div>
                 </div>
+
+                {/* --- ON-CHAIN VERIFICATION UI --- */}
+                {selectedTask.verificationType === "onchain" && (
+                    <div className="text-center space-y-4">
+                        <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+                            <Zap className="h-8 w-8 text-purple-600" />
+                        </div>
+                        <h4 className="text-lg font-semibold">Wallet Check Required</h4>
+                        <p className="text-muted-foreground text-sm">
+                            We will scan your connected wallet on the blockchain to verify this task.
+                        </p>
+                        
+                        <Button 
+                            size="lg" 
+                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-12"
+                            onClick={handleSubmitTask}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Verifying...</> : "Verify Wallet Status"}
+                        </Button>
+                    </div>
+                )}  
 
                 {/* ────────────────────────────────────────────────
                     1. SYSTEM SHARE ON X (manual review)
@@ -1618,6 +1702,7 @@ const questStatusGuard = useMemo(() => {
                 {/* ────────────────────────────────────────────────
                     2. WATCH VIDEO – preview + mark done
                 ──────────────────────────────────────────────── */}
+               
                 {selectedTask.action === "watch" && selectedTask.verificationType === "none" && (
                   <div className="space-y-6">
                     <div className="rounded-xl overflow-hidden border bg-black aspect-video relative shadow-lg">
@@ -1646,31 +1731,30 @@ const questStatusGuard = useMemo(() => {
 
                     <div className="flex flex-col sm:flex-row gap-4">
                       <Button
-                        variant="outline"
-                        className="flex-1"
-                        onClick={() => window.open(selectedTask.url, "_blank", "noopener,noreferrer")}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Open Original Video
-                      </Button>
-
-                      <Button
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => {
-                          handleSubmitTask();
-                          toast.success("Video marked as watched!");
-                          setShowSubmitModal(false);
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold h-12"
+                        onClick={async () => {
+                          // 1. Open the original video link
+                          window.open(selectedTask.url, "_blank", "noopener,noreferrer");
+                          
+                          // 2. Submit task immediately (Backend now marks this as 'approved' automatically)
+                          await handleSubmitTask(); 
+                          
+                          // Note: handleSubmitTask handles closing the modal and refreshing the points
                         }}
                         disabled={isSubmitting}
                       >
-                        I've Watched It – Mark as Done
+                        {isSubmitting ? (
+                          <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Claiming...</>
+                        ) : (
+                          "Watch Video & Claim Points"
+                        )}
                       </Button>
                     </div>
                   </div>
                 )}
 
                 {/* ────────────────────────────────────────────────
-                    3. VISIT PAGE – auto complete, no reviewing
+                    VISIT PAGE – Instant Reward
                 ──────────────────────────────────────────────── */}
                 {selectedTask.action === "visit" && selectedTask.verificationType === "none" && (
                   <div className="space-y-6 text-center">
@@ -1678,22 +1762,28 @@ const questStatusGuard = useMemo(() => {
                       <ExternalLink className="mx-auto h-14 w-14 text-blue-500 mb-5 opacity-90" />
                       <h4 className="text-xl font-semibold mb-3">Visit Project Website</h4>
                       <p className="text-muted-foreground mb-8 max-w-sm mx-auto">
-                        Page will open in new tab. Task will be auto-completed shortly.
+                        Opening the website will automatically add <strong>{selectedTask.points} points</strong> to your profile.
                       </p>
 
                       <Button
                         size="lg"
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-12"
-                        onClick={() => {
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-12 h-14 font-bold text-lg shadow-lg"
+                        onClick={async () => {
+                          // 1. Open the page
                           window.open(selectedTask.url, "_blank", "noopener,noreferrer");
-                          setTimeout(() => {
-                            handleSubmitTask();
-                            toast.success("Visit completed!");
-                            setShowSubmitModal(false);
-                          }, 5000); // 5 seconds – natural feel
+                          
+                          // 2. Add points instantly
+                          await handleSubmitTask(); 
+                          
+                          // Note: handleSubmitTask handles closing the modal and refreshing the points
                         }}
+                        disabled={isSubmitting}
                       >
-                        Open Page & Confirm
+                        {isSubmitting ? (
+                          <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Verifying...</>
+                        ) : (
+                          "Visit Website & Get Points"
+                        )}
                       </Button>
                     </div>
                   </div>

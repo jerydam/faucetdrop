@@ -19,13 +19,13 @@ const sections = [
 
 export default function AboutUs() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pt-10">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 md:py-24">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_280px] text-white">
           {/* MAIN CONTENT */}
           <main className="space-y-16">
             <div className="space-y-10">
-              <h1 className="text-5xl md:text-6xl font-bold tracking-tight bg-[#2563EB] bg-clip-text text-transparent">
+              <h1 className="text-3xl md:text-6xl font-bold tracking-tight bg-[#2563EB] bg-clip-text text-transparent">
                 About FaucetDrops
               </h1>
               <div className="relative aspect-16/5 rounded-2xl border border-gray-700/50 overflow-hidden shadow-xl hover:shadow-blue-500/20 transition-all duration-300">
@@ -45,11 +45,11 @@ export default function AboutUs() {
               <div className="relative">
                 <div className="flex items-center mb-6">
                   <div className="h-10 w-1 bg-[#2563EB] rounded-full mr-4"></div>
-                  <h2 className="text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
+                  <h2 className="text-2xl md:text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
                     Who We Are
                   </h2>
                 </div>
-                <p className="text-lg text-gray-300 leading-relaxed">
+                <p className="text-base md:text-lg text-gray-300 leading-relaxed">
                   We are an{" "}
                   <span className="font-bold text-blue-300">
                     Automated Onchain Engagement and Reward Distribution
@@ -68,11 +68,11 @@ export default function AboutUs() {
               <div className="relative">
                 <div className="flex items-center mb-6">
                   <div className="h-10 w-1 bg-[#2563EB] rounded-full mr-4"></div>
-                  <h2 className="text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
+                  <h2 className="text-2xl md:text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
                     Our Mission
                   </h2>
                 </div>
-                <p className="text-lg text-gray-300 leading-relaxed">
+                <p className="text-base md:text-lg text-gray-300 leading-relaxed">
                   FaucetDrops helps web3 Projects, DAOs, Protocols, and
                   Communities automate token distribution, run interactive
                   campaigns, and onboard real users at scale - all in one
@@ -88,11 +88,11 @@ export default function AboutUs() {
               <div className="relative">
                 <div className="flex items-center mb-6">
                   <div className="h-10 w-1 bg-[#2563EB] rounded-full mr-4"></div>
-                  <h2 className="text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
+                  <h2 className="text-2xl md:text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
                     The Problem We&apos;re Solving
                   </h2>
                 </div>
-                <div className="space-y-4 text-gray-300">
+                <div className="space-y-4 text-gray-300 text-base md:text-lg">
                   <p className="leading-relaxed">
                     Web3 projects face a critical challenge: how do you onboard
                     thousands of users, reward genuine engagement, and build
@@ -168,10 +168,10 @@ export default function AboutUs() {
             <section id="solution" className="space-y-6">
               <div className="flex flex-col md:flex-row items-center gap-8">
                 <div className="flex-1 space-y-6">
-                  <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
+                  <h2 className="text-2xl md:text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent border-l-4 border-blue-500 pl-4">
                     Our Solution
                   </h2>
-                  <p className="text-lg text-gray-400">
+                  <p className="text-base md:text-lg text-gray-400">
                     FaucetDrops transforms how Web3 projects grow by combining
                     three powerful elements:
                   </p>
@@ -184,7 +184,7 @@ export default function AboutUs() {
                     {
                       topic: "Verifiable Engagement",
                       content:
-                        "Gamified quests and quizzes that ensure users aren&apos;t just claiming—they&apos;re learning, participating, and adding value to your ecosystem.",
+                        "Gamified quests and quizzes that ensure users aren't just claiming—they're learning, participating, and adding value to your ecosystem.",
                     },
                     {
                       topic: "Onchain Transparency",
@@ -215,7 +215,7 @@ export default function AboutUs() {
               <div className="relative">
                 <div className="flex items-center mb-8">
                   <div className="h-10 w-1 bg-[#2563EB] rounded-full mr-4"></div>
-                  <h2 className="text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
+                  <h2 className="text-2xl md:text-3xl font-bold bg-[#2563EB] bg-clip-text text-transparent">
                     Why Choose FaucetDrops?
                   </h2>
                 </div>
@@ -331,7 +331,7 @@ export default function AboutUs() {
                 </div>
 
                 <div className="mt-8 text-center">
-                  <p className="text-lg text-gray-300 mb-6">
+                  <p className="text-md md:text-lg text-gray-300 mb-6">
                     Join hundreds of projects already growing with FaucetDrops
                   </p>
                   <div className="flex flex-wrap justify-center gap-6 opacity-80">
@@ -355,26 +355,26 @@ export default function AboutUs() {
             <section id="impact" className="space-y-6">
               <div className="flex flex-col md:flex-row items-center gap-8">
                 <div className="flex-1 space-y-6">
-                  <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
+                  <h2 className="text-2xl md:text-3xl font-bold border-l-4 border-blue-500 pl-4 bg-[#2563EB] bg-clip-text text-transparent">
                     Our Impact
                   </h2>
-                  <p className="text-lg text-gray-400">
+                  <p className="text-base md:text-lg text-gray-400">
                     Trusted by top protocols like Celo, Lisk, and Self Protocol,
                     FaucetDrops powers onchain growth at scale:
                   </p>
                   
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 px-10 gap-8">
                 {[
-                  { label: "5000+", text: "Faucets created and deployed" },
-                  { label: "100000+", text: "Transactions processed seamlessly" },
-                  { label: "100000+", text: "Active Users onboarded to Web3" },
-                  { label: "100000+", text: "Total Drops distributed fairly" },
+                  { label: "100+", text: "Faucets created and deployed" },
+                  { label: "5,000+", text: "Transactions processed seamlessly" },
+                  { label: "2,000+", text: "Active Users onboarded to Web3" },
+                  { label: "2,000+", text: "Total Drops distributed fairly" },
                 ].map((item, i) => (
-                  <Card key={i} className="border-none">
+                  <Card key={i} className="border border-gray-700/50 bg-gray-800/50">
                     <CardHeader>
                       <div className="flex-1 items-center align-center justify-center gap-2">
-                        <p className="text-2xl font-bold text-[#2563EB]">{item.label}</p>
-                        <p className="text-lg text-foreground">{item.text}</p>
+                        <p className="text-2xl md:text-3xl font-bold text-white">{item.label}</p>
+                        <p className="text-base text-gray-500">{item.text}</p>
                       </div>
                     </CardHeader>
                   </Card>
@@ -388,15 +388,15 @@ export default function AboutUs() {
             <section id="future" className="space-y-6">
               <div className="flex flex-col md:flex-row items-center gap-8">
                 <div className="flex-1 space-y-6">
-                  <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
+                  <h2 className="text-2xl font-bold text-transparent border-l-4 border-blue-500 pl-4 md:text-3xl bg-[#2563EB] bg-clip-text">
                     Future We&apos;re Building
                   </h2>
-                  <p className="text-lg text-gray-400">
+                  <p className="text-base md:text-lg text-gray-400">
                     The future of Web3 user acquisition is engaging, automated,
                     and verifiable. We&apos;re building it.
                   </p>
                   <blockquote className="space-y-2">
-                    <p className="text-lg px-5">
+                    <p className="text-base md:text-lg px-5">
                       We believe that every project deserves enterprise-grade
                       distribution infrastructure. That communities should be
                       rewarded for genuine participation. That onboarding to Web3
@@ -414,18 +414,18 @@ export default function AboutUs() {
             <section id="ready" className="space-y-6">
               <div className="flex flex-col md:flex-row items-center gap-8">
                 <div className="flex-1 space-y-6">
-                  <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
+                  <h2 className="text-2xl font-bold border-l-4 border-blue-500 pl-4 md:text-3xl bg-[#2563EB] bg-clip-text text-transparent">
                     Ready to Automate Your Growth?
                   </h2>
-                  <p className="text-lg text-gray-400">
+                  <p className="text-base md:text-lg text-gray-400">
                     Join the protocols already using FaucetDrops to scale their
                     communities, reward real users, and build the future of
                     Web3.
                   </p>
                   {/* CTA */}
-                  <div className="flex flex-col md:flex-row items-center gap-4">
+                  <div className="flex flex-col md:flex-row items-center gap-4 px-16">
                     <button
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 h-12 rounded-md transition-colors duration-200"
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 h-12 rounded-md transition-colors duration-200 w-full md:w-auto"
                       onClick={() =>
                         window.open("https://app.faucetdrops.io", "_blank")
                       }
@@ -433,7 +433,7 @@ export default function AboutUs() {
                       Launch App
                     </button>
                     <button
-                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 h-12 rounded-md transition-colors duration-200 flex items-center gap-2 no-wrap"
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 h-12 rounded-md transition-colors duration-200 flex items-center justify-center gap-2 no-wrap w-full md:w-auto"
                       onClick={() =>
                         window.open("https://t.me/faucetdropschat", "_blank")
                       }

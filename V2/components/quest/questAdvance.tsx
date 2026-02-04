@@ -476,7 +476,29 @@ export default function Phase2TimingTasksFinalize({
   // =========================================================
   // LOGIC HELPERS
   // =========================================================
-  
+  // Auto-appends https:// if missing and removes trailing slashes
+const normalizeUrl = (url: string): string => {
+  if (!url) return ""
+  let cleanUrl = url.trim()
+  if (!/^https?:\/\//i.test(cleanUrl)) {
+    cleanUrl = `https://${cleanUrl}`
+  }
+  return cleanUrl.replace(/\/+$/, "")
+}
+
+// Extracts the username from common social URLs
+const extractHandleFromUrl = (url: string): string | null => {
+  const twitterMatch = url.match(/(?:x\.com|twitter\.com)\/([a-zA-Z0-9_]{1,15})/i)
+  if (twitterMatch) return twitterMatch[1]
+
+  const telegramMatch = url.match(/(?:t\.me|telegram\.me)\/([a-zA-Z0-9_]+)/i)
+  if (telegramMatch) return telegramMatch[1]
+
+  const instagramMatch = url.match(/instagram\.com\/([a-zA-Z0-9._]+)/i)
+  if (instagramMatch) return instagramMatch[1]
+
+  return null
+}
   // 1. Is this task using the Onchain Engine?
   const isOnchainVerification = newTask.verificationType === 'onchain'
   
@@ -836,24 +858,40 @@ const getSocialInputLabel = () => {
                 {isSocialTemplate && (
                   <div className="space-y-2">
                     <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center">
-                       {newTask.targetPlatform === 'Twitter' ? <XIcon className="h-3 w-3 text-blue-400"/> : <LinkIcon className="h-3 w-3"/>}
-                       {getSocialInputLabel()}
+                      {newTask.targetPlatform === 'Twitter' ? <XIcon className="h-3 w-3 text-blue-400"/> : <LinkIcon className="h-3 w-3"/>}
+                      {getSocialInputLabel()}
                     </Label>
                     <Input 
                       className="bg-background" 
-                      placeholder={newTask.targetPlatform === 'Twitter' ? "faucetdrops" : "https://..."}
-                      value={newTask.targetHandle || newTask.url || ""} 
+                      placeholder={newTask.targetPlatform === 'Twitter' ? "Paste link or handle" : "https://..."}
+                      value={newTask.url || newTask.targetHandle || ""} 
                       onChange={e => {
-                        const val = e.target.value
-                        setNewTask((p:any) => ({ 
-                           ...p, 
-                           // For Twitter, we treat it as a handle (targetHandle)
-                           targetHandle: newTask.targetPlatform === 'Twitter' ? val.replace('@','') : val,
-                           // For Links (Discord/Web), we treat it as a URL
-                           url: val
+                        const val = e.target.value.trim()
+                        
+                        // 1. Try to extract handle if they paste a full URL
+                        const extracted = extractHandleFromUrl(val)
+                        
+                        setNewTask((p: any) => ({ 
+                          ...p, 
+                          // If it's a URL, save it. If they just typed a handle, don't force https yet
+                          url: val.includes('.') ? val : p.url,
+                          // If we found a handle in the URL, use it. Otherwise, use the raw text as handle
+                          targetHandle: extracted || val.replace('@', '')
                         }))
                       }} 
+                      onBlur={() => {
+                        // 2. Final normalization when user finishes typing
+                        if (newTask.url && newTask.url.includes('.')) {
+                          const finalUrl = normalizeUrl(newTask.url)
+                          setNewTask((p: any) => ({ ...p, url: finalUrl }))
+                        }
+                      }}
                     />
+                    {newTask.targetHandle && (
+                      <p className="text-[10px] text-blue-500 font-medium">
+                        Detected Handle: @{newTask.targetHandle}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -931,12 +969,24 @@ const getSocialInputLabel = () => {
                 ) : (
                   <Button 
                     onClick={async () => {
-                      const t = newTask as QuestTask
-                      // Validation logic
-                      if (showContractInput && t.action !== 'hold_token' && !t.targetContractAddress?.trim()) {
-                         if(t.action === 'hold_nft') { toast.error("Contract address required"); return }
+                      // CLONE the current task to modify it before saving
+                      let t = { ...newTask } as QuestTask
+
+                      // 1. Force URL normalization one last time
+                      if (t.url && t.url.includes('.')) {
+                        t.url = normalizeUrl(t.url)
                       }
-                      if (!t.title || !t.points || (enforceRules && !editingTask && isAtMax)) return;
+
+                      // 2. Ensure Handle is present for 'quote' or 'tag' related actions
+                      if (t.action === 'quote' || t.action === 'comment') {
+                        if (!t.targetHandle) {
+                            toast.error("A target handle is required for tag verification.")
+                            return
+                        }
+                      }
+
+                      // Standard Validation
+                      if (!t.title || !t.points) return;
                       
                       try {
                         if (editingTask) {

@@ -55,6 +55,11 @@ import {
   Play,
   Link,
   Zap,
+  MessageCircle,
+  Send,
+  UserPlus,
+  LogIn,
+  ArrowLeftRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
@@ -63,7 +68,7 @@ import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
 const API_BASE_URL = "https://fauctdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
-const VERIFIER_API_URL = "https://fauctdrop-backend.onrender.com"; // <--- New Link
+
 // ============= TYPES =============
 export type VerificationType =
   | "auto_social"
@@ -80,15 +85,21 @@ interface QuestTask {
   title: string;
   description: string;
   targetHandle?: string;
-  points: number;
+  points: number; // or string | number, depending on your DB
   category: string;
-  targetContractAddress: string;
+  targetContractAddress?: string; // Make this optional (?)
   verificationType: VerificationType;
   url: string;
   stage: string;
   required: boolean;
   action: string;
   isSystem?: boolean;
+  targetPlatform?: string;
+  // --- ADD THESE NEW FIELDS ---
+  minAmount?: string | number;
+  minTxCount?: string | number;
+  minDays?: string | number;
+  targetChainId?: string;
 }
 interface UserProgress {
   totalPoints: number;
@@ -669,113 +680,83 @@ const displayLeaderboard = useMemo(() => {
   };
 
 const handleSubmitTask = async () => {
-    if (!selectedTask || !userWalletAddress) return;
-    const taskId = selectedTask.id;
-    const taskPoints = selectedTask.points;
+  if (!selectedTask || !userWalletAddress) return;
+  setIsSubmitting(true);
 
-    // 1. Optimistic Update (Show it as done immediately)
-    setUserProgress((prev) => {
-      if (prev.completedTasks.includes(taskId)) return prev;
-      // Add fake pending submission visually
-      const newSubs = prev.submissions ? [...prev.submissions, { 
-          taskId, 
-          status: selectedTask.verificationType === "none" || selectedTask.verificationType === "onchain" ? "approved" : "pending", 
-          submittedAt: new Date().toISOString() 
-      }] : [];
-      
-      return {
-        ...prev,
-        // Only add points locally if it's instant or we assume success
-        completedTasks: [...prev.completedTasks, taskId], 
-        submissions: newSubs, 
-      };
-    });
+  try {
+    const formData = new FormData();
+    formData.append("walletAddress", userWalletAddress);
+    formData.append("taskId", selectedTask.id);
+    formData.append("submissionType", selectedTask.verificationType);
 
-    setShowSubmitModal(false);
-    setIsSubmitting(true);
+    const finalProofUrl =
+      selectedTask.action === "quote" || selectedTask.verificationType === "manual_link"
+        ? submissionData.proofUrl
+        : selectedTask.url;
 
-    try {
-      const formData = new FormData();
-      formData.append("walletAddress", userWalletAddress);
-      formData.append("taskId", taskId);
-      formData.append("submissionType", selectedTask.verificationType);
+    formData.append("submittedData", finalProofUrl || "");
 
-      // Handle Proof URL logic
-      let finalProofUrl = "";
-      if (selectedTask.verificationType === "manual_link" || selectedTask.action === "quote" || selectedTask.action === "share_quest") {
-          finalProofUrl = submissionData.proofUrl.trim();
-      } else if (selectedTask.verificationType === "onchain") {
-          finalProofUrl = "onchain-check"; 
-      } else {
-          finalProofUrl = selectedTask.url || "";
-      }
-      
-      formData.append("submittedData", finalProofUrl);
-      if (submissionData.notes) formData.append("notes", submissionData.notes);
-      if (submissionData.file) formData.append("file", submissionData.file);
-
-      // 2. Create Submission in DB
-      const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions`, {
+    const response = await fetch(
+      `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
+      {
         method: "POST",
         body: formData,
-      });
-
-      const result = await response.json();
-      if (!result.success) throw new Error(result.message || "Submission failed");
-
-      // 3. Handle Auto Social Verification
-      if (selectedTask.verificationType === "auto_social") {
-         const verifyRes = await fetch(`${VERIFIER_API_URL}/api/bot/verify-social`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            submissionId: result.submissionId,
-            faucetAddress,
-            walletAddress: userWalletAddress,
-            handle: userProfile?.twitter_handle || userProfile?.username || "",
-            proofUrl: finalProofUrl,
-            taskType: selectedTask.action,
-            taskId: selectedTask.id
-          }),
-        });
-        
-        const verifyJson = await verifyRes.json();
-        
-        if (verifyJson.verified) {
-            toast.success(`Verified! +${taskPoints} points added.`);
-        } else {
-            // IF BOT FAILS: Throw error to trigger the catch block below
-            throw new Error(verifyJson.message || "Social verification failed");
-        }
       }
+    );
+    const result = await response.json();
 
-      // 4. Force Reload Progress from Backend (To sync persisted data)
-      await loadUserProgress();
-      
-      // Update Leaderboard
-      const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
-      const lbJson = await lbRes.json();
-      if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+    if (!result.success) throw new Error(result.message || "Failed to submit task");
 
-    } catch (error: any) {
-      console.error("Task submission error:", error);
-      toast.error(error.message || "Failed to submit task.");
-
-      // 5. ROLLBACK on Failure
-      // Remove the task from 'completedTasks' and remove the submission from state
-      setUserProgress((prev) => {
-        return {
-          ...prev,
-          totalPoints: prev.totalPoints, // Keep points, let loadUserProgress sync real points
-          completedTasks: prev.completedTasks.filter((id) => id !== taskId), // Remove ID
-          submissions: prev.submissions.filter((s) => s.taskId !== taskId) // Remove submission entry
-        };
+    // CASE 1: AUTO SOCIAL (Twitter/X Bot)
+    if (selectedTask.verificationType === "auto_social") {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: result.submissionId,
+          faucetAddress: faucetAddress,
+          walletAddress: userWalletAddress,
+          handle: userProfile?.twitter_handle || userProfile?.username || "",
+          proofUrl: finalProofUrl,
+          taskType: selectedTask.action,
+        }),
       });
-    } finally {
-      setIsSubmitting(false);
-      setSubmissionData({ proofUrl: "", notes: "", file: null });
+
+      const verifyJson = await verifyRes.json();
+      if (verifyJson.verified) {
+        toast.success("Task verified! Points added.");
+      } else {
+        toast.error(verifyJson.message || "Verification failed.");
+      }
+    } 
+    
+    // CASE 2: NO VERIFICATION (Watch/Visit)
+    // If the backend is set to auto-approve 'none' types, we just need to refresh
+    else if (selectedTask.verificationType === "none") {
+      toast.success("Task completed! Points added.");
+    } 
+    
+    // CASE 3: MANUAL
+    else {
+      toast.info("Task submitted for manual review.");
     }
-  };
+
+    // ALWAYS refresh progress and leaderboard after a submission attempt
+    await loadUserProgress();
+    // Refresh Leaderboard to show updated "Tasks Done" and "Points"
+    const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+    const lbJson = await lbRes.json();
+    if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+
+    setShowSubmitModal(false);
+    setSubmissionData({ proofUrl: "", notes: "", file: null });
+
+  } catch (error: any) {
+    toast.error(error.message || "An error occurred");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected") => {
     try {
@@ -1615,7 +1596,92 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>{selectedTask.description}</div>
                 </div>
+                {(selectedTask.verificationType === "auto_social" || selectedTask.verificationType === "manual_link") && (
+                <div className="space-y-6">
+    
+                {/* --- 1. THE "DO TASK" BUTTON --- */}
+                {selectedTask.url && (
+                  <div className="p-6 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-center space-y-4">
+                    <div className="h-12 w-12 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center shadow-sm text-2xl">
+                      {/* Simple Icon Mapping based on platform/action */}
+                      {selectedTask.targetPlatform === 'Twitter' || selectedTask.url.includes('twitter') || selectedTask.url.includes('x.com') ?<svg 
+                        viewBox="0 0 24 24" 
+                        aria-hidden="true" 
+                        className="h-6 w-6 text-black dark:text-white" // Changed from text-blue-400
+                        fill="currentColor"
+                      >
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                      </svg>:
+                        selectedTask.targetPlatform === 'Discord' || selectedTask.url.includes('discord') ? <MessageCircle className="h-6 w-6 text-indigo-500" /> :
+                        selectedTask.targetPlatform === 'Telegram' || selectedTask.url.includes('t.me') ? <Send className="h-6 w-6 text-sky-500" /> :
+                        <ExternalLink className="h-6 w-6 text-slate-500" />
+                      }
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-semibold text-base">Step 1: Perform Action</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Click the button below to {selectedTask.action.replace('_', ' ')} on {selectedTask.targetPlatform || "the external site"}.
+                      </p>
+                    </div>
 
+                    <Button 
+                      size="lg" 
+                      className="w-full max-w-xs gap-2 font-bold"
+                      variant={selectedTask.verificationType === 'auto_social' ? "default" : "outline"}
+                      onClick={() => window.open(selectedTask.url, "_blank")}
+                    >
+                      {selectedTask.action === 'follow' && <UserPlus className="h-4 w-4" />}
+                      {selectedTask.action === 'join' && <LogIn className="h-4 w-4" />}
+                      {selectedTask.action === 'swap' && <ArrowLeftRight className="h-4 w-4" />}
+                      
+                      {/* Dynamic Label */}
+                      {selectedTask.action.toUpperCase()} {selectedTask.targetPlatform ? selectedTask.targetPlatform.toUpperCase() : "NOW"}
+                      <ExternalLink className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </div>
+                )}
+
+                {/* --- 2. THE INPUT FIELD (Step 2) --- */}
+                
+                {/* CASE A: Tasks that require a Link Proof (Retweet, Quote, Manual Link) */}
+                { (selectedTask.verificationType === 'manual_link' || 
+                  ['quote', 'tweet', 'retweet', 'comment', 'share'].includes(selectedTask.action)
+                  ) && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="bg-background">Step 2</Badge>
+                      <Label className="font-semibold">Submit Proof URL</Label>
+                    </div>
+                    
+                    <Input
+                      placeholder={selectedTask.targetPlatform === 'Twitter' ? "https://x.com/username/status/..." : "https://..."}
+                      value={submissionData.proofUrl}
+                      onChange={(e) => setSubmissionData(prev => ({ ...prev, proofUrl: e.target.value.trim() }))}
+                      className="h-11 font-mono text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {selectedTask.verificationType === 'auto_social' 
+                        ? "Paste the link to your post/tweet/comment so our bot can verify it." 
+                        : "Paste the link (transaction, blog post, etc) proving you completed the task."}
+                    </p>
+                  </div>
+                )}
+
+                {/* CASE B: Tasks that verify automatically (Follow, Join) - No Input Needed */}
+                { selectedTask.verificationType === 'auto_social' && 
+                  ['follow', 'join', 'subscribe', 'like'].includes(selectedTask.action) && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-lg flex gap-3">
+                    <Sparkles className="h-5 w-5 text-blue-500 shrink-0" />
+                    <div className="text-sm text-blue-800 dark:text-blue-300">
+                      <strong>No link required.</strong><br/>
+                      Once you have completed the action above, click "Verify & Submit". Our system will check your social connection automatically.
+                    </div>
+                  </div>
+                )}
+
+                  </div>
+                )}
                 {/* --- ON-CHAIN VERIFICATION UI --- */}
                 {selectedTask.verificationType === "onchain" && (
                     <div className="text-center space-y-4">
@@ -1645,7 +1711,14 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                   <div className="space-y-6">
                     <div className="p-6 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/40 dark:to-yellow-950/30 rounded-xl border border-amber-200 dark:border-amber-800 text-center">
                       <div className="mx-auto w-16 h-16 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-4 shadow-md">
-                        <Twitter className="h-8 w-8 text-[#1DA1F2]" />
+                        <svg 
+                          viewBox="0 0 24 24" 
+                          aria-hidden="true" 
+                          className="h-6 w-6 text-black dark:text-white" // Changed from text-blue-400
+                          fill="currentColor"
+                        >
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                        </svg>
                       </div>
                       <h4 className="text-lg font-semibold mb-3">Share this Quest on X</h4>
                       <p className="text-sm text-muted-foreground mb-5">
@@ -1670,7 +1743,14 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                           );
                         }}
                       >
-                        <Twitter className="mr-2 h-5 w-5" />
+                        <svg 
+                          viewBox="0 0 24 24" 
+                          aria-hidden="true" 
+                          className="h-6 w-6 text-black dark:text-white" // Changed from text-blue-400
+                          fill="currentColor"
+                        >
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                        </svg>
                         Compose & Post on X
                       </Button>
 
@@ -1943,28 +2023,31 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
 
                 {/* Only show submit button for tasks that require manual action */}
                 {selectedTask.verificationType !== "none" && (
-                  <Button
-                    onClick={handleSubmitTask}
-                    disabled={
-                      isSubmitting ||
-                      // Require proof URL for share-on-X and manual tx tasks
-                      ((selectedTask.id === "sys_share_x" || selectedTask.action === "share_quest") &&
-                        !submissionData.proofUrl.trim()) ||
-                      (selectedTask.category === "trading" &&
-                        selectedTask.verificationType !== "auto_tx" &&
-                        !submissionData.proofUrl.trim())
-                    }
-                    className="bg-primary hover:bg-primary/90 min-w-[160px]"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : (
-                      "Submit Task"
-                    )}
-                  </Button>
+                 <Button
+                  onClick={handleSubmitTask}
+                  disabled={
+                    isSubmitting ||
+                    // 1. Manual Links must have text
+                    (selectedTask.verificationType === "manual_link" && !submissionData.proofUrl) ||
+                    // 2. Social Posts (Quotes/Tweets) must have text
+                    (selectedTask.verificationType === "auto_social" && 
+                      ['quote', 'tweet', 'comment'].includes(selectedTask.action) && 
+                      !submissionData.proofUrl) ||
+                    // 3. Trading manual must have text
+                    (selectedTask.category === "trading" && 
+                      selectedTask.verificationType !== "auto_tx" && 
+                      selectedTask.verificationType !== "onchain" &&
+                      !submissionData.proofUrl)
+                    // Note: 'follow', 'join', 'subscribe' (auto_social) do NOT need inputs, so they are not disabled here.
+                  }
+                  className="bg-primary hover:bg-primary/90 min-w-[160px]"
+                >
+                  {isSubmitting ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
+                  ) : (
+                    selectedTask.verificationType === 'auto_social' ? "Verify & Submit" : "Submit Task"
+                  )}
+                </Button>
                 )}
               </CardFooter>
             </Card>

@@ -1,11 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 import React, { useEffect, useState } from 'react'
-import SimpleRadarChart from './graph/GraphChart1'
-// import TwoLevelPieChart from './graph/GraphChart2'
-import StackedAreaChart from './graph/GraphChart3'
+// import SimpleRadarChart from './graph/GraphChart1'
+import StackedAreaChart, {
+  // StackedAreaChart, 
+  // SimpleAreaChart, 
+  // type ClaimData 
+} from './graph/GraphChart2'
 import { AnalyticsService } from '@/services/analyticsService'
 import AnimateOnScroll from '../common/AnimateOnScroll';
+import SimpleRadarChart from './graph/GraphChart1';
+// import { SimpleAreaChart2, TransactionsPerDayChart } from './graph/TransactionsPerDayChart'
 
 type ChartData = {
   radarData: any[];
@@ -14,6 +19,7 @@ type ChartData = {
     timeData: any[];
   };
   areaData: any[];
+  // areaData2: ClaimData[];
 };
 
 export default function GraphChart() {
@@ -21,6 +27,7 @@ export default function GraphChart() {
     radarData: [],
     pieData: { networkData: [], timeData: [] },
     areaData: [],
+    // areaData2: []
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +41,7 @@ export default function GraphChart() {
           radarData: data.radarData || [],
           pieData: data.pieData || { networkData: [], timeData: [] },
           areaData: data.areaData || [],
+          // areaData2: [data.areaData2]
         });
       } catch (err) {
         console.error('Error fetching chart data:', err);
@@ -76,22 +84,37 @@ export default function GraphChart() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
         {/* Area Chart - Daily Trends */}
         {chartData.areaData.length > 0 && (
-          <AnimateOnScroll 
-            type="fadeIn" 
-            delay={100} 
+          <AnimateOnScroll
+            type="fadeIn"
+            delay={100}
             className="col-span-1 lg:col-span-2"
           >
             <div className="h-full rounded-xl p-6 shadow-lg border border-white/10 bg-linear-to-br from-gray-900/50 to-gray-800/50">
-              <h3 className="text-2xl font-bold text-white mb-6 text-center">Daily Claim Trends by Network</h3>
+              <h3 className="text-2xl font-bold text-white mb-6 text-center">Transactions across all networks</h3>
               <div className="h-[400px] w-full">
-                <StackedAreaChart data={chartData.areaData} />
+                {/* <StackedAreaChart data={chartData.areaData} /> */}
+                <StackedAreaChart />
               </div>
             </div>
           </AnimateOnScroll>
         )}
 
+        <AnimateOnScroll
+          type="fadeIn"
+          delay={100}
+          className="col-span-1"
+        >
+          <div className="h-full rounded-xl p-6 shadow-lg border border-white/10 bg-linear-to-br from-gray-900/50 to-gray-800/50">
+            <h3 className="text-2xl font-bold text-white mb-6 text-center">Users accross all networks</h3>
+            <div className="h-[400px] w-full">
+              {/* <StackedAreaChart data={chartData.areaData} /> */}
+              <SimpleRadarChart />
+            </div>
+          </div>
+        </AnimateOnScroll>
+
         {/* Radar Chart - Network Performance */}
-        <AnimateOnScroll 
+        {/* <AnimateOnScroll 
           type="fadeIn" 
           delay={200} 
           className="col-span-1"
@@ -102,7 +125,27 @@ export default function GraphChart() {
               <SimpleRadarChart data={chartData.radarData} />
             </div>
           </div>
-        </AnimateOnScroll>
+        </AnimateOnScroll> */}
+
+        {/* <AnimateOnScroll 
+          type="fadeIn" 
+          delay={300} 
+          className="col-span-2"
+        >
+          <div className="h-full rounded-xl p-6 shadow-lg border border-white/10 bg-linear-to-br from-gray-900/50 to-gray-800/50">
+            <h3 className="text-2xl font-bold text-white mb-6 text-center">Network Distribution</h3>
+            <div className="h-[400px] w-full">
+              <SimpleAreaChart
+                ClaimData={chartData.areaData2[0]}
+              />
+            </div>
+          </div>
+        </AnimateOnScroll> */}
+
+        {/* <TransactionsPerDayChart /> */}
+        {/* <SimpleAreaChart2
+          className="col-span-2"
+        /> */}
       </div>
     </div>
   );

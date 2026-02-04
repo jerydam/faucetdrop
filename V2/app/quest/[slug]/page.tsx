@@ -51,6 +51,10 @@ import {
   Copy,
   CalendarClock,
   Users,
+  Twitter,
+  Play,
+  Link,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
@@ -58,17 +62,18 @@ import { Contract, BrowserProvider, parseEther } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
-
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const VERIFIER_API_URL = "https://fauctdrop-backend.onrender.com"; // <--- New Link
 // ============= TYPES =============
 export type VerificationType =
   | "auto_social"
-  | "auto_tx" // <--- ADD THIS HERE
+  | "auto_tx"
   | "manual_link"
   | "manual_upload"
   | "system_referral"
   | "system_daily"
-  | "none";
+  | "none"
+  | "onchain";
 
 interface QuestTask {
   id: string;
@@ -77,12 +82,12 @@ interface QuestTask {
   targetHandle?: string;
   points: number;
   category: string;
-  // UPDATED THIS LINE:
+  targetContractAddress: string;
   verificationType: VerificationType;
   url: string;
   stage: string;
   required: boolean;
-  action: string; // <--- ADD THIS LINE (fixes the 'action' error)
+  action: string;
   isSystem?: boolean;
 }
 interface UserProgress {
@@ -96,8 +101,8 @@ interface UserProgress {
 interface LeaderboardEntry {
   rank: number;
   walletAddress: string;
-  username: string | null; // Allow null
-  avatarUrl?: string | null; // Allow null and make optional
+  username: string | null;
+  avatarUrl?: string | null;
   points: number;
   completedTasks: number;
 }
@@ -106,7 +111,7 @@ interface UserProfile {
   wallet_address: string;
   username: string | null;
   avatar_url?: string;
-  twitter_handle?: string; // <--- ADD THIS
+  twitter_handle?: string;
 }
 
 interface ParticipantData {
@@ -115,7 +120,6 @@ interface ParticipantData {
   last_checkin_at: string | null;
   points: number;
 }
-
 // ============= COMPONENT =============
 export default function QuestDetailsPage() {
   const params = useParams();
@@ -128,17 +132,12 @@ export default function QuestDetailsPage() {
   const rawSlug = (params.addresss || params.faucetAddress) as
     | string
     | undefined;
-  const faucetAddress = useMemo(() => {
-    if (!rawSlug) return undefined;
-    const addressPattern = /(0x[a-fA-F0-9]{40})/i;
-    const match = rawSlug.match(addressPattern);
-    return match ? match[1] : /^0x[a-fA-F0-9]{40}$/i.test(rawSlug)
-      ? rawSlug
-      : undefined;
-  }, [rawSlug]);
+  
 
   // ============= STATE =============
   const [questData, setQuestData] = useState<any | null>(null);
+  const [faucetAddress, setFaucetAddress] = useState<string | undefined>(undefined);
+  
   const [userProgress, setUserProgress] = useState<UserProgress>({
     totalPoints: 0,
     stagePoints: {},
@@ -200,7 +199,83 @@ export default function QuestDetailsPage() {
     questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
 
   const stages = ["Beginner", "Intermediate", "Advance", "Legend", "Ultimate"];
+useEffect(() => {
+    // Correctly access the slug from params
+    const slug = params.slug as string;
+    if (!slug) return;
 
+    const loadQuestBySlug = async () => {
+      setIsLoading(true);
+      try {
+        // 1. Fetch from your NEW slug-based endpoint
+        const response = await fetch(`${API_BASE_URL}/api/quests/by-slug/${slug}`);
+        const json = await response.json();
+
+        if (json.success && json.quest) {
+          setQuestData(json.quest);
+          // Set the internal faucetAddress state from the DB result
+          setFaucetAddress(json.quest.faucetAddress);
+          
+          // Sync edit form
+          setEditForm({
+            title: json.quest.title,
+            description: json.quest.description,
+            rewardPool: json.quest.rewardPool,
+            imageUrl: json.quest.imageUrl || "",
+            isActive: json.quest.isActive,
+          });
+        } else {
+          toast.error("Quest not found");
+        }
+      } catch (error) {
+        console.error("Fetch error:", error);
+        toast.error("Failed to load quest details");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadQuestBySlug();
+  }, [params.slug]);
+  useEffect(() => {
+    // Only run these once we have the faucetAddress from the slug lookup
+    if (!faucetAddress) return;
+
+    const loadLiveStats = async () => {
+      try {
+        const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+        const lbJson = await lbRes.json();
+        if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+      } catch (e) {
+        console.error("Leaderboard fetch failed", e);
+      }
+    };
+
+    loadLiveStats();
+  }, [faucetAddress]);
+
+  useEffect(() => {
+    if (!faucetAddress || !userWalletAddress || !hasUsername) return;
+    
+    const fetchUserSpecifics = async () => {
+      try {
+        const progRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/progress/${userWalletAddress}`);
+        const progJson = await progRes.json();
+        if (progJson.success) setUserProgress(progJson.progress);
+        
+        // Handle admin rehydration if applicable
+        if (isCreator) {
+          const pendingRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/pending`);
+          const pendingJson = await pendingRes.json();
+          // ... (rest of your pending submissions mapping logic)
+        }
+      } catch (e) {
+        console.error("Progress fetch failed", e);
+      }
+    };
+
+    fetchUserSpecifics();
+  }, [faucetAddress, userWalletAddress, hasUsername, isCreator]);
   // ============= TOKEN SYMBOL LOGIC =============
   const tokenSymbol = questData?.tokenSymbol || "Tokens";
 
@@ -235,37 +310,37 @@ export default function QuestDetailsPage() {
       entry.walletAddress.toLowerCase() !== questData?.creatorAddress.toLowerCase()
   );
 
-  const totalPoints = participantData?.points || userProgress.totalPoints || 0;
+  // Add them together instead of picking one
+const totalPoints = participantData?.points || 0;
 
   // ============= HELPER FUNCTIONS =============
   const loadUserProgress = async () => {
-    if (!faucetAddress || !userWalletAddress) return;
-    try {
-      const progRes = await fetch(
-        `${API_BASE_URL}/api/quests/${faucetAddress}/progress/${userWalletAddress}`
-      );
-      const progJson = await progRes.json();
-      if (progJson.success) setUserProgress(progJson.progress);
-    } catch (e) {
-      console.error("Failed to reload progress");
+  if (!faucetAddress || !userWalletAddress) return;
+  try {
+    const res = await fetch(
+  `${API_BASE_URL}/api/quests/${faucetAddress}/progress/${userWalletAddress}?t=${Date.now()}`,
+  { cache: "no-store", credentials: "include" } // if using auth
+);
+
+    const json = await res.json();
+    if (json.success) {
+      setUserProgress(json.progress); // This is what triggers the UI update
     }
-  };
+  } catch (e) {
+    console.error("Reload failed", e);
+  }
+};
+
   const handleXShareAction = (task: QuestTask) => {
-    // 1. Determine the target handle
-    const targetHandle = task.isSystem ? "@faucetdrops" : task.targetHandle || "@faucetdrops";
-
-    // 2. Get the participant's referral link
+    const targetHandle = "@faucetdrops";
+    // Constructing the message with the user's referral link
     const referralLink = `${window.location.origin}${window.location.pathname}?ref=${participantData?.referral_id}`;
-
-    // 3. Construct the FULL message including the link
-    // We put the link inside the text string so it's guaranteed to show up
-    const message = `I am participating in a quest on ${targetHandle}, join me using this link: ${referralLink}`;
-
-    // 4. Build the intent URL using ONLY the text parameter for maximum reliability
+    
+    const message = `I am participating in a quest on ${targetHandle}. Join me and earn rewards here: ${referralLink}`;
+    
     const xIntentUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(message)}`;
-
     window.open(xIntentUrl, "_blank");
-  };
+};
   const handleJoin = async () => {
     if (!userWalletAddress || !faucetAddress) return;
     setIsJoining(true);
@@ -448,45 +523,58 @@ export default function QuestDetailsPage() {
   }, [questData]);
 
   // 2. Leaderboard Filter (Hides Admin completely)
-  const displayLeaderboard = useMemo(() => {
-    // 1. Start with the raw list from the backend
-    let list = [...leaderboard];
+const displayLeaderboard = useMemo(() => {
+  let list = [...leaderboard];
 
-    // 2. If you are logged in and not the creator, find or add yourself
-    if (userWalletAddress && participantData && !isCreator) {
-      const myWalletLower = userWalletAddress.toLowerCase();
-      const myIndex = list.findIndex(
-        (e) => e.walletAddress.toLowerCase() === myWalletLower
-      );
+  if (userWalletAddress && participantData && !isCreator) {
+    const myWalletLower = userWalletAddress.toLowerCase();
 
-      const myEntry = {
-        rank: 0,
-        walletAddress: userWalletAddress,
-        username: userProfile?.username || "You",
-        avatarUrl: userProfile?.avatar_url || null,
-        points: participantData.points || 0,
-        completedTasks: userProgress?.completedTasks?.length || 0,
+    // Always build fresh "me" entry from **current** state
+    const myLatestEntry = {
+      rank: 0,
+      walletAddress: userWalletAddress,
+      username: userProfile?.username || "You",
+      avatarUrl: userProfile?.avatar_url || null,
+      points: participantData.points || 0,
+      // ─── Use current (fresh) userProgress here ───
+      completedTasks: userProgress?.completedTasks?.length || 0,
+    };
+
+    const myIndex = list.findIndex(e => e.walletAddress.toLowerCase() === myWalletLower);
+
+    if (myIndex !== -1) {
+      // Merge: keep server rank/points if available, but force completedTasks from local
+      list[myIndex] = {
+        ...list[myIndex],
+        ...myLatestEntry,
+        // Preserve server rank if it exists
+        rank: list[myIndex].rank || 0,
       };
-
-      if (myIndex > -1) {
-        // Update existing entry with live local data
-        list[myIndex] = { ...list[myIndex], ...myEntry };
-      } else {
-        // Add yourself if you aren't in the Top 50 yet
-        list.push(myEntry);
-      }
+    } else {
+      // Not in top list yet → add at bottom
+      list.push(myLatestEntry);
     }
+  }
 
-    // 3. Final Filter: Ensure Creator is hidden, but keep users with 0 points
-    return list
-      .filter((entry) => {
-        const entryWallet = entry.walletAddress.toLowerCase();
-        const creatorWallet = questData?.creatorAddress?.toLowerCase();
-        return entryWallet !== creatorWallet;
-      })
-      .sort((a, b) => b.points - a.points)
-      .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
-  }, [leaderboard, participantData, userWalletAddress, userProfile, userProgress, questData, isCreator]);
+  // Final filter (hide creator) + sort + assign ranks
+  return list
+    .filter(entry => {
+      const entryWallet = entry.walletAddress.toLowerCase();
+      const creatorWallet = questData?.creatorAddress?.toLowerCase();
+      return entryWallet !== creatorWallet;
+    })
+    .sort((a, b) => b.points - a.points)
+    .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
+
+}, [
+  leaderboard,           // when server leaderboard updates
+  participantData,       // when referral/check-in updates points
+  userProgress,          // ← critical: when completedTasks changes
+  userWalletAddress,
+  userProfile,
+  questData,
+  isCreator
+]);
 
   // ============= 3. LOAD USER PROGRESS =============
   useEffect(() => {
@@ -580,65 +668,112 @@ export default function QuestDetailsPage() {
     };
   };
 
-  const handleSubmitTask = async () => {
+const handleSubmitTask = async () => {
     if (!selectedTask || !userWalletAddress) return;
+    const taskId = selectedTask.id;
+    const taskPoints = selectedTask.points;
+
+    // 1. Optimistic Update (Show it as done immediately)
+    setUserProgress((prev) => {
+      if (prev.completedTasks.includes(taskId)) return prev;
+      // Add fake pending submission visually
+      const newSubs = prev.submissions ? [...prev.submissions, { 
+          taskId, 
+          status: selectedTask.verificationType === "none" || selectedTask.verificationType === "onchain" ? "approved" : "pending", 
+          submittedAt: new Date().toISOString() 
+      }] : [];
+      
+      return {
+        ...prev,
+        // Only add points locally if it's instant or we assume success
+        completedTasks: [...prev.completedTasks, taskId], 
+        submissions: newSubs, 
+      };
+    });
+
+    setShowSubmitModal(false);
     setIsSubmitting(true);
 
     try {
       const formData = new FormData();
       formData.append("walletAddress", userWalletAddress);
-      formData.append("taskId", selectedTask.id);
+      formData.append("taskId", taskId);
       formData.append("submissionType", selectedTask.verificationType);
 
-      // FIX: For quote tasks, we MUST use the user-inputted proofUrl.
-      // For standard auto_social (follow/like), we use the task's preset URL.
-      const finalProofUrl =
-        selectedTask.action === "quote" || selectedTask.verificationType === "manual_link"
-          ? submissionData.proofUrl
-          : selectedTask.url;
-
+      // Handle Proof URL logic
+      let finalProofUrl = "";
+      if (selectedTask.verificationType === "manual_link" || selectedTask.action === "quote" || selectedTask.action === "share_quest") {
+          finalProofUrl = submissionData.proofUrl.trim();
+      } else if (selectedTask.verificationType === "onchain") {
+          finalProofUrl = "onchain-check"; 
+      } else {
+          finalProofUrl = selectedTask.url || "";
+      }
+      
       formData.append("submittedData", finalProofUrl);
+      if (submissionData.notes) formData.append("notes", submissionData.notes);
+      if (submissionData.file) formData.append("file", submissionData.file);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      // 2. Create Submission in DB
+      const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions`, {
+        method: "POST",
+        body: formData,
+      });
+
       const result = await response.json();
+      if (!result.success) throw new Error(result.message || "Submission failed");
 
-      if (!result.success) throw new Error("Failed to initialize submission");
-
+      // 3. Handle Auto Social Verification
       if (selectedTask.verificationType === "auto_social") {
-        const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
+         const verifyRes = await fetch(`${VERIFIER_API_URL}/api/bot/verify-social`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             submissionId: result.submissionId,
-            faucetAddress: faucetAddress,
+            faucetAddress,
             walletAddress: userWalletAddress,
             handle: userProfile?.twitter_handle || userProfile?.username || "",
-            proofUrl: finalProofUrl, // Bot will check this URL
+            proofUrl: finalProofUrl,
             taskType: selectedTask.action,
+            taskId: selectedTask.id
           }),
         });
-
+        
         const verifyJson = await verifyRes.json();
-
+        
         if (verifyJson.verified) {
-          toast.success("Task verified! Points added.");
-          await loadUserProgress();
-          setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null }); // CLEAR FORM
+            toast.success(`Verified! +${taskPoints} points added.`);
         } else {
-          toast.error(verifyJson.message || "Verification failed.");
+            // IF BOT FAILS: Throw error to trigger the catch block below
+            throw new Error(verifyJson.message || "Social verification failed");
         }
       }
+
+      // 4. Force Reload Progress from Backend (To sync persisted data)
+      await loadUserProgress();
+      
+      // Update Leaderboard
+      const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+      const lbJson = await lbRes.json();
+      if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+
     } catch (error: any) {
-      toast.error(error.message || "An error occurred");
+      console.error("Task submission error:", error);
+      toast.error(error.message || "Failed to submit task.");
+
+      // 5. ROLLBACK on Failure
+      // Remove the task from 'completedTasks' and remove the submission from state
+      setUserProgress((prev) => {
+        return {
+          ...prev,
+          totalPoints: prev.totalPoints, // Keep points, let loadUserProgress sync real points
+          completedTasks: prev.completedTasks.filter((id) => id !== taskId), // Remove ID
+          submissions: prev.submissions.filter((s) => s.taskId !== taskId) // Remove submission entry
+        };
+      });
     } finally {
       setIsSubmitting(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
     }
   };
 
@@ -774,18 +909,24 @@ const questStatusGuard = useMemo(() => {
 }, [questData]);
 
   const getTaskStatus = (task: QuestTask) => {
-    if (!participantData) return "locked";
+  if (!participantData) return "locked";
 
-    if (userProgress.completedTasks.includes(task.id)) return "completed";
-    const pending = userProgress.submissions.find((s) => s.taskId === task.id && s.status === "pending");
-    if (pending) return "pending";
+  // 1. If the task ID is in the completed array, it's definitely Done
+  if (userProgress.completedTasks.includes(task.id)) return "completed";
 
-    const stageIndex = stages.indexOf(task.stage);
-    const userStageIndex = stages.indexOf(userProgress.currentStage);
-    if (stageIndex > userStageIndex) return "locked";
+  // 2. Check for pending submissions
+  const pending = userProgress.submissions.find(
+    (s) => s.taskId === task.id && s.status === "pending"
+  );
+  if (pending) return "pending";
 
-    return "available";
-  };
+  // 3. Stage Locking logic
+  const stageIndex = stages.indexOf(task.stage);
+  const userStageIndex = stages.indexOf(userProgress.currentStage);
+  if (stageIndex > userStageIndex) return "locked";
+
+  return "available";
+};
 
   // ============= RENDER STATES =============
   if (isLoading || isProfileLoading) {
@@ -875,7 +1016,7 @@ const questStatusGuard = useMemo(() => {
   const currentStageData = questData.stagePassRequirements || {};
   const pointsForCurrentStage = userProgress.stagePoints[userProgress.currentStage] || 0;
   const requiredForCurrent = currentStageData[userProgress.currentStage] || 100;
-  const progressPercent = Math.min((pointsForCurrentStage / requiredForCurrent) * 100, 100);
+const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
 
   const filteredLeaderboard = leaderboard.filter(
     (entry) =>
@@ -1069,7 +1210,7 @@ const questStatusGuard = useMemo(() => {
                     <Badge variant="outline" className="text-primary border-primary bg-primary/5">{userProgress.currentStage}</Badge>
                   </h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Earn <strong>{Math.max(0, requiredForCurrent - pointsForCurrentStage)}</strong> more points to level up.
+                    Earn <strong>{Math.max(0, requiredForCurrent - totalPoints)}</strong> more points to level up.
                   </p>
                 </div>
                 <div className="text-right">
@@ -1222,31 +1363,49 @@ const questStatusGuard = useMemo(() => {
                               <div className="mt-auto pt-4 border-t flex items-center justify-between">
                                 {/* Verification Badge */}
                                 <div className="text-[10px] font-bold text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
-                                  {task.verificationType === "auto_social" && <Sparkles className="h-3 w-3 text-blue-500" />}
-                                  {task.verificationType === "auto_tx" && <Shield className="h-3 w-3 text-green-500" />}
-                                  {task.verificationType === "manual_link" && <ExternalLink className="h-3 w-3" />}
-                                  {task.verificationType === "manual_upload" && <Upload className="h-3 w-3" />}
-                                  {task.verificationType.replace("manual_", "").replace("auto_", "")}
+                                   {task.verificationType === "auto_social" && <Sparkles className="h-3 w-3 text-blue-500" />}
+                                   {task.verificationType === "auto_tx" && <Shield className="h-3 w-3 text-green-500" />}
+                                   {task.verificationType === "onchain" && <Zap className="h-3 w-3 text-purple-500" />}
+                                   {task.verificationType === "manual_link" && <ExternalLink className="h-3 w-3" />}
+                                   {task.verificationType.replace("manual_", "").replace("auto_", "")}
                                 </div>
 
+                                {/* Find the button section inside your task mapping loop */}
                                 {status === "completed" ? (
-                                  <div className="flex items-center text-green-600 text-sm font-bold"><CheckCircle2 className="h-4 w-4 mr-1" /> Done</div>
+                                  <Button
+                                    size="sm"
+                                    disabled
+                                    className="bg-green-100 text-green-700 border-green-200 cursor-default hover:bg-green-100"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                                    Done
+                                  </Button>
                                 ) : status === "pending" ? (
-                                  <div className="flex items-center text-orange-600 text-sm font-bold"><Clock className="h-4 w-4 mr-1" /> Reviewing</div>
+                                  <div className="flex items-center text-orange-600 text-sm font-bold">
+                                    <Clock className="h-4 w-4 mr-1" /> 
+                                    Reviewing
+                                  </div>
                                 ) : isLocked || !participantData ? (
-                                  <span className="text-sm text-muted-foreground">{!participantData ? "Join Required" : "Locked"}</span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {!participantData ? "Join Required" : "Locked"}
+                                  </span>
                                 ) : (
                                   !isCreator ? (
                                     <Button
                                       size="sm"
-                                      onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }}
-                                      disabled={!participantData || !questTiming.isLive || status !== "available" || isCreator}
+                                      onClick={() => {
+                                        setSelectedTask(task);
+                                        setShowSubmitModal(true);
+                                      }}
+                                      disabled={!participantData || !questTiming.isLive || status !== "available"}
                                       className="bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"
                                     >
                                       {questTiming.notStartedYet ? "Starts Soon" : "Open Task"}
                                     </Button>
                                   ) : (
-                                    <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Preview Mode</span>
+                                    <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                                      Preview Mode
+                                    </span>
                                   )
                                 )}
                               </div>
@@ -1441,159 +1600,377 @@ const questStatusGuard = useMemo(() => {
             </div>
           </div>
         )}
-
-        {/* ============= SUBMISSION MODAL ============= */}
+            {/* ============= SUBMISSION MODAL (UPDATED) ============= */}
         {showSubmitModal && selectedTask && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <Card className="w-full max-w-lg shadow-2xl scale-100 animate-in zoom-in-95 duration-200 border-0 dark:bg-slate-900">
-              <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-4">
-                <CardTitle className="text-xl">Complete Task</CardTitle>
-                <CardDescription className="text-base font-medium">{selectedTask.title}</CardDescription>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+            <Card className="w-full max-w-lg shadow-2xl border-0 dark:bg-slate-900 animate-in zoom-in-95 duration-200">
+              <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-5 relative">
+                <Button variant="ghost" size="icon" className="absolute right-4 top-4 h-8 w-8 rounded-full" onClick={() => setShowSubmitModal(false)}><X className="h-5 w-5" /></Button>
+                <CardTitle className="text-xl pr-10">{selectedTask.title}</CardTitle>
+                <CardDescription className="text-base font-medium mt-1">{selectedTask.description}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6 pt-6">
+
+              <CardContent className="pt-6 space-y-6">
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 flex gap-3">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>{selectedTask.description}</div>
                 </div>
 
-                {/* DYNAMIC CONTENT PER VERIFICATION TYPE */}
-                <div className="space-y-4">
-                  {/* CASE 1: AUTO SOCIAL (Click to Verify) */}
-                  {selectedTask.verificationType === "auto_social" && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2">
-                      {/* STEP 1: DYNAMIC ACTION BUTTON */}
+                {/* --- ON-CHAIN VERIFICATION UI --- */}
+                {selectedTask.verificationType === "onchain" && (
+                    <div className="text-center space-y-4">
+                        <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+                            <Zap className="h-8 w-8 text-purple-600" />
+                        </div>
+                        <h4 className="text-lg font-semibold">Wallet Check Required</h4>
+                        <p className="text-muted-foreground text-sm">
+                            We will scan your connected wallet on the blockchain to verify this task.
+                        </p>
+                        
+                        <Button 
+                            size="lg" 
+                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-12"
+                            onClick={handleSubmitTask}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Verifying...</> : "Verify Wallet Status"}
+                        </Button>
+                    </div>
+                )}  
+
+                {/* ────────────────────────────────────────────────
+                    1. SYSTEM SHARE ON X (manual review)
+                ──────────────────────────────────────────────── */}
+                {(selectedTask.id === "sys_share_x" || selectedTask.action === "share_quest") && (
+                  <div className="space-y-6">
+                    <div className="p-6 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/40 dark:to-yellow-950/30 rounded-xl border border-amber-200 dark:border-amber-800 text-center">
+                      <div className="mx-auto w-16 h-16 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center mb-4 shadow-md">
+                        <Twitter className="h-8 w-8 text-[#1DA1F2]" />
+                      </div>
+                      <h4 className="text-lg font-semibold mb-3">Share this Quest on X</h4>
+                      <p className="text-sm text-muted-foreground mb-5">
+                        Post about this quest including @faucetdrops and your referral link
+                      </p>
+
                       <Button
-                        variant="outline"
-                        className="w-full h-12 border-blue-400 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center justify-between px-6"
+                        size="lg"
+                        className="bg-[#1DA1F2] hover:bg-[#0c8cdf] text-white w-full mb-5"
                         onClick={() => {
-                          // Only trigger X logic if the task is an X task
-                          if (selectedTask.category?.toLowerCase() === "x" || selectedTask.category?.toLowerCase() === "twitter") {
-                            if (selectedTask.action === "quote" || selectedTask.id === "sys_share_x") {
-                              handleXShareAction(selectedTask);
-                            } else {
-                              window.open(selectedTask.url, "_blank");
-                            }
-                          } else {
-                            // Discord or other platforms just open the Invite/Link
-                            window.open(selectedTask.url, "_blank");
+                          if (!participantData?.referral_id) {
+                            toast.error("Referral link not available – please join first");
+                            return;
                           }
-                          setHasOpenedLink((prev) => ({ ...prev, [selectedTask.id]: true }));
+                          const cleanUrl = window.location.href.split("?")[0];
+                          const refLink = `${cleanUrl}?ref=${participantData.referral_id}`;
+                          const text = `I'm participating in this awesome quest on @faucetdrops!\nJoin me here: ${refLink}`;
+                          window.open(
+                            `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`,
+                            "_blank",
+                            "noopener,noreferrer"
+                          );
                         }}
                       >
-                        <span className="flex items-center gap-2">
-                          <ExternalLink className="h-4 w-4" /> 
-                          1. {selectedTask.category?.toLowerCase() === "discord" ? "Join Discord Server" : `Perform ${selectedTask.action} on X`}
-                        </span>
-                        {hasOpenedLink[selectedTask.id] && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                        <Twitter className="mr-2 h-5 w-5" />
+                        Compose & Post on X
                       </Button>
 
-                      {/* STEP 2: DYNAMIC INFO/INPUT BOX */}
-                      {selectedTask.category?.toLowerCase() === "discord" ? (
-                        <div className="flex items-start gap-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-dashed border-indigo-300 dark:border-indigo-800">
-                          <Users className="h-4 w-4 text-indigo-600 mt-1 shrink-0" />
-                          <div className="text-xs text-muted-foreground leading-relaxed">
-                        
-                            Make sure you've joined before clicking verify.
-                          </div>
-                        </div>
-                      ) : (
-                        /* EXISTING X LOGIC */
-                        (selectedTask.action === "quote" || selectedTask.id === "sys_share_x") ? (
-                          <div className="space-y-2 animate-in fade-in zoom-in-95">
-                            <Label className="text-xs font-bold text-orange-600 flex items-center gap-1">
-                              <Sparkles className="h-3 w-3" /> PASTE YOUR POST LINK
-                            </Label>
-                            <Input
-                              placeholder="https://x.com/yourname/status/..."
-                              value={submissionData.proofUrl}
-                              onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
-                              className="border-orange-200 focus:border-orange-500"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex items-start gap-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-dashed border-slate-300 dark:border-slate-600">
-                            <Shield className="h-4 w-4 text-primary mt-1 shrink-0" />
-                            <div className="text-xs text-muted-foreground">
-                              Verifying <strong>{selectedTask.action}</strong> for @{userProfile?.twitter_handle || userProfile?.username}
-                            </div>
-                          </div>
-                        )
-                      )}
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        Make sure your tweet contains @faucetdrops and the referral link
+                      </p>
+                    </div>
 
-                      {/* STEP 3: VERIFY BUTTON */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium flex items-center gap-2">
+                        <Link className="h-4 w-4" />
+                        Paste link to your tweet (required)
+                      </Label>
+                      <Input
+                        placeholder="https://x.com/yourusername/status/..."
+                        value={submissionData.proofUrl}
+                        onChange={(e) =>
+                          setSubmissionData((prev) => ({ ...prev, proofUrl: e.target.value.trim() }))
+                        }
+                        className="font-mono text-sm focus-visible:ring-amber-500"
+                      />
+                      <p className="text-xs text-muted-foreground italic">
+                        This link will be reviewed manually.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ────────────────────────────────────────────────
+                    2. WATCH VIDEO – preview + mark done
+                ──────────────────────────────────────────────── */}
+               
+                {selectedTask.action === "watch" && selectedTask.verificationType === "none" && (
+                  <div className="space-y-6">
+                    <div className="rounded-xl overflow-hidden border bg-black aspect-video relative shadow-lg">
+                      {(selectedTask.url.includes("youtube.com") || selectedTask.url.includes("youtu.be")) ? (
+                        <iframe
+                          width="100%"
+                          height="100%"
+                          src={
+                            selectedTask.url
+                              .replace("watch?v=", "embed/")
+                              .replace("youtu.be/", "www.youtube.com/embed/")
+                              .split("&")[0]
+                          }
+                          title="Introduction Video"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white/70 bg-gradient-to-b from-black/60 to-black/90">
+                          <Play className="h-16 w-16 opacity-70 mb-4" />
+                          <p className="text-lg font-medium">Video preview not available</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4">
                       <Button
-                        className="w-full h-12 bg-primary text-white"
-                        onClick={handleSubmitTask}
-                        disabled={isSubmitting || (selectedTask.action === "quote" && !submissionData.proofUrl)}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold h-12"
+                        onClick={async () => {
+                          // 1. Open the original video link
+                          window.open(selectedTask.url, "_blank", "noopener,noreferrer");
+                          
+                          // 2. Submit task immediately (Backend now marks this as 'approved' automatically)
+                          await handleSubmitTask(); 
+                          
+                          // Note: handleSubmitTask handles closing the modal and refreshing the points
+                        }}
+                        disabled={isSubmitting}
                       >
                         {isSubmitting ? (
-                          <><Loader2 className="animate-spin mr-2 h-4 w-4" /> Verifying...</>
+                          <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Claiming...</>
                         ) : (
-                          <><Shield className="mr-2 h-4 w-4" /> 2. Verify {selectedTask.category === "discord" ? "Membership" : "Completion"}</>
+                          "Watch Video & Claim Points"
                         )}
                       </Button>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {/* CASE 2: AUTO TX (On-Chain) */}
-                  {selectedTask.verificationType === "auto_tx" && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2">
+                {/* ────────────────────────────────────────────────
+                    VISIT PAGE – Instant Reward
+                ──────────────────────────────────────────────── */}
+                {selectedTask.action === "visit" && selectedTask.verificationType === "none" && (
+                  <div className="space-y-6 text-center">
+                    <div className="p-10 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-2xl border border-blue-100 dark:border-blue-900/50">
+                      <ExternalLink className="mx-auto h-14 w-14 text-blue-500 mb-5 opacity-90" />
+                      <h4 className="text-xl font-semibold mb-3">Visit Project Website</h4>
+                      <p className="text-muted-foreground mb-8 max-w-sm mx-auto">
+                        Opening the website will automatically add <strong>{selectedTask.points} points</strong> to your profile.
+                      </p>
+
+                      <Button
+                        size="lg"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-12 h-14 font-bold text-lg shadow-lg"
+                        onClick={async () => {
+                          // 1. Open the page
+                          window.open(selectedTask.url, "_blank", "noopener,noreferrer");
+                          
+                          // 2. Add points instantly
+                          await handleSubmitTask(); 
+                          
+                          // Note: handleSubmitTask handles closing the modal and refreshing the points
+                        }}
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? (
+                          <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Verifying...</>
+                        ) : (
+                          "Visit Website & Get Points"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ────────────────────────────────────────────────
+                    4. MANUAL TRADING / ON-CHAIN TASKS
+                ──────────────────────────────────────────────── */}
+                {selectedTask.category === "trading" && selectedTask.verificationType !== "auto_tx" && (
+                  <div className="space-y-6">
+                    <div className="space-y-4 p-5 bg-slate-50 dark:bg-slate-950/50 rounded-xl border">
+                      {/* Tx Hash */}
                       <div className="space-y-2">
-                        <Label className="text-sm font-semibold">Transaction Hash (TxHash)</Label>
+                        <Label className="text-sm font-medium">Transaction Hash (required)</Label>
                         <Input
-                          placeholder="0x..."
+                          placeholder="0x1234567890abcdef..."
                           value={submissionData.proofUrl}
-                          onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
-                          className="h-11 font-mono text-xs"
+                          onChange={(e) =>
+                            setSubmissionData((prev) => ({ ...prev, proofUrl: e.target.value.trim() }))
+                          }
+                          className="font-mono text-sm focus-visible:ring-green-500"
                         />
                       </div>
-                      <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20">
-                        <Shield className="h-3 w-3 text-green-600" />
-                        <p className="text-[10px] text-green-700 dark:text-green-400 font-medium">Automatic on-chain verification will check this hash.</p>
+
+                      {/* Screenshot upload */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Upload Proof / Screenshot (optional but recommended)</Label>
+                        <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-6 text-center hover:bg-slate-100 dark:hover:bg-slate-900/50 transition-colors">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            id="tx-proof-upload"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                if (file.size > 5 * 1024 * 1024) {
+                                  toast.error("File too large (max 5MB)");
+                                  return;
+                                }
+                                setSubmissionData((prev) => ({ ...prev, file }));
+                              }
+                            }}
+                          />
+                          <label htmlFor="tx-proof-upload" className="cursor-pointer block">
+                            <Upload className="mx-auto h-10 w-10 text-slate-400 mb-3" />
+                            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Click or drag image here
+                            </p>
+                            {submissionData.file && (
+                              <p className="text-xs text-green-600 mt-2 font-medium">
+                                {submissionData.file.name}
+                              </p>
+                            )}
+                          </label>
+                        </div>
                       </div>
-                      <Button className="w-full h-11 bg-slate-900 text-white" onClick={handleSubmitTask} disabled={!submissionData.proofUrl || isSubmitting}>
-                        {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "Verify Transaction"}
-                      </Button>
                     </div>
-                  )}
 
-                  {/* CASE 3: MANUAL UPLOAD */}
-                  {selectedTask.verificationType === "manual_upload" && (
-                    <div className="space-y-4 animate-in slide-in-from-top-2">
-                      <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 flex flex-col items-center justify-center relative bg-slate-50/50 dark:bg-slate-900">
-                        <Input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer h-full" onChange={handleFileSelect} />
-                        <Upload className="h-8 w-8 text-slate-400 mb-2" />
-                        <p className="text-sm font-semibold">Click to upload screenshot</p>
-                        {submissionData.file && <Badge className="mt-2 bg-green-500">{submissionData.file.name}</Badge>}
+                    {selectedTask.targetContractAddress && (
+                      <div className="text-xs bg-slate-100 dark:bg-slate-900 p-3 rounded border font-mono break-all">
+                        <span className="font-semibold">Target contract:</span>{" "}
+                        {selectedTask.targetContractAddress.slice(0, 6)}...{selectedTask.targetContractAddress.slice(-4)}
                       </div>
-                      <Button className="w-full h-11" onClick={handleSubmitTask} disabled={!submissionData.file || isSubmitting}>
-                        {isSubmitting ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "Submit for Review"}
-                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* ────────────────────────────────────────────────
+                    5. AUTO TX (unchanged – keep your original)
+                ──────────────────────────────────────────────── */}
+                {selectedTask.verificationType === "auto_tx" && (
+                  <div className="space-y-4 animate-in slide-in-from-top-2">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Transaction Hash (TxHash)</Label>
+                      <Input
+                        placeholder="0x..."
+                        value={submissionData.proofUrl}
+                        onChange={(e) => setSubmissionData({ ...submissionData, proofUrl: e.target.value })}
+                        className="h-11 font-mono text-xs"
+                      />
                     </div>
-                  )}
+                    <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20">
+                      <Shield className="h-3 w-3 text-green-600" />
+                      <p className="text-[10px] text-green-700 dark:text-green-400 font-medium">
+                        Automatic on-chain verification will check this hash.
+                      </p>
+                    </div>
+                    <Button
+                      className="w-full h-11 bg-slate-900 text-white"
+                      onClick={handleSubmitTask}
+                      disabled={!submissionData.proofUrl || isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                      ) : (
+                        "Verify Transaction"
+                      )}
+                    </Button>
+                  </div>
+                )}
 
-                  
-                </div>
+                {/* ────────────────────────────────────────────────
+                    6. MANUAL UPLOAD (unchanged – keep your original)
+                ──────────────────────────────────────────────── */}
+                {selectedTask.verificationType === "manual_upload" && (
+                  <div className="space-y-4 animate-in slide-in-from-top-2">
+                    <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 flex flex-col items-center justify-center relative bg-slate-50/50 dark:bg-slate-900">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-0 opacity-0 cursor-pointer h-full"
+                        onChange={handleFileSelect}
+                      />
+                      <Upload className="h-8 w-8 text-slate-400 mb-2" />
+                      <p className="text-sm font-semibold">Click to upload screenshot</p>
+                      {submissionData.file && <Badge className="mt-2 bg-green-500">{submissionData.file.name}</Badge>}
+                    </div>
+                    <Button
+                      className="w-full h-11"
+                      onClick={handleSubmitTask}
+                      disabled={!submissionData.file || isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                      ) : (
+                        "Submit for Review"
+                      )}
+                    </Button>
+                  </div>
+                )}
 
-                {/* SHARED NOTES FIELD */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium uppercase text-muted-foreground">Notes (Optional)</Label>
-                  <Textarea
-                    placeholder="Add extra details..."
-                    value={submissionData.notes}
-                    onChange={(e) => setSubmissionData({ ...submissionData, notes: e.target.value })}
-                    className="resize-none dark:bg-slate-950"
-                    rows={2}
-                  />
-                </div>
+                {/* ────────────────────────────────────────────────
+                    SHARED NOTES (shown for most manual tasks)
+                ──────────────────────────────────────────────── */}
+                {selectedTask.verificationType !== "none" && (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium uppercase text-muted-foreground">
+                      Notes (Optional)
+                    </Label>
+                    <Textarea
+                      placeholder="Add any extra details or comments..."
+                      value={submissionData.notes}
+                      onChange={(e) => setSubmissionData({ ...submissionData, notes: e.target.value })}
+                      className="resize-none dark:bg-slate-950 min-h-[80px]"
+                      rows={3}
+                    />
+                  </div>
+                )}
               </CardContent>
-              <CardFooter className="justify-center border-t p-4">
-                <Button variant="ghost" size="sm" onClick={() => setShowSubmitModal(false)}>Close Modal</Button>
+
+              {/* Footer with Submit / Cancel */}
+              <CardFooter className="justify-between border-t p-5 dark:border-slate-800">
+                <Button variant="outline" onClick={() => setShowSubmitModal(false)}>
+                  Cancel
+                </Button>
+
+                {/* Only show submit button for tasks that require manual action */}
+                {selectedTask.verificationType !== "none" && (
+                  <Button
+                    onClick={handleSubmitTask}
+                    disabled={
+                      isSubmitting ||
+                      // Require proof URL for share-on-X and manual tx tasks
+                      ((selectedTask.id === "sys_share_x" || selectedTask.action === "share_quest") &&
+                        !submissionData.proofUrl.trim()) ||
+                      (selectedTask.category === "trading" &&
+                        selectedTask.verificationType !== "auto_tx" &&
+                        !submissionData.proofUrl.trim())
+                    }
+                    className="bg-primary hover:bg-primary/90 min-w-[160px]"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Submit Task"
+                    )}
+                  </Button>
+                )}
               </CardFooter>
             </Card>
           </div>
         )}
-
+        
         {/* ============= FUNDING MODAL ============= */}
         {showFundModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">

@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { BrowserProvider, type JsonRpcSigner } from "ethers"
 import { useDisconnect, useSwitchChain, useAccount, useChainId, useConnect } from 'wagmi'
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 
 interface WalletContextType {
   provider: BrowserProvider | null
@@ -35,7 +35,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<BrowserProvider | null>(null)
   const [signer, setSigner] = useState<JsonRpcSigner | null>(null)
   const [isReady, setIsReady] = useState(false)
-  const { toast } = useToast()
+  
   
   const { connectAsync } = useConnect()
   const { disconnect: wagmiDisconnect } = useDisconnect()
@@ -102,11 +102,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       await connectAsync()
     } catch (error: any) {
       console.error("Error connecting wallet:", error)
-      toast({
-        title: "Connection failed",
-        description: error.message || "Failed to connect wallet",
-        variant: "destructive",
-      })
+      toast.error("Failed to connect wallet")
     }
   }
 
@@ -118,10 +114,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setSigner(null)
       setIsReady(false)
       
-      toast({
-        title: "Wallet disconnected",
-        description: "Your wallet has been disconnected",
-      })
+      toast.warning("Wallet disconnected")
     } catch (error) {
       console.error("Error disconnecting:", error)
     }
@@ -132,17 +125,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.log('Switching to chain:', newChainId)
       await wagmiSwitchChain({ chainId: newChainId })
       
-      toast({
-        title: "Network switched",
-        description: `Switched to chain ${newChainId}`,
-      })
+      toast.warning("Network switched")
     } catch (error: any) {
       console.error("Failed to switch network:", error)
-      toast({
-        title: "Network switch failed",
-        description: error.message || "Failed to switch network",
-        variant: "destructive",
-      })
+      toast.error("Failed to switch network")
       throw error
     }
   }

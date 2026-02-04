@@ -813,15 +813,7 @@ const loadAllFaucetsMetadata = useCallback(async () => {
     <div className="container mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6">
       {/* Header with Back Button */}
       <div className="flex items-center gap-4 mb-6">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={goBack}
-          className="flex items-center gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
+      
         <div className="flex-1">
           <Header
             pageTitle={`Faucets on ${network?.name || "Unknown Network"}`}

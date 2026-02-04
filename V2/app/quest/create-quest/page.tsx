@@ -79,18 +79,18 @@ const SYSTEM_TASKS: QuestTask[] = [
         minReferrals: 1
     },
     {
-        id: 'sys_share_x',
-        title: 'Quote Quest on X',
-        description: 'Share  quest on X with @faucetdrops to earn extra points.',
-        points: 20,
-        required: false,
-        category: 'social',
-        url: 'https://x.com/faucetdrops', // This points to your main account or specific tweet
-        action: 'quote',
-        verificationType: 'auto_social',
-        stage: 'Beginner',
-        isSystem: true,
-    },
+    id: 'sys_share_quest_x',
+    title: 'Share Quest on X',
+    description: 'Share this quest page on X with @faucetdrops and your referral link to earn points.',
+    points: 20,
+    required: false,
+    category: 'social',
+    url: '',                           // ← intentionally empty
+    action: 'share_quest',             // ← new distinct action
+    verificationType: 'manual_link',
+    stage: 'Beginner',
+    isSystem: true,
+  },
     {
         id: 'sys_daily',
         title: 'Daily Check-in',

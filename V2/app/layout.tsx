@@ -38,18 +38,18 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="icon" href="/favicon.png" />
+        <link rel="icon" href="/favicon.ico" />
         
         {/* Primary Meta Tags */}
-        <title>Faucetdrops - Token Drops Made Easy</title>
-        <meta name="title" content="app.faucetdrops - Token Drops Made Easy" />
+        <title>Faucetdrops</title>
+        <meta name="title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
         <meta name="description" content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains." />
         
         {/* Open Graph / Facebook / WhatsApp / Telegram */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://app.faucetdrops.io/" />
         <meta property="og:site_name" content="app.faucetdrops" />
-        <meta property="og:title" content="app.faucetdrops - Token Drops Made Easy" />
+        <meta property="og:title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
         <meta property="og:description" content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains." />
         <meta property="og:image" content="https://app.faucetdrops.io/opengraph-image" />
         <meta property="og:image:secure_url" content="https://app.faucetdrops.io/opengraph-image" />
@@ -61,7 +61,7 @@ export default function RootLayout({
         {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:url" content="https://app.faucetdrops.io/" />
-        <meta name="twitter:title" content="app.faucetdrops - Token Drops Made Easy" />
+        <meta name="twitter:title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
         <meta name="twitter:description" content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains." />
         <meta name="twitter:image" content="https://app.faucetdrops.io/opengraph-image" />
         <meta name="twitter:image:alt" content="app.faucetdrops - Automated onchain reward and engagement platform" />

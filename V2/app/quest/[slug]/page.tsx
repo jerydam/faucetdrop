@@ -189,7 +189,7 @@ export default function QuestDetailsPage() {
     notes: "",
     file: null as File | null,
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
 
   // Admin Fund Modal State
   const [showFundModal, setShowFundModal] = useState(false);
@@ -681,7 +681,7 @@ const displayLeaderboard = useMemo(() => {
 
 const handleSubmitTask = async () => {
   if (!selectedTask || !userWalletAddress) return;
-  setIsSubmitting(true);
+  setSubmittingTaskId(selectedTask.id);
 
   try {
     const formData = new FormData();
@@ -754,7 +754,7 @@ const handleSubmitTask = async () => {
   } catch (error: any) {
     toast.error(error.message || "An error occurred");
   } finally {
-    setIsSubmitting(false);
+    setSubmittingTaskId(null);
   }
 };
 
@@ -889,19 +889,32 @@ const questStatusGuard = useMemo(() => {
     return { blocked: false };
 }, [questData]);
 
-  const getTaskStatus = (task: QuestTask) => {
+ const getTaskStatus = (task: QuestTask) => {
   if (!participantData) return "locked";
 
-  // 1. If the task ID is in the completed array, it's definitely Done
-  if (userProgress.completedTasks.includes(task.id)) return "completed";
+  // 1. Get the Task ID safely
+  const currentTaskId = task.id || (task as any)._id;
 
-  // 2. Check for pending submissions
-  const pending = userProgress.submissions.find(
-    (s) => s.taskId === task.id && s.status === "pending"
-  );
+  // CRITICAL FIX: If the task has no ID, stop immediately.
+  // This prevents the "undefined === undefined" global bug.
+  if (!currentTaskId) return "available"; 
+
+  // 2. Check Completed
+  if (userProgress.completedTasks.includes(currentTaskId)) return "completed";
+
+  // 3. Check Pending
+  const pending = userProgress.submissions?.find((s) => {
+    const submissionTaskId = s.taskId || s.task_id; // Handle DB naming differences
+    
+    // CRITICAL FIX: If submission has no ID, it cannot match anything.
+    if (!submissionTaskId) return false;
+
+    return String(submissionTaskId) === String(currentTaskId) && s.status === "pending";
+  });
+
   if (pending) return "pending";
 
-  // 3. Stage Locking logic
+  // 4. Check Locking
   const stageIndex = stages.indexOf(task.stage);
   const userStageIndex = stages.indexOf(userProgress.currentStage);
   if (stageIndex > userStageIndex) return "locked";
@@ -1694,12 +1707,16 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                         </p>
                         
                         <Button 
-                            size="lg" 
-                            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-12"
-                            onClick={handleSubmitTask}
-                            disabled={isSubmitting}
+                          size="lg" 
+                          className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-12"
+                          onClick={handleSubmitTask}
+                          disabled={submittingTaskId === selectedTask?.id} // Changed
                         >
-                            {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Verifying...</> : "Verify Wallet Status"}
+                          {submittingTaskId === selectedTask?.id ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Verifying...</>
+                          ) : (
+                            "Verify Wallet Status"
+                          )}
                         </Button>
                     </div>
                 )}  
@@ -1810,25 +1827,20 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-4">
-                      <Button
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold h-12"
-                        onClick={async () => {
-                          // 1. Open the original video link
-                          window.open(selectedTask.url, "_blank", "noopener,noreferrer");
-                          
-                          // 2. Submit task immediately (Backend now marks this as 'approved' automatically)
-                          await handleSubmitTask(); 
-                          
-                          // Note: handleSubmitTask handles closing the modal and refreshing the points
-                        }}
-                        disabled={isSubmitting}
-                      >
-                        {isSubmitting ? (
-                          <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Claiming...</>
-                        ) : (
-                          "Watch Video & Claim Points"
-                        )}
-                      </Button>
+                    <Button
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold h-12"
+                      onClick={async () => {
+                        window.open(selectedTask.url, "_blank", "noopener,noreferrer");
+                        await handleSubmitTask(); 
+                      }}
+                      disabled={submittingTaskId === selectedTask?.id} // Changed
+                    >
+                      {submittingTaskId === selectedTask?.id ? (
+                        <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Claiming...</>
+                      ) : (
+                        "Watch Video & Claim Points"
+                      )}
+                    </Button>
                     </div>
                   </div>
                 )}
@@ -1845,21 +1857,16 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                         Opening the website will automatically add <strong>{selectedTask.points} points</strong> to your profile.
                       </p>
 
-                      <Button
+                     <Button
                         size="lg"
                         className="bg-blue-600 hover:bg-blue-700 text-white px-12 h-14 font-bold text-lg shadow-lg"
                         onClick={async () => {
-                          // 1. Open the page
                           window.open(selectedTask.url, "_blank", "noopener,noreferrer");
-                          
-                          // 2. Add points instantly
                           await handleSubmitTask(); 
-                          
-                          // Note: handleSubmitTask handles closing the modal and refreshing the points
                         }}
-                        disabled={isSubmitting}
+                        disabled={submittingTaskId === selectedTask?.id} // Changed
                       >
-                        {isSubmitting ? (
+                        {submittingTaskId === selectedTask?.id ? (
                           <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Verifying...</>
                         ) : (
                           "Visit Website & Get Points"
@@ -1955,9 +1962,9 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                     <Button
                       className="w-full h-11 bg-slate-900 text-white"
                       onClick={handleSubmitTask}
-                      disabled={!submissionData.proofUrl || isSubmitting}
+                      disabled={!submissionData.proofUrl || submittingTaskId === selectedTask?.id} // Changed
                     >
-                      {isSubmitting ? (
+                      {submittingTaskId === selectedTask?.id ? (
                         <Loader2 className="animate-spin mr-2 h-4 w-4" />
                       ) : (
                         "Verify Transaction"
@@ -1982,17 +1989,17 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                       <p className="text-sm font-semibold">Click to upload screenshot</p>
                       {submissionData.file && <Badge className="mt-2 bg-green-500">{submissionData.file.name}</Badge>}
                     </div>
-                    <Button
-                      className="w-full h-11"
-                      onClick={handleSubmitTask}
-                      disabled={!submissionData.file || isSubmitting}
-                    >
-                      {isSubmitting ? (
-                        <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                      ) : (
-                        "Submit for Review"
-                      )}
-                    </Button>
+                   <Button
+                    className="w-full h-11"
+                    onClick={handleSubmitTask}
+                    disabled={!submissionData.file || submittingTaskId === selectedTask?.id} // Changed
+                  >
+                    {submittingTaskId === selectedTask?.id ? (
+                      <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                    ) : (
+                      "Submit for Review"
+                    )}
+                  </Button>
                   </div>
                 )}
 
@@ -2023,32 +2030,28 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
 
                 {/* Only show submit button for tasks that require manual action */}
                 {selectedTask.verificationType !== "none" && (
-                 <Button
-                  onClick={handleSubmitTask}
-                  disabled={
-                    isSubmitting ||
-                    // 1. Manual Links must have text
-                    (selectedTask.verificationType === "manual_link" && !submissionData.proofUrl) ||
-                    // 2. Social Posts (Quotes/Tweets) must have text
-                    (selectedTask.verificationType === "auto_social" && 
-                      ['quote', 'tweet', 'comment'].includes(selectedTask.action) && 
-                      !submissionData.proofUrl) ||
-                    // 3. Trading manual must have text
-                    (selectedTask.category === "trading" && 
-                      selectedTask.verificationType !== "auto_tx" && 
-                      selectedTask.verificationType !== "onchain" &&
-                      !submissionData.proofUrl)
-                    // Note: 'follow', 'join', 'subscribe' (auto_social) do NOT need inputs, so they are not disabled here.
-                  }
-                  className="bg-primary hover:bg-primary/90 min-w-[160px]"
-                >
-                  {isSubmitting ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
-                  ) : (
-                    selectedTask.verificationType === 'auto_social' ? "Verify & Submit" : "Submit Task"
+                    <Button
+                      onClick={handleSubmitTask}
+                      disabled={
+                        submittingTaskId === selectedTask?.id || // Only disable THIS task
+                        (selectedTask.verificationType === "manual_link" && !submissionData.proofUrl) ||
+                        (selectedTask.verificationType === "auto_social" && 
+                          ['quote', 'tweet', 'comment'].includes(selectedTask.action) && 
+                          !submissionData.proofUrl) ||
+                        (selectedTask.category === "trading" && 
+                          selectedTask.verificationType !== "auto_tx" && 
+                          selectedTask.verificationType !== "onchain" &&
+                          !submissionData.proofUrl)
+                      }
+                      className="bg-primary hover:bg-primary/90 min-w-[160px]"
+                    >
+                      {submittingTaskId === selectedTask?.id ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
+                      ) : (
+                        selectedTask.verificationType === 'auto_social' ? "Verify & Submit" : "Submit Task"
+                      )}
+                    </Button>
                   )}
-                </Button>
-                )}
               </CardFooter>
             </Card>
           </div>

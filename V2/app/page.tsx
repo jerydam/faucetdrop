@@ -493,7 +493,7 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
                       </div>
                       <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Quests</span>
                     </div>
-                    <div className="text-4xl font-black mb-1 tracking-tighter text-white">8K+</div>
+                    <div className="text-4xl font-black mb-1 tracking-tighter text-white">8,000+</div>
                     <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Transactions</div>
                   </div>
 
@@ -505,7 +505,7 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
                       </div>
                       <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Quizzes</span>
                     </div>
-                    <div className="text-4xl font-black mb-1 tracking-tighter text-white">2K+</div>
+                    <div className="text-4xl font-black mb-1 tracking-tighter text-white">2,000+</div>
                     <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Active Users</div>
                   </div>
 

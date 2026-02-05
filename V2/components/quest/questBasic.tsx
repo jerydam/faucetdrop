@@ -126,16 +126,19 @@ const ImageUploadField: React.FC<{
     requiredResolution?: { width: number; height: number }
 }> = ({ imageUrl, onImageUrlChange, onFileUpload, isUploading, uploadError, requiredResolution }) => {
     const fileInputRef = useRef<HTMLInputElement>(null)
-    const [previewUrl, setPreviewUrl] = useState(imageUrl)
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [resolutionError, setResolutionError] = useState<string | null>(null)
+    
     const maxWidth = requiredResolution?.width || 1024
     const maxHeight = requiredResolution?.height || 1024
 
-    useEffect(() => setPreviewUrl(imageUrl), [imageUrl])
+    // Use a helper to check if the current image is just a placeholder
+    const isPlaceholder = !imageUrl || imageUrl.includes('placehold.co');
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
+        
         setResolutionError(null)
 
         const reader = new FileReader()
@@ -144,7 +147,6 @@ const ImageUploadField: React.FC<{
             img.onload = () => {
                 if (img.width > maxWidth || img.height > maxHeight) {
                     setResolutionError(`Image too large. Max: ${maxWidth}x${maxHeight}. Found: ${img.width}x${img.height}`)
-                    setPreviewUrl(null)
                     if (fileInputRef.current) fileInputRef.current.value = ""
                     return
                 }
@@ -157,33 +159,85 @@ const ImageUploadField: React.FC<{
     }
 
     const handleRemove = () => {
-        onImageUrlChange("")
-        setPreviewUrl(null)
+        onImageUrlChange("") // Clear parent state
+        setPreviewUrl(null)   // Clear local preview
         setResolutionError(null)
         if (fileInputRef.current) fileInputRef.current.value = ""
     }
 
-    const displayUrl = imageUrl || previewUrl
+    // Only show the preview section if there's a real image or an error
+    const shouldShowPreview = (!isPlaceholder) || previewUrl || uploadError || resolutionError;
 
     return (
         <div className="space-y-2">
             <Label>Quest Image/Logo (Max 5MB, Recommended: {maxWidth}x{maxHeight} Square)</Label>
+            
             <div className="flex items-center space-x-3">
-                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading || !!resolutionError} className="flex-grow">
-                    {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                    {isUploading ? "Uploading..." : imageUrl ? "Change" : "Upload"}
+                {/* The Button is now always visible and toggle-able */}
+                <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => fileInputRef.current?.click()} 
+                    disabled={isUploading} 
+                    className="flex-grow"
+                >
+                    {isUploading ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    {isUploading ? "Uploading..." : (!isPlaceholder ? "Change Image" : "Upload Image")}
                 </Button>
-                {imageUrl && <Button type="button" variant="destructive" size="icon" onClick={handleRemove} disabled={isUploading}><Trash2 className="h-4 w-4" /></Button>}
-                <Input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isUploading} />
+
+                {!isPlaceholder && (
+                    <Button 
+                        type="button" 
+                        variant="destructive" 
+                        size="icon" 
+                        onClick={handleRemove} 
+                        disabled={isUploading}
+                    >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                )}
+
+                <Input 
+                    ref={fileInputRef} 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleFileChange} 
+                />
             </div>
-            {(displayUrl || uploadError || resolutionError) && (
-                <div className="flex items-start space-x-3 mt-2 border p-3 rounded-lg bg-white dark:bg-gray-800">
-                    <div className="h-16 w-16 rounded-lg overflow-hidden border bg-gray-100 dark:bg-gray-700">
-                        {displayUrl ? <img src={displayUrl} alt="Preview" className="h-full w-full object-contain" /> : <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">No Img</div>}
+
+            {shouldShowPreview && (
+                <div className="flex items-start space-x-3 mt-2 border p-3 rounded-lg bg-slate-50 dark:bg-gray-800 animate-in fade-in zoom-in duration-200">
+                    <div className="h-16 w-16 rounded-lg overflow-hidden border bg-gray-100 dark:bg-gray-700 flex-shrink-0">
+                        {(previewUrl || !isPlaceholder) ? (
+                            <img 
+                                src={previewUrl || imageUrl} 
+                                alt="Preview" 
+                                className="h-full w-full object-cover" 
+                            />
+                        ) : (
+                            <div className="h-full w-full flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">
+                                No Image
+                            </div>
+                        )}
                     </div>
-                    <div>
-                        {(uploadError || resolutionError) && <p className="text-xs text-red-500"><AlertTriangle className="h-3 w-3 inline mr-1" />{resolutionError || uploadError}</p>}
-                        {(!uploadError && !resolutionError && imageUrl) && <p className="text-xs text-green-500"><Check className="h-3 w-3 inline mr-1" />Uploaded successfully</p>}
+                    
+                    <div className="flex-grow pt-1">
+                        {resolutionError || uploadError ? (
+                            <p className="text-xs text-red-500 font-medium flex items-center gap-1">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                {resolutionError || uploadError}
+                            </p>
+                        ) : !isPlaceholder ? (
+                            <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                                <Check className="h-3.5 w-3.5" />
+                                Ready for quest
+                            </p>
+                        ) : null}
                     </div>
                 </div>
             )}

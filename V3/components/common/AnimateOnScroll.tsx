@@ -31,38 +31,26 @@ export default function AnimateOnScroll({
 }: AnimateOnScrollProps) {
   const [isVisible, setIsVisible] = useState(false);
   const elementRef = useRef<HTMLDivElement>(null);
-  const hasAnimated = useRef(false);
 
   useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+  
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !hasAnimated.current) {
-          hasAnimated.current = true;
-          setTimeout(() => {
-            setIsVisible(true);
-          }, delay);
-          
-          // Unobserve after animation is triggered
-          if (elementRef.current) {
-            observer.unobserve(elementRef.current);
-          }
+        if (entry.isIntersecting) {
+          setIsVisible(true);
         }
       },
       {
-        root: null,
-        rootMargin: '0px',
         threshold: threshold,
       }
     );
-
-    if (elementRef.current) {
-      observer.observe(elementRef.current);
-    }
-
+  
+    observer.observe(element);
+  
     return () => {
-      if (elementRef.current) {
-        observer.unobserve(elementRef.current);
-      }
+      observer.unobserve(element);
     };
   }, [delay, threshold]);
 

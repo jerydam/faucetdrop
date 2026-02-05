@@ -57,24 +57,161 @@ const CAMPAIGNS = [
   },
 ];  
 
+// --- INFRASTRUCTURE & PROTOCOLS ---
+
+export const LayerZeroLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="black"/>
+    <path d="M16.6 8.5L10.2 16.5H7.5L13.9 8.5H16.6Z" fill="white"/>
+    <path d="M7.5 7.5H10.2L11.5 9.1L8.8 9.1L7.5 7.5Z" fill="white"/>
+    <path d="M13.9 16.5H16.6L15.3 14.9L12.6 14.9L13.9 16.5Z" fill="white"/>
+  </svg>
+);
+
+export const ScrollLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#FFF0DD"/>
+    <path d="M8 7C8 5.89543 8.89543 5 10 5H14C15.1046 5 16 5.89543 16 7V17C16 18.1046 15.1046 19 14 19H10C8.89543 19 8 18.1046 8 17V7Z" stroke="#111" strokeWidth="1.5"/>
+    <path d="M12 8V10" stroke="#111" strokeWidth="1.5" strokeLinecap="round"/>
+    <path d="M12 14V16" stroke="#111" strokeWidth="1.5" strokeLinecap="round"/>
+  </svg>
+);
+
+export const StarkNetLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" fill="#1C1C3E"/>
+    <path d="M16.7 9.8C16.7 9.8 13.9 9.8 12 9.8C10.1 9.8 7.3 9.8 7.3 9.8C6.9 9.8 6.5 10.1 6.5 10.5C6.5 10.9 6.8 11.2 7.2 11.3L9.5 12.1L8.6 14.4C8.5 14.8 8.7 15.2 9.1 15.3C9.5 15.4 9.9 15.2 10 14.8L11.2 11.8L12 9.8L12.8 11.8L14 14.8C14.1 15.2 14.5 15.4 14.9 15.3C15.3 15.2 15.5 14.8 15.4 14.4L14.5 12.1L16.8 11.3C17.2 11.2 17.5 10.9 17.5 10.5C17.5 10.1 17.1 9.8 16.7 9.8Z" fill="#5E80F9"/>
+  </svg>
+);
+
+export const FuelLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="12" fill="#00C06B"/>
+    <path d="M8 8H11V11H8V8Z" fill="white"/>
+    <path d="M13 8H16V11H13V8Z" fill="white"/>
+    <path d="M8 13H11V16H8V13Z" fill="white"/>
+    <path d="M13 13H16V16H13V13Z" fill="white"/>
+  </svg>
+);
+
+export const PendleLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#000"/>
+    <path d="M8.5 7C8.5 7 11 7 12.5 7C14.9853 7 17 9.01472 17 11.5C17 13.9853 14.9853 16 12.5 16H10.5V11.5C10.5 10.3954 9.60457 9.5 8.5 9.5V7Z" fill="#589BFF"/>
+  </svg>
+);
+
+// --- ECOSYSTEMS & CHAINS ---
+
+export const PolygonGuildLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" fill="#8247E5"/>
+    <path d="M15.4 12.6L13.8 11.7L12.2 12.6V14.4L13.8 15.3L15.4 14.4V12.6Z" fill="white"/>
+    <path d="M11.8 11.7L10.2 12.6V14.4L11.8 15.3V11.7Z" fill="white"/>
+    <path d="M15.4 9.9L13.8 9L12.2 9.9V11.7L13.8 12.6L15.4 11.7V9.9Z" fill="white"/>
+    <path d="M11.8 6.3L10.2 7.2V9L11.8 9.9V6.3Z" fill="white"/>
+    <path d="M10.2 9.9L8.6 9L7 9.9V11.7L8.6 12.6L10.2 11.7V9.9Z" fill="white"/>
+  </svg>
+);
+
+export const ChainlinkBuildersLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#375BD2"/>
+    <path d="M12 6L7 8.5V15.5L12 18L17 15.5V8.5L12 6Z" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
+    <path d="M12 9.5V14.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+  </svg>
+);
+
+export const BaseEcosystemLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#0052FF"/>
+    <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="3"/>
+  </svg>
+);
+
+// --- COMMUNITIES & DAOs ---
+
+export const EthGlobalLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#111"/>
+    <path d="M12 4.5L7.5 11.5L12 19.5L16.5 11.5L12 4.5Z" stroke="#627EEA" strokeWidth="1.5" strokeLinejoin="round"/>
+    <path d="M7.5 11.5H16.5" stroke="#627EEA" strokeWidth="1.5"/>
+    <path d="M12 11.5V4.5" stroke="#627EEA" strokeWidth="1.5"/>
+    <path d="M12 13V19.5" stroke="#627EEA" strokeWidth="1.5"/>
+  </svg>
+);
+
+export const NigeriaWeb3Logo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#008751"/>
+    <path d="M12 6V18" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M8 8L16 16" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M16 8L8 16" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
+export const AfricaBlockchainLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#FBBF24"/>
+    {/* Stylized Africa outline approximation */}
+    <path d="M14 6C14 6 10 6 9 8C8 10 6 11 6 13C6 15 9 19 12 19C15 19 16 15 17 12C18 9 17 7 14 6Z" fill="#111827"/>
+  </svg>
+);
+
+export const ZKHackLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#111"/>
+    <path d="M7 8H17L7 16H17" stroke="#00FFA3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+export const DeFiAfricaLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#1E3A8A"/>
+    <path d="M7 12H17" stroke="#60A5FA" strokeWidth="2"/>
+    <path d="M12 7V17" stroke="#60A5FA" strokeWidth="2"/>
+    <rect x="9" y="9" width="6" height="6" stroke="#60A5FA" strokeWidth="2"/>
+  </svg>
+);
+
+export const Web3LadiesLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#EC4899"/>
+    <path d="M7 10L9.5 16L12 12L14.5 16L17 10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+export const SolanaNigeriaLogo = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="12" fill="#14F195"/>
+    <path d="M7 9L17 7" stroke="#000" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M7 13L17 11" stroke="#000" strokeWidth="2" strokeLinecap="round"/>
+    <path d="M7 17L17 15" stroke="#000" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
+
+
+
 const NEW_SPACES = [
-  { id: 1, name: "Yieldbay", tags: ["DeFi"], quests: "0", funding: "Undisclosed", followers: "6.0K", color: "bg-gray-800" },
-  { id: 2, name: "OZNi_Ni28 Official", tags: ["DeFi", "Staking"], quests: "0", funding: "Undisclosed", followers: "7.2K", color: "bg-teal-900" },
-  { id: 3, name: "UniMex", tags: ["DeFi"], quests: "1", funding: "Undisclosed", followers: "16.0K", color: "bg-lime-500" },
-  { id: 4, name: "Sphere", tags: ["DeFi", "Infra"], quests: "2", funding: "Undisclosed", followers: "56.3K", color: "bg-white" },
+  { id: 1, name: "LayerZero", tags: ["Infra", "Cross-chain"], quests: "3", funding: "$263M", followers: "180K", logo: LayerZeroLogo },
+  { id: 2, name: "Scroll", tags: ["ZK", "Layer2"], quests: "2", funding: "$83M", followers: "145K", logo: ScrollLogo },
+  { id: 3, name: "StarkNet", tags: ["ZK", "Infra"], quests: "4", funding: "$282M", followers: "320K", logo: StarkNetLogo },
+  { id: 4, name: "Fuel Network", tags: ["Layer2", "Infra"], quests: "1", funding: "$81M", followers: "98K", logo: FuelLogo },
+  { id: 5, name: "Pendle Finance", tags: ["DeFi", "Yield"], quests: "2", funding: "$11M", followers: "110K", logo: PendleLogo },
 ];
 
+
 const HOT_SPACES = [
-  { rank: "01", name: "Prophexx", participation: "10.74K" },
-  { rank: "02", name: "Binstarter.ai", participation: "10.54K" },
-  { rank: "03", name: "Haven", participation: "6.08K" },
-  { rank: "04", name: "Lazbubu", participation: "5.31K" },
-  { rank: "05", name: "Perle Labs", participation: "5.00K", verified: true },
-  { rank: "06", name: "PolyPay", participation: "4.01K" },
-  { rank: "07", name: "Mey Real", participation: "3.55K" },
-  { rank: "08", name: "Kodeus", participation: "3.18K" },
-  { rank: "09", name: "Permission", participation: "2.98K", verified: true },
-  { rank: "10", name: "SmartGold", participation: "2.84K" },
+  { rank: "1", name: "ETH Global", participation: "2.62K", verified: true, logo: EthGlobalLogo},
+  { rank: "2", name: "Nigeria Web3 Community", participation: "2.41K", verified: true, logo:NigeriaWeb3Logo },
+  { rank: "3", name: "Africa Blockchain Devs", participation: "2.29K", logo: AfricaBlockchainLogo },
+  { rank: "4", name: "ZK Hack", participation: "2.11K", verified: true , logo: ZKHackLogo},
+  { rank: "5", name: "DeFi Africa", participation: "1.97K", logo: DeFiAfricaLogo },
+  { rank: "6", name: "Web3 Ladies", participation: "1.84K", verified: true, logo: Web3LadiesLogo },
+  { rank: "7", name: "Solana Nigeria", participation: "1.76K", logo: SolanaNigeriaLogo },
+  { rank: "8", name: "Polygon Guild", participation: "1.63K", verified: true , logo: PolygonGuildLogo},
+  { rank: "9", name: "Chainlink Builders", participation: "1.52K", logo:ChainlinkBuildersLogo },
+  { rank: "10", name: "Base Ecosystem", participation: "1.44K", verified: true, logo: BaseEcosystemLogo },
 ];
 
 export default function Home() {
@@ -256,7 +393,10 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
                 {column.map((s) => (
                   <div key={s.rank} className="flex items-center gap-4 py-3 px-4 hover:bg-white/5 rounded-xl transition-colors cursor-pointer group">
                     <span className="w-6 text-sm font-mono text-gray-500">{s.rank}</span>
-                    <div className="w-8 h-8 rounded-full bg-gray-700 border border-white/10" />
+                    <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <s.logo className="w-7 h-7" />
+                  </div>
+
                     <div className="flex-1 flex items-center gap-1.5"><span className="font-semibold text-sm">{s.name}</span>{s.verified && <CheckCircle2 size={14} className="text-blue-500" />}</div>
                     <span className="text-sm font-medium text-gray-400">{s.participation}</span>
                   </div>
@@ -289,7 +429,9 @@ const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
               <div key={space.id} className="min-w-[300px] sm:min-w-[320px] bg-[#080d19] border border-white/10 rounded-2xl p-6 relative group hover:border-blue-500/50 transition-all duration-300">
                 <div className="absolute top-4 right-4 bg-blue-600 text-[10px] font-black px-2 py-0.5 rounded uppercase">New</div>
                 <div className="flex items-center gap-4 mb-6">
-                  <div className={`w-12 h-12 rounded-full ${space.color} flex-shrink-0 border border-white/10`} />
+                  <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <space.logo className="w-7 h-7" />
+                </div>
                   <div>
                     <h3 className="font-bold text-sm sm:text-base mb-1">{space.name}</h3>
                     <div className="flex gap-1 flex-wrap">

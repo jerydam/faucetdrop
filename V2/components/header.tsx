@@ -3,14 +3,20 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { WalletConnectButton } from "@/components/wallet-connect";
-// Added MiniNetworkIndicator to imports
 import { NetworkSelector, MiniNetworkIndicator } from "@/components/network-selector";
 import Link from "next/link";
-import { Menu, X, Rocket, BookOpen, Droplets, ChevronLeft } from "lucide-react";
+import { Menu, X, ChevronLeft } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
 
-export function Header({ pageTitle }: { pageTitle: string }) {
+// 1. Add hideAction to the props interface
+export function Header({ 
+  pageTitle, 
+  hideAction = false 
+}: { 
+  pageTitle: string; 
+  hideAction?: boolean; 
+}) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -24,6 +30,7 @@ export function Header({ pageTitle }: { pageTitle: string }) {
     if (pathname.includes('/quiz')) {
       return { label: "Create Quiz", path: "/quiz/create-quiz" };
     }
+    // Default fallback
     return { label: "Create Faucet", path: "/faucet/create-faucet" };
   };
 
@@ -43,7 +50,7 @@ export function Header({ pageTitle }: { pageTitle: string }) {
     <header className="sticky top-0 z-[100] w-full bg-[#030712]/80 backdrop-blur-md border-b border-white/10 px-4 sm:px-10 h-20">
       <div className="max-w-[1400px] mx-auto h-full flex items-center justify-between">
         
-        {/* Left Section: Back Button + Title */}
+        {/* Left Section */}
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -69,22 +76,23 @@ export function Header({ pageTitle }: { pageTitle: string }) {
           {isConnected && (
             <>
               <NetworkSelector />
-              <Button
-                onClick={() => router.push(action.path)}
-                variant="outline"
-                className="bg-transparent border-white/10 hover:border-blue-500 hover:bg-blue-500/10 text-xs font-bold uppercase tracking-widest px-6"
-              >
-                {action.label}
-              </Button>
+              {/* 2. Check !hideAction before rendering */}
+              {!hideAction && (
+                <Button
+                    onClick={() => router.push(action.path)}
+                    variant="outline"
+                    className="bg-transparent border-white/10 hover:border-blue-500 hover:bg-blue-500/10 text-xs font-bold uppercase tracking-widest px-6"
+                >
+                    {action.label}
+                </Button>
+              )}
             </>
           )}
           <WalletConnectButton />
         </div>
 
-        {/* Mobile Actions: Wallet + Mini Indicator + Menu */}
+        {/* Mobile Actions */}
         <div className="lg:hidden flex items-center gap-2 sm:gap-3">
-         
-          
           <WalletConnectButton />
            {isConnected && (
             <MiniNetworkIndicator className="h-9 w-9" />
@@ -106,7 +114,8 @@ export function Header({ pageTitle }: { pageTitle: string }) {
           ref={menuRef}
           className="lg:hidden absolute top-20 left-0 w-full bg-[#030712] border-b border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top-2"
         >
-          {isConnected && (
+          {/* 3. Check !hideAction in mobile menu too */}
+          {isConnected && !hideAction && (
             <Button
               onClick={() => {
                 router.push(action.path);
@@ -114,12 +123,9 @@ export function Header({ pageTitle }: { pageTitle: string }) {
               }}
               className="bg-transparent border-white text-white hover:border-blue-500 hover:bg-blue-500/10 text-xs font-bold uppercase tracking-widest px-6"
             >
-             
               <span className="ml-2">{action.label}</span>
             </Button>
           )}
-          
-          {/* Note: Network Selector is removed from menu because it's now accessible via Mini Indicator in the header */}
         </div>
       )}
     </header>

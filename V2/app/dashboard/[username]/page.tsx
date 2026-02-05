@@ -247,7 +247,10 @@ export default function DashboardPage() {
     return (
         <main className="min-h-screen bg-background pb-20 relative overflow-x-hidden">
             <div className="container mx-auto px-4 py-8 relative z-10 max-w-7xl">
-                <Header pageTitle={isOwner ? "My Dashboard" : `${profile.username}'s Space`} />
+                <Header 
+            pageTitle={isOwner ? "My Dashboard" : `${profile.username}'s Space`} 
+            hideAction={true} 
+        />
 
                 {/* --- 1. USER IDENTITY SECTION --- */}
                 <div className="mb-10">

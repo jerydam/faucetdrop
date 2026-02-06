@@ -101,6 +101,7 @@ export interface QuestData {
     faucetAddress?: string
     rewardTokenType?: 'native' | 'erc20'
     tokenAddress?: string
+    tokenSymbol?: string
     tasks: any[]
 }
 
@@ -460,6 +461,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
             rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
             tokenAddress: selectedToken.address,
             tokenSymbol: selectedToken.symbol,           // ← ADD THIS
+            token_symbol: selectedToken.symbol,
             distributionConfig: newQuest.distributionConfig,
             faucetAddress: draftId,
             tasks: newQuest.tasks
@@ -560,7 +562,8 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                     setNewQuest(prev => ({
                                         ...prev,
                                         rewardTokenType: token.isNative ? 'native' : 'erc20',
-                                        tokenAddress: token.address
+                                        tokenAddress: token.address,
+                                        tokenSymbol: token.symbol
                                     } as T))
                                 }
                             }
@@ -580,8 +583,21 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                 <Input value={customTokenAddress} onChange={(e) => setCustomTokenAddress(e.target.value)} placeholder="0x..." />
                                 <Button variant="secondary" onClick={() => {
                                     if (isAddress(customTokenAddress)) {
-                                        setSelectedToken({ address: customTokenAddress, name: 'Custom', symbol: 'TOK', decimals: 18 })
-                                        setNewQuest(prev => ({ ...prev, rewardTokenType: 'erc20', tokenAddress: customTokenAddress } as T))
+                                        // ✅ FIX: Create token with symbol
+                                        const customToken = { 
+                                            address: customTokenAddress, 
+                                            name: 'Custom', 
+                                            symbol: 'TOK',  // You might want to fetch this
+                                            decimals: 18 
+                                        }
+                                        
+                                        setSelectedToken(customToken)
+                                        setNewQuest(prev => ({ 
+                                            ...prev, 
+                                            rewardTokenType: 'erc20', 
+                                            tokenAddress: customTokenAddress,
+                                            tokenSymbol: 'TOK'  // ← ADD THIS
+                                        } as T))
                                         toast.success("Custom token address set")
                                     } else {
                                         toast.error("Invalid token address")

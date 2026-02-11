@@ -23,7 +23,7 @@ export const privyConfig = {
       loginMessage: 'Connect to start your onchain journey',
     },
     // All login methods available
-    loginMethods: ['email', 'google', 'wallet'] as const,
+    loginMethods: ['email', 'wallet'] as const,
     embeddedWallets: {
       createOnLogin: 'all-users' as const, // CHANGED: Always create embedded wallet
       requireUserPasswordOnCreate: false,

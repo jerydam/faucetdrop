@@ -17,7 +17,6 @@ import {
     ScrollText, PencilRuler, Rocket, Trash2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
 import { ProfileSettingsModal } from "@/components/profile-setting" 
 import { MyCreationsModal } from "@/components/my-creations-modal" 
 import { CreateNewModal } from "@/components/create-new-modal" 
@@ -28,7 +27,6 @@ const XIcon = ({ className }: { className?: string }) => (
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
   </svg>
 )
-// ... (Other icons remain the same) ...
 
 // --- Types ---
 interface FaucetData {
@@ -41,7 +39,7 @@ interface FaucetData {
 
 interface QuestData {
     faucetAddress?: string; 
-    slug?: string; // <--- ADD THIS
+    slug?: string;
     title: string;
     description: string;
     imageUrl: string;
@@ -77,10 +75,10 @@ export default function DashboardPage() {
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
     const [publishedQuests, setPublishedQuests] = useState<QuestData[]>([]);
     const [draftQuests, setDraftQuests] = useState<QuestData[]>([]);
-    
     const [profile, setProfile] = useState<UserProfileData | null>(null);
     const [quizCount, setQuizCount] = useState<number>(0);
     const [loading, setLoading] = useState(true);
+    const [initialLoadComplete, setInitialLoadComplete] = useState(false);
     
     // Filters & UI State
     const [searchQuery, setSearchQuery] = useState("");
@@ -115,46 +113,54 @@ export default function DashboardPage() {
         }
     }
 
+    // FIXED: Improved fetchData with better error handling and logging
     const fetchData = useCallback(async () => {
+        console.log('[Dashboard] Starting fetchData for username:', targetUsername)
         setLoading(true);
+        
         try {
-            const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsername}`);
+            // First, try to fetch profile by username
+            console.log('[Dashboard] Fetching profile...')
+            const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsername}?t=${Date.now()}`);
             const profData = await profRes.json();
             
             if (profData.success && profData.profile) {
                 const userProfile = profData.profile;
+                console.log('✅ [Dashboard] Profile loaded:', userProfile.username)
                 setProfile(userProfile);
                 const userWallet = userProfile.wallet_address;
                 
                 if (userWallet) {
                     // Fetch Faucets
+                    console.log('[Dashboard] Fetching faucets...')
                     const faucetData = await getUserFaucets(userWallet);
+                    console.log('[Dashboard] Faucets loaded:', faucetData.length)
                     setFaucets(faucetData);
 
                     // Fetch Quests
-                    const questRes = await fetch(`${backendUrl}/api/quests`);
+                    console.log('[Dashboard] Fetching quests...')
+                    const questRes = await fetch(`${backendUrl}/api/quests?t=${Date.now()}`);
                     const qData = await questRes.json();
                     
                     if (qData.success) {
-                        // Filter Published Quests
-                       const myQuests = qData.quests
-                        .filter((q: any) => q.creatorAddress.toLowerCase() === userWallet.toLowerCase())
-                        .map((q: any) => ({
-                            ...q,
-                            // Ensure we are mapping the slug field from your backend 
-                            // (Assumes backend returns 'slug')
-                            slug: q.slug || q.faucetAddress, 
-                            faucetAddress: q.faucetAddress
-                        }));
-                    
-                    setPublishedQuests(myQuests.filter((q: any) => !q.isDraft));
-                
+                        const myQuests = qData.quests
+                            .filter((q: any) => q.creatorAddress?.toLowerCase() === userWallet.toLowerCase())
+                            .map((q: any) => ({
+                                ...q,
+                                slug: q.slug || q.faucetAddress, 
+                                faucetAddress: q.faucetAddress
+                            }));
+                        
+                        const published = myQuests.filter((q: any) => !q.isDraft);
+                        console.log('[Dashboard] Published quests loaded:', published.length)
+                        setPublishedQuests(published);
                     }
 
                     // Fetch Drafts (Only if viewing own profile)
                     if (isConnected && connectedAddress && userWallet.toLowerCase() === connectedAddress.toLowerCase()) {
+                        console.log('[Dashboard] Fetching drafts...')
                         try {
-                            const draftRes = await fetch(`${backendUrl}/api/quests/drafts/${userWallet}`);
+                            const draftRes = await fetch(`${backendUrl}/api/quests/drafts/${userWallet}?t=${Date.now()}`);
                             if (draftRes.ok) {
                                 const dData = await draftRes.json();
                                 if (dData.success) {
@@ -166,22 +172,28 @@ export default function DashboardPage() {
                                         title: d.title,
                                         description: d.description
                                     }));
+                                    console.log('[Dashboard] Drafts loaded:', formattedDrafts.length)
                                     setDraftQuests(formattedDrafts);
                                 }
                             }
                         } catch (err) {
-                            console.log("No drafts found", err);
+                            console.log('[Dashboard] No drafts found:', err);
                         }
                     }
                 }
+                
+                setInitialLoadComplete(true);
             } else {
-                // New User Logic
+                // FIXED: Better handling for new users
+                console.log('[Dashboard] No profile found, checking if viewing own new profile...')
+                
                 const isViewingOwnNewProfile = 
-                isConnected && 
-                connectedAddress && 
-                targetUsername.toLowerCase() === connectedAddress.toLowerCase();
+                    isConnected && 
+                    connectedAddress && 
+                    targetUsername.toLowerCase() === connectedAddress.toLowerCase();
 
                 if (isViewingOwnNewProfile) {
+                    console.log('[Dashboard] New user detected, setting up default profile')
                     setProfile({
                         wallet_address: connectedAddress,
                         username: "New User", 
@@ -189,23 +201,60 @@ export default function DashboardPage() {
                         avatar_url: "" 
                     });
                     
+                    // Still fetch their faucets if any
                     const faucetData = await getUserFaucets(connectedAddress);
                     setFaucets(faucetData);
+                    setInitialLoadComplete(true);
                 } else {
+                    console.log('❌ [Dashboard] User not found')
                     toast({ title: "User not found", variant: "destructive" });
                     setProfile(null);
+                    setInitialLoadComplete(true);
                 }
             }
         } catch (error) {
-            console.error("Dashboard load error:", error);
+            console.error("❌ [Dashboard] Load error:", error);
+            toast({ title: "Failed to load dashboard", variant: "destructive" });
+            setInitialLoadComplete(true);
         } finally {
             setLoading(false);
         }
-    }, [targetUsername, connectedAddress, isConnected, backendUrl]);
+    }, [targetUsername, connectedAddress, isConnected, backendUrl, toast]);
 
+    // FIXED: Effect that triggers data fetch
     useEffect(() => {
-        if (targetUsername) fetchData();
+        if (!targetUsername) {
+            console.log('[Dashboard] No username provided')
+            return;
+        }
+        
+        // Reset state when username changes
+        setInitialLoadComplete(false);
+        setProfile(null);
+        setFaucets([]);
+        setPublishedQuests([]);
+        setDraftQuests([]);
+        
+        // Small delay to ensure wallet state is stable
+        const timer = setTimeout(() => {
+            console.log('[Dashboard] Triggering fetchData...')
+            fetchData();
+        }, 100);
+        
+        return () => clearTimeout(timer);
     }, [targetUsername, fetchData]);
+
+    // Retry fetch if connected but profile not loaded
+    useEffect(() => {
+        if (isConnected && !loading && !profile && initialLoadComplete) {
+            console.log('[Dashboard] Retrying fetch after connection...')
+            const retryTimer = setTimeout(() => {
+                fetchData();
+            }, 1500);
+            
+            return () => clearTimeout(retryTimer);
+        }
+    }, [isConnected, loading, profile, initialLoadComplete, fetchData]);
 
     // Helpers
     const getNetworkName = (id: number) => networks.find(n => n.chainId === id)?.name || `Chain ${id}`;
@@ -228,29 +277,44 @@ export default function DashboardPage() {
 
     const filteredFaucets = useMemo(() => {
         return faucets.filter(f => {
-            const matchesSearch = f.name?.toLowerCase().includes(searchQuery.toLowerCase()) || f.faucetAddress.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesSearch = f.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                f.faucetAddress.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesNetwork = networkFilter === "all" || f.chainId.toString() === networkFilter;
             return matchesSearch && matchesNetwork;
         });
     }, [faucets, searchQuery, networkFilter]);
 
-    if (loading) return (
-        <div className="min-h-screen flex flex-col items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-    );
+    // FIXED: Better loading state
+    if (loading && !initialLoadComplete) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground">Loading dashboard...</p>
+            </div>
+        );
+    }
 
-    if (!profile) return <div className="p-20 text-center">User not found.</div>;
+    if (!profile && initialLoadComplete) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center">
+                <p className="text-xl font-semibold mb-2">User not found</p>
+                <p className="text-muted-foreground">The profile you're looking for doesn't exist.</p>
+            </div>
+        );
+    }
 
-    const displayAddress = profile.wallet_address ? `${profile.wallet_address.slice(0,6)}...${profile.wallet_address.slice(-4)}` : "";
+    if (!profile) return null; // Safety fallback
+
+    const displayAddress = profile.wallet_address ? 
+        `${profile.wallet_address.slice(0,6)}...${profile.wallet_address.slice(-4)}` : "";
 
     return (
         <main className="min-h-screen bg-background pb-20 relative overflow-x-hidden">
             <div className="container mx-auto px-4 py-8 relative z-10 max-w-7xl">
                 <Header 
-            pageTitle={isOwner ? "My Dashboard" : `${profile.username}'s Space`} 
-            hideAction={true} 
-        />
+                    pageTitle={isOwner ? "My Dashboard" : `${profile.username}'s Space`} 
+                    hideAction={true} 
+                />
 
                 {/* --- 1. USER IDENTITY SECTION --- */}
                 <div className="mb-10">
@@ -334,7 +398,6 @@ export default function DashboardPage() {
                             onClick={() => setActiveTab('quests')}
                             className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'quests' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                            {/* FIX: REMOVED DRAFT COUNT FROM HERE */}
                             Quests ({publishedQuests.length})
                         </button>
                     </div>
@@ -399,7 +462,6 @@ export default function DashboardPage() {
                                             key={quest.faucetAddress} 
                                             quest={quest} 
                                             type="published"
-                                            // PRIORITIZE SLUG FOR ROUTING
                                             onClick={() => router.push(`/quest/${quest.slug || quest.faucetAddress}`)}
                                         />
                                     ))}
@@ -409,7 +471,6 @@ export default function DashboardPage() {
                             )}
                         </div>
                         
-                    
                         {/* Section: Drafts (Only for Owner) */}
                         {isOwner && (
                             <div>
@@ -489,7 +550,12 @@ function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
     return (
         <Card className={`hover:shadow-md transition-all group ${type === 'draft' ? 'border-dashed border-orange-200 bg-orange-50/10' : ''}`}>
             <div className="relative h-32 w-full bg-muted overflow-hidden rounded-t-lg cursor-pointer" onClick={onClick}>
-                {/* ... existing image and badge code ... */}
+                {quest.imageUrl && (
+                    <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
+                )}
+                <Badge className="absolute top-2 right-2" variant={type === 'draft' ? "outline" : "default"}>
+                    {type === 'draft' ? 'Draft' : 'Published'}
+                </Badge>
             </div>
             <CardContent className="p-4">
                 <h4 className="font-bold truncate text-base mb-1">{quest.title || "Untitled Quest"}</h4>
@@ -497,13 +563,34 @@ function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
                     {quest.description || "No description provided."}
                 </p>
                 
-                <Button variant={type === 'draft' ? "outline" : "default"} size="sm" className="w-full" onClick={onClick}>
-                    {type === 'draft' ? (
-                        <><PencilRuler className="h-3 w-3 mr-2" /> Continue Editing</>
-                    ) : (
-                        <><ScrollText className="h-3 w-3 mr-2" /> View Quest</>
+                <div className="flex gap-2">
+                    <Button 
+                        variant={type === 'draft' ? "outline" : "default"} 
+                        size="sm" 
+                        className="flex-1" 
+                        onClick={onClick}
+                    >
+                        {type === 'draft' ? (
+                            <><PencilRuler className="h-3 w-3 mr-2" /> Continue Editing</>
+                        ) : (
+                            <><ScrollText className="h-3 w-3 mr-2" /> View Quest</>
+                        )}
+                    </Button>
+                    
+                    {type === 'draft' && onDelete && (
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="px-2" 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete(quest.faucetAddress!);
+                            }}
+                        >
+                            <Trash2 className="h-3 w-3 text-red-500" />
+                        </Button>
                     )}
-                </Button>
+                </div>
             </CardContent>
         </Card>
     )

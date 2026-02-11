@@ -2,8 +2,8 @@
 "use client"
 
 import { useNetwork, type Network } from "@/hooks/use-network"
-import { useAppKit, useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
-import { useSwitchChain } from 'wagmi'
+import { usePrivy } from '@privy-io/react-auth'
+import { useAccount, useSwitchChain, useChainId } from 'wagmi'
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -101,9 +101,9 @@ export function NetworkSelector({
   className = ""
 }: NetworkSelectorProps) {
   const { networks, isConnecting } = useNetwork() 
-  const { chainId } = useAppKitNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
+  const chainId = useChainId()
+  const { login, authenticated } = usePrivy()
+  const { isConnected, address } = useAccount()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
   
   
@@ -111,7 +111,7 @@ export function NetworkSelector({
   const pathname = usePathname()
   
   const isWalletAvailable = typeof window !== "undefined" && window.ethereum
-  const hasWalletConnected = isConnected && !!address
+  const hasWalletConnected = authenticated && isConnected && !!address
   
   const currentNetwork = networks.find((net) => net.chainId === chainId)
   
@@ -187,38 +187,38 @@ export function NetworkSelector({
 
   // Direct network switching without modal
   const handleNetworkSelect = async (net: Network) => {
-  // 1. Initial Checks
-  if (!hasWalletConnected) {
-    await open();
-    return;
-  }
-  
-  if (chainId === net.chainId) return; // Already on this network
-  
-  try {
-    // 2. Trigger Wallet Switch
-    await switchChain({ chainId: net.chainId });
-    toast.success(`Network Switched to ${net.name}`);
-    
-    // 3. Conditional Routing Logic
-    // We only route if we are currently on a network-specific page (/network/...)
-    const isNetworkPage = pathname?.startsWith('/network/');
-    
-    if (isNetworkPage) {
-      // Check if the current URL path already contains the target chainId
-      const isAlreadyOnTargetNetworkPage = pathname === `/network/${net.chainId}`;
-      
-      if (!isAlreadyOnTargetNetworkPage) {
-        router.push(`/network/${net.chainId}`);
-      }
+    // 1. Initial Checks
+    if (!hasWalletConnected) {
+      await login();
+      return;
     }
-    // If not on a /network/ page (e.g., Home or Create), we do nothing (no route)
+    
+    if (chainId === net.chainId) return; // Already on this network
+    
+    try {
+      // 2. Trigger Wallet Switch
+      await switchChain({ chainId: net.chainId });
+      toast.success(`Network Switched to ${net.name}`);
+      
+      // 3. Conditional Routing Logic
+      // We only route if we are currently on a network-specific page (/network/...)
+      const isNetworkPage = pathname?.startsWith('/network/');
+      
+      if (isNetworkPage) {
+        // Check if the current URL path already contains the target chainId
+        const isAlreadyOnTargetNetworkPage = pathname === `/network/${net.chainId}`;
+        
+        if (!isAlreadyOnTargetNetworkPage) {
+          router.push(`/network/${net.chainId}`);
+        }
+      }
+      // If not on a /network/ page (e.g., Home or Create), we do nothing (no route)
 
-  } catch (error: any) {
-    console.error('Network switch error:', error);
-    toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`);
-  }
-};
+    } catch (error: any) {
+      console.error('Network switch error:', error);
+      toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`);
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -367,21 +367,21 @@ export function NetworkStatusSelector({ className }: { className?: string }) {
 
 export function MobileNetworkSelector({ className }: { className?: string }) {
   const { networks, network } = useNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
+  const { login, authenticated } = usePrivy()
+  const { isConnected, address } = useAccount()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
  
   
   const router = useRouter()
   const pathname = usePathname()
 
-  const hasWalletConnected = isConnected && !!address
+  const hasWalletConnected = authenticated && isConnected && !!address
   
   const handleNetworkSelect = async (net: Network) => {
     console.log('Mobile network select:', net.name)
     
     if (!hasWalletConnected) {
-      await open()
+      await login()
       return
     }
     
@@ -389,7 +389,7 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
     
     try {
       await switchChain({ chainId: net.chainId })
-      toast.success( `Network Switched to ${net.name}`)
+      toast.success(`Network Switched to ${net.name}`)
 
       // Routing Logic
       const isLandingPage = pathname === '/'
@@ -400,7 +400,7 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
       }
     } catch (error: any) {
       console.error('Network switch error:', error)
-       toast.error( `Switch Failed: ${error.message || "Failed to switch network"}` )
+      toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`)
     }
   }
   
@@ -455,8 +455,8 @@ export function NetworkBreadcrumb({ className }: { className?: string }) {
 
 export function NetworkStatusIndicator({ className }: { className?: string }) {
   const { network } = useNetwork()
-  const { chainId } = useAppKitNetwork()
-  const { isConnected } = useAppKitAccount()
+  const chainId = useChainId()
+  const { isConnected } = useAccount()
 
   // const currentChainId = chainId
   
@@ -545,19 +545,19 @@ export function NetworkGrid({ onNetworkSelect }: { onNetworkSelect?: (network: N
 
 export function HorizontalNetworkSelector({ className }: { className?: string }) {
   const { networks, network } = useNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
+  const { login, authenticated } = usePrivy()
+  const { isConnected, address } = useAccount()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
 
   
   const router = useRouter()
   const pathname = usePathname()
 
-  const hasWalletConnected = isConnected && !!address
+  const hasWalletConnected = authenticated && isConnected && !!address
   
   const handleNetworkSelect = async (net: Network) => {
     if (!hasWalletConnected) {
-      await open()
+      await login()
       return
     }
     
@@ -565,7 +565,7 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
     
     try {
       await switchChain({ chainId: net.chainId })
-       toast.success( `Network Switched to ${net.name}`)
+      toast.success(`Network Switched to ${net.name}`)
        
       // Routing Logic
       const isLandingPage = pathname === '/'
@@ -576,7 +576,7 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
       }
     } catch (error: any) {
       console.error('Network switch error:', error)
-       toast.error( `Switch Failed: ${error.message || "Failed to switch network"}` )
+      toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`)
     }
   }
   
@@ -603,8 +603,8 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
 
 export function MiniNetworkIndicator({ className = "" }: { className?: string }) {
   const { networks } = useNetwork()
-  const { chainId } = useAppKitNetwork()
-  const { isConnected } = useAppKitAccount()
+  const chainId = useChainId()
+  const { isConnected } = useAccount()
   const { switchChain } = useSwitchChain()
   const currentNetwork = networks.find((net) => net.chainId === chainId)
 
@@ -653,4 +653,3 @@ export function MiniNetworkIndicator({ className = "" }: { className?: string })
     </DropdownMenu>
   )
 }
-

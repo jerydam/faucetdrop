@@ -9,12 +9,16 @@ import { Toaster } from "sonner"
 import { NetworkProvider } from "@/hooks/use-network"
 import { WalletProvider } from "@/components/wallet-provider"
 import { Footer } from "@/components/footer"
-import { QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider } from 'wagmi'
-import { wagmiAdapter, queryClient } from '@/config/appkit'
+import { PrivyProvider } from '@privy-io/react-auth'
+import { WagmiProvider } from '@privy-io/wagmi'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { privyConfig, wagmiConfig } from '@/config/privy'
 import sdk from "@farcaster/miniapp-sdk"
 
 const inter = Inter({ subsets: ["latin"] })
+
+// Create query client
+const queryClient = new QueryClient()
 
 export default function RootLayout({
   children,
@@ -81,21 +85,26 @@ export default function RootLayout({
           enableSystem 
           disableTransitionOnChange
         >
-          <WagmiProvider config={wagmiAdapter.wagmiConfig}>
+          <PrivyProvider
+            appId={privyConfig.appId}
+            config={privyConfig.config}
+          >
             <QueryClientProvider client={queryClient}>
-              <NetworkProvider>
-                <WalletProvider>
-                  <div className="min-h-screen flex flex-col">
-                    <main className="flex-1">
-                      {children}
-                    </main>
-                    <Footer />
-                  </div>
-                  <Toaster richColors position="top-center" closeButton />
-                </WalletProvider>
-              </NetworkProvider>
+              <WagmiProvider config={wagmiConfig}>
+                <NetworkProvider>
+                  <WalletProvider>
+                    <div className="min-h-screen flex flex-col">
+                      <main className="flex-1">
+                        {children}
+                      </main>
+                      <Footer />
+                    </div>
+                    <Toaster richColors position="top-center" closeButton />
+                  </WalletProvider>
+                </NetworkProvider>
+              </WagmiProvider>
             </QueryClientProvider>
-          </WagmiProvider>
+          </PrivyProvider>
         </ThemeProvider>
       </body>
     </html>

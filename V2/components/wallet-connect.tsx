@@ -2,8 +2,8 @@
 
 import Link from "next/link"
 import { useState, useEffect, useCallback } from "react"
-import { usePrivy } from '@privy-io/react-auth'
-import { useAccount } from 'wagmi'
+import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { useWallet } from "@/components/wallet-provider"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -14,12 +14,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-// Removed Dialog imports since we are using Privy's native modal now
 import { 
   LayoutDashboard, 
   LogOut, 
   Copy, 
-  ChevronDown
+  ChevronDown,
+  Wallet
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
@@ -28,20 +28,85 @@ const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 export function WalletConnectButton() {
   const { ready, authenticated, login, logout, user } = usePrivy()
-  const { address, isConnected: wagmiConnected } = useAccount()
+  const { wallets } = useWallets()
+  const { address, walletType, isConnected } = useWallet()
   
   const [username, setUsername] = useState<string>("Anonymous")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [hasFetchedProfile, setHasFetchedProfile] = useState(false)
 
-  const isConnected = authenticated && wagmiConnected && !!address
+  // Fetch user profile from backend
+  const fetchProfile = useCallback(async () => {
+    if (!address || hasFetchedProfile) return
+    
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/users/${address.toLowerCase()}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.username) {
+          setUsername(data.username)
+        }
+        if (data.avatarUrl) {
+          setAvatarUrl(data.avatarUrl)
+        }
+        setHasFetchedProfile(true)
+        console.log('✅ Profile fetched for:', address.slice(0, 8))
+      }
+    } catch (error) {
+      console.error("Failed to fetch user profile:", error)
+    } finally {
+      setLoading(false)
+    }
+  }, [address, hasFetchedProfile])
 
-  // ... (Keep your existing fetchProfile and useEffect logic exactly as it is) ...
-  // [Paste your existing fetchProfile, useEffects, and event listeners here]
-  
-  // Note: I am omitting the fetch logic here for brevity, 
-  // but you should keep the exact same logic you provided in your snippet.
+  // Fetch profile when connected
+  useEffect(() => {
+    if (isConnected && address && !hasFetchedProfile) {
+      fetchProfile()
+    }
+  }, [isConnected, address, hasFetchedProfile, fetchProfile])
+
+  // Listen for profile updates
+  useEffect(() => {
+    const handleProfileUpdate = (event: CustomEvent) => {
+      const { username: newUsername, avatarUrl: newAvatarUrl } = event.detail
+      if (newUsername) setUsername(newUsername)
+      if (newAvatarUrl) setAvatarUrl(newAvatarUrl)
+    }
+
+    window.addEventListener('profileUpdated' as any, handleProfileUpdate)
+    return () => {
+      window.removeEventListener('profileUpdated' as any, handleProfileUpdate)
+    }
+  }, [])
+
+  // Reset state when disconnected
+  useEffect(() => {
+    if (!isConnected) {
+      setUsername("Anonymous")
+      setAvatarUrl(null)
+      setHasFetchedProfile(false)
+    }
+  }, [isConnected])
+
+  // Get wallet display name
+  const getWalletName = () => {
+    if (!wallets[0]) return null
+    
+    const wallet = wallets[0]
+    if (wallet.walletClientType === 'privy') {
+      return 'Embedded Wallet'
+    }
+    // External wallets
+    return wallet.walletClientType === 'metamask' ? 'MetaMask' :
+           wallet.walletClientType === 'coinbase_wallet' ? 'Coinbase Wallet' :
+           wallet.walletClientType === 'rainbow' ? 'Rainbow' :
+           wallet.walletClientType === 'zerion' ? 'Zerion' :
+           'External Wallet'
+  }
 
   // --- LOADING STATE ---
   if (!ready) {
@@ -56,11 +121,11 @@ export function WalletConnectButton() {
     )
   }
 
-  // --- UNAUTHENTICATED STATE (Simplified) ---
+  // --- UNAUTHENTICATED STATE ---
   if (!isConnected) {
     return (
       <Button 
-        onClick={login} // Direct Privy Login
+        onClick={login}
         size="sm" 
         className="bg-transparent border-white hover:border-blue-500 border text-white hover:bg-blue-500/10 text-xs font-bold shadow-blue-900/20 uppercase tracking-widest px-6"
       >
@@ -69,7 +134,7 @@ export function WalletConnectButton() {
     )
   }
 
-  // --- AUTHENTICATED DROPDOWN (Unchanged) ---
+  // --- AUTHENTICATED DROPDOWN ---
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -88,6 +153,12 @@ export function WalletConnectButton() {
                 {username.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
+            {/* Small indicator for wallet type */}
+            {walletType === 'external' && (
+              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-blue-500 rounded-full border border-background flex items-center justify-center">
+                <Wallet className="h-2 w-2 text-white" />
+              </div>
+            )}
           </div>
 
           <span className="hidden sm:block text-xs sm:text-sm font-medium max-w-[100px] truncate">
@@ -107,9 +178,16 @@ export function WalletConnectButton() {
               </p>
             )}
             {address && (
-              <p className="text-xs leading-none text-muted-foreground font-mono">
-                {address.slice(0, 6)}...{address.slice(-4)}
-              </p>
+              <div className="flex items-center gap-1">
+                <p className="text-xs leading-none text-muted-foreground font-mono">
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                </p>
+                {walletType === 'external' && (
+                  <span className="text-[10px] bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">
+                    {getWalletName()}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </DropdownMenuLabel>

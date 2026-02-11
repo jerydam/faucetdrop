@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useWallet } from "@/hooks/use-wallet"
+import { useWallet } from "@/components/wallet-provider" // CHANGED: Use wallet-provider
 import { useNetwork } from "@/hooks/use-network" 
 import { getUserFaucets } from "@/lib/faucet"
 import { Header } from "@/components/header"
@@ -66,10 +66,10 @@ export default function DashboardPage() {
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
-    const { address: connectedAddress, isConnected } = useWallet();
+    const { address: connectedAddress, isConnected } = useWallet(); // CHANGED
     const { networks } = useNetwork();
     
-    const targetUsername = params.username as string;
+    const targetUsernameOrAddress = params.username as string;
     
     // Data State
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
@@ -113,105 +113,126 @@ export default function DashboardPage() {
         }
     }
 
-    // FIXED: Improved fetchData with better error handling and logging
+    // IMPROVED: Fetch data with better address/username handling
     const fetchData = useCallback(async () => {
-        console.log('[Dashboard] Starting fetchData for username:', targetUsername)
+        console.log('[Dashboard] Starting fetchData for:', targetUsernameOrAddress)
         setLoading(true);
         
         try {
-            // First, try to fetch profile by username
-            console.log('[Dashboard] Fetching profile...')
-            const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsername}?t=${Date.now()}`);
-            const profData = await profRes.json();
+            let userProfile: UserProfileData | null = null;
+            let userWallet: string | null = null;
+
+            // STEP 1: Determine if input is address or username
+            const isAddress = targetUsernameOrAddress.startsWith('0x') && targetUsernameOrAddress.length === 42;
             
-            if (profData.success && profData.profile) {
-                const userProfile = profData.profile;
-                console.log('✅ [Dashboard] Profile loaded:', userProfile.username)
-                setProfile(userProfile);
-                const userWallet = userProfile.wallet_address;
+            if (isAddress) {
+                // Input is an address - fetch by address
+                console.log('[Dashboard] Fetching profile by address:', targetUsernameOrAddress)
+                const profRes = await fetch(`${backendUrl}/api/users/${targetUsernameOrAddress.toLowerCase()}?t=${Date.now()}`);
+                const profData = await profRes.json();
                 
-                if (userWallet) {
-                    // Fetch Faucets
-                    console.log('[Dashboard] Fetching faucets...')
-                    const faucetData = await getUserFaucets(userWallet);
-                    console.log('[Dashboard] Faucets loaded:', faucetData.length)
-                    setFaucets(faucetData);
-
-                    // Fetch Quests
-                    console.log('[Dashboard] Fetching quests...')
-                    const questRes = await fetch(`${backendUrl}/api/quests?t=${Date.now()}`);
-                    const qData = await questRes.json();
-                    
-                    if (qData.success) {
-                        const myQuests = qData.quests
-                            .filter((q: any) => q.creatorAddress?.toLowerCase() === userWallet.toLowerCase())
-                            .map((q: any) => ({
-                                ...q,
-                                slug: q.slug || q.faucetAddress, 
-                                faucetAddress: q.faucetAddress
-                            }));
-                        
-                        const published = myQuests.filter((q: any) => !q.isDraft);
-                        console.log('[Dashboard] Published quests loaded:', published.length)
-                        setPublishedQuests(published);
-                    }
-
-                    // Fetch Drafts (Only if viewing own profile)
-                    if (isConnected && connectedAddress && userWallet.toLowerCase() === connectedAddress.toLowerCase()) {
-                        console.log('[Dashboard] Fetching drafts...')
-                        try {
-                            const draftRes = await fetch(`${backendUrl}/api/quests/drafts/${userWallet}?t=${Date.now()}`);
-                            if (draftRes.ok) {
-                                const dData = await draftRes.json();
-                                if (dData.success) {
-                                    const formattedDrafts = dData.drafts.map((d: any) => ({
-                                        ...d,
-                                        faucetAddress: d.faucet_address, 
-                                        creatorAddress: d.creator_address,
-                                        imageUrl: d.image_url,
-                                        title: d.title,
-                                        description: d.description
-                                    }));
-                                    console.log('[Dashboard] Drafts loaded:', formattedDrafts.length)
-                                    setDraftQuests(formattedDrafts);
-                                }
-                            }
-                        } catch (err) {
-                            console.log('[Dashboard] No drafts found:', err);
-                        }
-                    }
-                }
-                
-                setInitialLoadComplete(true);
-            } else {
-                // FIXED: Better handling for new users
-                console.log('[Dashboard] No profile found, checking if viewing own new profile...')
-                
-                const isViewingOwnNewProfile = 
-                    isConnected && 
-                    connectedAddress && 
-                    targetUsername.toLowerCase() === connectedAddress.toLowerCase();
-
-                if (isViewingOwnNewProfile) {
-                    console.log('[Dashboard] New user detected, setting up default profile')
-                    setProfile({
-                        wallet_address: connectedAddress,
-                        username: "New User", 
-                        bio: "You haven't set up your profile yet. Click settings to get started!",
-                        avatar_url: "" 
-                    });
-                    
-                    // Still fetch their faucets if any
-                    const faucetData = await getUserFaucets(connectedAddress);
-                    setFaucets(faucetData);
-                    setInitialLoadComplete(true);
+                if (profData.success && profData.username) {
+                    // Profile exists with username
+                    userProfile = {
+                        wallet_address: targetUsernameOrAddress.toLowerCase(),
+                        username: profData.username,
+                        bio: profData.bio,
+                        avatar_url: profData.avatarUrl,
+                        twitter_handle: profData.twitterHandle,
+                        discord_handle: profData.discordHandle,
+                        telegram_handle: profData.telegramHandle,
+                        farcaster_handle: profData.farcasterHandle
+                    };
+                    console.log('✅ [Dashboard] Profile found by address:', userProfile.username)
                 } else {
-                    console.log('❌ [Dashboard] User not found')
-                    toast({ title: "User not found", variant: "destructive" });
+                    // No profile yet, but valid address
+                    userProfile = {
+                        wallet_address: targetUsernameOrAddress.toLowerCase(),
+                        username: "New User",
+                        bio: "You haven't set up your profile yet. Click settings to get started!"
+                    };
+                    console.log('✅ [Dashboard] New user detected (address)')
+                }
+                userWallet = targetUsernameOrAddress.toLowerCase();
+                
+            } else {
+                // Input is a username - fetch by username
+                console.log('[Dashboard] Fetching profile by username:', targetUsernameOrAddress)
+                const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsernameOrAddress}?t=${Date.now()}`);
+                const profData = await profRes.json();
+                
+                if (profData.success && profData.profile) {
+                    userProfile = profData.profile;
+                    userWallet = profData.profile.wallet_address;
+                    console.log('✅ [Dashboard] Profile found by username:', userProfile.username)
+                } else {
+                    // Username not found
+                    console.log('❌ [Dashboard] Username not found')
                     setProfile(null);
                     setInitialLoadComplete(true);
+                    setLoading(false);
+                    return;
                 }
             }
+
+            // STEP 2: Set profile
+            setProfile(userProfile);
+
+            // STEP 3: Fetch user's faucets
+            if (userWallet) {
+                console.log('[Dashboard] Fetching faucets for wallet:', userWallet.slice(0, 8))
+                const faucetData = await getUserFaucets(userWallet);
+                console.log('[Dashboard] Faucets loaded:', faucetData.length)
+                setFaucets(faucetData);
+
+                // STEP 4: Fetch published quests
+                console.log('[Dashboard] Fetching quests...')
+                const questRes = await fetch(`${backendUrl}/api/quests?t=${Date.now()}`);
+                const qData = await questRes.json();
+                
+                if (qData.success) {
+                    const myQuests = qData.quests
+                        .filter((q: any) => q.creatorAddress?.toLowerCase() === userWallet.toLowerCase())
+                        .map((q: any) => ({
+                            ...q,
+                            slug: q.slug || q.faucetAddress, 
+                            faucetAddress: q.faucetAddress
+                        }));
+                    
+                    const published = myQuests.filter((q: any) => !q.isDraft);
+                    console.log('[Dashboard] Published quests loaded:', published.length)
+                    setPublishedQuests(published);
+                }
+
+                // STEP 5: Fetch drafts (only if owner)
+                const isOwnerView = connectedAddress && userWallet.toLowerCase() === connectedAddress.toLowerCase();
+                if (isOwnerView) {
+                    console.log('[Dashboard] Fetching drafts...')
+                    try {
+                        const draftRes = await fetch(`${backendUrl}/api/quests/drafts/${userWallet}?t=${Date.now()}`);
+                        if (draftRes.ok) {
+                            const dData = await draftRes.json();
+                            if (dData.success) {
+                                const formattedDrafts = dData.drafts.map((d: any) => ({
+                                    ...d,
+                                    faucetAddress: d.faucet_address, 
+                                    creatorAddress: d.creator_address,
+                                    imageUrl: d.image_url,
+                                    title: d.title,
+                                    description: d.description
+                                }));
+                                console.log('[Dashboard] Drafts loaded:', formattedDrafts.length)
+                                setDraftQuests(formattedDrafts);
+                            }
+                        }
+                    } catch (err) {
+                        console.log('[Dashboard] No drafts found:', err);
+                    }
+                }
+            }
+            
+            setInitialLoadComplete(true);
+            
         } catch (error) {
             console.error("❌ [Dashboard] Load error:", error);
             toast({ title: "Failed to load dashboard", variant: "destructive" });
@@ -219,12 +240,12 @@ export default function DashboardPage() {
         } finally {
             setLoading(false);
         }
-    }, [targetUsername, connectedAddress, isConnected, backendUrl, toast]);
+    }, [targetUsernameOrAddress, connectedAddress, backendUrl, toast]);
 
-    // FIXED: Effect that triggers data fetch
+    // STEP 6: Trigger data fetch on mount and when params change
     useEffect(() => {
-        if (!targetUsername) {
-            console.log('[Dashboard] No username provided')
+        if (!targetUsernameOrAddress) {
+            console.log('[Dashboard] No username/address provided')
             return;
         }
         
@@ -235,26 +256,8 @@ export default function DashboardPage() {
         setPublishedQuests([]);
         setDraftQuests([]);
         
-        // Small delay to ensure wallet state is stable
-        const timer = setTimeout(() => {
-            console.log('[Dashboard] Triggering fetchData...')
-            fetchData();
-        }, 100);
-        
-        return () => clearTimeout(timer);
-    }, [targetUsername, fetchData]);
-
-    // Retry fetch if connected but profile not loaded
-    useEffect(() => {
-        if (isConnected && !loading && !profile && initialLoadComplete) {
-            console.log('[Dashboard] Retrying fetch after connection...')
-            const retryTimer = setTimeout(() => {
-                fetchData();
-            }, 1500);
-            
-            return () => clearTimeout(retryTimer);
-        }
-    }, [isConnected, loading, profile, initialLoadComplete, fetchData]);
+        fetchData();
+    }, [targetUsernameOrAddress, fetchData]);
 
     // Helpers
     const getNetworkName = (id: number) => networks.find(n => n.chainId === id)?.name || `Chain ${id}`;
@@ -284,7 +287,7 @@ export default function DashboardPage() {
         });
     }, [faucets, searchQuery, networkFilter]);
 
-    // FIXED: Better loading state
+    // Loading state
     if (loading && !initialLoadComplete) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center">
@@ -299,11 +302,12 @@ export default function DashboardPage() {
             <div className="min-h-screen flex flex-col items-center justify-center">
                 <p className="text-xl font-semibold mb-2">User not found</p>
                 <p className="text-muted-foreground">The profile you're looking for doesn't exist.</p>
+                <Button onClick={() => router.push('/')} className="mt-4">Go Home</Button>
             </div>
         );
     }
 
-    if (!profile) return null; // Safety fallback
+    if (!profile) return null;
 
     const displayAddress = profile.wallet_address ? 
         `${profile.wallet_address.slice(0,6)}...${profile.wallet_address.slice(-4)}` : "";
@@ -507,7 +511,7 @@ export default function DashboardPage() {
     )
 }
 
-// --- SUB-COMPONENTS ---
+// --- SUB-COMPONENTS (unchanged) ---
 
 function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner }: any) {
     const networkName = getNetworkName(faucet.chainId)

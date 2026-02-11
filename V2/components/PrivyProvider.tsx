@@ -8,7 +8,7 @@ import { privyConfig, supportedChains } from '@/config/privy'
 import { http } from 'viem'
 import { createConfig } from 'wagmi'
 
-// Create wagmi config for Privy
+// Create wagmi config once (SINGLE SOURCE OF TRUTH)
 const wagmiConfig = createConfig({
   chains: supportedChains,
   transports: {
@@ -16,12 +16,18 @@ const wagmiConfig = createConfig({
     [supportedChains[1].id]: http(),
     [supportedChains[2].id]: http(),
     [supportedChains[3].id]: http(),
-    [supportedChains[4].id]: http(),
   },
 })
 
-// Create query client
-const queryClient = new QueryClient()
+// Create query client with optimized settings
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // 1 minute
+      gcTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+})
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -30,7 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       config={privyConfig.config}
     >
       <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={wagmiConfig}>
+        <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
           {children}
         </WagmiProvider>
       </QueryClientProvider>

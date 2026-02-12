@@ -16,6 +16,7 @@ const wagmiConfig = createConfig({
     [supportedChains[1].id]: http(),
     [supportedChains[2].id]: http(),
     [supportedChains[3].id]: http(),
+    
   },
 })
 

@@ -173,8 +173,8 @@ export const networks: Network[] = [
     blockExplorerUrls: "https://bscscan.com",
     explorerUrl: "https://bscscan.com",
     color: "#F3BA2F",
-    logoUrl: "/bnb.png",
-    iconUrl: "/bnb.png",
+    logoUrl: "/bnb.jpg",
+    iconUrl: "/bnb.jpg",
     factoryAddresses: [
       "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1", // Replace with your actual BSC factory addresses
       "0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36",

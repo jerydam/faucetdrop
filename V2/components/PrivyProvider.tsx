@@ -1,4 +1,3 @@
-// providers/PrivyProvider.tsx
 "use client"
 
 import { PrivyProvider } from '@privy-io/react-auth'
@@ -12,11 +11,11 @@ import { createConfig } from 'wagmi'
 const wagmiConfig = createConfig({
   chains: supportedChains,
   transports: {
-    [supportedChains[0].id]: http(),
-    [supportedChains[1].id]: http(),
-    [supportedChains[2].id]: http(),
-    [supportedChains[3].id]: http(),
-    
+    [supportedChains[0].id]: http(), // Arbitrum
+    [supportedChains[1].id]: http(), // Base
+    [supportedChains[2].id]: http(), // Celo
+    [supportedChains[3].id]: http(), // Lisk
+    [supportedChains[4].id]: http(), // <--- ADD THIS (BSC)
   },
 })
 

@@ -36,25 +36,35 @@ export function WalletConnectButton() {
   const [loading, setLoading] = useState(false)
   const [hasFetchedProfile, setHasFetchedProfile] = useState(false)
 
-  // Helper to safely get social image
+  // --- 1. Reset state when Address Changes (Switching Wallets) ---
+  useEffect(() => {
+    setUsername(null)
+    setAvatarUrl(null)
+    setHasFetchedProfile(false)
+  }, [address])
+
+  // --- 2. Safe Social Image Getter (Fixes TS Error) ---
   const getSocialImage = (user: User | null) => {
     if (!user) return ""
+    // Cast to any to bypass strict typing on specific social provider fields
     const google = user.google as any
     const twitter = user.twitter as any
     return avatarUrl || google?.picture || google?.profilePictureUrl || twitter?.profilePictureUrl || ""
   }
 
-  // Fetch user profile from backend
+  // --- 3. Fetch Profile Logic ---
   const fetchProfile = useCallback(async () => {
     if (!address) return
-    if (hasFetchedProfile) return
+    if (hasFetchedProfile) return // Prevent duplicate fetches for same address
 
     setLoading(true)
     try {
+      // Check if user exists in DB
       const response = await fetch(`${API_BASE_URL}/api/users/${address.toLowerCase()}`)
       
       if (response.ok) {
         const data = await response.json()
+        // If username exists, set it. Otherwise leave null (Dashboard will handle creation)
         if (data.username) {
           setUsername(data.username)
         }
@@ -70,14 +80,14 @@ export function WalletConnectButton() {
     }
   }, [address, hasFetchedProfile])
 
-  // Fetch profile when connected
+  // Trigger fetch when connected
   useEffect(() => {
     if (isConnected && address) {
       fetchProfile()
     }
   }, [isConnected, address, fetchProfile])
 
-  // Listen for profile updates
+  // Listen for profile updates (e.g. after user saves settings)
   useEffect(() => {
     const handleProfileUpdate = (event: CustomEvent) => {
       const { username: newUsername, avatarUrl: newAvatarUrl } = event.detail
@@ -91,16 +101,7 @@ export function WalletConnectButton() {
     }
   }, [])
 
-  // Reset state when disconnected
-  useEffect(() => {
-    if (!isConnected) {
-      setUsername(null)
-      setAvatarUrl(null)
-      setHasFetchedProfile(false)
-    }
-  }, [isConnected])
-
-  // Get wallet display name
+  // Helper: Get Wallet Name
   const getWalletName = () => {
     if (!wallets[0]) return null
     const wallet = wallets[0]
@@ -110,11 +111,17 @@ export function WalletConnectButton() {
            'External Wallet'
   }
 
-  // Derived Values
+  // --- 4. Render Logic ---
+  
+  // Display "Anonymous" if no username fetched yet
   const displayName = username || "Anonymous"
+
+  // SMART DASHBOARD LINK:
+  // If username exists -> /dashboard/username
+  // If no username -> /dashboard/0x123... (Dashboard page will see this is an address and show "New User" UI)
   const dashboardLink = username 
     ? `/dashboard/${username}` 
-    : `/dashboard/${address?.toLowerCase()}`
+    : `/dashboard/${address?.toLowerCase() || ''}`
 
   if (!ready) {
     return (
@@ -172,9 +179,6 @@ export function WalletConnectButton() {
         </Button>
       </DropdownMenuTrigger>
 
-      {/* FIX: Added z-[200] to ensure it pops up ON TOP of the header (which is z-100)
-         FIX: Added sideOffset to give it a little breathing room 
-      */}
       <DropdownMenuContent 
         align="end" 
         className="w-56 z-[200]" 

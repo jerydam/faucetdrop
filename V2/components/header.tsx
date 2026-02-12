@@ -9,7 +9,6 @@ import { Menu, X, ChevronLeft } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
 
-// 1. Add hideAction to the props interface
 export function Header({ 
   pageTitle, 
   hideAction = false 
@@ -18,7 +17,11 @@ export function Header({
   hideAction?: boolean; 
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // 1. Create a ref for the menu content AND the toggle button
   const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null); // New Ref
+
   const router = useRouter();
   const pathname = usePathname();
   const { isConnected } = useWallet();
@@ -30,7 +33,6 @@ export function Header({
     if (pathname.includes('/quiz')) {
       return { label: "Create Quiz", path: "/quiz/create-quiz" };
     }
-    // Default fallback
     return { label: "Create Faucet", path: "/faucet/create-faucet" };
   };
 
@@ -38,7 +40,13 @@ export function Header({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      // 2. Check if click is outside Menu AND outside the Button
+      if (
+        menuRef.current && 
+        !menuRef.current.contains(event.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
         setIsMenuOpen(false);
       }
     }
@@ -76,7 +84,6 @@ export function Header({
           {isConnected && (
             <>
               <NetworkSelector />
-              {/* 2. Check !hideAction before rendering */}
               {!hideAction && (
                 <Button
                     onClick={() => router.push(action.path)}
@@ -98,6 +105,7 @@ export function Header({
             <MiniNetworkIndicator className="h-9 w-9" />
           )}
           <Button
+            ref={buttonRef} // 3. Attach the ref to the button
             variant="ghost"
             size="sm"
             className="text-gray-400 hover:text-white p-1"
@@ -111,10 +119,9 @@ export function Header({
       {/* Mobile Menu Overlay */}
       {isMenuOpen && (
         <div
-          ref={menuRef}
+          ref={menuRef} // 4. Keep this ref here
           className="lg:hidden absolute top-20 left-0 w-full bg-[#030712] border-b border-white/10 p-6 flex flex-col gap-4 shadow-2xl animate-in slide-in-from-top-2"
         >
-          {/* 3. Check !hideAction in mobile menu too */}
           {isConnected && !hideAction && (
             <Button
               onClick={() => {

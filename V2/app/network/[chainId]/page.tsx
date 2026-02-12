@@ -764,7 +764,7 @@ export default function NetworkFaucets() {
               }
             </p>
             {allFaucetsMeta.length === 0 ? (
-              <Link href="/create">
+              <Link href="/faucet/create-faucet">
                 <Button className="h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
                   Create Faucet
                 </Button>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useWallet } from "@/components/wallet-provider" // CHANGED: Use wallet-provider
+import { useWallet } from "@/components/wallet-provider" 
 import { useNetwork } from "@/hooks/use-network" 
 import { getUserFaucets } from "@/lib/faucet"
 import { Header } from "@/components/header"
@@ -66,9 +66,10 @@ export default function DashboardPage() {
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
-    const { address: connectedAddress, isConnected } = useWallet(); // CHANGED
+    const { address: connectedAddress, isConnected } = useWallet(); 
     const { networks } = useNetwork();
     
+    // This could be "jerydam" OR "0x123..."
     const targetUsernameOrAddress = params.username as string;
     
     // Data State
@@ -131,21 +132,24 @@ export default function DashboardPage() {
                 const profRes = await fetch(`${backendUrl}/api/users/${targetUsernameOrAddress.toLowerCase()}?t=${Date.now()}`);
                 const profData = await profRes.json();
                 
-                if (profData.success && profData.username) {
-                    // Profile exists with username
+                // FIX: Check for nested 'profile' object OR top-level 'username'
+                const fetchedData = profData.profile || (profData.username ? profData : null);
+
+                if (profData.success && fetchedData) {
+                    // Profile exists in DB
                     userProfile = {
-                        wallet_address: targetUsernameOrAddress.toLowerCase(),
-                        username: profData.username,
-                        bio: profData.bio,
-                        avatar_url: profData.avatarUrl,
-                        twitter_handle: profData.twitterHandle,
-                        discord_handle: profData.discordHandle,
-                        telegram_handle: profData.telegramHandle,
-                        farcaster_handle: profData.farcasterHandle
+                        wallet_address: fetchedData.wallet_address || targetUsernameOrAddress.toLowerCase(),
+                        username: fetchedData.username,
+                        bio: fetchedData.bio,
+                        avatar_url: fetchedData.avatar_url || fetchedData.avatarUrl, // Handle snake_case or camelCase
+                        twitter_handle: fetchedData.twitter_handle || fetchedData.twitterHandle,
+                        discord_handle: fetchedData.discord_handle || fetchedData.discordHandle,
+                        telegram_handle: fetchedData.telegram_handle || fetchedData.telegramHandle,
+                        farcaster_handle: fetchedData.farcaster_handle || fetchedData.farcasterHandle
                     };
                     console.log('✅ [Dashboard] Profile found by address:', userProfile.username)
                 } else {
-                    // No profile yet, but valid address
+                    // No profile yet, but valid address -> Show "New User"
                     userProfile = {
                         wallet_address: targetUsernameOrAddress.toLowerCase(),
                         username: "New User",
@@ -192,7 +196,7 @@ export default function DashboardPage() {
                 
                 if (qData.success) {
                     const myQuests = qData.quests
-                        .filter((q: any) => q.creatorAddress?.toLowerCase() === userWallet.toLowerCase())
+                        .filter((q: any) => q.creatorAddress?.toLowerCase() === userWallet!.toLowerCase())
                         .map((q: any) => ({
                             ...q,
                             slug: q.slug || q.faucetAddress, 

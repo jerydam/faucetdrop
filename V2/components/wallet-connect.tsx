@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { usePrivy, useWallets, type User } from '@privy-io/react-auth'
 import { useWallet } from "@/components/wallet-provider"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,8 @@ import {
   LogOut, 
   Copy, 
   ChevronDown,
-  Wallet
+  Wallet,
+  User as UserIcon
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
@@ -34,60 +35,57 @@ export function WalletConnectButton() {
   const [username, setUsername] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [hasFetchedProfile, setHasFetchedProfile] = useState(false)
 
-  // --- 1. Reset state when Address Changes (Switching Wallets) ---
+  // --- 1. Robust Fetching Logic ---
   useEffect(() => {
+    if (!isConnected || !address) {
+      setUsername(null)
+      setAvatarUrl(null)
+      return
+    }
+
+    let isMounted = true
+    setLoading(true)
+    
     setUsername(null)
     setAvatarUrl(null)
-    setHasFetchedProfile(false)
-  }, [address])
 
-  // --- 2. Safe Social Image Getter (Fixes TS Error) ---
-  const getSocialImage = (user: User | null) => {
-    if (!user) return ""
-    // Cast to any to bypass strict typing on specific social provider fields
-    const google = user.google as any
-    const twitter = user.twitter as any
-    return avatarUrl || google?.picture || google?.profilePictureUrl || twitter?.profilePictureUrl || ""
-  }
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/users/${address.toLowerCase()}`)
+        
+        if (response.ok) {
+          const data = await response.json()
+          
+          // FIX: Handle nested 'profile' object logic just like the Dashboard
+          const profileData = data.profile || (data.username ? data : null)
 
-  // --- 3. Fetch Profile Logic ---
-  const fetchProfile = useCallback(async () => {
-    if (!address) return
-    if (hasFetchedProfile) return // Prevent duplicate fetches for same address
-
-    setLoading(true)
-    try {
-      // Check if user exists in DB
-      const response = await fetch(`${API_BASE_URL}/api/users/${address.toLowerCase()}`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        // If username exists, set it. Otherwise leave null (Dashboard will handle creation)
-        if (data.username) {
-          setUsername(data.username)
+          if (isMounted && profileData) {
+            if (profileData.username) {
+              setUsername(profileData.username)
+            }
+            // Handle both snake_case (DB) and camelCase (API variants)
+            const avatar = profileData.avatar_url || profileData.avatarUrl
+            if (avatar) {
+              setAvatarUrl(avatar)
+            }
+          }
         }
-        if (data.avatarUrl) {
-          setAvatarUrl(data.avatarUrl)
-        }
+      } catch (error) {
+        console.error("❌ Failed to fetch user profile:", error)
+      } finally {
+        if (isMounted) setLoading(false)
       }
-      setHasFetchedProfile(true)
-    } catch (error) {
-      console.error("Failed to fetch user profile:", error)
-    } finally {
-      setLoading(false)
     }
-  }, [address, hasFetchedProfile])
 
-  // Trigger fetch when connected
-  useEffect(() => {
-    if (isConnected && address) {
-      fetchProfile()
+    fetchProfile()
+
+    return () => {
+      isMounted = false
     }
-  }, [isConnected, address, fetchProfile])
+  }, [address, isConnected])
 
-  // Listen for profile updates (e.g. after user saves settings)
+  // --- 2. Listen for Manual Updates ---
   useEffect(() => {
     const handleProfileUpdate = (event: CustomEvent) => {
       const { username: newUsername, avatarUrl: newAvatarUrl } = event.detail
@@ -101,7 +99,14 @@ export function WalletConnectButton() {
     }
   }, [])
 
-  // Helper: Get Wallet Name
+  // --- 3. Helpers ---
+  const getSocialImage = (user: User | null) => {
+    if (!user) return ""
+    const google = user.google as any
+    const twitter = user.twitter as any
+    return avatarUrl || google?.picture || google?.profilePictureUrl || twitter?.profilePictureUrl || ""
+  }
+
   const getWalletName = () => {
     if (!wallets[0]) return null
     const wallet = wallets[0]
@@ -112,13 +117,9 @@ export function WalletConnectButton() {
   }
 
   // --- 4. Render Logic ---
-  
-  // Display "Anonymous" if no username fetched yet
   const displayName = username || "Anonymous"
-
-  // SMART DASHBOARD LINK:
-  // If username exists -> /dashboard/username
-  // If no username -> /dashboard/0x123... (Dashboard page will see this is an address and show "New User" UI)
+  
+  // Smart Link logic
   const dashboardLink = username 
     ? `/dashboard/${username}` 
     : `/dashboard/${address?.toLowerCase() || ''}`
@@ -162,7 +163,11 @@ export function WalletConnectButton() {
                 className="object-cover" 
               />
               <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                {displayName.charAt(0).toUpperCase()}
+                {loading ? (
+                  <span className="animate-pulse">...</span>
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
               </AvatarFallback>
             </Avatar>
             {walletType === 'external' && (
@@ -186,9 +191,11 @@ export function WalletConnectButton() {
       >
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{displayName}</p>
+            <p className="text-sm font-medium leading-none truncate">
+              {displayName}
+            </p>
             {user?.email && (
-              <p className="text-xs leading-none text-muted-foreground">
+              <p className="text-xs leading-none text-muted-foreground truncate">
                 {user.email.address}
               </p>
             )}
@@ -215,8 +222,8 @@ export function WalletConnectButton() {
               href={dashboardLink} 
               className="cursor-pointer flex items-center gap-2"
             > 
-              <LayoutDashboard className="h-4 w-4" />
-              <span>Dashboard</span>
+              {username ? <UserIcon className="h-4 w-4" /> : <LayoutDashboard className="h-4 w-4" />}
+              <span>{username ? "Profile" : "Dashboard"}</span>
             </Link>
           </DropdownMenuItem>
 

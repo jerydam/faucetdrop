@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState, useEffect, useCallback } from "react"
-import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { usePrivy, useWallets, type User } from '@privy-io/react-auth'
 import { useWallet } from "@/components/wallet-provider"
 import { Button } from "@/components/ui/button"
 import {
@@ -31,15 +31,24 @@ export function WalletConnectButton() {
   const { wallets } = useWallets()
   const { address, walletType, isConnected } = useWallet()
   
-  const [username, setUsername] = useState<string>("Anonymous")
+  const [username, setUsername] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [hasFetchedProfile, setHasFetchedProfile] = useState(false)
 
+  // Helper to safely get social image
+  const getSocialImage = (user: User | null) => {
+    if (!user) return ""
+    const google = user.google as any
+    const twitter = user.twitter as any
+    return avatarUrl || google?.picture || google?.profilePictureUrl || twitter?.profilePictureUrl || ""
+  }
+
   // Fetch user profile from backend
   const fetchProfile = useCallback(async () => {
-    if (!address || hasFetchedProfile) return
-    
+    if (!address) return
+    if (hasFetchedProfile) return
+
     setLoading(true)
     try {
       const response = await fetch(`${API_BASE_URL}/api/users/${address.toLowerCase()}`)
@@ -52,9 +61,8 @@ export function WalletConnectButton() {
         if (data.avatarUrl) {
           setAvatarUrl(data.avatarUrl)
         }
-        setHasFetchedProfile(true)
-        console.log('✅ Profile fetched for:', address.slice(0, 8))
       }
+      setHasFetchedProfile(true)
     } catch (error) {
       console.error("Failed to fetch user profile:", error)
     } finally {
@@ -64,10 +72,10 @@ export function WalletConnectButton() {
 
   // Fetch profile when connected
   useEffect(() => {
-    if (isConnected && address && !hasFetchedProfile) {
+    if (isConnected && address) {
       fetchProfile()
     }
-  }, [isConnected, address, hasFetchedProfile, fetchProfile])
+  }, [isConnected, address, fetchProfile])
 
   // Listen for profile updates
   useEffect(() => {
@@ -86,7 +94,7 @@ export function WalletConnectButton() {
   // Reset state when disconnected
   useEffect(() => {
     if (!isConnected) {
-      setUsername("Anonymous")
+      setUsername(null)
       setAvatarUrl(null)
       setHasFetchedProfile(false)
     }
@@ -95,46 +103,43 @@ export function WalletConnectButton() {
   // Get wallet display name
   const getWalletName = () => {
     if (!wallets[0]) return null
-    
     const wallet = wallets[0]
-    if (wallet.walletClientType === 'privy') {
-      return 'Embedded Wallet'
-    }
-    // External wallets
+    if (wallet.walletClientType === 'privy') return 'Embedded Wallet'
     return wallet.walletClientType === 'metamask' ? 'MetaMask' :
-           wallet.walletClientType === 'coinbase_wallet' ? 'Coinbase Wallet' :
-           wallet.walletClientType === 'rainbow' ? 'Rainbow' :
-           wallet.walletClientType === 'zerion' ? 'Zerion' :
+           wallet.walletClientType === 'coinbase_wallet' ? 'Coinbase' :
            'External Wallet'
   }
 
-  // --- LOADING STATE ---
+  // Derived Values
+  const displayName = username || "Anonymous"
+  const dashboardLink = username 
+    ? `/dashboard/${username}` 
+    : `/dashboard/${address?.toLowerCase()}`
+
   if (!ready) {
     return (
       <Button 
         size="sm" 
         disabled
-        className="bg-transparent border-white hover:border-blue-500 border text-white hover:bg-blue-500/10 text-xs font-bold shadow-blue-900/20 uppercase tracking-widest px-6"
+        className="bg-transparent border-white hover:border-blue-500 border text-white hover:bg-blue-500/10 text-xs font-bold uppercase tracking-widest px-6"
       >
         Loading...
       </Button>
     )
   }
 
-  // --- UNAUTHENTICATED STATE ---
   if (!isConnected) {
     return (
       <Button 
         onClick={login}
         size="sm" 
-        className="bg-transparent border-white hover:border-blue-500 border text-white hover:bg-blue-500/10 text-xs font-bold shadow-blue-900/20 uppercase tracking-widest px-6"
+        className="bg-transparent border-white hover:border-blue-500 border text-white hover:bg-blue-500/10 text-xs font-bold uppercase tracking-widest px-6"
       >
         Get Started
       </Button>
     )
   }
 
-  // --- AUTHENTICATED DROPDOWN ---
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -146,14 +151,13 @@ export function WalletConnectButton() {
           <div className="relative">
             <Avatar className="h-7 w-7 border border-background shadow-sm">
               <AvatarImage 
-                src={avatarUrl || user?.google?.profilePictureUrl || user?.twitter?.profilePictureUrl || ""} 
+                src={getSocialImage(user)} 
                 className="object-cover" 
               />
               <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-                {username.charAt(0).toUpperCase()}
+                {displayName.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            {/* Small indicator for wallet type */}
             {walletType === 'external' && (
               <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-blue-500 rounded-full border border-background flex items-center justify-center">
                 <Wallet className="h-2 w-2 text-white" />
@@ -162,16 +166,23 @@ export function WalletConnectButton() {
           </div>
 
           <span className="hidden sm:block text-xs sm:text-sm font-medium max-w-[100px] truncate">
-            {loading ? "..." : username}
+            {loading ? "..." : displayName}
           </span>
           <ChevronDown className="hidden sm:block h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-56">
+      {/* FIX: Added z-[200] to ensure it pops up ON TOP of the header (which is z-100)
+         FIX: Added sideOffset to give it a little breathing room 
+      */}
+      <DropdownMenuContent 
+        align="end" 
+        className="w-56 z-[200]" 
+        sideOffset={8}
+      >
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{username}</p>
+            <p className="text-sm font-medium leading-none">{displayName}</p>
             {user?.email && (
               <p className="text-xs leading-none text-muted-foreground">
                 {user.email.address}
@@ -197,7 +208,7 @@ export function WalletConnectButton() {
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
             <Link 
-              href={`/dashboard/${username === 'Anonymous' ? address?.toLowerCase() : username}`} 
+              href={dashboardLink} 
               className="cursor-pointer flex items-center gap-2"
             > 
               <LayoutDashboard className="h-4 w-4" />

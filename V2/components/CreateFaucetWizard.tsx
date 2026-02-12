@@ -496,7 +496,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "BNB coming soon",
       decimals: 18,
       isNative: true,
-      logoUrl: "/bnb.png", 
+      logoUrl: "/bnb.jpg", 
       description: "Native BNB for transaction fees",
     },
     {
@@ -504,7 +504,7 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       name: "USD Coin",
       symbol: "USDC",
       decimals: 18, // USDC on BSC is usually 18 decimals (Bridged)
-      logoUrl: "/bnb.jpg", 
+      logoUrl: "/busdc.jpg", 
       description: "Binance-Peg USD Coin",
     },
     {

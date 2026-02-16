@@ -380,7 +380,14 @@ export default function DashboardPage() {
                 {/* --- 1. USER IDENTITY SECTION --- */}
                 <div className="mb-10">
                     <Card className="border-none bg-gradient-to-r from-primary/5 via-primary/10 to-background shadow-sm">
-                        <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center gap-6">
+                        <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center gap-6 relative">
+                            {/* Embedded Wallet - Top Right Corner on Mobile */}
+                            {isOwner && (
+                                <div className="absolute top-4 right-4 md:hidden z-30">
+                                    <EmbeddedWalletControlProduction />
+                                </div>
+                            )}
+                            
                             <div className="relative">
                                 <Avatar className="h-24 w-24 border-4 border-background shadow-lg relative z-10">
                                     <AvatarImage src={profile.avatar_url} className="object-cover" />
@@ -464,14 +471,21 @@ export default function DashboardPage() {
                     </div>
 
                     {isOwner && (
-        <div className="flex flex-wrap gap-3">
-            {/* ADD THIS LINE HERE */}
-            <EmbeddedWalletControlProduction /> 
-            
-            <MyCreationsModal faucets={faucets} address={connectedAddress!} />
-            <CreateNewModal onSuccess={fetchData} />
-        </div>
-    )}
+                        <div className="flex gap-3 w-full md:w-auto">
+                            {/* Mobile - Only show action buttons (wallet is in profile section) */}
+                            <div className="md:hidden flex gap-3 w-full">
+                                <MyCreationsModal faucets={faucets} address={connectedAddress!} />
+                                <CreateNewModal onSuccess={fetchData} />
+                            </div>
+                            
+                            {/* Desktop - Show all buttons including wallet */}
+                            <div className="hidden md:flex gap-3 flex-wrap">
+                                <EmbeddedWalletControlProduction /> 
+                                <MyCreationsModal faucets={faucets} address={connectedAddress!} />
+                                <CreateNewModal onSuccess={fetchData} />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* --- 3. MAIN CONTENT --- */}

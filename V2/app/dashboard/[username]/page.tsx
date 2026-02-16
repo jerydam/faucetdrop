@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast"
 import { ProfileSettingsModal } from "@/components/profile-setting" 
 import { MyCreationsModal } from "@/components/my-creations-modal" 
 import { CreateNewModal } from "@/components/create-new-modal" 
+import { usePrivy } from "@privy-io/react-auth" // Add this import
+import { EmbeddedWalletControlProduction } from "@/components/embeddedwallet"
 
 // --- Custom Icons ---
 const XIcon = ({ className }: { className?: string }) => (
@@ -62,12 +64,13 @@ interface UserProfileData {
 }
 
 export default function DashboardPage() {
-    const backendUrl = "https://fauctdrop-backend.onrender.com"; 
+    const backendUrl = "http://127.0.0.1:8000"; 
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
     const { address: connectedAddress, isConnected } = useWallet(); 
     const { networks } = useNetwork();
+    const { user: privyUser } = usePrivy(); // Get Privy user data
     
     // This could be "jerydam" OR "0x123..."
     const targetUsernameOrAddress = params.username as string;
@@ -91,6 +94,55 @@ export default function DashboardPage() {
         if (!connectedAddress || !profile?.wallet_address) return false;
         return connectedAddress.toLowerCase() === profile.wallet_address.toLowerCase();
     }, [connectedAddress, profile]);
+
+    // --- NEW: Sync Email with Backend ---
+    const syncEmailToBackend = useCallback(async (walletAddress: string, email: string) => {
+        try {
+            console.log('[Dashboard] Syncing email to backend:', email);
+            const response = await fetch(`${backendUrl}/api/users/${walletAddress.toLowerCase()}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email }),
+            });
+
+            const data = await response.json();
+            
+            if (data.success) {
+                console.log('✅ [Dashboard] Email synced successfully');
+                return true;
+            } else {
+                console.error('❌ [Dashboard] Failed to sync email:', data);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ [Dashboard] Error syncing email:', error);
+            return false;
+        }
+    }, [backendUrl]);
+
+    // --- NEW: Check and sync email when user is logged in ---
+    useEffect(() => {
+        if (!privyUser || !connectedAddress || !isOwner) return;
+
+        // Get email from Privy user object
+        const userEmail = privyUser.email?.address;
+        
+        if (userEmail && profile && !profile.email) {
+            console.log('[Dashboard] User has email in Privy but not in profile, syncing...');
+            syncEmailToBackend(connectedAddress, userEmail).then((success) => {
+                if (success) {
+                    // Update local profile state
+                    setProfile(prev => prev ? { ...prev, email: userEmail } : null);
+                    toast({ 
+                        title: "Email synced", 
+                        description: "Your email has been added to your profile" 
+                    });
+                }
+            });
+        }
+    }, [privyUser, connectedAddress, profile, isOwner, syncEmailToBackend, toast]);
 
     // --- FUNCTION: Delete Draft ---
     const handleDeleteDraft = async (draftId: string) => {
@@ -140,8 +192,9 @@ export default function DashboardPage() {
                     userProfile = {
                         wallet_address: fetchedData.wallet_address || targetUsernameOrAddress.toLowerCase(),
                         username: fetchedData.username,
+                        email: fetchedData.email, // Include email
                         bio: fetchedData.bio,
-                        avatar_url: fetchedData.avatar_url || fetchedData.avatarUrl, // Handle snake_case or camelCase
+                        avatar_url: fetchedData.avatar_url || fetchedData.avatarUrl,
                         twitter_handle: fetchedData.twitter_handle || fetchedData.twitterHandle,
                         discord_handle: fetchedData.discord_handle || fetchedData.discordHandle,
                         telegram_handle: fetchedData.telegram_handle || fetchedData.telegramHandle,
@@ -411,11 +464,14 @@ export default function DashboardPage() {
                     </div>
 
                     {isOwner && (
-                        <div className="flex flex-wrap gap-3">
-                            <MyCreationsModal faucets={faucets} address={connectedAddress!} />
-                            <CreateNewModal onSuccess={fetchData} />
-                        </div>
-                    )}
+        <div className="flex flex-wrap gap-3">
+            {/* ADD THIS LINE HERE */}
+            <EmbeddedWalletControlProduction /> 
+            
+            <MyCreationsModal faucets={faucets} address={connectedAddress!} />
+            <CreateNewModal onSuccess={fetchData} />
+        </div>
+    )}
                 </div>
 
                 {/* --- 3. MAIN CONTENT --- */}

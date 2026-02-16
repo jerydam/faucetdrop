@@ -3,6 +3,9 @@
 @tailwind utilities;
 
 @layer base {
+  .mobile-safe-top {
+    padding-top: env(safe-area-inset-top, 4.5rem); /* iOS notch + header */
+  }
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -31,6 +34,7 @@
   
   /* Optional: Match your border styling */
   --privy-border-radius: 1rem !important;
+  
   }
 
   .dark {

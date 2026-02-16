@@ -19,7 +19,7 @@ import { ZeroAddress, isAddress as ethersIsAddress } from 'ethers'
 import { type Network } from "@/lib/faucet"
 
 // ==== CONFIG ====
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 const MIN_POOL_USD_VALUE = 50; // $50 Minimum
 
 const networks: Network[] = [
@@ -510,7 +510,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                 value={titleSafe}
                                 onChange={(e) => handleTitleChange(e.target.value)}
                                 onBlur={handleTitleBlur}
-                                placeholder="e.g. FaucetDrop Launch Campaign"
+                                placeholder="e.g. FaucetDrops Launch Campaign"
                                 className={nameError ? "border-red-500 pr-10" : (!isCheckingName && titleLength >= 3 && !nameError) ? "border-green-500 pr-10" : "pr-10"}
                                 disabled={isCheckingName}
                             />

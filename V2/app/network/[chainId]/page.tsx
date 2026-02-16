@@ -79,7 +79,7 @@ interface DeletedFaucetResponse {
 
 async function fetchDeletedFaucetsSet(): Promise<Set<string>> {
     try {
-        const response = await fetch("https://fauctdrop-backend.onrender.com/deleted-faucets");
+        const response = await fetch("http://127.0.0.1:8000/deleted-faucets");
         if (!response.ok) return new Set();
         const result: DeletedFaucetResponse = await response.json();
         if (result.success && result.deletedAddresses) {
@@ -127,7 +127,7 @@ function usePreviousPage() {
 
 const loadFaucetMetadata = async (faucetAddress: string): Promise<{description?: string, imageUrl?: string}> => {
   try {
-    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-metadata/${faucetAddress}`)
+    const response = await fetch(`http://127.0.0.1:8000/faucet-metadata/${faucetAddress}`)
     if (response.ok) {
       const result = await response.json()
       return { description: result.description, imageUrl: result.imageUrl }

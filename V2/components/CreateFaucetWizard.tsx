@@ -67,7 +67,7 @@ import { zeroAddress, isAddress } from "viem"
 import LoadingPage from "@/components/loading"
 
 // --- TYPES ---
-interface TokenConfiguration {
+export interface TokenConfiguration {
   address: string
   name: string
   symbol: string
@@ -283,7 +283,7 @@ const FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING: Record<FaucetType, FactoryType> = {
 
 const SUPPORTED_CHAIN_IDS = [42220, 1135, 42161, 8453] as const
 
-const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
+export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
   // Celo Mainnet (42220)
   42220: [
     {
@@ -682,7 +682,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     formData.append('file', file)
 
     try {
-      const response = await fetch('https://fauctdrop-backend.onrender.com/upload-image', {
+      const response = await fetch('http://127.0.0.1:8000/upload-image', {
         method: 'POST',
         body: formData,
       })
@@ -740,7 +740,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`💾 Saving faucet metadata for ${faucetAddress}`)
         
-      const response = await fetch('https://fauctdrop-backend.onrender.com/faucet-metadata', {
+      const response = await fetch('http://127.0.0.1:8000/faucet-metadata', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -888,7 +888,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`📝 Registering faucet ${name} (${faucetAddress}) in backend...`)
 
-      const response = await fetch('https://fauctdrop-backend.onrender.com/register-faucet', {
+      const response = await fetch('http://127.0.0.1:8000/register-faucet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2041,7 +2041,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
           <p className="text-xs text-muted-foreground">
             {faucetImageUrl.trim() || selectedImageFile
               ? "Custom image will be used"
-              : "If left empty, the FaucetDrop logo will be used"
+              : "If left empty, the FaucetDrops logo will be used"
             }
           </p>
 

@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import { useWallet } from "@/hooks/use-wallet"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -131,7 +131,7 @@ const getUserCustomClaimAmount = async (provider: any, userAddress: string, fauc
 
 const loadSocialMediaLinks = async (faucetAddress: string): Promise<SocialMediaLink[]> => {
     try {
-        const apiUrl = `https://fauctdrop-backend.onrender.com/faucet-tasks/${faucetAddress}`;
+        const apiUrl = `http://127.0.0.1:8000/faucet-tasks/${faucetAddress}`;
         const response = await fetch(apiUrl);
         
         if (!response.ok) {
@@ -162,7 +162,7 @@ const loadSocialMediaLinks = async (faucetAddress: string): Promise<SocialMediaL
 
 const loadFaucetMetadata = async (faucetAddress: string): Promise<{description: string, imageUrl: string}> => {
   try {
-    const response = await fetch(`https://fauctdrop-backend.onrender.com/faucet-metadata/${faucetAddress}`);
+    const response = await fetch(`http://127.0.0.1:8000/faucet-metadata/${faucetAddress}`);
     if (!response.ok) {
       if (response.status === 404) {
         return {description: '', imageUrl: DEFAULT_FAUCET_IMAGE};
@@ -183,14 +183,52 @@ const loadFaucetMetadata = async (faucetAddress: string): Promise<{description: 
 // Update the constant to remove the fixed prefix and restructure the template
 const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
 
+// Default template for display (shown in textarea for editing)
+const DEFAULT_X_POST_TEMPLATE = "Drip created by {@handle} for {#hashtag}, Verify Drop 💧: {explorer}";
+
+// Check if template has been customized by looking for handle or hashtag placeholders
+const isTemplateCustomized = (template: string): boolean => {
+    if (!template || template.trim().length === 0) return false;
+    
+    // Check if the template contains actual values (not just placeholders)
+    // A customized template should have {@handle} or {#hashtag} replaced with actual values
+    const hasHandlePlaceholder = template.includes('{@handle}');
+    const hasHashtagPlaceholder = template.includes('{#hashtag}');
+    
+    // If template is just the default with placeholders, it's not customized
+    if (template === DEFAULT_X_POST_TEMPLATE) return false;
+    
+    // If template has placeholders but differs from default, check for actual customization
+    if (hasHandlePlaceholder && hasHashtagPlaceholder) {
+        // Still contains both placeholders - likely not customized
+        return false;
+    }
+    
+    // Template has been modified (placeholders replaced or text changed)
+    return true;
+};
+
+// Load custom X post template or return default for editing
 const loadCustomXPostTemplate = async (faucetAddress: string): Promise<string> => {
-    // Default template with placeholders for handle and hashtag
-    return `Drip created by {@handle} for {#hashtag}, Verify Drop 💧: {explorer}`
+    try {
+        const response = await fetch(`http://127.0.0.1:8000/faucet-x-post-template/${faucetAddress}`);
+        if (!response.ok) {
+            if (response.status === 404) {
+                return DEFAULT_X_POST_TEMPLATE; // Return default template for editing
+            }
+            throw new Error(`Failed to fetch template: ${response.statusText}`);
+        }
+        const result = await response.json();
+        return result.template || DEFAULT_X_POST_TEMPLATE;
+    } catch (error) {
+        console.error('Error fetching custom X post template:', error);
+        return DEFAULT_X_POST_TEMPLATE;
+    }
 }
 
 const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, dontShow: boolean): Promise<boolean> => {
     try {
-        const response = await fetch("https://fauctdrop-backend.onrender.com/admin-popup-preference", {
+        const response = await fetch("http://127.0.0.1:8000/admin-popup-preference", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userAddress: userAddr, faucetAddress: faucetAddr, dontShowAgain: dontShow }),
@@ -207,7 +245,7 @@ const saveAdminPopupPreference = async (userAddr: string, faucetAddr: string, do
 const getAdminPopupPreference = async (userAddr: string, faucetAddr: string): Promise<boolean> => {
     try {
         const response = await fetch(
-            `https://fauctdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+            `http://127.0.0.1:8000/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
         )
         if (!response.ok) return false
         const result = await response.json()
@@ -222,7 +260,7 @@ export default function FaucetDetails() {
     const { address: faucetAddress } = useParams<{ address: string }>()
     const searchParams = useSearchParams()
     const networkId = searchParams.get("networkId")
-    const { toast } = useToast()
+    
     const router = useRouter()
     const { address, chainId, isConnected, provider } = useWallet()
     const { networks, setNetwork } = useNetwork()
@@ -276,15 +314,18 @@ export default function FaucetDetails() {
     const isSecretCodeValid = secretCode.length === 6 && /^[A-Z0-9]{6}$/.test(secretCode)
     const allAccountsVerified = dynamicTasks.length === 0 ? true : dynamicTasks.every(task => verificationStates[getTaskKey(task)])
     
+    // UPDATED: Check if template has been customized (not just default with placeholders)
+    const hasCustomXPostTemplate = isTemplateCustomized(customXPostTemplate)
+    
     const checkNetwork = useCallback((skipToast = false): boolean => {
       if (!chainId) {
-        if (!skipToast) toast({ title: "Network not detected", description: "Please ensure your wallet is connected.", variant: "destructive" });
+        if (!skipToast) toast.warning( "Network not detected Please ensure your wallet is connected.");
         return false
       }
       if (networkId && Number(networkId) !== chainId) {
         const targetNetwork = networks.find((n) => n.chainId === Number(networkId))
         if (targetNetwork) {
-          if (!skipToast) toast({ title: "Wrong Network", description: "Switch to the network to perform operation", variant: "destructive", action: (<Button onClick={() => setNetwork(targetNetwork)} variant="outline">Switch to {targetNetwork.name}</Button>), });
+          if (!skipToast) toast.warning("Wrong NetworkSwitch to the network to perform operation", );
           return false
         }
       }
@@ -369,7 +410,7 @@ export default function FaucetDetails() {
         }
         
       } catch (error: any) {
-        toast({ title: "Failed to load faucet details", description: error.message || "Unknown error occurred", variant: "destructive", })
+        toast( "Failed to load faucet details")
       } finally {
         setLoading(false)
       }
@@ -386,7 +427,7 @@ export default function FaucetDetails() {
 
     const handleFollowAll = (): void => {
       if (dynamicTasks.length === 0) {
-        toast({ title: "No Tasks", description: "This faucet does not require social media verification.", variant: "default" })
+        toast.error( "No Tasks This faucet does not require social media verification.")
         return
       }
       setShowFollowDialog(true)
@@ -396,7 +437,7 @@ export default function FaucetDetails() {
     const handleVerifyAllTasks = async (): Promise<void> => {
         const allUsernamesProvided = dynamicTasks.every(task => usernames[getTaskKey(task)] && usernames[getTaskKey(task)].trim().length > 0)
         if (!allUsernamesProvided) {
-          toast({ title: "Missing Information", description: "Please enter usernames for all required tasks.", variant: "destructive", })
+          toast.error( "Missing Information Please enter usernames for all required tasks.", )
           return
         }
 
@@ -412,18 +453,14 @@ export default function FaucetDetails() {
               setShowVerificationDialog(false)
               setHasAttemptedVerification(true) // Mark as attempted so next time it succeeds
               
-              toast({
-                  title: "Verification Failed",
-                  description: "Can't verify. Please complete the tasks and try again.",
-                  variant: "destructive",
-              })
+              toast.error("Can't verify. Please complete the tasks and try again.")
           } else {
               // SECOND+ ATTEMPT: SUCCEED
               const newVerificationStates: Record<string, boolean> = {}
               dynamicTasks.forEach(task => { newVerificationStates[getTaskKey(task)] = true })
               setVerificationStates(newVerificationStates)
               setIsVerifying(false)
-              toast({ title: "All Tasks Verified", description: "All required tasks have been verified successfully!", })
+              toast.success( "All Tasks Verified All required tasks have been verified successfully!")
               setTimeout(() => {
                 setShowVerificationDialog(false)
                 setShowFollowDialog(false)
@@ -443,13 +480,13 @@ export default function FaucetDetails() {
     }
 
     async function handleBackendClaim(): Promise<void> {
-      if (!isConnected || !address || !faucetDetails) { toast({ title: "Wallet not connected", description: "Please connect your wallet.", variant: "destructive", }); return; }
+      if (!isConnected || !address || !faucetDetails) { toast.warning("wallet not connected"); return; }
       if (!checkNetwork()) return;
 
-      if (faucetType === 'dropcode' && backendMode && !isSecretCodeValid) { toast({ title: "Invalid Drop code", description: "Please enter a valid 6-character alphanumeric Drop code", variant: "destructive", }); return; }
-      if (faucetType === 'droplist' && !userIsWhitelisted) { toast({ title: "Not Drop-listed", description: "You are not Drop-listed to claim.", variant: "destructive", }); return; }
-      if (faucetType === 'custom' && !hasCustomAmount) { toast({ title: "No Custom Allocation", description: "You don't have a custom amount allocated.", variant: "destructive", }); return; }
-      if (!allAccountsVerified) { toast({ title: "Verification Required", description: "Please complete and verify all required tasks before claiming", variant: "destructive", }); return; }
+      if (faucetType === 'dropcode' && backendMode && !isSecretCodeValid) { toast.error( "Invalid Drop code, Please enter a valid 6-character alphanumeric Drop code"); return; }
+      if (faucetType === 'droplist' && !userIsWhitelisted) { toast.error("Not Drop-listed, You are not Drop-listed to claim."); return; }
+      if (faucetType === 'custom' && !hasCustomAmount) { toast.error("No Custom Allocation, You don't have a custom amount allocated."); return; }
+      if (!allAccountsVerified) { toast.error( "Verification Required, Please complete and verify all required tasks before claiming"); return; }
 
       try {
         setIsVerifying(true);
@@ -472,14 +509,19 @@ export default function FaucetDetails() {
           ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
           : "tokens";
 
-        toast({ title: "Tokens dripped successfully", description: `You have dripped ${claimedAmount} ${tokenSymbol}.`, });
-        setShowClaimPopup(true);
+        toast.success( `Tokens dripped successfully, You have dripped ${claimedAmount} ${tokenSymbol}.`);
+        
+        // UPDATED: Only show claim popup if custom template exists
+        if (hasCustomXPostTemplate) {
+          setShowClaimPopup(true);
+        }
+        
         setSecretCode("");
         await loadFaucetDetails();
         
       } catch (error: any) {
         console.error("Error dropping tokens:", error);
-        toast({ title: "Failed to drop tokens", description: error.message || "Unknown error occurred", variant: "destructive", });
+        toast.error("Failed to drop tokens");
       } finally {
         setIsVerifying(false);
       }
@@ -489,7 +531,7 @@ export default function FaucetDetails() {
       if (dontShowAdminPopupAgain && faucetAddress && address) {
         const saved = await saveAdminPopupPreference(address, faucetAddress, true)
         if (saved) {
-          toast({ title: "Preference Saved", description: "Your popup preference has been saved." })
+          toast.success( "Preference Saved, Your popup preference has been saved." )
         }
       }
       setShowAdminPopup(false)
@@ -543,7 +585,6 @@ export default function FaucetDetails() {
                   provider={provider}
                   handleGoBack={handleGoBack}
                   router={router}
-                  // --- PASSED PROP ---
                   faucetMetadata={faucetMetadata}
               />
             ) : (

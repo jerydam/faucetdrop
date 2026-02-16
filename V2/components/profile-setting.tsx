@@ -15,7 +15,7 @@ import { Settings, Loader2, Save, Upload, Check, Edit2, RefreshCw, AlertCircle, 
 import { toast } from "sonner"
 
 // Backend URL
-const API_BASE_URL = "http://127.0.0.1:8000"
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 interface UserProfile {
   username: string

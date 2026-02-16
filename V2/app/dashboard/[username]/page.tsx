@@ -64,7 +64,7 @@ interface UserProfileData {
 }
 
 export default function DashboardPage() {
-    const backendUrl = "http://127.0.0.1:8000"; 
+    const backendUrl = "https://fauctdrop-backend.onrender.com"; 
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();

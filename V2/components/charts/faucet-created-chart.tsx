@@ -40,7 +40,7 @@ interface DeletedFaucetResponse {
  */
 async function fetchDeletedFaucetsSet(): Promise<Set<string>> {
     try {
-        const response = await fetch("http://127.0.0.1:8000/deleted-faucets");
+        const response = await fetch("https://fauctdrop-backend.onrender.com/deleted-faucets");
         
         if (!response.ok) {
             console.error("Backend failed to return deleted faucet list.");

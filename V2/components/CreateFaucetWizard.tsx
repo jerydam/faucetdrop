@@ -492,8 +492,8 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
   56:[
     {
       address: zeroAddress,
-      name: "BNB coming soon",
-      symbol: "BNB coming soon",
+      name: "BNB",
+      symbol: "BNB",
       decimals: 18,
       isNative: true,
       logoUrl: "/bnb.jpg", 

@@ -166,7 +166,7 @@ export const networks: Network[] = [
     isTestnet: false,
   },
 {
-    name: "Bnb coming soon",
+    name: "BNB",
     symbol: "BSC",
     chainId: 56,
     rpcUrl: "https://bsc-dataseed.binance.org",

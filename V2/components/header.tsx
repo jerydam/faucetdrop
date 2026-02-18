@@ -60,22 +60,20 @@ export function Header({
         <div className="max-w-[1400px] mx-auto h-full flex items-center justify-between">
           
           {/* Left Section */}
-          <div className="flex items-center gap-4">
-            {/* Logo Section - Filters removed to maintain original brand colors */}
-           
-
+          <div className="flex items-center gap-4">       
             <div className="h-6 w-px bg-border hidden sm:block" />
             
             <Button
-              variant="outline"
-              size="icon"
-              onClick={() => router.back()}
-              className="rounded-full shadow-sm hover:bg-accent transition-colors hidden sm:flex"
-              title="Go Back"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-            
+            variant="outline"
+            size="icon"
+            onClick={() => router.back()}
+            // Removed 'hidden sm:flex' and added 'flex'
+            className=" rounded-full text-gray-400 hover:text-white transition-colors" 
+            title="Go Back"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+           
             <h1 className="text-sm sm:text-base font-black tracking-tighter uppercase text-foreground/90">
                 {pageTitle}
             </h1>

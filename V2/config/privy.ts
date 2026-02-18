@@ -17,7 +17,8 @@ export const privyConfig = {
   appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID || '',
   config: {
     appearance: {
-      theme: 'dark' as const,
+      // CHANGED: Use 'system' to automatically toggle based on user's OS/Browser settings
+      theme: 'system' as const, 
       accentColor: '#3b82f6',
       logo: 'https://faucetdrops.io/favicon.png',
       landingHeader: 'Join FaucetDrops',
@@ -26,7 +27,7 @@ export const privyConfig = {
     // All login methods available
     loginMethods: ['email', 'wallet'] as const,
     embeddedWallets: {
-      createOnLogin: 'all-users' as const, // CHANGED: Always create embedded wallet
+      createOnLogin: 'all-users' as const,
       requireUserPasswordOnCreate: false,
       noPromptOnSignature: false,
     },

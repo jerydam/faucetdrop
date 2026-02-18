@@ -116,10 +116,8 @@ export function WalletConnectButton() {
            'External Wallet'
   }
 
-  // --- 4. Render Logic ---
   const displayName = username || "Anonymous"
   
-  // Smart Link logic
   const dashboardLink = username 
     ? `/dashboard/${username}` 
     : `/dashboard/${address?.toLowerCase() || ''}`
@@ -129,7 +127,8 @@ export function WalletConnectButton() {
       <Button 
         size="sm" 
         disabled
-        className="bg-transparent border-white hover:border-blue-500 border text-white hover:bg-blue-500/10 text-xs font-bold uppercase tracking-widest px-6"
+        variant="outline"
+        className="text-xs font-bold uppercase tracking-widest px-6 opacity-50 border-border"
       >
         Loading...
       </Button>
@@ -141,7 +140,8 @@ export function WalletConnectButton() {
       <Button 
         onClick={login}
         size="sm" 
-        className="bg-transparent border-white hover:border-blue-500 border text-white hover:bg-blue-500/10 text-xs font-bold uppercase tracking-widest px-6"
+        variant="default" // Use the primary theme color for maximum visibility
+        className="text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-all"
       >
         Get Started
       </Button>

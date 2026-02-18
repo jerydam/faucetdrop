@@ -167,7 +167,7 @@ export const networks: Network[] = [
   },
 {
     name: "BNB",
-    symbol: "BSC",
+    symbol: "BNB",
     chainId: 56,
     rpcUrl: "https://bsc-dataseed.binance.org",
     blockExplorerUrls: "https://bscscan.com",

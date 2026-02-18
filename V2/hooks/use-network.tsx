@@ -169,7 +169,7 @@ export const networks: Network[] = [
     name: "Bnb coming soon",
     symbol: "BSC",
     chainId: 56,
-    rpcUrl: "https://binance.llamarpc.com", // or "https://bsc-dataseed.binance.org"
+    rpcUrl: "https://bsc-dataseed.binance.org",
     blockExplorerUrls: "https://bscscan.com",
     explorerUrl: "https://bscscan.com",
     color: "#F3BA2F",

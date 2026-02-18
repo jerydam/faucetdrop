@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle, Loader2 } from "lucide-react"
 import { useState } from "react"
+import { cn } from "@/lib/utils"
 
 
 // Network image component with fallback
@@ -602,12 +603,11 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
 
 export function MiniNetworkIndicator({ className = "" }: { className?: string }) {
   const { networks } = useNetwork()
-  const { chainId, isConnected, switchChain } = useWallet() // CHANGED
+  const { chainId, isConnected, switchChain } = useWallet()
   const [isSwitching, setIsSwitching] = useState(false)
   
   const currentNetwork = networks.find((net) => net.chainId === chainId)
 
-  // Only show if the wallet is actually connected
   if (!isConnected) return null
 
   const handleSwitchNetwork = async (targetChainId: number) => {
@@ -626,20 +626,24 @@ export function MiniNetworkIndicator({ className = "" }: { className?: string })
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button 
-          className={`flex items-center justify-center outline-none border border-white/10 rounded-full bg-white/5 hover:bg-white/10 transition-all h-9 w-9 shrink-0 ${className}`}
+          className={cn(
+            "flex items-center justify-center outline-none border border-border rounded-full bg-background hover:bg-accent transition-all h-9 w-9 shrink-0",
+            className
+          )}
           disabled={isSwitching}
         >
           {currentNetwork ? (
             <NetworkImage network={currentNetwork} size="sm" />
           ) : (
-            <div className="w-5 h-5 rounded-full bg-white/10 animate-pulse flex items-center justify-center">
-               <NetworkIcon size={12} className="text-gray-500" />
+            <div className="w-5 h-5 rounded-full bg-muted animate-pulse flex items-center justify-center">
+               <NetworkIcon size={12} className="text-muted-foreground" />
             </div>
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64 bg-[#0d121f] border-white/10 text-white z-[110] shadow-2xl">
-        <div className="px-4 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest border-b border-white/5">
+      {/* SYSTEM THEME: Changed bg, border, and text colors */}
+      <DropdownMenuContent align="end" className="w-64 bg-background border-border text-foreground z-[110] shadow-2xl">
+        <div className="px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b border-border">
           Switch Network
         </div>
         {networks.map((net) => (
@@ -647,17 +651,17 @@ export function MiniNetworkIndicator({ className = "" }: { className?: string })
             key={net.chainId}
             onClick={() => handleSwitchNetwork(net.chainId)}
             disabled={isSwitching}
-            className="flex items-center gap-3 p-4 focus:bg-white/5 cursor-pointer"
+            className="flex items-center gap-3 p-4 focus:bg-accent cursor-pointer"
           >
             <NetworkImage network={net} size="sm" />
             <div className="flex flex-col">
                <span className="text-sm font-bold">{net.name}</span>
-               {net.isTestnet && <span className="text-[9px] text-orange-400 font-medium">Testnet</span>}
+               {net.isTestnet && <span className="text-[9px] text-orange-500 font-medium">Testnet</span>}
             </div>
             {chainId === net.chainId && (
               <div className="ml-auto flex items-center gap-1.5">
-                <span className="text-[10px] text-green-400 font-bold uppercase tracking-tighter">Active</span>
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <span className="text-[10px] text-green-500 font-bold uppercase tracking-tighter">Active</span>
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               </div>
             )}
           </DropdownMenuItem>

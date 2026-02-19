@@ -8,7 +8,6 @@ import Footer from "@/components/Footer";
 import SplashScreen from "@/components/SplashScreen";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import FloatingElements from "@/components/FloatingElements";
-import CursorFollower from "@/components/CursorFollower";
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -33,7 +32,6 @@ export default async function RootLayout({
         {/* <ContextProvider cookies={cookies}> */}
           <AnimatedBackground />
           <FloatingElements />
-          <CursorFollower />
           <div className="relative z-20">
             <SplashScreen />
             <Header />

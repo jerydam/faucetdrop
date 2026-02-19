@@ -1,12 +1,13 @@
 import HeroSection from "@/components/landingPage/Hero";
 import Networks from "@/components/Networks";
 import OfferTabs from "@/components/landingPage/OfferTabs"
-import FaucetChats from "@/components/landingPage/FaucetChats";
+// import FaucetChats from "@/components/landingPage/FaucetChats";
 import ProtocolsStats from "@/components/landingPage/ProtocolsStats";
 import CTA from "@/components/landingPage/CTA";
 import FaucetFlow from "@/components/landingPage/FaucetFlow";
 import GraphChart from "@/components/landingPage/GraphChart";
 import WhyFaucetDrops from "@/components/landingPage/WhyFaucetDrops";
+import ChatBot from "@/components/landingPage/ChatBot";
 
 export default function Home() {
   return (
@@ -21,7 +22,8 @@ export default function Home() {
         <ProtocolsStats />
         <GraphChart />
         <CTA />
-        <FaucetChats />
+        {/* <FaucetChats /> */}
+        <ChatBot />
       </div>
     </div>
   );

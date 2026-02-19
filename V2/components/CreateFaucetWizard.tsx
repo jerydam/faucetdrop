@@ -4,8 +4,7 @@
 import { Alert } from "@/components/ui/alert"
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react"
 import { useWallet } from "@/hooks/use-wallet"
-import { useNetwork, isFactoryTypeAvailable, getFactoryAddress } from "@/hooks/use-network"
-import { useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
+import { useNetwork, isFactoryTypeAvailable } from "@/hooks/use-network"
 import { useChainId } from 'wagmi'
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -68,7 +67,7 @@ import { zeroAddress, isAddress } from "viem"
 import LoadingPage from "@/components/loading"
 
 // --- TYPES ---
-interface TokenConfiguration {
+export interface TokenConfiguration {
   address: string
   name: string
   symbol: string
@@ -284,7 +283,7 @@ const FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING: Record<FaucetType, FactoryType> = {
 
 const SUPPORTED_CHAIN_IDS = [42220, 1135, 42161, 8453] as const
 
-const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
+export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
   // Celo Mainnet (42220)
   42220: [
     {
@@ -489,6 +488,42 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "Degen community token",
     },
   ],
+  
+  56:[
+    {
+      address: zeroAddress,
+      name: "BNB",
+      symbol: "BNB",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/bnb.jpg", 
+      description: "Native BNB for transaction fees",
+    },
+    {
+      address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 18, // USDC on BSC is usually 18 decimals (Bridged)
+      logoUrl: "/busdc.jpg", 
+      description: "Binance-Peg USD Coin",
+    },
+    {
+      address: "0x55d398326f99059fF775485246999027B3197955",
+      name: "Tether USD",
+      symbol: "USDT",
+      decimals: 18,
+      logoUrl: "/busd.jpg", 
+      description: "Binance-Peg BSC-USD",
+    },
+    {
+      address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
+      name: "BUSD",
+      symbol: "BUSD",
+      decimals: 18,
+      logoUrl: "/busdt.jpg", 
+      description: "Binance-Peg BUSD Token",
+    },
+]
 }
 
 const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{
@@ -559,15 +594,18 @@ interface CreateFaucetProps {
 // MAIN WIZARD COMPONENT
 // ----------------------------------------------------------------------------------
 export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFaucetProps) {
-  const { provider, connect } = useWallet()
   const { network, getFactoryAddress, networks } = useNetwork()
-  const { address, isConnected } = useAppKitAccount()
-  const chainId = useChainId()
-  const { chainId: appKitChainId } = useAppKitNetwork()
+  const { 
+    address, 
+    isConnected, 
+    chainId: walletChainId, 
+    connect, 
+    provider 
+  } = useWallet();
 
   const router = useRouter()
   const searchParams = useSearchParams()
-  const effectiveChainId = (chainId || appKitChainId) as number
+  const effectiveChainId = walletChainId;
     
   const currentNetwork = useMemo(() => {
     if (!effectiveChainId) return null
@@ -1514,15 +1552,16 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
             </AlertDescription>
           </Alert>
         )}
-        {isConnected && (networks.find((net) => net.chainId === chainId)?.chainId !== appKitChainId) && (
-          <Alert className="border-red-500 bg-red-50 dark:bg-red-900/20">
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-            <AlertTitle className="text-red-700 dark:text-red-300">Wrong Network Selected</AlertTitle>
-            <AlertDescription className="text-red-700 dark:text-red-300">
-              Please switch to a supported network to create a faucet.
-            </AlertDescription>
-          </Alert>
-        )}
+        {isConnected && !currentNetwork && (
+  <Alert className="border-red-500 bg-red-50 dark:bg-red-900/20">
+    <AlertTriangle className="h-4 w-4 text-red-600" />
+    <AlertTitle className="text-red-700 dark:text-red-300">Wrong Network Selected</AlertTitle>
+    <AlertDescription className="text-red-700 dark:text-red-300">
+      The current network (Chain ID: {effectiveChainId}) is not supported. 
+      Please switch to Celo, Lisk, Arbitrum, or Base.
+    </AlertDescription>
+  </Alert>
+)}
         {unavailableTypes.length > 0 && network && (
           <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-900/20">
             <AlertTriangle className="h-4 w-4 text-orange-600" />
@@ -2002,7 +2041,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
           <p className="text-xs text-muted-foreground">
             {faucetImageUrl.trim() || selectedImageFile
               ? "Custom image will be used"
-              : "If left empty, the FaucetDrop logo will be used"
+              : "If left empty, the FaucetDrops logo will be used"
             }
           </p>
 

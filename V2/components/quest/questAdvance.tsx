@@ -476,7 +476,29 @@ export default function Phase2TimingTasksFinalize({
   // =========================================================
   // LOGIC HELPERS
   // =========================================================
-  
+  // Auto-appends https:// if missing and removes trailing slashes
+const normalizeUrl = (url: string): string => {
+  if (!url) return ""
+  let cleanUrl = url.trim()
+  if (!/^https?:\/\//i.test(cleanUrl)) {
+    cleanUrl = `https://${cleanUrl}`
+  }
+  return cleanUrl.replace(/\/+$/, "")
+}
+
+// Extracts the username from common social URLs
+const extractHandleFromUrl = (url: string): string | null => {
+  const twitterMatch = url.match(/(?:x\.com|twitter\.com)\/([a-zA-Z0-9_]{1,15})/i)
+  if (twitterMatch) return twitterMatch[1]
+
+  const telegramMatch = url.match(/(?:t\.me|telegram\.me)\/([a-zA-Z0-9_]+)/i)
+  if (telegramMatch) return telegramMatch[1]
+
+  const instagramMatch = url.match(/instagram\.com\/([a-zA-Z0-9._]+)/i)
+  if (instagramMatch) return instagramMatch[1]
+
+  return null
+}
   // 1. Is this task using the Onchain Engine?
   const isOnchainVerification = newTask.verificationType === 'onchain'
   
@@ -551,95 +573,109 @@ const getSocialInputLabel = () => {
     }))
   }
 
-  const handleDeployAndFinalize = async () => {
-    const now = new Date()
-    const startTime = new Date(`${newQuest.startDate}T${newQuest.startTime}`)
-    if (startTime < now) { toast.error("Start time must be in the future."); return }
+ const handleDeployAndFinalize = async () => {
+    const now = new Date();
+    const startTime = new Date(`${newQuest.startDate}T${newQuest.startTime}`);
+    if (startTime < now) {
+        toast.error("Start time must be in the future.");
+        return;
+    }
 
-    setIsDeploying(true)
-    setError(null)
+    setIsDeploying(true);
+    setError(null);
 
     try {
-      if (!isConnected) throw new Error("Please connect your wallet first.")
+        if (!isConnected) throw new Error("Please connect your wallet first.");
 
-      // 1. Save Draft
-      const draftPayload = {
-        creatorAddress: address,
-        title: newQuest.title.trim(),
-        description: newQuest.description,
-        imageUrl: newQuest.imageUrl,
-        rewardPool: newQuest.rewardPool,
-        rewardTokenType: newQuest.rewardTokenType,
-        tokenAddress: newQuest.tokenAddress,
-        distributionConfig: newQuest.distributionConfig,
-        faucetAddress: newQuest.faucetAddress,
-        tasks: newQuest.tasks
-      }
+        // 1. Save Draft
+        const draftPayload = {
+            creatorAddress: address,
+            title: newQuest.title.trim(),
+            description: newQuest.description,
+            imageUrl: newQuest.imageUrl,
+            rewardPool: newQuest.rewardPool,
+            rewardTokenType: newQuest.rewardTokenType,
+            tokenAddress: newQuest.tokenAddress,
+            // Ensure tokenSymbol is sent to draft
+            tokenSymbol: newQuest.tokenSymbol, 
+            distributionConfig: newQuest.distributionConfig,
+            faucetAddress: newQuest.faucetAddress,
+            tasks: newQuest.tasks
+        };
 
-      const draftRes = await fetch(`${API_BASE_URL}/api/quests/draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draftPayload)
-      })
-      const draftJson = await draftRes.json()
-      const activeDraftId = draftJson.faucetAddress || newQuest.faucetAddress
+        const draftRes = await fetch(`${API_BASE_URL}/api/quests/draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(draftPayload)
+        });
+        const draftJson = await draftRes.json();
+        const activeDraftId = draftJson.faucetAddress || newQuest.faucetAddress;
 
-      // 2. Deploy Contract
-      const currentNetwork = networks.find(n => Number(n.chainId) === Number(chainId))
-      const targetFactory = currentNetwork?.factories?.quest
-      if (!targetFactory) throw new Error("Quest Factory not found for this network.")
+        // 2. Deploy Contract
+        const currentNetwork = networks.find(n => Number(n.chainId) === Number(chainId));
+        const targetFactory = currentNetwork?.factories?.quest;
+        if (!targetFactory) throw new Error("Quest Factory not found for this network.");
 
-      const hoursInt = parseInt(newQuest.claimWindowHours || "168", 10)
-      const nowInSeconds = Math.floor(Date.now() / 1000)
-      const questEndTime = nowInSeconds + hoursInt * 3600
+        const hoursInt = parseInt(newQuest.claimWindowHours || "168", 10);
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const questEndTime = nowInSeconds + hoursInt * 3600;
 
-      const provider = new BrowserProvider((window as any).ethereum)
-      const deployedAddress = await createQuestReward(
-        provider,
-        targetFactory,
-        newQuest.title.trim(),
-        newQuest.tokenAddress,
-        questEndTime,
-        hoursInt,
-        BACKEND_WALLET_ADDRESS
-      )
+        const provider = new BrowserProvider((window as any).ethereum);
+        const deployedAddress = await createQuestReward(
+            provider,
+            targetFactory,
+            newQuest.title.trim(),
+            newQuest.tokenAddress,
+            questEndTime,
+            hoursInt,
+            BACKEND_WALLET_ADDRESS
+        );
 
-      // 3. Finalize
-      const baseSlug = newQuest.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-      const finalSlug = `${baseSlug}-${deployedAddress.slice(-4).toLowerCase()}`
+        // 3. Finalize
+        // We generate a local slug as fallback, but we will prefer the server-side slug
+        const baseSlug = newQuest.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        const localSlug = `${baseSlug}-${deployedAddress.slice(-4).toLowerCase()}`;
 
-      const finalizePayload = {
-        faucetAddress: deployedAddress,
-        draftId: activeDraftId,
-        slug: finalSlug,
-        creatorAddress: address,
-        title: newQuest.title.trim(),
-        description: newQuest.description,
-        imageUrl: newQuest.imageUrl,
-        startDate: newQuest.startDate,
-        endDate: newQuest.endDate,
-        claimWindowHours: hoursInt,
-        tasks: newQuest.tasks,
-        stagePassRequirements,
-        enforceStageRules: newQuest.enforceStageRules ?? false
-      }
+        const finalizePayload = {
+            faucetAddress: deployedAddress,
+            draftId: activeDraftId,
+            slug: localSlug,
+            creatorAddress: address,
+            title: newQuest.title.trim(),
+            description: newQuest.description,
+            imageUrl: newQuest.imageUrl,
+            startDate: newQuest.startDate,
+            endDate: newQuest.endDate,
+            claimWindowHours: hoursInt,
+            tasks: newQuest.tasks,
+            stagePassRequirements,
+            enforceStageRules: newQuest.enforceStageRules ?? false
+        };
 
-      const res = await fetch(`${API_BASE_URL}/api/quests/finalize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(finalizePayload)
-      })
+        const res = await fetch(`${API_BASE_URL}/api/quests/finalize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(finalizePayload)
+        });
 
-      if (!res.ok) throw new Error("Finalization failed.")
+        if (!res.ok) throw new Error("Finalization failed.");
+        
+        const finalizeResult = await res.json();
 
-      toast.success("Quest published successfully!")
-      router.push(`/quest/${finalSlug}`)
+        toast.success("Quest published successfully!");
+        
+        // REDIRECT using the slug from database response
+        if (finalizeResult.slug) {
+            router.push(`/quest/${finalizeResult.slug}`);
+        } else {
+            router.push(`/quest/${deployedAddress}`);
+        }
     } catch (e: any) {
-      console.error("Deployment Error:", e)
-      toast.error(e.message || "Deployment failed")
-      setIsDeploying(false)
+        console.error("Deployment Error:", e);
+        toast.error(e.message || "Deployment failed");
+        setIsDeploying(false);
     }
-  }
+};
 
   const isStageUnlocked = (targetStage: TaskStage): boolean => {
     if (!enforceRules) return true
@@ -836,24 +872,40 @@ const getSocialInputLabel = () => {
                 {isSocialTemplate && (
                   <div className="space-y-2">
                     <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center">
-                       {newTask.targetPlatform === 'Twitter' ? <XIcon className="h-3 w-3 text-blue-400"/> : <LinkIcon className="h-3 w-3"/>}
-                       {getSocialInputLabel()}
+                      {newTask.targetPlatform === 'Twitter' ? <XIcon className="h-3 w-3 text-blue-400"/> : <LinkIcon className="h-3 w-3"/>}
+                      {getSocialInputLabel()}
                     </Label>
                     <Input 
                       className="bg-background" 
-                      placeholder={newTask.targetPlatform === 'Twitter' ? "faucetdrops" : "https://..."}
-                      value={newTask.targetHandle || newTask.url || ""} 
+                      placeholder={newTask.targetPlatform === 'Twitter' ? "Paste link or handle" : "https://..."}
+                      value={newTask.url || newTask.targetHandle || ""} 
                       onChange={e => {
-                        const val = e.target.value
-                        setNewTask((p:any) => ({ 
-                           ...p, 
-                           // For Twitter, we treat it as a handle (targetHandle)
-                           targetHandle: newTask.targetPlatform === 'Twitter' ? val.replace('@','') : val,
-                           // For Links (Discord/Web), we treat it as a URL
-                           url: val
+                        const val = e.target.value.trim()
+                        
+                        // 1. Try to extract handle if they paste a full URL
+                        const extracted = extractHandleFromUrl(val)
+                        
+                        setNewTask((p: any) => ({ 
+                          ...p, 
+                          // If it's a URL, save it. If they just typed a handle, don't force https yet
+                          url: val.includes('.') ? val : p.url,
+                          // If we found a handle in the URL, use it. Otherwise, use the raw text as handle
+                          targetHandle: extracted || val.replace('@', '')
                         }))
                       }} 
+                      onBlur={() => {
+                        // 2. Final normalization when user finishes typing
+                        if (newTask.url && newTask.url.includes('.')) {
+                          const finalUrl = normalizeUrl(newTask.url)
+                          setNewTask((p: any) => ({ ...p, url: finalUrl }))
+                        }
+                      }}
                     />
+                    {newTask.targetHandle && (
+                      <p className="text-[10px] text-blue-500 font-medium">
+                        Detected Handle: @{newTask.targetHandle}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -931,12 +983,24 @@ const getSocialInputLabel = () => {
                 ) : (
                   <Button 
                     onClick={async () => {
-                      const t = newTask as QuestTask
-                      // Validation logic
-                      if (showContractInput && t.action !== 'hold_token' && !t.targetContractAddress?.trim()) {
-                         if(t.action === 'hold_nft') { toast.error("Contract address required"); return }
+                      // CLONE the current task to modify it before saving
+                      let t = { ...newTask } as QuestTask
+
+                      // 1. Force URL normalization one last time
+                      if (t.url && t.url.includes('.')) {
+                        t.url = normalizeUrl(t.url)
                       }
-                      if (!t.title || !t.points || (enforceRules && !editingTask && isAtMax)) return;
+
+                      // 2. Ensure Handle is present for 'quote' or 'tag' related actions
+                      if (t.action === 'quote' || t.action === 'comment') {
+                        if (!t.targetHandle) {
+                            toast.error("A target handle is required for tag verification.")
+                            return
+                        }
+                      }
+
+                      // Standard Validation
+                      if (!t.title || !t.points) return;
                       
                       try {
                         if (editingTask) {

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useWallet } from "@/hooks/use-wallet"
+import { useWallet } from "@/components/wallet-provider" 
 import { useNetwork } from "@/hooks/use-network" 
 import { getUserFaucets } from "@/lib/faucet"
 import { Header } from "@/components/header"
@@ -17,10 +17,11 @@ import {
     ScrollText, PencilRuler, Rocket, Trash2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-
 import { ProfileSettingsModal } from "@/components/profile-setting" 
 import { MyCreationsModal } from "@/components/my-creations-modal" 
 import { CreateNewModal } from "@/components/create-new-modal" 
+import { usePrivy } from "@privy-io/react-auth" // Add this import
+import { EmbeddedWalletControlProduction } from "@/components/embeddedwallet"
 
 // --- Custom Icons ---
 const XIcon = ({ className }: { className?: string }) => (
@@ -28,7 +29,6 @@ const XIcon = ({ className }: { className?: string }) => (
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
   </svg>
 )
-// ... (Other icons remain the same) ...
 
 // --- Types ---
 interface FaucetData {
@@ -41,7 +41,7 @@ interface FaucetData {
 
 interface QuestData {
     faucetAddress?: string; 
-    slug?: string; // <--- ADD THIS
+    slug?: string;
     title: string;
     description: string;
     imageUrl: string;
@@ -68,19 +68,21 @@ export default function DashboardPage() {
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
-    const { address: connectedAddress, isConnected } = useWallet();
+    const { address: connectedAddress, isConnected } = useWallet(); 
     const { networks } = useNetwork();
+    const { user: privyUser } = usePrivy(); // Get Privy user data
     
-    const targetUsername = params.username as string;
+    // This could be "jerydam" OR "0x123..."
+    const targetUsernameOrAddress = params.username as string;
     
     // Data State
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
     const [publishedQuests, setPublishedQuests] = useState<QuestData[]>([]);
     const [draftQuests, setDraftQuests] = useState<QuestData[]>([]);
-    
     const [profile, setProfile] = useState<UserProfileData | null>(null);
     const [quizCount, setQuizCount] = useState<number>(0);
     const [loading, setLoading] = useState(true);
+    const [initialLoadComplete, setInitialLoadComplete] = useState(false);
     
     // Filters & UI State
     const [searchQuery, setSearchQuery] = useState("");
@@ -92,6 +94,55 @@ export default function DashboardPage() {
         if (!connectedAddress || !profile?.wallet_address) return false;
         return connectedAddress.toLowerCase() === profile.wallet_address.toLowerCase();
     }, [connectedAddress, profile]);
+
+    // --- NEW: Sync Email with Backend ---
+    const syncEmailToBackend = useCallback(async (walletAddress: string, email: string) => {
+        try {
+            console.log('[Dashboard] Syncing email to backend:', email);
+            const response = await fetch(`${backendUrl}/api/users/${walletAddress.toLowerCase()}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email }),
+            });
+
+            const data = await response.json();
+            
+            if (data.success) {
+                console.log('✅ [Dashboard] Email synced successfully');
+                return true;
+            } else {
+                console.error('❌ [Dashboard] Failed to sync email:', data);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ [Dashboard] Error syncing email:', error);
+            return false;
+        }
+    }, [backendUrl]);
+
+    // --- NEW: Check and sync email when user is logged in ---
+    useEffect(() => {
+        if (!privyUser || !connectedAddress || !isOwner) return;
+
+        // Get email from Privy user object
+        const userEmail = privyUser.email?.address;
+        
+        if (userEmail && profile && !profile.email) {
+            console.log('[Dashboard] User has email in Privy but not in profile, syncing...');
+            syncEmailToBackend(connectedAddress, userEmail).then((success) => {
+                if (success) {
+                    // Update local profile state
+                    setProfile(prev => prev ? { ...prev, email: userEmail } : null);
+                    toast({ 
+                        title: "Email synced", 
+                        description: "Your email has been added to your profile" 
+                    });
+                }
+            });
+        }
+    }, [privyUser, connectedAddress, profile, isOwner, syncEmailToBackend, toast]);
 
     // --- FUNCTION: Delete Draft ---
     const handleDeleteDraft = async (draftId: string) => {
@@ -115,97 +166,155 @@ export default function DashboardPage() {
         }
     }
 
+    // IMPROVED: Fetch data with better address/username handling
     const fetchData = useCallback(async () => {
+        console.log('[Dashboard] Starting fetchData for:', targetUsernameOrAddress)
         setLoading(true);
+        
         try {
-            const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsername}`);
-            const profData = await profRes.json();
-            
-            if (profData.success && profData.profile) {
-                const userProfile = profData.profile;
-                setProfile(userProfile);
-                const userWallet = userProfile.wallet_address;
-                
-                if (userWallet) {
-                    // Fetch Faucets
-                    const faucetData = await getUserFaucets(userWallet);
-                    setFaucets(faucetData);
+            let userProfile: UserProfileData | null = null;
+            let userWallet: string | null = null;
 
-                    // Fetch Quests
-                    const questRes = await fetch(`${backendUrl}/api/quests`);
-                    const qData = await questRes.json();
-                    
-                    if (qData.success) {
-                        // Filter Published Quests
-                       const myQuests = qData.quests
-                        .filter((q: any) => q.creatorAddress.toLowerCase() === userWallet.toLowerCase())
+            // STEP 1: Determine if input is address or username
+            const isAddress = targetUsernameOrAddress.startsWith('0x') && targetUsernameOrAddress.length === 42;
+            
+            if (isAddress) {
+                // Input is an address - fetch by address
+                console.log('[Dashboard] Fetching profile by address:', targetUsernameOrAddress)
+                const profRes = await fetch(`${backendUrl}/api/users/${targetUsernameOrAddress.toLowerCase()}?t=${Date.now()}`);
+                const profData = await profRes.json();
+                
+                // FIX: Check for nested 'profile' object OR top-level 'username'
+                const fetchedData = profData.profile || (profData.username ? profData : null);
+
+                if (profData.success && fetchedData) {
+                    // Profile exists in DB
+                    userProfile = {
+                        wallet_address: fetchedData.wallet_address || targetUsernameOrAddress.toLowerCase(),
+                        username: fetchedData.username,
+                        email: fetchedData.email, // Include email
+                        bio: fetchedData.bio,
+                        avatar_url: fetchedData.avatar_url || fetchedData.avatarUrl,
+                        twitter_handle: fetchedData.twitter_handle || fetchedData.twitterHandle,
+                        discord_handle: fetchedData.discord_handle || fetchedData.discordHandle,
+                        telegram_handle: fetchedData.telegram_handle || fetchedData.telegramHandle,
+                        farcaster_handle: fetchedData.farcaster_handle || fetchedData.farcasterHandle
+                    };
+                    console.log('✅ [Dashboard] Profile found by address:', userProfile.username)
+                } else {
+                    // No profile yet, but valid address -> Show "New User"
+                    userProfile = {
+                        wallet_address: targetUsernameOrAddress.toLowerCase(),
+                        username: "New User",
+                        bio: "You haven't set up your profile yet. Click settings to get started!"
+                    };
+                    console.log('✅ [Dashboard] New user detected (address)')
+                }
+                userWallet = targetUsernameOrAddress.toLowerCase();
+                
+            } else {
+                // Input is a username - fetch by username
+                console.log('[Dashboard] Fetching profile by username:', targetUsernameOrAddress)
+                const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsernameOrAddress}?t=${Date.now()}`);
+                const profData = await profRes.json();
+                
+                if (profData.success && profData.profile) {
+                    userProfile = profData.profile;
+                    userWallet = profData.profile.wallet_address;
+                    console.log('✅ [Dashboard] Profile found by username:', userProfile.username)
+                } else {
+                    // Username not found
+                    console.log('❌ [Dashboard] Username not found')
+                    setProfile(null);
+                    setInitialLoadComplete(true);
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            // STEP 2: Set profile
+            setProfile(userProfile);
+
+            // STEP 3: Fetch user's faucets
+            if (userWallet) {
+                console.log('[Dashboard] Fetching faucets for wallet:', userWallet.slice(0, 8))
+                const faucetData = await getUserFaucets(userWallet);
+                console.log('[Dashboard] Faucets loaded:', faucetData.length)
+                setFaucets(faucetData);
+
+                // STEP 4: Fetch published quests
+                console.log('[Dashboard] Fetching quests...')
+                const questRes = await fetch(`${backendUrl}/api/quests?t=${Date.now()}`);
+                const qData = await questRes.json();
+                
+                if (qData.success) {
+                    const myQuests = qData.quests
+                        .filter((q: any) => q.creatorAddress?.toLowerCase() === userWallet!.toLowerCase())
                         .map((q: any) => ({
                             ...q,
-                            // Ensure we are mapping the slug field from your backend 
-                            // (Assumes backend returns 'slug')
                             slug: q.slug || q.faucetAddress, 
                             faucetAddress: q.faucetAddress
                         }));
                     
-                    setPublishedQuests(myQuests.filter((q: any) => !q.isDraft));
-                
-                    }
-
-                    // Fetch Drafts (Only if viewing own profile)
-                    if (isConnected && connectedAddress && userWallet.toLowerCase() === connectedAddress.toLowerCase()) {
-                        try {
-                            const draftRes = await fetch(`${backendUrl}/api/quests/drafts/${userWallet}`);
-                            if (draftRes.ok) {
-                                const dData = await draftRes.json();
-                                if (dData.success) {
-                                    const formattedDrafts = dData.drafts.map((d: any) => ({
-                                        ...d,
-                                        faucetAddress: d.faucet_address, 
-                                        creatorAddress: d.creator_address,
-                                        imageUrl: d.image_url,
-                                        title: d.title,
-                                        description: d.description
-                                    }));
-                                    setDraftQuests(formattedDrafts);
-                                }
-                            }
-                        } catch (err) {
-                            console.log("No drafts found", err);
-                        }
-                    }
+                    const published = myQuests.filter((q: any) => !q.isDraft);
+                    console.log('[Dashboard] Published quests loaded:', published.length)
+                    setPublishedQuests(published);
                 }
-            } else {
-                // New User Logic
-                const isViewingOwnNewProfile = 
-                isConnected && 
-                connectedAddress && 
-                targetUsername.toLowerCase() === connectedAddress.toLowerCase();
 
-                if (isViewingOwnNewProfile) {
-                    setProfile({
-                        wallet_address: connectedAddress,
-                        username: "New User", 
-                        bio: "You haven't set up your profile yet. Click settings to get started!",
-                        avatar_url: "" 
-                    });
-                    
-                    const faucetData = await getUserFaucets(connectedAddress);
-                    setFaucets(faucetData);
-                } else {
-                    toast({ title: "User not found", variant: "destructive" });
-                    setProfile(null);
+                // STEP 5: Fetch drafts (only if owner)
+                const isOwnerView = connectedAddress && userWallet.toLowerCase() === connectedAddress.toLowerCase();
+                if (isOwnerView) {
+                    console.log('[Dashboard] Fetching drafts...')
+                    try {
+                        const draftRes = await fetch(`${backendUrl}/api/quests/drafts/${userWallet}?t=${Date.now()}`);
+                        if (draftRes.ok) {
+                            const dData = await draftRes.json();
+                            if (dData.success) {
+                                const formattedDrafts = dData.drafts.map((d: any) => ({
+                                    ...d,
+                                    faucetAddress: d.faucet_address, 
+                                    creatorAddress: d.creator_address,
+                                    imageUrl: d.image_url,
+                                    title: d.title,
+                                    description: d.description
+                                }));
+                                console.log('[Dashboard] Drafts loaded:', formattedDrafts.length)
+                                setDraftQuests(formattedDrafts);
+                            }
+                        }
+                    } catch (err) {
+                        console.log('[Dashboard] No drafts found:', err);
+                    }
                 }
             }
+            
+            setInitialLoadComplete(true);
+            
         } catch (error) {
-            console.error("Dashboard load error:", error);
+            console.error("❌ [Dashboard] Load error:", error);
+            toast({ title: "Failed to load dashboard", variant: "destructive" });
+            setInitialLoadComplete(true);
         } finally {
             setLoading(false);
         }
-    }, [targetUsername, connectedAddress, isConnected, backendUrl]);
+    }, [targetUsernameOrAddress, connectedAddress, backendUrl, toast]);
 
+    // STEP 6: Trigger data fetch on mount and when params change
     useEffect(() => {
-        if (targetUsername) fetchData();
-    }, [targetUsername, fetchData]);
+        if (!targetUsernameOrAddress) {
+            console.log('[Dashboard] No username/address provided')
+            return;
+        }
+        
+        // Reset state when username changes
+        setInitialLoadComplete(false);
+        setProfile(null);
+        setFaucets([]);
+        setPublishedQuests([]);
+        setDraftQuests([]);
+        
+        fetchData();
+    }, [targetUsernameOrAddress, fetchData]);
 
     // Helpers
     const getNetworkName = (id: number) => networks.find(n => n.chainId === id)?.name || `Chain ${id}`;
@@ -228,31 +337,57 @@ export default function DashboardPage() {
 
     const filteredFaucets = useMemo(() => {
         return faucets.filter(f => {
-            const matchesSearch = f.name?.toLowerCase().includes(searchQuery.toLowerCase()) || f.faucetAddress.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesSearch = f.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                f.faucetAddress.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesNetwork = networkFilter === "all" || f.chainId.toString() === networkFilter;
             return matchesSearch && matchesNetwork;
         });
     }, [faucets, searchQuery, networkFilter]);
 
-    if (loading) return (
-        <div className="min-h-screen flex flex-col items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-    );
+    // Loading state
+    if (loading && !initialLoadComplete) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground">Loading dashboard...</p>
+            </div>
+        );
+    }
 
-    if (!profile) return <div className="p-20 text-center">User not found.</div>;
+    if (!profile && initialLoadComplete) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center">
+                <p className="text-xl font-semibold mb-2">User not found</p>
+                <p className="text-muted-foreground">The profile you're looking for doesn't exist.</p>
+                <Button onClick={() => router.push('/')} className="mt-4">Go Home</Button>
+            </div>
+        );
+    }
 
-    const displayAddress = profile.wallet_address ? `${profile.wallet_address.slice(0,6)}...${profile.wallet_address.slice(-4)}` : "";
+    if (!profile) return null;
+
+    const displayAddress = profile.wallet_address ? 
+        `${profile.wallet_address.slice(0,6)}...${profile.wallet_address.slice(-4)}` : "";
 
     return (
         <main className="min-h-screen bg-background pb-20 relative overflow-x-hidden">
             <div className="container mx-auto px-4 py-8 relative z-10 max-w-7xl">
-                <Header pageTitle={isOwner ? "My Dashboard" : `${profile.username}'s Space`} />
+                <Header 
+                    pageTitle={isOwner ? "My Dashboard" : `${profile.username}'s Space`} 
+                    hideAction={true} 
+                />
 
                 {/* --- 1. USER IDENTITY SECTION --- */}
                 <div className="mb-10">
                     <Card className="border-none bg-gradient-to-r from-primary/5 via-primary/10 to-background shadow-sm">
-                        <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center gap-6">
+                        <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center gap-6 relative">
+                            {/* Embedded Wallet - Top Right Corner on Mobile */}
+                            {isOwner && (
+                                <div className="absolute top-4 right-4 md:hidden z-30">
+                                    <EmbeddedWalletControlProduction />
+                                </div>
+                            )}
+                            
                             <div className="relative">
                                 <Avatar className="h-24 w-24 border-4 border-background shadow-lg relative z-10">
                                     <AvatarImage src={profile.avatar_url} className="object-cover" />
@@ -331,15 +466,24 @@ export default function DashboardPage() {
                             onClick={() => setActiveTab('quests')}
                             className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'quests' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                            {/* FIX: REMOVED DRAFT COUNT FROM HERE */}
                             Quests ({publishedQuests.length})
                         </button>
                     </div>
 
                     {isOwner && (
-                        <div className="flex flex-wrap gap-3">
-                            <MyCreationsModal faucets={faucets} address={connectedAddress!} />
-                            <CreateNewModal onSuccess={fetchData} />
+                        <div className="flex gap-3 w-full md:w-auto">
+                            {/* Mobile - Only show action buttons (wallet is in profile section) */}
+                            <div className="md:hidden flex gap-3 w-full">
+                                <MyCreationsModal faucets={faucets} address={connectedAddress!} />
+                                <CreateNewModal onSuccess={fetchData} />
+                            </div>
+                            
+                            {/* Desktop - Show all buttons including wallet */}
+                            <div className="hidden md:flex gap-3 flex-wrap">
+                                <EmbeddedWalletControlProduction /> 
+                                <MyCreationsModal faucets={faucets} address={connectedAddress!} />
+                                <CreateNewModal onSuccess={fetchData} />
+                            </div>
                         </div>
                     )}
                 </div>
@@ -396,7 +540,6 @@ export default function DashboardPage() {
                                             key={quest.faucetAddress} 
                                             quest={quest} 
                                             type="published"
-                                            // PRIORITIZE SLUG FOR ROUTING
                                             onClick={() => router.push(`/quest/${quest.slug || quest.faucetAddress}`)}
                                         />
                                     ))}
@@ -406,7 +549,6 @@ export default function DashboardPage() {
                             )}
                         </div>
                         
-                    
                         {/* Section: Drafts (Only for Owner) */}
                         {isOwner && (
                             <div>
@@ -443,7 +585,7 @@ export default function DashboardPage() {
     )
 }
 
-// --- SUB-COMPONENTS ---
+// --- SUB-COMPONENTS (unchanged) ---
 
 function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner }: any) {
     const networkName = getNetworkName(faucet.chainId)
@@ -486,7 +628,12 @@ function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
     return (
         <Card className={`hover:shadow-md transition-all group ${type === 'draft' ? 'border-dashed border-orange-200 bg-orange-50/10' : ''}`}>
             <div className="relative h-32 w-full bg-muted overflow-hidden rounded-t-lg cursor-pointer" onClick={onClick}>
-                {/* ... existing image and badge code ... */}
+                {quest.imageUrl && (
+                    <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
+                )}
+                <Badge className="absolute top-2 right-2" variant={type === 'draft' ? "outline" : "default"}>
+                    {type === 'draft' ? 'Draft' : 'Published'}
+                </Badge>
             </div>
             <CardContent className="p-4">
                 <h4 className="font-bold truncate text-base mb-1">{quest.title || "Untitled Quest"}</h4>
@@ -494,13 +641,34 @@ function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
                     {quest.description || "No description provided."}
                 </p>
                 
-                <Button variant={type === 'draft' ? "outline" : "default"} size="sm" className="w-full" onClick={onClick}>
-                    {type === 'draft' ? (
-                        <><PencilRuler className="h-3 w-3 mr-2" /> Continue Editing</>
-                    ) : (
-                        <><ScrollText className="h-3 w-3 mr-2" /> View Quest</>
+                <div className="flex gap-2">
+                    <Button 
+                        variant={type === 'draft' ? "outline" : "default"} 
+                        size="sm" 
+                        className="flex-1" 
+                        onClick={onClick}
+                    >
+                        {type === 'draft' ? (
+                            <><PencilRuler className="h-3 w-3 mr-2" /> Continue Editing</>
+                        ) : (
+                            <><ScrollText className="h-3 w-3 mr-2" /> View Quest</>
+                        )}
+                    </Button>
+                    
+                    {type === 'draft' && onDelete && (
+                        <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="px-2" 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete(quest.faucetAddress!);
+                            }}
+                        >
+                            <Trash2 className="h-3 w-3 text-red-500" />
+                        </Button>
                     )}
-                </Button>
+                </div>
             </CardContent>
         </Card>
     )

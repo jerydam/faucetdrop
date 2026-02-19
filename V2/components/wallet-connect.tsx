@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { useState, useEffect } from "react"
-import { useAppKit, useAppKitAccount } from '@reown/appkit/react'
+import { usePrivy, useWallets, type User } from '@privy-io/react-auth'
+import { useWallet } from "@/components/wallet-provider"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -13,190 +14,203 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { 
-  Wallet, 
   LayoutDashboard, 
   LogOut, 
   Copy, 
   ChevronDown,
-  Mail,
-  UserPlus,
-  Zap,
-  Sparkles,
-  ExternalLink
+  Wallet,
+  User as UserIcon
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
-import Image from "next/image"
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com" 
+const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
 
 export function WalletConnectButton() {
-  const { open } = useAppKit()
-  const { address, isConnected } = useAppKitAccount()
+  const { ready, authenticated, login, logout, user } = usePrivy()
+  const { wallets } = useWallets()
+  const { address, walletType, isConnected } = useWallet()
   
-  const [username, setUsername] = useState<string>("Anonymous")
+  const [username, setUsername] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
 
+  // --- 1. Robust Fetching Logic ---
   useEffect(() => {
-    if (isConnected && address) {
-      fetchProfile();
-      setIsAuthModalOpen(false); // Close the popup automatically on connect
-      
-      const handleUpdate = () => fetchProfile();
-      window.addEventListener("profileUpdated", handleUpdate);
-      return () => window.removeEventListener("profileUpdated", handleUpdate);
-    } else {
-      setUsername("Anonymous");
-      setAvatarUrl(null);
+    if (!isConnected || !address) {
+      setUsername(null)
+      setAvatarUrl(null)
+      return
     }
-  }, [address, isConnected]);
- 
-  const fetchProfile = async () => {
-    if (!address) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}?t=${Date.now()}`);
-      const data = await res.json();
-      if (data.success && data.profile?.username) {
-        setUsername(data.profile.username);
-        setAvatarUrl(data.profile.avatar_url || null);
-      }
-    } catch (error) {
-      console.error("Profile fetch error", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  // --- UNAUTHENTICATED STATE WITH POPUP ---
-  if (!isConnected || !address) {
-    return (
-      <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
-        <DialogTrigger asChild>
-          <Button 
-            size="sm" 
-             className="bg-transparent border-white hover:border-blue-500 border  text-white hover:bg-blue-500/10 text-xs font-bold shadow-blue-900/20 uppercase tracking-widest px-6"
-          >
-            Get Started
-          </Button>
-        </DialogTrigger>
+    let isMounted = true
+    setLoading(true)
+    
+    setUsername(null)
+    setAvatarUrl(null)
+
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/users/${address.toLowerCase()}`)
         
-        <DialogContent className="sm:max-w-[400px] bg-[#080d19] border-white/10 text-white rounded-[2rem] overflow-hidden">
-        <DialogHeader className="items-center text-center pb-2">
-          {/* The container maintains the same 14x14 (56px) size and rounded styling */}
-          <div className="w-14 h-14 flex items-center justify-center mb-4  overflow-hidden">
-            <Image
-              src="/favicon.png" // Replace with your square logo path if you have one
-              alt="FaucetDrops Favicon"
-              width={40}
-              height={40}
-              className="object-contain"
-              priority
-            />
-          </div>
-          <DialogTitle className="text-2xl font-bold tracking-tight">
-            Join FaucetDrops
-          </DialogTitle>
-          <DialogDescription className="text-gray-400">
-            Choose your preferred way to start your onchain journey.
-          </DialogDescription>
-        </DialogHeader>
+        if (response.ok) {
+          const data = await response.json()
+          
+          // FIX: Handle nested 'profile' object logic just like the Dashboard
+          const profileData = data.profile || (data.username ? data : null)
 
-          <div className="grid gap-3 py-6">
-            {/* Wallet Connect Path */}
-            <Button 
-              onClick={() => { open(); }}
-              variant="outline" 
-              className="h-16 justify-start gap-4 border-white/5 bg-white/5 hover:bg-blue-600/10 hover:border-blue-500/50 transition-all rounded-2xl px-5 group"
-            >
-              <div className="bg-blue-500 p-2.5 rounded-xl group-hover:scale-110 transition-transform">
-                <Wallet className="h-5 w-5 text-white" />
-              </div>
-              <div className="text-left">
-                <div className="font-bold text-sm">Connect Wallet</div>
-                <div className="text-[10px] text-gray-500 font-medium">MetaMask, Phantom, or Mobile App</div>
-              </div>
-            </Button>
+          if (isMounted && profileData) {
+            if (profileData.username) {
+              setUsername(profileData.username)
+            }
+            // Handle both snake_case (DB) and camelCase (API variants)
+            const avatar = profileData.avatar_url || profileData.avatarUrl
+            if (avatar) {
+              setAvatarUrl(avatar)
+            }
+          }
+        }
+      } catch (error) {
+        console.error("❌ Failed to fetch user profile:", error)
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
 
-            <div className="relative py-4">
-              <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-white/5" /></div>
-              <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-black"><span className="bg-[#080d19] px-3 text-gray-600">Secure Web2 Auth</span></div>
-            </div>
+    fetchProfile()
 
-            {/* Email Path */}
-            <div className="grid grid-cols-2 gap-3">
-               <Button 
-                variant="outline" 
-                className="h-12 gap-2 border-white/5 bg-white/5 hover:bg-white/10 rounded-xl font-bold text-xs"
-              >
-                <Mail className="h-4 w-4 text-emerald-500" />
-                Login
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-12 gap-2 border-white/5 bg-white/5 hover:bg-white/10 rounded-xl font-bold text-xs"
-              >
-                <UserPlus className="h-4 w-4 text-purple-500" />
-                Sign Up
-              </Button>
-            </div>
-          </div>
+    return () => {
+      isMounted = false
+    }
+  }, [address, isConnected])
 
-          <p className="text-center text-[10px] text-gray-600">
-            By connecting, you agree to our Terms of Service.
-          </p>
-        </DialogContent>
-      </Dialog>
+  // --- 2. Listen for Manual Updates ---
+  useEffect(() => {
+    const handleProfileUpdate = (event: CustomEvent) => {
+      const { username: newUsername, avatarUrl: newAvatarUrl } = event.detail
+      if (newUsername) setUsername(newUsername)
+      if (newAvatarUrl) setAvatarUrl(newAvatarUrl)
+    }
+
+    window.addEventListener('profileUpdated' as any, handleProfileUpdate)
+    return () => {
+      window.removeEventListener('profileUpdated' as any, handleProfileUpdate)
+    }
+  }, [])
+
+  // --- 3. Helpers ---
+  const getSocialImage = (user: User | null) => {
+    if (!user) return ""
+    const google = user.google as any
+    const twitter = user.twitter as any
+    return avatarUrl || google?.picture || google?.profilePictureUrl || twitter?.profilePictureUrl || ""
+  }
+
+  const getWalletName = () => {
+    if (!wallets[0]) return null
+    const wallet = wallets[0]
+    if (wallet.walletClientType === 'privy') return 'Embedded Wallet'
+    return wallet.walletClientType === 'metamask' ? 'MetaMask' :
+           wallet.walletClientType === 'coinbase_wallet' ? 'Coinbase' :
+           'External Wallet'
+  }
+
+  const displayName = username || "Anonymous"
+  
+  const dashboardLink = username 
+    ? `/dashboard/${username}` 
+    : `/dashboard/${address?.toLowerCase() || ''}`
+
+  if (!ready) {
+    return (
+      <Button 
+        size="sm" 
+        disabled
+        variant="outline"
+        className="text-xs font-bold uppercase tracking-widest px-6 opacity-50 border-border"
+      >
+        Loading...
+      </Button>
     )
   }
 
-  // --- AUTHENTICATED DROPDOWN ---
+  if (!isConnected) {
+    return (
+      <Button 
+        onClick={login}
+        size="sm" 
+        variant="default" // Use the primary theme color for maximum visibility
+        className="text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-all"
+      >
+        Get Started
+      </Button>
+    )
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-      <Button 
-        variant="outline" 
-        size="sm"
-        // Reduced padding and height for a more compact mobile look
-        className="flex items-center gap-2 p-1 sm:pr-3 border-primary/20 hover:bg-primary/5 transition-all rounded-full h-9 relative"
+        <Button 
+          variant="outline" 
+          size="sm"
+          className="flex items-center gap-2 p-1 sm:pr-3 border-primary/20 hover:bg-primary/5 transition-all rounded-full h-9 relative"
+        >
+          <div className="relative">
+            <Avatar className="h-7 w-7 border border-background shadow-sm">
+              <AvatarImage 
+                src={getSocialImage(user)} 
+                className="object-cover" 
+              />
+              <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+                {loading ? (
+                  <span className="animate-pulse">...</span>
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
+              </AvatarFallback>
+            </Avatar>
+            {walletType === 'external' && (
+              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-blue-500 rounded-full border border-background flex items-center justify-center">
+                <Wallet className="h-2 w-2 text-white" />
+              </div>
+            )}
+          </div>
+
+          <span className="hidden sm:block text-xs sm:text-sm font-medium max-w-[100px] truncate">
+            {loading ? "..." : displayName}
+          </span>
+          <ChevronDown className="hidden sm:block h-3 w-3 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent 
+        align="end" 
+        className="w-56 z-[200]" 
+        sideOffset={8}
       >
-        <div className="relative">
-          <Avatar className="h-7 w-7 border border-background shadow-sm">
-            <AvatarImage src={avatarUrl || ""} className="object-cover" />
-            <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
-              {username.charAt(0).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-        </div>
-
-        {/* 'hidden' hides the username and arrow on mobile.
-            'sm:flex' or 'sm:block' restores them on larger screens.
-        */}
-        <span className="hidden sm:block text-xs sm:text-sm font-medium max-w-[100px] truncate">
-          {loading ? "..." : username}
-        </span>
-        <ChevronDown className="hidden sm:block h-3 w-3 opacity-50" />
-      </Button>
-    </DropdownMenuTrigger>
-
-      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{username}</p>
-            <p className="text-xs leading-none text-muted-foreground font-mono">
-              {address.slice(0, 6)}...{address.slice(-4)}
+            <p className="text-sm font-medium leading-none truncate">
+              {displayName}
             </p>
+            {user?.email && (
+              <p className="text-xs leading-none text-muted-foreground truncate">
+                {user.email.address}
+              </p>
+            )}
+            {address && (
+              <div className="flex items-center gap-1">
+                <p className="text-xs leading-none text-muted-foreground font-mono">
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                </p>
+                {walletType === 'external' && (
+                  <span className="text-[10px] bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">
+                    {getWalletName()}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </DropdownMenuLabel>
         
@@ -205,30 +219,34 @@ export function WalletConnectButton() {
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
             <Link 
-            href={`/dashboard/${username === 'Anonymous' ? address.toLowerCase() : username}`} 
-            className="cursor-pointer flex items-center gap-2"> 
-            <LayoutDashboard className="h-4 w-4" />
-            <span>Dashboard</span>
-          </Link>
+              href={dashboardLink} 
+              className="cursor-pointer flex items-center gap-2"
+            > 
+              {username ? <UserIcon className="h-4 w-4" /> : <LayoutDashboard className="h-4 w-4" />}
+              <span>{username ? "Profile" : "Dashboard"}</span>
+            </Link>
           </DropdownMenuItem>
 
-          <DropdownMenuItem onClick={() => {
-            navigator.clipboard.writeText(address);
-            toast.success("Address copied to clipboard!");
-          }} className="cursor-pointer flex items-center gap-2">
-            <Copy className="h-4 w-4" />
-            <span>Copy Address</span>
-          </DropdownMenuItem>
+          {address && (
+            <DropdownMenuItem 
+              onClick={() => {
+                navigator.clipboard.writeText(address)
+                toast.success("Address copied to clipboard!")
+              }} 
+              className="cursor-pointer flex items-center gap-2"
+            >
+              <Copy className="h-4 w-4" />
+              <span>Copy Address</span>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
       
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={() => open()} className="cursor-pointer flex items-center gap-2">
-          <ExternalLink className="h-4 w-4" />
-          <span>Wallet Settings</span>
-        </DropdownMenuItem>
-
-        <DropdownMenuItem onClick={() => open({ view: 'Account' })} className="cursor-pointer flex items-center gap-2 text-red-600 focus:text-red-600 focus:bg-red-50">
+        <DropdownMenuItem 
+          onClick={logout} 
+          className="cursor-pointer flex items-center gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"
+        >
           <LogOut className="h-4 w-4" />
           <span>Disconnect</span>
         </DropdownMenuItem>

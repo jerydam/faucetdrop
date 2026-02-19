@@ -2,14 +2,15 @@
 "use client"
 
 import { useNetwork, type Network } from "@/hooks/use-network"
-import { useAppKit, useAppKitAccount, useAppKitNetwork } from '@reown/appkit/react'
-import { useSwitchChain } from 'wagmi'
+import { useWallet } from "@/components/wallet-provider" // USE THIS instead of wagmi
+import { usePrivy } from '@privy-io/react-auth'
 import { useRouter, usePathname } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ChevronDown, Network as NetworkIcon, Wifi, WifiOff, AlertTriangle, Loader2 } from "lucide-react"
 import { useState } from "react"
+import { cn } from "@/lib/utils"
 
 
 // Network image component with fallback
@@ -101,17 +102,15 @@ export function NetworkSelector({
   className = ""
 }: NetworkSelectorProps) {
   const { networks, isConnecting } = useNetwork() 
-  const { chainId } = useAppKitNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
-  const { switchChain, isPending: isSwitching } = useSwitchChain()
-  
+  const { chainId, isConnected, address, switchChain, connect } = useWallet() // CHANGED
+  const { authenticated } = usePrivy()
+  const [isSwitching, setIsSwitching] = useState(false)
   
   const router = useRouter()
   const pathname = usePathname()
   
   const isWalletAvailable = typeof window !== "undefined" && window.ethereum
-  const hasWalletConnected = isConnected && !!address
+  const hasWalletConnected = authenticated && isConnected && !!address
   
   const currentNetwork = networks.find((net) => net.chainId === chainId)
   
@@ -187,38 +186,38 @@ export function NetworkSelector({
 
   // Direct network switching without modal
   const handleNetworkSelect = async (net: Network) => {
-  // 1. Initial Checks
-  if (!hasWalletConnected) {
-    await open();
-    return;
-  }
-  
-  if (chainId === net.chainId) return; // Already on this network
-  
-  try {
-    // 2. Trigger Wallet Switch
-    await switchChain({ chainId: net.chainId });
-    toast.success(`Network Switched to ${net.name}`);
-    
-    // 3. Conditional Routing Logic
-    // We only route if we are currently on a network-specific page (/network/...)
-    const isNetworkPage = pathname?.startsWith('/network/');
-    
-    if (isNetworkPage) {
-      // Check if the current URL path already contains the target chainId
-      const isAlreadyOnTargetNetworkPage = pathname === `/network/${net.chainId}`;
-      
-      if (!isAlreadyOnTargetNetworkPage) {
-        router.push(`/network/${net.chainId}`);
-      }
+    // 1. Initial Checks
+    if (!hasWalletConnected) {
+      await connect()
+      return
     }
-    // If not on a /network/ page (e.g., Home or Create), we do nothing (no route)
+    
+    if (chainId === net.chainId) return // Already on this network
+    
+    setIsSwitching(true)
+    try {
+      // 2. Trigger Wallet Switch
+      await switchChain(net.chainId)
+      toast.success(`Network Switched to ${net.name}`)
+      
+      // 3. Conditional Routing Logic
+      const isNetworkPage = pathname?.startsWith('/network/')
+      
+      if (isNetworkPage) {
+        const isAlreadyOnTargetNetworkPage = pathname === `/network/${net.chainId}`
+        
+        if (!isAlreadyOnTargetNetworkPage) {
+          router.push(`/network/${net.chainId}`)
+        }
+      }
 
-  } catch (error: any) {
-    console.error('Network switch error:', error);
-    toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`);
+    } catch (error: any) {
+      console.error('Network switch error:', error)
+      toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`)
+    } finally {
+      setIsSwitching(false)
+    }
   }
-};
 
   return (
     <DropdownMenu>
@@ -367,29 +366,29 @@ export function NetworkStatusSelector({ className }: { className?: string }) {
 
 export function MobileNetworkSelector({ className }: { className?: string }) {
   const { networks, network } = useNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
-  const { switchChain, isPending: isSwitching } = useSwitchChain()
- 
+  const { isConnected, address, switchChain, connect } = useWallet() // CHANGED
+  const { authenticated } = usePrivy()
+  const [isSwitching, setIsSwitching] = useState(false)
   
   const router = useRouter()
   const pathname = usePathname()
 
-  const hasWalletConnected = isConnected && !!address
+  const hasWalletConnected = authenticated && isConnected && !!address
   
   const handleNetworkSelect = async (net: Network) => {
     console.log('Mobile network select:', net.name)
     
     if (!hasWalletConnected) {
-      await open()
+      await connect()
       return
     }
     
     if (network?.chainId === net.chainId) return
     
+    setIsSwitching(true)
     try {
-      await switchChain({ chainId: net.chainId })
-      toast.success( `Network Switched to ${net.name}`)
+      await switchChain(net.chainId)
+      toast.success(`Network Switched to ${net.name}`)
 
       // Routing Logic
       const isLandingPage = pathname === '/'
@@ -400,7 +399,9 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
       }
     } catch (error: any) {
       console.error('Network switch error:', error)
-       toast.error( `Switch Failed: ${error.message || "Failed to switch network"}` )
+      toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`)
+    } finally {
+      setIsSwitching(false)
     }
   }
   
@@ -455,11 +456,8 @@ export function NetworkBreadcrumb({ className }: { className?: string }) {
 
 export function NetworkStatusIndicator({ className }: { className?: string }) {
   const { network } = useNetwork()
-  const { chainId } = useAppKitNetwork()
-  const { isConnected } = useAppKitAccount()
+  const { chainId, isConnected } = useWallet() // CHANGED
 
-  // const currentChainId = chainId
-  
   if (!isConnected || !network || !chainId) {
     return (
       <div className={`flex items-center space-x-2 text-red-600 ${className}`}>
@@ -545,27 +543,27 @@ export function NetworkGrid({ onNetworkSelect }: { onNetworkSelect?: (network: N
 
 export function HorizontalNetworkSelector({ className }: { className?: string }) {
   const { networks, network } = useNetwork()
-  const { open } = useAppKit()
-  const { isConnected, address } = useAppKitAccount()
-  const { switchChain, isPending: isSwitching } = useSwitchChain()
-
+  const { isConnected, address, switchChain, connect } = useWallet() // CHANGED
+  const { authenticated } = usePrivy()
+  const [isSwitching, setIsSwitching] = useState(false)
   
   const router = useRouter()
   const pathname = usePathname()
 
-  const hasWalletConnected = isConnected && !!address
+  const hasWalletConnected = authenticated && isConnected && !!address
   
   const handleNetworkSelect = async (net: Network) => {
     if (!hasWalletConnected) {
-      await open()
+      await connect()
       return
     }
     
     if (network?.chainId === net.chainId) return
     
+    setIsSwitching(true)
     try {
-      await switchChain({ chainId: net.chainId })
-       toast.success( `Network Switched to ${net.name}`)
+      await switchChain(net.chainId)
+      toast.success(`Network Switched to ${net.name}`)
        
       // Routing Logic
       const isLandingPage = pathname === '/'
@@ -576,7 +574,9 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
       }
     } catch (error: any) {
       console.error('Network switch error:', error)
-       toast.error( `Switch Failed: ${error.message || "Failed to switch network"}` )
+      toast.error(`Switch Failed: ${error.message || "Failed to switch network"}`)
+    } finally {
+      setIsSwitching(false)
     }
   }
   
@@ -603,48 +603,65 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
 
 export function MiniNetworkIndicator({ className = "" }: { className?: string }) {
   const { networks } = useNetwork()
-  const { chainId } = useAppKitNetwork()
-  const { isConnected } = useAppKitAccount()
-  const { switchChain } = useSwitchChain()
+  const { chainId, isConnected, switchChain } = useWallet()
+  const [isSwitching, setIsSwitching] = useState(false)
+  
   const currentNetwork = networks.find((net) => net.chainId === chainId)
 
-  // Only show if the wallet is actually connected
   if (!isConnected) return null
+
+  const handleSwitchNetwork = async (targetChainId: number) => {
+    setIsSwitching(true)
+    try {
+      await switchChain(targetChainId)
+      toast.success("Network switched")
+    } catch (error) {
+      console.error("Failed to switch network:", error)
+    } finally {
+      setIsSwitching(false)
+    }
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button 
-          className={`flex items-center justify-center outline-none border border-white/10 rounded-full bg-white/5 hover:bg-white/10 transition-all h-9 w-9 shrink-0 ${className}`}
+          className={cn(
+            "flex items-center justify-center outline-none border border-border rounded-full bg-background hover:bg-accent transition-all h-9 w-9 shrink-0",
+            className
+          )}
+          disabled={isSwitching}
         >
           {currentNetwork ? (
             <NetworkImage network={currentNetwork} size="sm" />
           ) : (
-            <div className="w-5 h-5 rounded-full bg-white/10 animate-pulse flex items-center justify-center">
-               <NetworkIcon size={12} className="text-gray-500" />
+            <div className="w-5 h-5 rounded-full bg-muted animate-pulse flex items-center justify-center">
+               <NetworkIcon size={12} className="text-muted-foreground" />
             </div>
           )}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64 bg-[#0d121f] border-white/10 text-white z-[110] shadow-2xl">
-        <div className="px-4 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest border-b border-white/5">
+      {/* SYSTEM THEME: Changed bg, border, and text colors */}
+      <DropdownMenuContent align="end" className="w-64 bg-background border-border text-foreground z-[110] shadow-2xl">
+        <div className="px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b border-border">
           Switch Network
         </div>
         {networks.map((net) => (
           <DropdownMenuItem
             key={net.chainId}
-            onClick={() => switchChain({ chainId: net.chainId })}
-            className="flex items-center gap-3 p-4 focus:bg-white/5 cursor-pointer"
+            onClick={() => handleSwitchNetwork(net.chainId)}
+            disabled={isSwitching}
+            className="flex items-center gap-3 p-4 focus:bg-accent cursor-pointer"
           >
             <NetworkImage network={net} size="sm" />
             <div className="flex flex-col">
                <span className="text-sm font-bold">{net.name}</span>
-               {net.isTestnet && <span className="text-[9px] text-orange-400 font-medium">Testnet</span>}
+               {net.isTestnet && <span className="text-[9px] text-orange-500 font-medium">Testnet</span>}
             </div>
             {chainId === net.chainId && (
               <div className="ml-auto flex items-center gap-1.5">
-                <span className="text-[10px] text-green-400 font-bold uppercase tracking-tighter">Active</span>
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <span className="text-[10px] text-green-500 font-bold uppercase tracking-tighter">Active</span>
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               </div>
             )}
           </DropdownMenuItem>
@@ -653,4 +670,3 @@ export function MiniNetworkIndicator({ className = "" }: { className?: string })
     </DropdownMenu>
   )
 }
-

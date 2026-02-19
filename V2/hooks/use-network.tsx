@@ -164,7 +164,37 @@ export const networks: Network[] = [
       decimals: 18,
     },
     isTestnet: false,
-  }
+  },
+{
+    name: "BNB",
+    symbol: "BSC",
+    chainId: 56,
+    rpcUrl: "https://bsc-dataseed.binance.org",
+    blockExplorerUrls: "https://bscscan.com",
+    explorerUrl: "https://bscscan.com",
+    color: "#F3BA2F",
+    logoUrl: "/bnb.jpg",
+    iconUrl: "/bnb.jpg",
+    factoryAddresses: [
+      "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1", // Replace with your actual BSC factory addresses
+      "0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36",
+      "0x4B8c7A12660C4847c65662a953F517198fBFc0ED"
+    ],
+    factories: {
+      droplist: "0x4B8c7A12660C4847c65662a953F517198fBFc0ED",
+      dropcode: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
+      custom: "0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36",
+      quest: "",
+      quiz: ""
+    },
+    tokenAddress: ZeroAddress,
+    nativeCurrency: {
+      name: "BNB",
+      symbol: "BNB",
+      decimals: 18,
+    },
+    isTestnet: false,
+}
 ]
 
 interface NetworkContextType {

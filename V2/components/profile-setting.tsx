@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAppKitAccount, useAppKitProvider } from "@reown/appkit/react"
+import { useWallet } from "@/components/wallet-provider"  // Changed from useAppKitAccount
 import { BrowserProvider, Eip1193Provider } from 'ethers'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
@@ -56,8 +56,7 @@ const GENERATED_SEEDS = [
 ];
 
 export function ProfileSettingsModal() {
-  const { address, isConnected } = useAppKitAccount()
-  const { walletProvider } = useAppKitProvider('eip155')
+  const { address, isConnected, signer } = useWallet()  // Updated to use useWallet hook
   
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
@@ -142,7 +141,7 @@ export function ProfileSettingsModal() {
       const data = await response.json()
       if (data.success) {
         setFormData(prev => ({ ...prev, avatar_url: data.imageUrl }))
-        toast.success("Image Uploaded,Your custom avatar is ready to save.")
+        toast.success("Image Uploaded, Your custom avatar is ready to save.")
       } else {
         throw new Error(data.message)
       }
@@ -153,7 +152,7 @@ export function ProfileSettingsModal() {
     }
   }
 
-  // ✅ CRITICAL FIX: Include current_wallet in the body
+  // ✅ CRITICAL FIX: Include current_wallet in the body with proper error handling
   const checkUniqueness = async (field: keyof UserProfile, value: string) => {
     if (!value || value.trim() === "") {
         // Reset status if empty
@@ -165,17 +164,41 @@ export function ProfileSettingsModal() {
         return true; 
     }
     
+    // Ensure we have an address and wallet is connected before checking
+    if (!address || !isConnected) {
+        console.warn("Wallet not connected, skipping uniqueness check");
+        return true; // Don't block if wallet not connected
+    }
+    
     try {
+        const payload = { 
+            field, 
+            value: value.trim(), 
+            current_wallet: address.toLowerCase() // <--- ENSURE LOWERCASE & SEND WALLET ADDRESS HERE
+        };
+        
+        console.log("Checking uniqueness:", payload); // Debug log
+        
         const res = await fetch(`${API_BASE_URL}/api/profile/check-availability`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                field, 
-                value, 
-                current_wallet: address // <--- SEND WALLET ADDRESS HERE
-            })
+            body: JSON.stringify(payload)
         });
+        
+        if (!res.ok) {
+            console.error("Backend returned error status:", res.status);
+            const errorData = await res.json();
+            console.error("Error details:", errorData);
+            return true; // Don't block on backend errors
+        }
+        
         const data = await res.json();
+        
+        // Check for validation errors from backend
+        if (data.detail) {
+            console.error("Backend validation error:", data.detail);
+            return true; // Don't block on backend errors
+        }
         
         if (!data.available) {
             setFieldStatus(prev => ({ ...prev, [field]: data.message })); // Set Error Message
@@ -191,8 +214,13 @@ export function ProfileSettingsModal() {
   };
 
   const handleSave = async () => {
-    if (!isConnected || !walletProvider || !address) {
-      toast.error("Wallet not connected")
+    if (!isConnected || !address) {
+      toast.error("Please connect your wallet first")
+      return
+    }
+
+    if (!walletProvider) {
+      toast.error("Wallet provider not available")
       return
     }
 
@@ -203,7 +231,7 @@ export function ProfileSettingsModal() {
 
     setSaving(true)
 
-    // Check all fields
+    // Check all fields - only if wallet is connected
     const validations = await Promise.all([
         checkUniqueness('username', formData.username),
         checkUniqueness('email', formData.email),

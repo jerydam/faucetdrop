@@ -9,9 +9,7 @@ import { Toaster } from "sonner"
 import { NetworkProvider } from "@/hooks/use-network"
 import { WalletProvider } from "@/components/wallet-provider"
 import { Footer } from "@/components/footer"
-import { QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider } from 'wagmi'
-import { wagmiAdapter, queryClient } from '@/config/appkit'
+import { Providers } from "@/components/PrivyProvider" // Import your Providers component
 import sdk from "@farcaster/miniapp-sdk"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -81,21 +79,20 @@ export default function RootLayout({
           enableSystem 
           disableTransitionOnChange
         >
-          <WagmiProvider config={wagmiAdapter.wagmiConfig}>
-            <QueryClientProvider client={queryClient}>
-              <NetworkProvider>
-                <WalletProvider>
-                  <div className="min-h-screen flex flex-col">
-                    <main className="flex-1">
-                      {children}
-                    </main>
-                    <Footer />
-                  </div>
-                  <Toaster richColors position="top-center" closeButton />
-                </WalletProvider>
-              </NetworkProvider>
-            </QueryClientProvider>
-          </WagmiProvider>
+          {/* SINGLE PROVIDER WRAPPER - handles Privy, Wagmi, and QueryClient */}
+          <Providers>
+            <NetworkProvider>
+              <WalletProvider>
+                <div className="min-h-screen flex flex-col">
+                  <main className="flex-1">
+                    {children}
+                  </main>
+                  <Footer />
+                </div>
+                <Toaster richColors position="top-center" closeButton />
+              </WalletProvider>
+            </NetworkProvider>
+          </Providers>
         </ThemeProvider>
       </body>
     </html>

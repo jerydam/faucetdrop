@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useWallet } from "@/components/wallet-provider" 
-import { usePrivy } from "@privy-io/react-auth" // <-- IMPORT PRIVY
+import { usePrivy } from "@privy-io/react-auth" 
 import { BrowserProvider, Eip1193Provider } from 'ethers'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
@@ -25,13 +25,24 @@ interface UserProfile {
 
 const GENERATED_SEEDS = [
   "Jerry","John", "Aneka", "Zack", "Molly", "Bear", "Crypto", "Whale", "Pepe",
-  "Satoshi", "Vitalik", "Gwei"
+  "Satoshi", "Vitalik", "Gwei", "HODL", "WAGMI", "Doge", "Shiba", "Solana",
+  "Ether", "Bitcoin", "Chain", "Block", "DeFi", "NFT", "Alpha", "Beta",
+  "Neon", "Cyber", "Pixel", "Glitch", "Retro", "Vapor", "Synth", "Wave",
+  "Pulse", "Echo", "Flux", "Spark", "Glow", "Shine", "Shadow", "Light",
+  "Dark", "Void", "Zenith", "Apex", "Nova", "Nebula", "Galaxy", "Comet",
+  "Zeus", "Hera", "Odin", "Thor", "Loki", "Freya", "Ra", "Anubis",
+  "Apollo", "Athena", "Ares", "Hades", "Poseidon", "Atlas", "Titan",
+  "Phoenix", "Dragon", "Griffin", "Hydra", "Medusa", "Pegasus", "Sphinx",
+  "Wolf", "Eagle", "Hawk", "Lion", "Tiger", "Shark", "Dolphin", "Panda",
+  "Fox", "Owl", "Raven", "Crow", "Snake", "Cobra", "Viper", "Toad",
+  "River", "Sky", "Ocean", "Forest", "Mountain", "Rain", "Storm", "Snow",
+  "Leo", "Zoe", "Max", "Ruby", "Kai", "Luna", "Finn", "Cleo",
+  "Jasper", "Milo", "Otis", "Arlo", "Ezra", "Silas", "Jude", "Rowan"
 ];
 
 export function ProfileSettingsModal() {
   const { address, isConnected, signer } = useWallet() 
   
-  // --- PRIVY HOOKS FOR VERIFICATION ---
   const { 
     user, 
     linkTwitter, 
@@ -50,36 +61,56 @@ export function ProfileSettingsModal() {
   const [usernameError, setUsernameError] = useState<string | null>(null)
   const [seedOffset, setSeedOffset] = useState(0);
 
-  // We only need to track manual inputs now. 
-  // Social handles are derived directly from Privy's 'user' object.
   const [formData, setFormData] = useState<UserProfile>({
     username: "",
     bio: "",
     avatar_url: ""
   })
 
-  // ---------------------------------------------------------
-  // 1. DATA FETCHING (Only manual fields)
-  // ---------------------------------------------------------
+  // --- NEW: FALLBACK HELPERS ---
+  const getFallbackAvatar = useCallback(() => {
+    if (!user) return "";
+    const google = user.google as any;
+    const twitter = user.twitter as any;
+    return google?.picture || google?.profilePictureUrl || twitter?.profilePictureUrl || "";
+  }, [user]);
+
+  const getFallbackUsername = useCallback(() => {
+    if (!user) return "";
+    if (user.twitter?.username) return user.twitter.username;
+    if (user.discord?.username) return user.discord.username;
+    if (user.google?.name) return user.google.name.replace(/\s+/g, '');
+    if (user.email?.address) return user.email.address.split('@')[0];
+    return "";
+  }, [user]);
+
+
+  // --- 1. DATA FETCHING ---
   const fetchProfile = useCallback(async () => {
     if (!address) return;
     setLoading(true)
     try {
       const res = await fetch(`${API_BASE_URL}/api/profile/${address}`)
       const data = await res.json()
-      if (data.profile) {
-        setFormData({
-          username: data.profile.username || "",
-          bio: data.profile.bio || "",
-          avatar_url: data.profile.avatar_url || ""
-        })
-      }
+      
+      // Get DB values (or empty strings)
+      const dbUsername = data.profile?.username || "";
+      const dbBio = data.profile?.bio || "";
+      const dbAvatar = data.profile?.avatar_url || "";
+
+      // PRE-FILL logic: If DB is empty, use the Privy Fallbacks
+      setFormData({
+        username: dbUsername || getFallbackUsername(),
+        bio: dbBio,
+        avatar_url: dbAvatar || getFallbackAvatar()
+      })
+
     } catch (error) {
       console.error("Failed to fetch profile", error)
     } finally {
       setLoading(false)
     }
-  }, [address]);
+  }, [address, getFallbackUsername, getFallbackAvatar]);
 
   useEffect(() => {
     if (isOpen && address) {
@@ -87,6 +118,20 @@ export function ProfileSettingsModal() {
       setUsernameError(null)
     }
   }, [isOpen, address, fetchProfile])
+
+  // --- NEW: Watch for Social Links while Modal is Open ---
+  // If a user clicks "Connect Twitter", we want to instantly pre-fill the username
+  // if they haven't typed one yet.
+  useEffect(() => {
+    if (isOpen && user) {
+        setFormData(prev => ({
+            ...prev,
+            // Only overwrite if the field is currently completely empty
+            username: prev.username || getFallbackUsername(),
+            avatar_url: prev.avatar_url || getFallbackAvatar()
+        }));
+    }
+  }, [user, isOpen, getFallbackUsername, getFallbackAvatar]);
 
 
   // ---------------------------------------------------------
@@ -116,9 +161,9 @@ export function ProfileSettingsModal() {
   const handleSave = async () => {
     if (!isConnected || !address || !signer) return toast.error("Wallet error");
     
-    // Ensure they linked at least Google or Twitter via Privy
     if (!user?.google?.email) return toast.error("Please connect your Google (Email) account.");
     if (!user?.twitter?.username) return toast.error("Please connect your X (Twitter) account.");
+    // if (!user?.telegram?.username) return toast.error("Please connect your Telegram account."); // Re-enable if required
 
     setSaving(true)
 
@@ -133,21 +178,16 @@ export function ProfileSettingsModal() {
       const message = `Update Profile\nWallet: ${address}\nNonce: ${nonce}`
       const signature = await signer.signMessage(message)
 
-      // Payload includes manual form data AND Privy verified data
       const payload = {
         wallet_address: address,
         username: formData.username,
         bio: formData.bio,
         avatar_url: formData.avatar_url,
-        
-        // --- ADD PRIVY VERIFIED DATA TO PAYLOAD ---
         email: user?.google?.email || "",
         twitter_handle: user?.twitter?.username || "",
         discord_handle: user?.discord?.username || "",
         telegram_handle: user?.telegram?.username || "",
         farcaster_handle: user?.farcaster?.username || "",
-        // ------------------------------------------
-
         signature,
         message,
         nonce
@@ -176,52 +216,73 @@ export function ProfileSettingsModal() {
     }
   }
 
-  // ... (Keep handleFileUpload, handleShuffle)
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { /* ... */ }
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const uploadData = new FormData()
+      uploadData.append('file', file)
+
+      const response = await fetch(`${API_BASE_URL}/upload-image`, {
+        method: 'POST',
+        body: uploadData
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        setFormData(prev => ({ ...prev, avatar_url: data.imageUrl }))
+        toast.success("Image Uploaded, Your custom avatar is ready to save.")
+      } else {
+        throw new Error(data.message)
+      }
+    } catch (error: any) {
+      toast.error(`Upload failed: ${error.message}`)
+    } finally {
+      setUploading(false)
+    }
+  }
   const handleShuffle = () => { setSeedOffset((prev) => (prev + 8) % GENERATED_SEEDS.length); }
   const currentSeeds = GENERATED_SEEDS.slice(seedOffset, seedOffset + 8);
 
-  // --- REUSABLE UI COMPONENT FOR PRIVY ACCOUNTS ---
-  // Replace your existing PrivySocialRow with this updated version
-const PrivySocialRow = ({ label, handle, onConnect }: { label: string, handle?: string | null, onConnect: () => Promise<any> | void }) => {
-  const [isConnecting, setIsConnecting] = useState(false);
+  const PrivySocialRow = ({ label, handle, onConnect }: { label: string, handle?: string | null, onConnect: () => Promise<any> | void }) => {
+    const [isConnecting, setIsConnecting] = useState(false);
 
-  const handleConnect = async () => {
-    setIsConnecting(true);
-    try {
-      // This automatically opens the new tab (OAuth) or the native app (Telegram/Farcaster)
-      await onConnect(); 
-    } catch (error) {
-      console.error(`Failed to connect ${label}`, error);
-      // Privy handles its own error toasts usually, but we stop the loading spinner
-    } finally {
-      setIsConnecting(false);
-    }
+    const handleConnect = async () => {
+      setIsConnecting(true);
+      try {
+        await onConnect(); 
+      } catch (error) {
+        console.error(`Failed to connect ${label}`, error);
+      } finally {
+        setIsConnecting(false);
+      }
+    };
+
+    return (
+      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
+          <div className="flex flex-col">
+              <span className="text-sm font-semibold text-foreground">{label}</span>
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  {handle ? (
+                    <span className="text-green-600 flex items-center font-medium">
+                      <CheckCircle2 className="h-3 w-3 mr-1" /> {handle}
+                    </span>
+                  ) : "Not linked"}
+              </span>
+          </div>
+          {handle ? (
+              <Button size="sm" variant="ghost" disabled className="text-green-600 bg-green-50">Linked</Button>
+          ) : (
+              <Button size="sm" variant="outline" type="button" onClick={handleConnect} disabled={isConnecting}>
+                  {isConnecting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  {isConnecting ? "Opening..." : "Connect"}
+              </Button>
+          )}
+      </div>
+    );
   };
-
-  return (
-    <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
-        <div className="flex flex-col">
-            <span className="text-sm font-semibold text-foreground">{label}</span>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                {handle ? (
-                  <span className="text-green-600 flex items-center font-medium">
-                    <CheckCircle2 className="h-3 w-3 mr-1" /> {handle}
-                  </span>
-                ) : "Not linked"}
-            </span>
-        </div>
-        {handle ? (
-            <Button size="sm" variant="ghost" disabled className="text-green-600 bg-green-50">Linked</Button>
-        ) : (
-            <Button size="sm" variant="outline" type="button" onClick={handleConnect} disabled={isConnecting}>
-                {isConnecting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                {isConnecting ? "Opening..." : "Connect"}
-            </Button>
-        )}
-    </div>
-  );
-};
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -293,7 +354,7 @@ const PrivySocialRow = ({ label, handle, onConnect }: { label: string, handle?: 
                           className={usernameError ? "border-red-500" : ""} 
                         />
                         {usernameError && <p className="text-xs text-red-500 mt-1">{usernameError}</p>}
-                        {usernameError === null && <p className="text-xs text-green-600 mt-1 flex items-center"><CheckCircle2 className="h-3 w-3 mr-1"/> Available</p>}
+                        {usernameError === null && formData.username && <p className="text-xs text-green-600 mt-1 flex items-center"><CheckCircle2 className="h-3 w-3 mr-1"/> Available</p>}
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 items-start gap-2">
@@ -314,7 +375,6 @@ const PrivySocialRow = ({ label, handle, onConnect }: { label: string, handle?: 
               </h4>
               <div className="grid gap-3">
                 
-                {/* Privy automatically provides these linking methods and updates the 'user' object */}
                 <PrivySocialRow label="Email (Google)" handle={user?.google?.email} onConnect={linkGoogle} />
                 <PrivySocialRow label="X (Twitter)" handle={user?.twitter?.username} onConnect={linkTwitter} />
                 <PrivySocialRow label="Discord" handle={user?.discord?.username} onConnect={linkDiscord} />

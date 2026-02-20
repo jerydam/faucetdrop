@@ -169,7 +169,7 @@ export const networks: Network[] = [
     name: "BNB",
     symbol: "BSC",
     chainId: 56,
-    rpcUrl: "https://bsc-dataseed.binance.org",
+    rpcUrl: "https://bnb-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
     blockExplorerUrls: "https://bscscan.com",
     explorerUrl: "https://bscscan.com",
     color: "#F3BA2F",

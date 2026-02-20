@@ -15,7 +15,6 @@ export default function Home() {
       <div className="container">
         <HeroSection />
         <Networks />
-        <h1 className="text-3xl md:text-4xl font-bold leading-tight tracking-[-0.015em] px-4 py-20 text-center text-white">The Flow Starts Here</h1>
         <OfferTabs />
         <WhyFaucetDrops />
         <FaucetFlow />

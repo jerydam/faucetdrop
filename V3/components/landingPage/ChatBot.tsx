@@ -5,16 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
 
 const QUICK_REPLIES = [
-    { label: "🚀 How do I launch?", value: "I want to launch a new token." },
-    { label: "🛡️ Is it bot-proof?", value: "How does your anti-bot security work?" },
-    { label: "💰 What is the cost?", value: "What are the fees for a large distribution?" },
+    { label: "🚀 Launch a Faucet", value: "How do I create and launch a faucet campaign?" },
+    { label: "🎁 Claim Issue", value: "I completed tasks but didn’t receive my tokens." },
+    { label: "🔌 Wallet Problem", value: "My wallet won’t connect or my transaction failed." },
+    { label: "🛡️ Anti-Bot Protection", value: "How does FaucetDrops prevent bots and abuse?" },
+    { label: "🏢 Enterprise / API", value: "Do you offer API access or enterprise integrations?" },
 ];
 
 export default function ChatBot() {
     const [messages, setMessages] = useState([
         {
             role: 'bot',
-            text: "Hi! I'm the FaucetDrops AI. I can help you scale your distribution. What's on your mind?",
+            text: "Hi! How may I help you today?",
             sender: 'Gemini Bot',
             avatar: '/favicon.png',
         }
@@ -66,7 +68,7 @@ export default function ChatBot() {
                 body: JSON.stringify({
                     message: text,
                     history
-                }),                
+                }),
             });
 
             if (!response.ok) {
@@ -115,16 +117,15 @@ export default function ChatBot() {
     };
 
     return (
-        <div className="w-full max-w-2xl mx-auto">
+        <div className="w-full max-w-2xl px-[20px]">
             <div className="rounded-3xl border border-white/10 shadow-2xl bg-black/40 backdrop-blur-xl overflow-hidden flex flex-col h-[600px] relative">
 
                 {/* Header */}
                 <div className="p-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        <span className="text-sm font-semibold text-white/90">Gemini Support Agent</span>
+                        <span className="text-sm font-semibold text-white/90">FaucetDrops Support Agent</span>
                     </div>
-                    <span className="text-[10px] text-white/40 uppercase tracking-tighter">Powered by FaucetDrops</span>
                 </div>
 
                 {/* Chat Body */}
@@ -150,10 +151,11 @@ export default function ChatBot() {
                         <div className="flex flex-col gap-2">
                             <span className="text-[10px] text-blue-400 font-mono ml-11 animate-pulse">ANALYZING REQUEST...</span>
                             <div className="flex gap-3 items-center">
-                                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
-                                    <div className="flex gap-1">
+                                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center px-6">
+                                    <div className="flex gap-1.5">
                                         <div className="w-1 h-1 bg-white/40 rounded-full animate-bounce" />
                                         <div className="w-1 h-1 bg-white/40 rounded-full animate-bounce [animation-delay:0.2s]" />
+                                        <div className="w-1 h-1 bg-white/40 rounded-full animate-bounce [animation-delay:0.4s]" />
                                     </div>
                                 </div>
                             </div>

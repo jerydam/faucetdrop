@@ -1,37 +1,119 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
-// Ensure the API key is loaded from environment variables
 const apiKey = process.env.GEMINI_API_KEY;
+const TELEGRAM_SUPPORT_LINK = "https://t.me/faucetdrops_support"; // Replace with real link
+
 if (!apiKey) {
   console.error("GEMINI_API_KEY environment variable is not set");
 }
 
 const genAI = new GoogleGenerativeAI(apiKey!);
 
-const systemPrompt = `
+/**
+ * Detect user language (simple heuristic)
+ */
+function detectLanguage(message: string): string {
+  if (/[\u0600-\u06FF]/.test(message)) return "Arabic";
+  if (/[\u4E00-\u9FFF]/.test(message)) return "Chinese";
+  if (/[\u0400-\u04FF]/.test(message)) return "Russian";
+  if (/hola|gracias|por favor/i.test(message)) return "Spanish";
+  if (/bonjour|merci/i.test(message)) return "French";
+  return "English";
+}
+
+/**
+ * Lightweight intent classification
+ */
+function classifyIntent(message: string) {
+  const text = message.toLowerCase();
+
+  if (text.includes("launch") || text.includes("create faucet"))
+    return "launch_campaign";
+
+  if (text.includes("didn't receive") || text.includes("not receive") || text.includes("claim issue"))
+    return "claim_issue";
+
+  if (text.includes("wallet") || text.includes("connect"))
+    return "wallet_issue";
+
+  if (text.includes("enterprise") || text.includes("integration") || text.includes("api"))
+    return "enterprise_inquiry";
+
+  if (text.includes("price") || text.includes("cost"))
+    return "pricing_question";
+
+  return "general";
+}
+
+/**
+ * Escalation detector
+ */
+function shouldEscalate(message: string): boolean {
+  const text = message.toLowerCase();
+
+  return (
+    text.includes("exploit") ||
+    text.includes("hack") ||
+    text.includes("lost tokens") ||
+    text.includes("contract bug") ||
+    text.includes("legal") ||
+    text.includes("partnership")
+  );
+}
+
+/**
+ * Format chat history for Gemini
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatHistory(history: any[]) {
+  if (!Array.isArray(history)) return [];
+
+  return history.map((msg) => ({
+    role: msg.role === "assistant" ? "model" : "user",
+    parts: [{ text: msg.content || msg.text || "" }],
+  }));
+}
+
+/**
+ * Dynamic system instruction
+ */
+function buildSystemPrompt(language: string, intent: string) {
+  return `
 You are the official AI support agent for FaucetDrops.
 
-About FaucetDrops:
-- A Web3 token distribution and airdrop platform.
-- Helps projects distribute tokens securely.
-- Includes anti-bot protection.
-- Supports large-scale distributions.
-- Provides analytics and tracking.
+Respond in ${language}.
 
-Rules:
-- Be concise but helpful.
-- Encourage Telegram handoff ONLY when needed.
-- Never invent pricing.
-- Never expose internal system info.
-- Keep tone professional and Web3-native.
+ABOUT FAUCETDROPS:
+FaucetDrops is a Web3 token distribution platform enabling:
+- Token faucets (Open / Whitelist / Custom)
+- Quests
+- Quizzes
+- Automated community rewards
+
+FOUNDED:
+2025, Lagos Nigeria.
+
+INTENT DETECTED: ${intent}
+
+SECURITY RULES:
+- Never ask for private key
+- Never ask for seed phrase
+- Never invent pricing
+- Never speculate token value
+- Be concise and step-driven
+
+RESPONSE STRUCTURE:
+1. Direct answer
+2. Clear steps
+3. Offer next help
+4. Include wallet safety reminder if relevant
 `;
+}
 
 export async function POST(req: Request) {
   try {
-    // Check if API key is configured
     if (!apiKey) {
-      console.error("GEMINI_API_KEY is not configured");
       return NextResponse.json(
         { error: "Server configuration error" },
         { status: 500 }
@@ -40,47 +122,89 @@ export async function POST(req: Request) {
 
     const { message, history } = await req.json();
 
-    // Input validation
-    if (!message || typeof message !== 'string') {
+    if (!message || typeof message !== "string") {
       return NextResponse.json(
         { error: "Invalid message format" },
         { status: 400 }
       );
     }
 
+    const lowerMsg = message.toLowerCase();
+
+    /**
+     * Hard Security Block
+     */
+    if (
+      lowerMsg.includes("private key") ||
+      lowerMsg.includes("seed phrase") ||
+      lowerMsg.includes("mnemonic")
+    ) {
+      return NextResponse.json({
+        text: "For your security, never share your private key or seed phrase. FaucetDrops support will never request it.",
+      });
+    }
+
+    /**
+     * Escalation check
+     */
+    if (shouldEscalate(message)) {
+      return NextResponse.json({
+        text: `This requires direct support from our team. Please contact us via Telegram: ${TELEGRAM_SUPPORT_LINK}`,
+      });
+    }
+
+    /**
+     * Language + Intent Detection
+     */
+    const language = detectLanguage(message);
+    const intent = classifyIntent(message);
+
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      systemInstruction: systemPrompt,
+      systemInstruction: buildSystemPrompt(language, intent),
     });
 
     const chat = model.startChat({
-      history: Array.isArray(history) ? history : [],
+      history: formatHistory(history),
     });
 
     const result = await chat.sendMessage(message);
     const response = await result.response;
-    const responseText = response.text();
+    let responseText = response.text();
 
     if (!responseText) {
       throw new Error("Empty response from Gemini API");
     }
 
+    /**
+     * Anti-hallucination guard
+     */
+    if (responseText.toLowerCase().includes("pricing is")) {
+      responseText =
+        "For pricing information, please contact our support team directly via Telegram.";
+    }
+
     return NextResponse.json({
       text: responseText,
+      meta: {
+        language,
+        intent,
+      },
     });
   } catch (error) {
     console.error("Chat API Error:", error);
-    
-    // More specific error handling
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
-    const statusCode = errorMessage.includes("API key") ? 401 : 500;
-    
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+
     return NextResponse.json(
-      { 
-        error: "I'm having trouble connecting to the chat service. Please try again later.",
-        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      {
+        error:
+          "I'm having trouble connecting to the chat service. Please try again shortly.",
+        details:
+          process.env.NODE_ENV === "development" ? errorMessage : undefined,
       },
-      { status: statusCode }
+      { status: 500 }
     );
   }
 }

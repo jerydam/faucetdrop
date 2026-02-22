@@ -91,6 +91,13 @@ FaucetDrops is a Web3 token distribution platform enabling:
 - Quizzes
 - Automated community rewards
 
+AVAILABLE NETWORK:
+- Celo
+- Base
+- Lisk
+- Arbitrum
+- Binance Smart Chain
+
 FOUNDED:
 2025, Lagos Nigeria.
 

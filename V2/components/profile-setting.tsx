@@ -158,12 +158,12 @@ export function ProfileSettingsModal() {
     } catch (error) { return true; }
   };
 
-  const handleSave = async () => {
+ const handleSave = async () => {
     if (!isConnected || !address || !signer) return toast.error("Wallet error");
     
+    // It's usually best to make these optional unless strictly required for your app's core loop
     if (!user?.google?.email) return toast.error("Please connect your Google (Email) account.");
     if (!user?.twitter?.username) return toast.error("Please connect your X (Twitter) account.");
-    // if (!user?.telegram?.username) return toast.error("Please connect your Telegram account."); // Re-enable if required
 
     setSaving(true)
 
@@ -183,11 +183,20 @@ export function ProfileSettingsModal() {
         username: formData.username,
         bio: formData.bio,
         avatar_url: formData.avatar_url,
+        
+        // --- SOCIAL HANDLES ---
         email: user?.google?.email || "",
         twitter_handle: user?.twitter?.username || "",
         discord_handle: user?.discord?.username || "",
         telegram_handle: user?.telegram?.username || "",
         farcaster_handle: user?.farcaster?.username || "",
+        
+        // --- NEW: PERMANENT IDs ---
+        twitter_id: user?.twitter?.subject || "",         // Privy uses 'subject' for the provider ID
+        discord_id: user?.discord?.subject || "",         // Privy uses 'subject' for the provider ID
+        telegram_user_id: user?.telegram?.telegramUserId || "",
+        farcaster_id: user?.farcaster?.fid ? String(user.farcaster.fid) : "", // Cast to string for the DB
+
         signature,
         message,
         nonce

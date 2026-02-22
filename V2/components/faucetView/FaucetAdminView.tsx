@@ -2204,12 +2204,15 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
   </DialogContent>
 </Dialog>
          {/* QR Code Share Dialog - Mobile Optimized */}
-     <QRCodeShareDialog
-        open={showQRDialog}
-        onOpenChange={setShowQRDialog}
-        faucetAddress={faucetAddress}
-        faucetName={faucetDetails?.name || "Faucet"}
-      />
+    <QRCodeShareDialog
+  open={showQRDialog}
+  onOpenChange={setShowQRDialog}
+  faucetAddress={faucetAddress}
+  faucetDetails={faucetDetails}
+  faucetMetadata={faucetMetadata}
+  selectedNetwork={selectedNetwork} // Pass current network object
+  tokenSymbol={tokenSymbol}         // Pass current token symbol string
+/>
     </Card>
   );
 };

@@ -85,7 +85,6 @@ const drawIceShield = (
   ctx.save();
   ctx.translate(cx, cy);
 
-  // Outer shield body
   const w = size, h = size * 1.15;
   ctx.beginPath();
   ctx.moveTo(0, -h * 0.5);
@@ -95,7 +94,6 @@ const drawIceShield = (
   ctx.bezierCurveTo(-w * 0.55, -h * 0.05, -w * 0.55, -h * 0.5,  0,        -h * 0.5);
   ctx.closePath();
 
-  // Gradient fill — ice blue
   const grad = ctx.createLinearGradient(-w * 0.55, -h * 0.5, w * 0.55, h * 0.6);
   grad.addColorStop(0,   "#c8f0ff");
   grad.addColorStop(0.3, "#7dd3f8");
@@ -107,7 +105,6 @@ const drawIceShield = (
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  // Glossy highlight (top-left inner shine)
   const shine = ctx.createRadialGradient(-w * 0.15, -h * 0.25, 0, -w * 0.1, -h * 0.1, w * 0.5);
   shine.addColorStop(0,   "rgba(255,255,255,0.55)");
   shine.addColorStop(0.5, "rgba(255,255,255,0.15)");
@@ -115,12 +112,10 @@ const drawIceShield = (
   ctx.fillStyle = shine;
   ctx.fill();
 
-  // Border
   ctx.strokeStyle = "rgba(255,255,255,0.75)";
   ctx.lineWidth = size * 0.06;
   ctx.stroke();
 
-  // White checkmark
   const ck = size * 0.28;
   ctx.beginPath();
   ctx.moveTo(-ck, 0);
@@ -146,7 +141,6 @@ const drawIceCoin = (
   ctx.save();
   ctx.translate(cx, cy);
 
-  // Body
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, Math.PI * 2);
   const g = ctx.createLinearGradient(-r, -r, r, r);
@@ -159,19 +153,16 @@ const drawIceCoin = (
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  // Shine
   const shine = ctx.createRadialGradient(-r * 0.3, -r * 0.35, 0, -r * 0.1, -r * 0.1, r * 0.9);
   shine.addColorStop(0,   "rgba(255,255,255,0.6)");
   shine.addColorStop(1,   "rgba(255,255,255,0)");
   ctx.fillStyle = shine;
   ctx.fill();
 
-  // Border
   ctx.strokeStyle = "rgba(255,255,255,0.7)";
   ctx.lineWidth = r * 0.08;
   ctx.stroke();
 
-  // Star
   ctx.beginPath();
   for (let i = 0; i < 10; i++) {
     const a = (i * Math.PI) / 5 - Math.PI / 2;
@@ -206,7 +197,6 @@ const drawIceGift = (
     return g;
   };
 
-  // Box body
   ctx.beginPath();
   ctx.rect(-hw, -hh + lidH, hw * 2, hh * 2 - lidH);
   ctx.fillStyle = iceGrad(-hh + lidH, hh);
@@ -218,7 +208,6 @@ const drawIceGift = (
   ctx.lineWidth = size * 0.05;
   ctx.stroke();
 
-  // Lid
   ctx.beginPath();
   ctx.rect(-hw * 1.1, -hh, hw * 2.2, lidH);
   ctx.fillStyle = iceGrad(-hh, -hh + lidH);
@@ -226,13 +215,11 @@ const drawIceGift = (
   ctx.strokeStyle = "rgba(255,255,255,0.6)";
   ctx.stroke();
 
-  // Ribbon vertical
   ctx.beginPath();
   ctx.rect(-size * 0.08, -hh, size * 0.16, hh * 2);
   ctx.fillStyle = "rgba(255,255,255,0.75)";
   ctx.fill();
 
-  // Ribbon horizontal
   ctx.beginPath();
   ctx.rect(-hw * 1.1, -hh, hw * 2.2, lidH);
   ctx.beginPath();
@@ -240,7 +227,6 @@ const drawIceGift = (
   ctx.fillStyle = "rgba(255,255,255,0.55)";
   ctx.fill();
 
-  // Bow loops
   const bowR = size * 0.16;
   [-1, 1].forEach((side) => {
     ctx.save();
@@ -270,7 +256,6 @@ const drawIceWallet = (
   iceG.addColorStop(0.5, "#7dd3f8");
   iceG.addColorStop(1,   "#0369a1");
 
-  // Wallet body
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(-hw, -hh, hw * 2, hh * 2, size * 0.12);
   else ctx.rect(-hw, -hh, hw * 2, hh * 2);
@@ -283,7 +268,6 @@ const drawIceWallet = (
   ctx.lineWidth = size * 0.05;
   ctx.stroke();
 
-  // Coin pocket on the right
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(hw * 0.22, -hh * 0.55, hw * 0.65, hh * 1.1, size * 0.1);
   else ctx.rect(hw * 0.22, -hh * 0.55, hw * 0.65, hh * 1.1);
@@ -293,13 +277,11 @@ const drawIceWallet = (
   ctx.lineWidth = size * 0.04;
   ctx.stroke();
 
-  // Coin in pocket
   ctx.beginPath();
   ctx.arc(hw * 0.55, 0, size * 0.14, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(255,255,255,0.8)";
   ctx.fill();
 
-  // Shine
   const shine = ctx.createRadialGradient(-hw * 0.3, -hh * 0.4, 0, 0, 0, hw);
   shine.addColorStop(0, "rgba(255,255,255,0.5)");
   shine.addColorStop(1, "rgba(255,255,255,0)");
@@ -312,7 +294,7 @@ const drawIceWallet = (
   ctx.restore();
 };
 
-// ─── Core card renderer (shared between preview & download) ───────────────────
+// ─── Core card renderer ───────────────────────────────────────────────────────
 
 async function renderMarketingCard(
   qrCanvas: HTMLCanvasElement,
@@ -323,20 +305,19 @@ async function renderMarketingCard(
     networkName: string;
     networkLogoUrl: string;
     logoPath: string;
-    /** Output canvas size — defaults to 1080×1512 (high-res) */
     outputSize?: { w: number; h: number };
   }
 ): Promise<HTMLCanvasElement> {
   const W = opts.outputSize?.w ?? 1080;
-  const H = opts.outputSize?.h ?? 1512;
-  const scale = W / 1080; // uniform scale factor vs reference 1080px
+  const H = opts.outputSize?.h ?? 1240;
+  const scale = W / 1080;
 
   const out = document.createElement("canvas");
   out.width = W;
   out.height = H;
   const ctx = out.getContext("2d")!;
 
-  // ── Background gradient ──────────────────────────────────────────────────
+  // ── Background gradient ────────────────────────────────────────────────
   const bg = ctx.createLinearGradient(0, 0, W, H);
   bg.addColorStop(0,   "#a8edff");
   bg.addColorStop(0.4, "#5ecef5");
@@ -345,7 +326,7 @@ async function renderMarketingCard(
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // ── Soft swirl blobs ─────────────────────────────────────────────────────
+  // ── Soft swirl blobs ──────────────────────────────────────────────────
   const blobs: [number, number, number, number, number][] = [
     [0.19, 0.46, 0.35, 0.11, 0.12],
     [0.83, 0.26, 0.28, 0.09, 0.10],
@@ -362,7 +343,7 @@ async function renderMarketingCard(
     ctx.restore();
   });
 
-  // ── Sparkles ─────────────────────────────────────────────────────────────
+  // ── Sparkles ──────────────────────────────────────────────────────────
   const sparkles: [number, number, number][] = [
     [0.074, 0.119, 22], [0.907, 0.172, 18], [0.056, 0.595, 16],
     [0.935, 0.529, 20], [0.185, 0.893, 14], [0.796, 0.872, 18],
@@ -373,16 +354,15 @@ async function renderMarketingCard(
     drawSparkle(ctx, sx * W, sy * H, ss * scale, 0.85)
   );
 
-  // ── Load images ──────────────────────────────────────────────────────────
+  // ── Load images ────────────────────────────────────────────────────────
   const [mainImg, chainImg, logoImg] = await Promise.all([
     loadImg(opts.faucetImage),
     loadImg(opts.networkLogoUrl),
     loadImg(opts.logoPath),
   ]);
 
-  // ── Branding top ─────────────────────────────────────────────────────────
+  // ── Branding top (logo only, no circle) ───────────────────────────────
   const brandCy = 0.054 * H;
-
   if (logoImg) {
     const lh = 72 * scale;
     const lw = lh * (logoImg.width / logoImg.height);
@@ -397,13 +377,12 @@ async function renderMarketingCard(
     ctx.shadowBlur = 0;
   }
 
-  // ── Central card frame ───────────────────────────────────────────────────
+  // ── Central card frame ─────────────────────────────────────────────────
   const cardX = 0.093 * W;
   const cardY = 0.109 * H;
   const cardW = 0.815 * W;
-  const cardH = 0.29 * H; // reduced height so QR code is always visible below
+  const cardH = 0.29 * H;
 
-  // Glow border
   ctx.save();
   ctx.shadowColor = "rgba(14,165,233,0.55)";
   ctx.shadowBlur = 40 * scale;
@@ -413,7 +392,6 @@ async function renderMarketingCard(
   ctx.stroke();
   ctx.restore();
 
-  // Semi-transparent fill
   ctx.save();
   ctx.globalAlpha = 0.22;
   ctx.fillStyle = "#ffffff";
@@ -421,7 +399,6 @@ async function renderMarketingCard(
   ctx.fill();
   ctx.restore();
 
-  // Radial centre glow
   const cxCard = cardX + cardW / 2;
   const cyCard = cardY + cardH / 2;
   const radGlow = ctx.createRadialGradient(cxCard, cyCard, 10, cxCard, cyCard, cardW * 0.45);
@@ -433,7 +410,6 @@ async function renderMarketingCard(
   ctx.fill();
   ctx.restore();
 
-  // Faucet/main image
   if (mainImg) {
     const pad = 28 * scale;
     ctx.save();
@@ -441,10 +417,12 @@ async function renderMarketingCard(
     ctx.clip();
     const s = Math.max((cardW - pad * 2) / mainImg.width, (cardH - pad * 2) / mainImg.height);
     const dw = mainImg.width * s, dh = mainImg.height * s;
-    ctx.drawImage(mainImg, cardX + pad + ((cardW - pad * 2) - dw) / 2, cardY + pad + ((cardH - pad * 2) - dh) / 2, dw, dh);
+    ctx.drawImage(mainImg,
+      cardX + pad + ((cardW - pad * 2) - dw) / 2,
+      cardY + pad + ((cardH - pad * 2) - dh) / 2,
+      dw, dh
+    );
     ctx.restore();
-
-    // Re-draw border on top of image
     ctx.save();
     ctx.strokeStyle = "rgba(255,255,255,0.9)";
     ctx.lineWidth = 5 * scale;
@@ -453,15 +431,14 @@ async function renderMarketingCard(
     ctx.restore();
   }
 
-  // ── Corner decorative ice-blue icons (canvas-drawn) ─────────────────────
+  // ── Corner ice-blue icons ──────────────────────────────────────────────
   const iconSz = 72 * scale;
-  // top-right: shield, bottom-right: wallet, bottom-left: gift, top-left: coin
-  drawIceShield(ctx, cardX + cardW + iconSz * 0.55, cardY - iconSz * 0.1,  iconSz);
-  drawIceWallet(ctx, cardX + cardW + iconSz * 0.55, cardY + cardH + iconSz * 0.1, iconSz);
-  drawIceGift  (ctx, cardX        - iconSz * 0.55, cardY + cardH + iconSz * 0.1, iconSz);
-  drawIceCoin  (ctx, cardX        - iconSz * 0.55, cardY - iconSz * 0.1,  iconSz);
+  drawIceShield(ctx, cardX + cardW + iconSz * 0.55, cardY - iconSz * 0.1,          iconSz);
+  drawIceWallet(ctx, cardX + cardW + iconSz * 0.55, cardY + cardH + iconSz * 0.1,  iconSz);
+  drawIceGift  (ctx, cardX         - iconSz * 0.55, cardY + cardH + iconSz * 0.1,  iconSz);
+  drawIceCoin  (ctx, cardX         - iconSz * 0.55, cardY - iconSz * 0.1,          iconSz);
 
-  // ── Title ────────────────────────────────────────────────────────────────
+  // ── Title ──────────────────────────────────────────────────────────────
   const titleY = cardY + cardH + 75 * scale;
   ctx.textAlign = "center";
   ctx.fillStyle = "#ffffff";
@@ -475,7 +452,7 @@ async function renderMarketingCard(
   ctx.font = `bold ${48 * scale}px sans-serif`;
   ctx.fillText(`$${opts.tokenSymbol}`, W / 2, titleY + 66 * scale);
 
-  // ── Claim badge ──────────────────────────────────────────────────────────
+  // ── Claim badge ────────────────────────────────────────────────────────
   const badgeW = 520 * scale;
   const badgeH = 104 * scale;
   const badgeX = (W - badgeW) / 2;
@@ -493,11 +470,11 @@ async function renderMarketingCard(
   ctx.textAlign = "center";
   ctx.fillText("CLAIM NOW!", W / 2, badgeY + badgeH * 0.66);
 
-  // ── QR Code ──────────────────────────────────────────────────────────────
-  const qrSz = 340 * scale;
-  const qrX  = (W - qrSz) / 2;
-  const qrY2 = badgeY + badgeH + 50 * scale;
-  const qrPad = 22 * scale;
+  // ── QR Code — always drawn as a square ────────────────────────────────
+  const qrSz  = 280 * scale;
+  const qrX   = (W - qrSz) / 2;
+  const qrY2  = badgeY + badgeH + 50 * scale;
+  const qrPad = 20 * scale;
 
   ctx.fillStyle = "#ffffff";
   ctx.shadowColor = "rgba(0,0,0,0.18)";
@@ -505,17 +482,16 @@ async function renderMarketingCard(
   roundRect(ctx, qrX - qrPad, qrY2 - qrPad, qrSz + qrPad * 2, qrSz + qrPad * 2, 24 * scale);
   ctx.fill();
   ctx.shadowBlur = 0;
+  ctx.drawImage(qrCanvas, qrX, qrY2, qrSz, qrSz); // explicit square draw
 
-  ctx.drawImage(qrCanvas, qrX, qrY2, qrSz, qrSz);
-
-  // ── Network badge ────────────────────────────────────────────────────────
+  // ── Network badge ──────────────────────────────────────────────────────
   const netLabel = opts.networkName || "Mainnet";
   const netBH    = 88 * scale;
   ctx.font = `bold ${40 * scale}px sans-serif`;
-  const netTW  = ctx.measureText(netLabel).width;
-  const netBW  = netTW + (chainImg ? 156 * scale : 72 * scale);
-  const netBX  = (W - netBW) / 2;
-  const netBY  = qrY2 + qrSz + 42 * scale;
+  const netTW = ctx.measureText(netLabel).width;
+  const netBW = netTW + (chainImg ? 156 * scale : 72 * scale);
+  const netBX = (W - netBW) / 2;
+  const netBY = qrY2 + qrSz + 42 * scale;
 
   ctx.fillStyle = "rgba(255,255,255,0.92)";
   ctx.shadowColor = "rgba(0,0,0,0.12)";
@@ -525,7 +501,7 @@ async function renderMarketingCard(
   ctx.shadowBlur = 0;
 
   if (chainImg) {
-    const iconR = 26 * scale;
+    const iconR  = 26 * scale;
     const iconCx = netBX + 52 * scale;
     const iconCy = netBY + netBH / 2;
     ctx.save();
@@ -560,31 +536,33 @@ export function QRCodeShareDialog({
   tokenSymbol,
 }: QRCodeShareDialogProps) {
   const { resolvedTheme } = useTheme();
-  const webCanvasRef      = useRef<HTMLCanvasElement>(null);
+  const webCanvasRef       = useRef<HTMLCanvasElement>(null);
   const farcasterCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [activeTab, setActiveTab]       = useState<"web" | "farcaster">("web");
-  const [previewOpen, setPreviewOpen]   = useState(false);
-  const [previewSrc, setPreviewSrc]     = useState<string | null>(null);
+  const [activeTab, setActiveTab]           = useState<"web" | "farcaster">("web");
+  const [previewOpen, setPreviewOpen]       = useState(false);
+  const [previewSrc, setPreviewSrc]         = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [downloading, setDownloading]   = useState(false);
-  const [dlQrOnly, setDlQrOnly]         = useState(false);
+  const [downloading, setDownloading]       = useState(false);
+  const [dlQrOnly, setDlQrOnly]             = useState(false);
 
-  const faucetName  = faucetDetails?.name  || "Token Faucet";
+  const faucetName  = faucetDetails?.name      || "Token Faucet";
   const faucetImage = faucetMetadata?.imageUrl || "/default.jpeg";
 
   const qrColors = {
-    web:      { dark: "#2563eb", light: "#ffffff" },
+    web:       { dark: "#2563eb", light: "#ffffff" },
     farcaster: { dark: "#7c3aed", light: "#ffffff" },
   };
 
-  const webUrl      = typeof window !== "undefined" ? `${window.location.origin}/faucet/${faucetAddress}` : "";
+  const webUrl       = typeof window !== "undefined" ? `${window.location.origin}/faucet/${faucetAddress}` : "";
   const farcasterUrl = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/faucetdrops?startapp/faucet=${faucetAddress}`;
 
+  // ── Fixed square QR generation ────────────────────────────────────────────
   const generateQR = (canvas: HTMLCanvasElement | null, url: string, color: { dark: string; light: string }) => {
     if (!canvas || !url) return;
     QRCode.toCanvas(canvas, url, {
-      width: 440, margin: 1,
+      width: 260,  // fixed square — prevents tall/wide distortion
+      margin: 2,
       color: { dark: color.dark, light: color.light },
       errorCorrectionLevel: "H",
     }, (err) => { if (err) console.error("QR Error", err); });
@@ -593,7 +571,7 @@ export function QRCodeShareDialog({
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => {
-      generateQR(webCanvasRef.current,      webUrl,       qrColors.web);
+      generateQR(webCanvasRef.current,       webUrl,       qrColors.web);
       generateQR(farcasterCanvasRef.current, farcasterUrl, qrColors.farcaster);
     }, 200);
     return () => clearTimeout(t);
@@ -606,7 +584,7 @@ export function QRCodeShareDialog({
     faucetName,
     tokenSymbol,
     faucetImage,
-    networkName:   selectedNetwork?.name    || "Mainnet",
+    networkName:    selectedNetwork?.name    || "Mainnet",
     networkLogoUrl: selectedNetwork?.logoUrl || "",
     logoPath: "/lightlogo.png",
   });
@@ -619,10 +597,9 @@ export function QRCodeShareDialog({
     setPreviewOpen(true);
     setPreviewSrc(null);
     try {
-      // Render at 540×756 for fast preview
       const canvas = await renderMarketingCard(qrCanvas, {
         ...cardOpts(type),
-        outputSize: { w: 540, h: 756 },
+        outputSize: { w: 540, h: 620 },
       });
       setPreviewSrc(canvas.toDataURL("image/png"));
     } finally {
@@ -638,7 +615,7 @@ export function QRCodeShareDialog({
     try {
       const canvas = await renderMarketingCard(qrCanvas, {
         ...cardOpts(type),
-        outputSize: { w: 1080, h: 1512 },
+        outputSize: { w: 1080, h: 1240 },
       });
       const link = document.createElement("a");
       link.download = `${faucetName.replace(/\s+/g, "-")}-card.png`;
@@ -660,12 +637,12 @@ export function QRCodeShareDialog({
     try {
       const size = 600, pad = 32;
       const out = document.createElement("canvas");
-      out.width = size + pad * 2;
+      out.width  = size + pad * 2;
       out.height = size + pad * 2;
       const ctx = out.getContext("2d")!;
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, out.width, out.height);
-      ctx.drawImage(qrCanvas, pad, pad, size, size);
+      ctx.drawImage(qrCanvas, pad, pad, size, size); // explicit square draw
       const link = document.createElement("a");
       link.download = `${faucetName.replace(/\s+/g, "-")}-qr.png`;
       link.href = out.toDataURL("image/png", 1.0);
@@ -680,87 +657,77 @@ export function QRCodeShareDialog({
     <>
       {/* ── Main share dialog ─────────────────────────────────────────────── */}
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="
-          w-[95vw] max-w-[480px]
-          bg-background border-border
-          p-4 sm:p-6
-          overflow-y-auto max-h-[95vh]
-        ">
-          <DialogHeader className="space-y-1">
-            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
-              <LinkIcon className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
+        <DialogContent className="w-[420px] max-w-[420px] bg-background border-border p-4 overflow-hidden">
+          <DialogHeader className="space-y-0.5">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <LinkIcon className="h-4 w-4 text-primary flex-shrink-0" />
               Share {faucetName}
             </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
+            <DialogDescription className="text-xs">
               Preview or download your high-quality marketing card
             </DialogDescription>
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "web" | "farcaster")}>
             <TabsList className="grid w-full grid-cols-2 bg-muted mt-2">
-              <TabsTrigger value="web"       className="text-xs sm:text-sm">Web Access</TabsTrigger>
-              <TabsTrigger value="farcaster" className="text-xs sm:text-sm">Farcaster</TabsTrigger>
+              <TabsTrigger value="web"       className="text-xs">Web Access</TabsTrigger>
+              <TabsTrigger value="farcaster" className="text-xs">Farcaster</TabsTrigger>
             </TabsList>
 
             {(["web", "farcaster"] as const).map((tab) => (
               <TabsContent
                 key={tab} value={tab}
-                className="mt-3 flex flex-col items-center gap-3"
+                className="mt-3 flex flex-col items-center gap-2"
               >
-                {/* QR preview box */}
-                <div className="
-                  p-3 sm:p-4 bg-white rounded-2xl shadow-xl
-                  border border-primary/10 w-full flex justify-center
-                ">
+                {/* QR preview — fixed square container, no stretching */}
+                <div className="bg-white rounded-2xl shadow-xl border border-primary/10 flex items-center justify-center w-[260px] h-[260px] flex-shrink-0">
                   <canvas
                     ref={tab === "web" ? webCanvasRef : farcasterCanvasRef}
-                    className="w-full max-w-[220px] sm:max-w-[260px]"
+                    className="block w-[240px] h-[240px]"
+                    style={{ imageRendering: "pixelated" }}
                   />
                 </div>
 
-                {/* Action buttons — stack nicely on small screens */}
-                <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {/* Preview card */}
+                {/* Action buttons */}
+                <div className="w-full grid grid-cols-2 gap-2">
                   <Button
                     onClick={() => handlePreview(tab)}
                     variant="outline"
-                    className="h-10 sm:h-11 text-sm font-semibold w-full transition-all hover:scale-[1.02] hover:bg-primary/5"
+                    className="h-9 text-xs font-semibold w-full"
                     disabled={previewLoading}
                   >
                     {previewLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <Eye className="mr-2 h-4 w-4" />
+                      <Eye className="mr-1.5 h-3.5 w-3.5" />
                     )}
                     Preview Card
                   </Button>
 
-                  {/* Download QR only */}
                   <Button
                     onClick={() => handleDownloadQROnly(tab)}
                     variant="outline"
-                    className="h-10 sm:h-11 text-sm font-semibold w-full transition-all hover:scale-[1.02] hover:bg-primary/5"
+                    className="h-9 text-xs font-semibold w-full"
                     disabled={dlQrOnly}
                   >
                     {dlQrOnly ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <QrCode className="mr-2 h-4 w-4" />
+                      <QrCode className="mr-1.5 h-3.5 w-3.5" />
                     )}
                     QR Only
                   </Button>
                 </div>
 
-                {/* Download full card — full-width primary CTA */}
                 <Button
                   onClick={() => handleDownloadCard(tab)}
-                  className="w-full h-11 sm:h-12 text-sm sm:text-base font-bold transition-all hover:scale-[1.02]"
+                  className="w-full h-10 text-sm font-bold"
                   disabled={downloading}
                 >
                   {downloading ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <Download className="mr-2 h-5 w-5" />
+                    <Download className="mr-2 h-4 w-4" />
                   )}
                   Download Marketing Card
                 </Button>
@@ -771,7 +738,7 @@ export function QRCodeShareDialog({
       </Dialog>
 
       {/* ── Card Preview modal ────────────────────────────────────────────── */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="
           w-[95vw] max-w-[520px] p-0 overflow-hidden
           bg-zinc-950 border-zinc-800

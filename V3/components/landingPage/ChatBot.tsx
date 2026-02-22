@@ -3,6 +3,8 @@
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
+import { MessageCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const QUICK_REPLIES = [
     { label: "🚀 Launch a Faucet", value: "How do I create and launch a faucet campaign?" },
@@ -13,6 +15,7 @@ const QUICK_REPLIES = [
 ];
 
 export default function ChatBot() {
+    const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([
         {
             role: 'bot',
@@ -25,6 +28,7 @@ export default function ChatBot() {
     const [isTyping, setIsTyping] = useState(false);
     const [step, setStep] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const toggleChat = () => setIsOpen(!isOpen);
 
     // Auto-scroll logic
     useEffect(() => {
@@ -215,6 +219,17 @@ export default function ChatBot() {
                     </form>
                 </div>
             </div>
+
+            {/* Chat toggle button */}
+            <button
+                onClick={toggleChat}
+                className={cn(
+                'h-14 w-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:bg-blue-700 transition-all',
+                isOpen && 'hidden'
+                )}
+            >
+                <MessageCircle className="h-6 w-6" />
+            </button>
         </div>
     );
 }

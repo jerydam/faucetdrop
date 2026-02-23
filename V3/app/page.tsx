@@ -7,7 +7,7 @@ import CTA from "@/components/landingPage/CTA";
 import FaucetFlow from "@/components/landingPage/FaucetFlow";
 import GraphChart from "@/components/landingPage/GraphChart";
 import WhyFaucetDrops from "@/components/landingPage/WhyFaucetDrops";
-import ChatBot from "@/components/landingPage/ChatBot";
+// import ChatBot from "@/components/landingPage/ChatBot";
 
 export default function Home() {
   return (
@@ -21,8 +21,6 @@ export default function Home() {
         <ProtocolsStats />
         <GraphChart />
         <CTA />
-        {/* <FaucetChats /> */}
-        <ChatBot />
       </div>
     </div>
   );

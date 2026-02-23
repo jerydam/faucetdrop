@@ -8,6 +8,7 @@ import Footer from "@/components/Footer";
 import SplashScreen from "@/components/SplashScreen";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import FloatingElements from "@/components/FloatingElements";
+import ChatBot from '@/components/landingPage/ChatBot';
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -36,6 +37,7 @@ export default async function RootLayout({
             <SplashScreen />
             <Header />
             {children}
+            <ChatBot /> 
             <Footer />
           </div>
         {/* </ContextProvider> */}

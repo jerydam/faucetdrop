@@ -683,6 +683,19 @@ const handleSubmitTask = async () => {
   if (!selectedTask || !userWalletAddress) return;
   setSubmittingTaskId(selectedTask.id);
 
+  // Helper: cancel a submission so the task goes back to "available"
+  const cancelSubmission = async (submissionId: string) => {
+    try {
+      await fetch(
+        `${API_BASE_URL}/api/quests/${faucetAddress}/submissions/${submissionId}`,
+        { method: "DELETE" }
+      );
+    } catch {
+      // Best-effort — even if this fails the user can reload
+    }
+    await loadUserProgress(); // Re-render task as "available"
+  };
+
   try {
     const formData = new FormData();
     formData.append("walletAddress", userWalletAddress);
@@ -696,6 +709,7 @@ const handleSubmitTask = async () => {
 
     formData.append("submittedData", finalProofUrl || "");
 
+    // Create the submission record
     const response = await fetch(
       `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
       { method: "POST", body: formData }
@@ -703,7 +717,11 @@ const handleSubmitTask = async () => {
     const result = await response.json();
     if (!result.success) throw new Error(result.message || "Failed to submit task");
 
-    // CASE 1: TELEGRAM AUTO-VERIFY (must come before generic auto_social)
+    const submissionId = result.submissionId;
+
+    // ─────────────────────────────────────────────────────────
+    // CASE 1: TELEGRAM AUTO-VERIFY
+    // ─────────────────────────────────────────────────────────
     if (
       selectedTask.verificationType === "auto_social" &&
       selectedTask.targetPlatform === "Telegram"
@@ -712,77 +730,105 @@ const handleSubmitTask = async () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          submissionId: result.submissionId,
-          faucetAddress: faucetAddress,
+          submissionId,
+          faucetAddress,
           walletAddress: userWalletAddress,
           taskUrl: selectedTask.url,
           taskAction: selectedTask.action,
         }),
       });
-
       const verifyJson = await verifyRes.json();
 
       if (verifyJson.verified) {
         toast.success("✅ Telegram membership verified! Points awarded.");
-      } else if (verifyJson.manual_review) {
-        toast.info("📋 Submitted for manual review. " + verifyJson.message);
-      } else if (verifyJson.reason === "telegram_not_linked") {
-        toast.error("⚠️ " + verifyJson.message, {
-          action: {
-            label: "Link Telegram",
-            onClick: () => router.push(`/dashboard/${userWalletAddress}`),
-          },
-        });
+        // Refresh and close
+        await loadUserProgress();
+        const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+        const lbJson = await lbRes.json();
+        if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+        setShowSubmitModal(false);
+        setSubmissionData({ proofUrl: "", notes: "", file: null });
       } else {
-        toast.error("❌ " + verifyJson.message);
+        // Verification failed — cancel submission so task stays retryable
+        await cancelSubmission(submissionId);
+
+        if (verifyJson.reason === "telegram_not_linked") {
+          toast.error("⚠️ Connect your Telegram in Profile Settings first.", {
+            action: {
+              label: "Open Profile",
+              onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+            },
+          });
+        } else if (verifyJson.reason === "not_member") {
+          toast.error("❌ You are not a member of this channel yet. Join first then try again.");
+        } else if (verifyJson.reason === "bot_not_admin") {
+          toast.error("❌ Bot verification unavailable for this channel. Contact the quest creator.");
+        } else {
+          toast.error("❌ " + (verifyJson.message || "Verification failed. Please try again."));
+        }
       }
 
-    // CASE 2: TWITTER/X AUTO-VERIFY
+    // ─────────────────────────────────────────────────────────
+    // CASE 2: TWITTER / DISCORD AUTO-VERIFY
+    // ─────────────────────────────────────────────────────────
     } else if (selectedTask.verificationType === "auto_social") {
       const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          submissionId: result.submissionId,
-          faucetAddress: faucetAddress,
+          submissionId,
+          faucetAddress,
           walletAddress: userWalletAddress,
           handle: userProfile?.twitter_handle || userProfile?.username || "",
           proofUrl: finalProofUrl,
           taskType: selectedTask.action,
         }),
       });
-
       const verifyJson = await verifyRes.json();
+
       if (verifyJson.verified) {
-        toast.success("Task verified! Points added.");
+        toast.success("✅ Task verified! Points added.");
+        await loadUserProgress();
+        const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+        const lbJson = await lbRes.json();
+        if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+        setShowSubmitModal(false);
+        setSubmissionData({ proofUrl: "", notes: "", file: null });
       } else {
-        toast.error(verifyJson.message || "Verification failed.");
+        // Verification failed — cancel so user can retry
+        await cancelSubmission(submissionId);
+        toast.error("❌ " + (verifyJson.message || "Verification failed. Complete the action then try again."));
       }
 
-    // CASE 3: NO VERIFICATION (Watch/Visit)
+    // ─────────────────────────────────────────────────────────
+    // CASE 3: NO VERIFICATION (Watch / Visit)
+    // ─────────────────────────────────────────────────────────
     } else if (selectedTask.verificationType === "none") {
-      toast.success("Task completed! Points added.");
+      toast.success("✅ Task completed! Points added.");
+      await loadUserProgress();
+      const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+      const lbJson = await lbRes.json();
+      if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+      setShowSubmitModal(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
 
-    // CASE 4: MANUAL
+    // ─────────────────────────────────────────────────────────
+    // CASE 4: MANUAL / UPLOAD / AUTO_TX / ONCHAIN
+    // ─────────────────────────────────────────────────────────
     } else {
-      toast.info("Task submitted for manual review.");
+      toast.info("📋 Task submitted for manual review.");
+      await loadUserProgress();
+      setShowSubmitModal(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
     }
 
-    // Always refresh progress and leaderboard
-    await loadUserProgress();
-    const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
-    const lbJson = await lbRes.json();
-    if (lbJson.success) setLeaderboard(lbJson.leaderboard);
-
-    setShowSubmitModal(false);
-    setSubmissionData({ proofUrl: "", notes: "", file: null });
-
   } catch (error: any) {
-    toast.error(error.message || "An error occurred");
+    toast.error(error.message || "An error occurred. Please try again.");
   } finally {
     setSubmittingTaskId(null);
   }
 };
+
 
   const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected") => {
     try {

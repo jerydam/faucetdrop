@@ -147,7 +147,7 @@ export function TaskSubmissionModal({
 
     const cleanUrl = window.location.href.split("?")[0];
     const refLink = `${cleanUrl}?ref=${participantData.referral_id}`;
-    const text = `I'm participating in this awesome quest on @faucetdrops!\nJoin me here: ${refLink}`;
+    const text = `I'm participating in this awesome quest on @FaucetDrops!\nJoin me here: ${refLink}`;
 
     window.open(
       `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`,
@@ -249,7 +249,7 @@ export function TaskSubmissionModal({
             </div>
             <h4 className="text-lg font-semibold mb-3">Share this Quest on X</h4>
             <p className="text-sm text-muted-foreground mb-5">
-              Post about this quest including @faucetdrops and your referral link
+              Post about this quest including @FaucetDrops and your referral link
             </p>
 
             <Button
@@ -262,7 +262,7 @@ export function TaskSubmissionModal({
             </Button>
 
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              Make sure your tweet contains @faucetdrops and the referral link
+              Make sure your tweet contains @FaucetDrops and the referral link
             </p>
           </div>
 

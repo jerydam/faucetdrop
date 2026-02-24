@@ -343,7 +343,7 @@ const totalPoints = participantData?.points || 0;
 };
 
   const handleXShareAction = (task: QuestTask) => {
-    const targetHandle = "@faucetdrops";
+    const targetHandle = "@FaucetDrops";
     // Constructing the message with the user's referral link
     const referralLink = `${window.location.origin}${window.location.pathname}?ref=${participantData?.referral_id}`;
     
@@ -698,17 +698,47 @@ const handleSubmitTask = async () => {
 
     const response = await fetch(
       `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
-      {
-        method: "POST",
-        body: formData,
-      }
+      { method: "POST", body: formData }
     );
     const result = await response.json();
-
     if (!result.success) throw new Error(result.message || "Failed to submit task");
 
-    // CASE 1: AUTO SOCIAL (Twitter/X Bot)
-    if (selectedTask.verificationType === "auto_social") {
+    // CASE 1: TELEGRAM AUTO-VERIFY (must come before generic auto_social)
+    if (
+      selectedTask.verificationType === "auto_social" &&
+      selectedTask.targetPlatform === "Telegram"
+    ) {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-telegram`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: result.submissionId,
+          faucetAddress: faucetAddress,
+          walletAddress: userWalletAddress,
+          taskUrl: selectedTask.url,
+          taskAction: selectedTask.action,
+        }),
+      });
+
+      const verifyJson = await verifyRes.json();
+
+      if (verifyJson.verified) {
+        toast.success("✅ Telegram membership verified! Points awarded.");
+      } else if (verifyJson.manual_review) {
+        toast.info("📋 Submitted for manual review. " + verifyJson.message);
+      } else if (verifyJson.reason === "telegram_not_linked") {
+        toast.error("⚠️ " + verifyJson.message, {
+          action: {
+            label: "Link Telegram",
+            onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+          },
+        });
+      } else {
+        toast.error("❌ " + verifyJson.message);
+      }
+
+    // CASE 2: TWITTER/X AUTO-VERIFY
+    } else if (selectedTask.verificationType === "auto_social") {
       const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -728,22 +758,18 @@ const handleSubmitTask = async () => {
       } else {
         toast.error(verifyJson.message || "Verification failed.");
       }
-    } 
-    
-    // CASE 2: NO VERIFICATION (Watch/Visit)
-    // If the backend is set to auto-approve 'none' types, we just need to refresh
-    else if (selectedTask.verificationType === "none") {
+
+    // CASE 3: NO VERIFICATION (Watch/Visit)
+    } else if (selectedTask.verificationType === "none") {
       toast.success("Task completed! Points added.");
-    } 
-    
-    // CASE 3: MANUAL
-    else {
+
+    // CASE 4: MANUAL
+    } else {
       toast.info("Task submitted for manual review.");
     }
 
-    // ALWAYS refresh progress and leaderboard after a submission attempt
+    // Always refresh progress and leaderboard
     await loadUserProgress();
-    // Refresh Leaderboard to show updated "Tasks Done" and "Points"
     const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
     const lbJson = await lbRes.json();
     if (lbJson.success) setLeaderboard(lbJson.leaderboard);
@@ -1739,7 +1765,7 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                       </div>
                       <h4 className="text-lg font-semibold mb-3">Share this Quest on X</h4>
                       <p className="text-sm text-muted-foreground mb-5">
-                        Post about this quest including @faucetdrops and your referral link
+                        Post about this quest including @FaucetDrops and your referral link
                       </p>
 
                       <Button
@@ -1752,7 +1778,7 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                           }
                           const cleanUrl = window.location.href.split("?")[0];
                           const refLink = `${cleanUrl}?ref=${participantData.referral_id}`;
-                          const text = `I'm participating in this awesome quest on @faucetdrops!\nJoin me here: ${refLink}`;
+                          const text = `I'm participating in this awesome quest on @FaucetDrops!\nJoin me here: ${refLink}`;
                           window.open(
                             `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`,
                             "_blank",
@@ -1772,7 +1798,7 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                       </Button>
 
                       <p className="text-xs text-amber-700 dark:text-amber-300">
-                        Make sure your tweet contains @faucetdrops and the referral link
+                        Make sure your tweet contains @FaucetDrops and the referral link
                       </p>
                     </div>
 

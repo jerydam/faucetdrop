@@ -910,7 +910,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       if (type === "web") {
         url = window.location.origin + "/faucet/" + faucetAddress;
       } else {
-        url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/faucetdrops?startapp/faucet=${faucetAddress}`;
+        url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
       }
 
       await navigator.clipboard.writeText(url);

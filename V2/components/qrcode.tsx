@@ -555,7 +555,7 @@ export function QRCodeShareDialog({
   };
 
   const webUrl       = typeof window !== "undefined" ? `${window.location.origin}/faucet/${faucetAddress}` : "";
-  const farcasterUrl = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/faucetdrops?startapp/faucet=${faucetAddress}`;
+  const farcasterUrl = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
 
   // ── Fixed square QR generation ────────────────────────────────────────────
   const generateQR = (canvas: HTMLCanvasElement | null, url: string, color: { dark: string; light: string }) => {

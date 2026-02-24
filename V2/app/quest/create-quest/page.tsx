@@ -81,7 +81,7 @@ const SYSTEM_TASKS: QuestTask[] = [
     {
     id: 'sys_share_quest_x',
     title: 'Share Quest on X',
-    description: 'Share this quest page on X with @faucetdrops and your referral link to earn points.',
+    description: 'Share this quest page on X with @FaucetDrops and your referral link to earn points.',
     points: 20,
     required: false,
     category: 'social',

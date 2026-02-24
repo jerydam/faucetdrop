@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react" // 🔧 FIX 1: added useRef
 import { useWallet } from "@/components/wallet-provider" 
 import { usePrivy } from "@privy-io/react-auth" 
 import { BrowserProvider, Eip1193Provider } from 'ethers'
@@ -49,7 +49,12 @@ export function ProfileSettingsModal() {
     linkDiscord, 
     linkGoogle, 
     linkTelegram,
-    linkFarcaster
+    linkFarcaster,
+    unlinkTwitter,
+    unlinkDiscord,
+    unlinkGoogle,
+    unlinkTelegram,
+    unlinkFarcaster,
   } = usePrivy();
 
   const router = useRouter()
@@ -61,13 +66,15 @@ export function ProfileSettingsModal() {
   const [usernameError, setUsernameError] = useState<string | null>(null)
   const [seedOffset, setSeedOffset] = useState(0);
 
+  // 🔧 FIX 1: Ref to prevent the user effect from re-running during OAuth callback
+  const hasPrefilledRef = useRef(false);
+
   const [formData, setFormData] = useState<UserProfile>({
     username: "",
     bio: "",
     avatar_url: ""
   })
 
-  // --- NEW: FALLBACK HELPERS ---
   const getFallbackAvatar = useCallback(() => {
     if (!user) return "";
     const google = user.google as any;
@@ -93,12 +100,10 @@ export function ProfileSettingsModal() {
       const res = await fetch(`${API_BASE_URL}/api/profile/${address}`)
       const data = await res.json()
       
-      // Get DB values (or empty strings)
       const dbUsername = data.profile?.username || "";
       const dbBio = data.profile?.bio || "";
       const dbAvatar = data.profile?.avatar_url || "";
 
-      // PRE-FILL logic: If DB is empty, use the Privy Fallbacks
       setFormData({
         username: dbUsername || getFallbackUsername(),
         bio: dbBio,
@@ -119,24 +124,26 @@ export function ProfileSettingsModal() {
     }
   }, [isOpen, address, fetchProfile])
 
-  // --- NEW: Watch for Social Links while Modal is Open ---
-  // If a user clicks "Connect Twitter", we want to instantly pre-fill the username
-  // if they haven't typed one yet.
+  // 🔧 FIX 1: Reset the prefill guard when the modal closes
   useEffect(() => {
-    if (isOpen && user) {
-        setFormData(prev => ({
-            ...prev,
-            // Only overwrite if the field is currently completely empty
-            username: prev.username || getFallbackUsername(),
-            avatar_url: prev.avatar_url || getFallbackAvatar()
-        }));
+    if (!isOpen) hasPrefilledRef.current = false;
+  }, [isOpen]);
+
+  // 🔧 FIX 1: Only prefill once when modal opens — not on every user change
+  // This prevents re-renders from interrupting Privy's OAuth callback
+  useEffect(() => {
+    if (isOpen && user && !hasPrefilledRef.current) {
+      hasPrefilledRef.current = true;
+      setFormData(prev => ({
+        ...prev,
+        username: prev.username || getFallbackUsername(),
+        avatar_url: prev.avatar_url || getFallbackAvatar()
+      }));
     }
   }, [user, isOpen, getFallbackUsername, getFallbackAvatar]);
 
 
-  // ---------------------------------------------------------
-  // 2. FORM HANDLERS
-  // ---------------------------------------------------------
+  // --- 2. FORM HANDLERS ---
   const checkUsernameUniqueness = async (value: string) => {
     if (!value || value.trim() === "") return true;
     if (!address) return true;
@@ -158,10 +165,9 @@ export function ProfileSettingsModal() {
     } catch (error) { return true; }
   };
 
- const handleSave = async () => {
+  const handleSave = async () => {
     if (!isConnected || !address || !signer) return toast.error("Wallet error");
     
-    // It's usually best to make these optional unless strictly required for your app's core loop
     if (!user?.google?.email) return toast.error("Please connect your Google (Email) account.");
     if (!user?.twitter?.username) return toast.error("Please connect your X (Twitter) account.");
 
@@ -184,25 +190,23 @@ export function ProfileSettingsModal() {
         bio: formData.bio,
         avatar_url: formData.avatar_url,
         
-        // --- SOCIAL HANDLES ---
         email: user?.google?.email || "",
         twitter_handle: user?.twitter?.username || "",
         discord_handle: user?.discord?.username || "",
         telegram_handle: user?.telegram?.username || "",
         farcaster_handle: user?.farcaster?.username || "",
         
-        // --- NEW: PERMANENT IDs ---
-        twitter_id: user?.twitter?.subject || "",         // Privy uses 'subject' for the provider ID
-        discord_id: user?.discord?.subject || "",         // Privy uses 'subject' for the provider ID
+        twitter_id: user?.twitter?.subject || "",
+        discord_id: user?.discord?.subject || "",
         telegram_user_id: user?.telegram?.telegramUserId || "",
-        farcaster_id: user?.farcaster?.fid ? String(user.farcaster.fid) : "", // Cast to string for the DB
+        farcaster_id: user?.farcaster?.fid ? String(user.farcaster.fid) : "",
 
         signature,
         message,
         nonce
       }
 
-     const res = await fetch(`${API_BASE_URL}/api/profile/update`, {
+      const res = await fetch(`${API_BASE_URL}/api/profile/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -252,43 +256,97 @@ export function ProfileSettingsModal() {
       setUploading(false)
     }
   }
+
   const handleShuffle = () => { setSeedOffset((prev) => (prev + 8) % GENERATED_SEEDS.length); }
   const currentSeeds = GENERATED_SEEDS.slice(seedOffset, seedOffset + 8);
 
-  const PrivySocialRow = ({ label, handle, onConnect }: { label: string, handle?: string | null, onConnect: () => Promise<any> | void }) => {
+  // 🔧 FIX 2 & 3: Added onDisconnect prop + ref guard against double-clicks
+  // + silent handling of user-closed popups
+  // + friendly error for "last account" Privy error
+  const PrivySocialRow = ({ 
+    label, 
+    handle, 
+    onConnect,
+    onDisconnect
+  }: { 
+    label: string
+    handle?: string | null
+    onConnect: () => Promise<any> | void
+    onDisconnect?: () => Promise<any> | void
+  }) => {
     const [isConnecting, setIsConnecting] = useState(false);
+    const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+    // 🔧 FIX 2: Prevents double-clicking from opening two OAuth popups
+    const isLinkingRef = useRef(false);
 
     const handleConnect = async () => {
+      if (isLinkingRef.current) return;
+      isLinkingRef.current = true;
       setIsConnecting(true);
-      try {
+      try { 
         await onConnect(); 
-      } catch (error) {
-        console.error(`Failed to connect ${label}`, error);
-      } finally {
+      } catch (error: any) {
+        const msg = error?.message?.toLowerCase() ?? "";
+        // 🔧 FIX 2: Silently ignore user-closed/cancelled popups
+        if (!msg.includes("closed") && !msg.includes("cancelled") && !msg.includes("popup")) {
+          toast.error(`Failed to connect ${label}. Please try again.`);
+        }
+      } finally { 
         setIsConnecting(false);
+        isLinkingRef.current = false;
+      }
+    };
+
+    const handleDisconnect = async () => {
+      if (!onDisconnect) return;
+      setIsDisconnecting(true);
+      try { 
+        await onDisconnect(); 
+      } catch (error: any) {
+        // 🔧 FIX 3: Friendly message when user tries to unlink their only account
+        const msg = error?.message?.toLowerCase() ?? "";
+        if (msg.includes("cannot remove") || msg.includes("only linked account") || msg.includes("at least one")) {
+          toast.error("You must keep at least one account linked to your wallet.");
+        } else {
+          toast.error(`Failed to disconnect ${label}. Please try again.`);
+        }
+      } finally { 
+        setIsDisconnecting(false); 
       }
     };
 
     return (
       <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
-          <div className="flex flex-col">
-              <span className="text-sm font-semibold text-foreground">{label}</span>
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  {handle ? (
-                    <span className="text-green-600 flex items-center font-medium">
-                      <CheckCircle2 className="h-3 w-3 mr-1" /> {handle}
-                    </span>
-                  ) : "Not linked"}
+        <div className="flex flex-col">
+          <span className="text-sm font-semibold text-foreground">{label}</span>
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            {handle ? (
+              <span className="text-green-600 flex items-center font-medium">
+                <CheckCircle2 className="h-3 w-3 mr-1" /> {handle}
               </span>
-          </div>
-          {handle ? (
-              <Button size="sm" variant="ghost" disabled className="text-green-600 bg-green-50">Linked</Button>
-          ) : (
-              <Button size="sm" variant="outline" type="button" onClick={handleConnect} disabled={isConnecting}>
-                  {isConnecting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                  {isConnecting ? "Opening..." : "Connect"}
-              </Button>
-          )}
+            ) : "Not linked"}
+          </span>
+        </div>
+
+        {handle ? (
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            type="button"
+            onClick={handleDisconnect} 
+            disabled={isDisconnecting}
+            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+          >
+            {isDisconnecting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            {isDisconnecting ? "Removing..." : "Disconnect"}
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" type="button" onClick={handleConnect} disabled={isConnecting}>
+            {isConnecting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            {isConnecting ? "Opening..." : "Connect"}
+          </Button>
+        )}
       </div>
     );
   };
@@ -348,6 +406,7 @@ export function ProfileSettingsModal() {
                     </TabsContent>
                 </Tabs>
             </div>
+
             {/* Manual Inputs */}
             <div className="grid gap-4">
                 <div className="grid grid-cols-1 sm:grid-cols-4 items-start gap-2">
@@ -377,19 +436,42 @@ export function ProfileSettingsModal() {
                 </div>
             </div>
 
-            {/* Verified Connections using Privy */}
+            {/* Verified Connections */}
             <div className="border-t pt-6">
               <h4 className="mb-4 text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <LinkIcon className="h-3 w-3" /> Verified Connections
               </h4>
               <div className="grid gap-3">
-                
-                <PrivySocialRow label="Email (Google)" handle={user?.google?.email} onConnect={linkGoogle} />
-                <PrivySocialRow label="X (Twitter)" handle={user?.twitter?.username} onConnect={linkTwitter} />
-                <PrivySocialRow label="Discord" handle={user?.discord?.username} onConnect={linkDiscord} />
-                <PrivySocialRow label="Telegram" handle={user?.telegram?.username} onConnect={linkTelegram} />
-                <PrivySocialRow label="Farcaster" handle={user?.farcaster?.username} onConnect={linkFarcaster} />
-
+                <PrivySocialRow 
+                  label="Email (Google)" 
+                  handle={user?.google?.email} 
+                  onConnect={linkGoogle}
+                  onDisconnect={() => unlinkGoogle(user?.google?.subject!)}
+                />
+                <PrivySocialRow 
+                  label="X (Twitter)" 
+                  handle={user?.twitter?.username} 
+                  onConnect={linkTwitter}
+                  onDisconnect={() => unlinkTwitter(user?.twitter?.subject!)}
+                />
+                <PrivySocialRow 
+                  label="Discord" 
+                  handle={user?.discord?.username} 
+                  onConnect={linkDiscord}
+                  onDisconnect={() => unlinkDiscord(user?.discord?.subject!)}
+                />
+                <PrivySocialRow 
+                  label="Telegram" 
+                  handle={user?.telegram?.username} 
+                  onConnect={linkTelegram}
+                  onDisconnect={() => unlinkTelegram(user?.telegram?.telegramUserId!)}
+                />
+                <PrivySocialRow 
+                  label="Farcaster" 
+                  handle={user?.farcaster?.username} 
+                  onConnect={linkFarcaster}
+                  onDisconnect={() => unlinkFarcaster(user?.farcaster?.fid!)}
+                />
               </div>
               <p className="text-xs text-muted-foreground mt-3">
                 * Note: You must click "Save Profile" below to sync your linked accounts to your public FaucetDrops profile.

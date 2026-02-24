@@ -14,7 +14,8 @@ import {
   Plus, Zap, Lock, Unlock, Trophy, Settings,
   LayoutList, GripVertical, Percent, ShieldAlert, CalendarClock, Users, AlertTriangle,
   Link as LinkIcon, Code, CalendarDays, CheckCircle2,
-  XIcon
+  XIcon,
+  Send
 } from "lucide-react"
 import { useWallet } from "@/hooks/use-wallet"
 import { BrowserProvider, ZeroAddress } from 'ethers'
@@ -434,6 +435,14 @@ export default function Phase2TimingTasksFinalize({
   const [newTask, setNewTask] = useState<Partial<QuestTask>>(initialNewTaskForm)
   const [editingTask, setEditingTask] = useState<QuestTask | null>(null)
   const [isDeploying, setIsDeploying] = useState(false)
+  // Add this state inside your component
+const [telegramBotStatus, setTelegramBotStatus] = useState<{
+  checking: boolean;
+  is_admin: boolean | null;
+  bot_username: string;
+  message: string;
+}>({ checking: false, is_admin: null, bot_username: "", message: "" });
+
 
   useEffect(() => {
     setNewTask(initialNewTaskForm)
@@ -563,7 +572,7 @@ const getSocialInputLabel = () => {
 
     // Auto-fix URL for Twitter Quotes
     if (suggestion.action === 'quote' && suggestion.targetPlatform === 'Twitter') {
-      updated.url = "https://x.com/faucetdrops"
+      updated.url = "https://x.com/FaucetDrops"
     }
 
     setNewTask(prev => ({
@@ -572,7 +581,29 @@ const getSocialInputLabel = () => {
       stage: updated.stage || prev.stage || 'Beginner',
     }))
   }
-
+  // Add this function
+const checkTelegramBotAdmin = async (channelUrl: string) => {
+  if (!channelUrl || !channelUrl.includes("t.me")) return;
+  
+  setTelegramBotStatus(prev => ({ ...prev, checking: true }));
+  
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/bot/check-telegram-admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channelUrl })
+    });
+    const data = await res.json();
+    setTelegramBotStatus({
+      checking: false,
+      is_admin: data.is_admin,
+      bot_username: data.bot_username || "",
+      message: data.message || ""
+    });
+  } catch {
+    setTelegramBotStatus({ checking: false, is_admin: false, bot_username: "", message: "Check failed" });
+  }
+};
  const handleDeployAndFinalize = async () => {
     const now = new Date();
     const startTime = new Date(`${newQuest.startDate}T${newQuest.startTime}`);
@@ -905,6 +936,57 @@ const getSocialInputLabel = () => {
                       <p className="text-[10px] text-blue-500 font-medium">
                         Detected Handle: @{newTask.targetHandle}
                       </p>
+                    )}
+                  </div>
+                )}
+                {/* Show Telegram Bot Admin checker when platform is Telegram */}
+                {newTask.targetPlatform === 'Telegram' && newTask.verificationType === 'auto_social' && (
+                  <div className="mt-2 space-y-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs h-7 border-sky-500 text-sky-600"
+                      onClick={() => checkTelegramBotAdmin(newTask.url || "")}
+                      disabled={telegramBotStatus.checking || !newTask.url}
+                    >
+                      {telegramBotStatus.checking ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <Send className="h-3 w-3 mr-1" />
+                      )}
+                      Check Bot Admin Status
+                    </Button>
+
+                    {telegramBotStatus.is_admin !== null && (
+                      <div className={`p-2 rounded text-xs flex items-start gap-2 ${
+                        telegramBotStatus.is_admin
+                          ? "bg-green-50 border border-green-200 text-green-700"
+                          : "bg-orange-50 border border-orange-200 text-orange-700"
+                      }`}>
+                        {telegramBotStatus.is_admin ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3 shrink-0 mt-0.5" />
+                            <span>✅ Bot is admin. Auto-verification is enabled!</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                            <div>
+                              <strong>Bot not admin yet.</strong> To enable auto-verify:
+                              <ol className="mt-1 space-y-0.5 list-decimal list-inside">
+                                <li>Open your Telegram channel/group</li>
+                                <li>Go to Admins → Add Admin</li>
+                                <li>Search <strong>@{telegramBotStatus.bot_username || "YourQuestBot"}</strong></li>
+                                <li>Grant it at least "Read Messages" permission</li>
+                              </ol>
+                              <p className="mt-1 text-orange-500">
+                                Without this, submissions go to manual review.
+                              </p>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

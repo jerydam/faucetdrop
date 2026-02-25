@@ -1668,15 +1668,24 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
         )}
             {/* ============= SUBMISSION MODAL (UPDATED) ============= */}
         {showSubmitModal && selectedTask && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <Card className="w-full max-w-lg shadow-2xl border-0 dark:bg-slate-900 animate-in zoom-in-95 duration-200">
-              <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-5 relative">
-                <Button variant="ghost" size="icon" className="absolute right-4 top-4 h-8 w-8 rounded-full" onClick={() => setShowSubmitModal(false)}><X className="h-5 w-5" /></Button>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200 overflow-y-auto">
+            <Card className="w-full max-w-lg shadow-2xl border-0 dark:bg-slate-900 animate-in zoom-in-95 duration-200 my-8 max-h-[90vh] flex flex-col">
+              <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-5 relative flex-shrink-0">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-4 top-4 h-8 w-8 rounded-full" 
+                  onClick={() => setShowSubmitModal(false)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
                 <CardTitle className="text-xl pr-10">{selectedTask.title}</CardTitle>
-                <CardDescription className="text-base font-medium mt-1">{selectedTask.description}</CardDescription>
+                <CardDescription className="text-base font-medium mt-1">
+                  {selectedTask.description}
+                </CardDescription>
               </CardHeader>
 
-              <CardContent className="pt-6 space-y-6">
+               <CardContent className="pt-6 space-y-6 overflow-y-auto flex-1">
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 flex gap-3">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>{selectedTask.description}</div>
@@ -2095,36 +2104,36 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
               </CardContent>
 
               {/* Footer with Submit / Cancel */}
-              <CardFooter className="justify-between border-t p-5 dark:border-slate-800">
-                <Button variant="outline" onClick={() => setShowSubmitModal(false)}>
-                  Cancel
-                </Button>
+                    <CardFooter className="justify-between border-t p-5 dark:border-slate-800 flex-shrink-0">
+                      <Button variant="outline" onClick={() => setShowSubmitModal(false)}>
+                        Cancel
+                      </Button>
 
-                {/* Only show submit button for tasks that require manual action */}
-                {selectedTask.verificationType !== "none" && (
-                    <Button
-                      onClick={handleSubmitTask}
-                      disabled={
-                        submittingTaskId === selectedTask?.id || // Only disable THIS task
-                        (selectedTask.verificationType === "manual_link" && !submissionData.proofUrl) ||
-                        (selectedTask.verificationType === "auto_social" && 
-                          ['quote', 'tweet', 'comment'].includes(selectedTask.action) && 
-                          !submissionData.proofUrl) ||
-                        (selectedTask.category === "trading" && 
-                          selectedTask.verificationType !== "auto_tx" && 
-                          selectedTask.verificationType !== "onchain" &&
-                          !submissionData.proofUrl)
-                      }
-                      className="bg-primary hover:bg-primary/90 min-w-[160px]"
-                    >
-                      {submittingTaskId === selectedTask?.id ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
-                      ) : (
-                        selectedTask.verificationType === 'auto_social' ? "Verify & Submit" : "Submit Task"
+                      {selectedTask.verificationType !== "none" && (
+                        <Button
+                          onClick={handleSubmitTask}
+                          disabled={
+                            submittingTaskId === selectedTask?.id ||
+                            (selectedTask.verificationType === "manual_link" && !submissionData.proofUrl) ||
+                            (selectedTask.verificationType === "auto_social" && 
+                              ['quote', 'tweet', 'comment'].includes(selectedTask.action) && 
+                              !submissionData.proofUrl) ||
+                            (selectedTask.category === "trading" && 
+                              selectedTask.verificationType !== "auto_tx" && 
+                              selectedTask.verificationType !== "onchain" &&
+                              !submissionData.proofUrl)
+                          }
+                          className="bg-primary hover:bg-primary/90 min-w-[160px]"
+                        >
+                          {submittingTaskId === selectedTask?.id ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
+                          ) : (
+                            selectedTask.verificationType === 'auto_social' ? "Verify & Submit" : "Submit Task"
+                          )}
+                        </Button>
                       )}
-                    </Button>
-                  )}
-              </CardFooter>
+                    </CardFooter>
+
             </Card>
           </div>
         )}

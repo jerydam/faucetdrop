@@ -1,8 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-// import { headers } from 'next/headers' // added
-// import ContextProvider from '@/context'
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SplashScreen from "@/components/SplashScreen";
@@ -24,13 +22,9 @@ export default async function RootLayout({
   children: React.ReactNode
 }>) {
 
-  // const headersObj = await headers();
-  // const cookies = headersObj.get('cookie')
-
   return (
     <html lang="en">
       <body className={`${inter.className} antialiased relative`}>
-        {/* <ContextProvider cookies={cookies}> */}
           <AnimatedBackground />
           <FloatingElements />
           <div className="relative z-20">
@@ -40,7 +34,6 @@ export default async function RootLayout({
             <ChatBot /> 
             <Footer />
           </div>
-        {/* </ContextProvider> */}
       </body>
     </html>
   )

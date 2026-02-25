@@ -1,14 +1,11 @@
 import StackedAreaChart from './graph/GraphChart2'
-import AnimateOnScroll from '../common/AnimateOnScroll';
 import SimpleRadarChart from './graph/GraphChart1';
 
 export default function GraphChart() {
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
-          <AnimateOnScroll
-            type="fadeIn"
-            delay={100}
+          <div
             className="col-span-1 lg:col-span-2"
           >
             <div className="h-full rounded-xl p-6 shadow-lg border border-white/10 bg-linear-to-br from-gray-900/50 to-gray-800/50">
@@ -17,12 +14,9 @@ export default function GraphChart() {
                 <StackedAreaChart />
               </div>
             </div>
-          </AnimateOnScroll>
-        {/* )} */}
+          </div>
 
-        <AnimateOnScroll
-          type="fadeIn"
-          delay={100}
+        <div
           className="col-span-1"
         >
           <div className="h-full rounded-xl p-6 shadow-lg border border-white/10 bg-linear-to-br from-gray-900/50 to-gray-800/50">
@@ -31,7 +25,7 @@ export default function GraphChart() {
               <SimpleRadarChart />
             </div>
           </div>
-        </AnimateOnScroll>
+        </div>
       </div>
     </div>
   );

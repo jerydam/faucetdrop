@@ -13,7 +13,8 @@ import {
   Clock, Trash2, Loader2, Rocket,
   Plus, Zap, Lock, Unlock, Trophy, Settings,
   LayoutList, GripVertical, Percent, ShieldAlert, CalendarClock, Users, AlertTriangle,
-  Link as LinkIcon, Code, CalendarDays, CheckCircle2,
+  Link as LinkIcon, Code, CalendarDays, CheckCircle2, MessageSquareText,
+  ShieldCheck,
   XIcon,
   Send
 } from "lucide-react"
@@ -56,7 +57,16 @@ export type VerificationType =
 export type SocialPlatform = 'Twitter' | 'Facebook' | 'Tiktok' | 'Youtube' | 'Discord' | 'Thread' | 'Linkedin' | 'Farcaster' | 'Instagram' | 'Website' | 'Telegram'
 const SOCIAL_PLATFORMS: SocialPlatform[] = ['Twitter', 'Facebook', 'Telegram','Tiktok', 'Youtube', 'Discord', 'Thread', 'Linkedin', 'Farcaster', 'Instagram', 'Website']
 const SOCIAL_ACTIONS = ['follow', 'like & retweet', 'join', 'subscribe', 'visit', 'comment', 'quote']
-
+const getAvailableActions = (platform: string) => {
+  switch (platform) {
+    case 'Twitter': return ['follow', 'like & retweet', 'quote', 'comment'];
+    case 'Discord': return ['join', 'role']; // Added 'role'
+    case 'Telegram': return ['join', 'message_count']; // Added 'message_count'
+    case 'Youtube': return ['subscribe', 'watch'];
+    case 'Website': return ['visit'];
+    default: return ['follow', 'join', 'visit', 'like'];
+  }
+}
 // 2. New Onchain Actions Definition for Dropdown
 const ONCHAIN_ACTIONS = [
   { value: 'hold_token', label: 'Hold Token Balance' },
@@ -232,6 +242,26 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       points: 40,
       verificationType: "manual_upload",
     },
+    { 
+      title: "Attain 'Verified' Discord Role", 
+      description: "Get the Verified role in our server.", 
+      category: "social", 
+      action: "role", 
+      targetPlatform: "Discord", 
+      points: 80, 
+      verificationType: "auto_social", 
+      targetHandle: "1234567890" 
+    },
+    {
+       title: "Send 2 Messages in Telegram", 
+       description: "Be active and send 2 messages in the main chat.", 
+       category: "social", 
+       action: "message_count", 
+       targetPlatform: "Telegram", 
+       points: 60, 
+       verificationType: "auto_social", 
+       minTxCount: 2 
+      },
     {
       title: "Subscribe to YouTube Channel",
       description: "Subscribe to our YouTube channel and turn on notifications.",
@@ -517,18 +547,18 @@ const extractHandleFromUrl = (url: string): string | null => {
   const availableCategories = ['social', 'trading', 'swap', 'referral', 'content', 'general']
   const suggestedTasks = SUGGESTED_TASKS_BY_STAGE[newTask.stage || 'Beginner'] || []
   const generateSocialTaskTitle = (platform: string, action: string): string => {
-  if (!platform || !action) return ""
-  return `${action.charAt(0).toUpperCase() + action.slice(1)} our ${platform}`
-}
-const getSocialInputLabel = () => {
-    // Fix: Fallback to empty string if undefined
-    const platform = newTask.targetPlatform || "" 
+    if (!platform || !action) return ""
+    if (action === 'role') return `Attain Role in ${platform}`
+    if (action === 'message_count') return `Send Messages in ${platform}`
+    return `${action.charAt(0).toUpperCase() + action.slice(1)} our ${platform}`
+  }
 
-    if (['Twitter'].includes(platform)) return "Target Handle (no @)"
-    if (['Discord', 'Telegram'].includes(platform)) return "Invite Link"
+  const getSocialInputLabel = () => {
+    const platform = newTask.targetPlatform || "" 
+    if (['Discord', 'Telegram'].includes(platform)) return "Server/Group Invite Link"
     if (['Youtube', 'Instagram', 'Tiktok', 'Website'].includes(platform)) return "Profile / Content URL"
-    return "Target URL / Handle"
-}
+    return "Target Profile/Post URL"
+  }
   const showContractInput = ['hold_token', 'hold_nft'].includes(newTask.action || '')
   const showAmountInput = ['hold_token'].includes(newTask.action || '')
   const showDaysInput = ['wallet_age'].includes(newTask.action || '')
@@ -857,13 +887,15 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
                             <SelectContent>{SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-blue-400">Action</Label>
-                          <Select value={newTask.action} onValueChange={(v:any) => setNewTask(p => ({ ...p, action: v, title: generateSocialTaskTitle(p.targetPlatform || '', v) }))}>
-                            <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
-                            <SelectContent>{SOCIAL_ACTIONS.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-blue-400">Action</Label>
+                        <Select value={newTask.action} onValueChange={(v:any) => setNewTask(p => ({ ...p, action: v, title: generateSocialTaskTitle(p.targetPlatform || '', v) }))}>
+                          <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {getAvailableActions(newTask.targetPlatform || 'Twitter').map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       </div>
                       {/* CHANGED: Removed 'disabled' and added 'onChange' */}
                       <Input 
@@ -901,91 +933,148 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
 
                 {/* --- FIX START: SOCIAL INPUTS --- */}
                 {isSocialTemplate && (
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center">
-                      {newTask.targetPlatform === 'Twitter' ? <XIcon className="h-3 w-3 text-blue-400"/> : <LinkIcon className="h-3 w-3"/>}
-                      {getSocialInputLabel()}
-                    </Label>
-                    <Input 
-                      className="bg-background" 
-                      placeholder={newTask.targetPlatform === 'Twitter' ? "Paste link or handle" : "https://..."}
-                      value={newTask.url || newTask.targetHandle || ""} 
-                      onChange={e => {
-                        const val = e.target.value.trim()
-                        
-                        // 1. Try to extract handle if they paste a full URL
-                        const extracted = extractHandleFromUrl(val)
-                        
-                        setNewTask((p: any) => ({ 
-                          ...p, 
-                          // If it's a URL, save it. If they just typed a handle, don't force https yet
-                          url: val.includes('.') ? val : p.url,
-                          // If we found a handle in the URL, use it. Otherwise, use the raw text as handle
-                          targetHandle: extracted || val.replace('@', '')
-                        }))
-                      }} 
-                      onBlur={() => {
-                        // 2. Final normalization when user finishes typing
-                        if (newTask.url && newTask.url.includes('.')) {
-                          const finalUrl = normalizeUrl(newTask.url)
-                          setNewTask((p: any) => ({ ...p, url: finalUrl }))
-                        }
-                      }}
-                    />
-                    {newTask.targetHandle && (
-                      <p className="text-[10px] text-blue-500 font-medium">
-                        Detected Handle: @{newTask.targetHandle}
-                      </p>
+                  <div className="space-y-4">
+                    {/* Primary Link Input */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center">
+                        <LinkIcon className="h-3 w-3"/> {getSocialInputLabel()}
+                      </Label>
+                      <Input 
+                        className="bg-background" 
+                        placeholder="https://..."
+                        value={newTask.url || ""} 
+                        onChange={e => setNewTask((p: any) => ({ ...p, url: e.target.value }))} 
+                        onBlur={() => {
+                          if (newTask.url && newTask.url.includes('.')) {
+                            setNewTask((p: any) => ({ ...p, url: normalizeUrl(p.url) }))
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {/* Discord Role ID Field */}
+                    {newTask.targetPlatform === 'Discord' && newTask.action === 'role' && (
+                       <div className="space-y-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                        <Label className="text-xs font-bold text-indigo-500 flex items-center gap-1">
+                          <ShieldCheck className="h-3 w-3"/> Required Role ID
+                        </Label>
+                        <Input 
+                          className="bg-background" 
+                          placeholder="e.g. 104239849202392"
+                          value={newTask.targetHandle || ""} 
+                          onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value }))} 
+                        />
+                        <p className="text-[10px] text-muted-foreground">Enable Developer Mode in Discord, right-click the Role in server settings, and select "Copy Role ID".</p>
+                      </div>
+                    )}
+
+                    {/* Telegram Message Count Field */}
+                    {newTask.targetPlatform === 'Telegram' && newTask.action === 'message_count' && (
+                       <div className="space-y-2 p-3 bg-sky-500/10 border border-sky-500/20 rounded-lg">
+                        <Label className="text-xs font-bold text-sky-600 flex items-center gap-1">
+                          <MessageSquareText className="h-3 w-3"/> Required Message Count
+                        </Label>
+                        <Input 
+                          type="number"
+                          className="bg-background" 
+                          placeholder="e.g. 10"
+                          value={newTask.minTxCount || ""} 
+                          onChange={e => setNewTask((p: any) => ({ ...p, minTxCount: e.target.value }))} 
+                        />
+                        <p className="text-[10px] text-muted-foreground">Users must send this many messages in the group to pass.</p>
+                      </div>
+                    )}
+
+                    {/* Twitter Handle Override / General Handle Input */}
+                    {newTask.targetPlatform === 'Twitter' && ['quote', 'comment'].includes(newTask.action || '') && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium uppercase text-muted-foreground">Target Tag/Handle</Label>
+                        <Input 
+                          className="bg-background" 
+                          placeholder="@FaucetDrops"
+                          value={newTask.targetHandle || ""} 
+                          onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value.replace('@', '') }))} 
+                        />
+                      </div>
                     )}
                   </div>
                 )}
                 {/* Show Telegram Bot Admin checker when platform is Telegram */}
+                {/* Telegram Bot Checker UI */}
                 {newTask.targetPlatform === 'Telegram' && newTask.verificationType === 'auto_social' && (
-                  <div className="mt-2 space-y-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7 border-sky-500 text-sky-600"
-                      onClick={() => checkTelegramBotAdmin(newTask.url || "")}
-                      disabled={telegramBotStatus.checking || !newTask.url}
-                    >
-                      {telegramBotStatus.checking ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                      ) : (
-                        <Send className="h-3 w-3 mr-1" />
-                      )}
-                      Check Bot Admin Status
-                    </Button>
-
-                    {telegramBotStatus.is_admin !== null && (
-                      <div className={`p-2 rounded text-xs flex items-start gap-2 ${
-                        telegramBotStatus.is_admin
-                          ? "bg-green-50 border border-green-200 text-green-700"
-                          : "bg-orange-50 border border-orange-200 text-orange-700"
-                      }`}>
-                        {telegramBotStatus.is_admin ? (
-                          <>
-                            <CheckCircle2 className="h-3 w-3 shrink-0 mt-0.5" />
-                            <span>✅ Bot is admin. Auto-verification is enabled!</span>
-                          </>
-                        ) : (
-                          <>
-                            <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                            <div>
-                              <strong>Bot not admin yet.</strong> To enable auto-verify:
-                              <ol className="mt-1 space-y-0.5 list-decimal list-inside">
-                                <li>Open your Telegram channel/group</li>
-                                <li>Go to Admins → Add Admin</li>
-                                <li>Search <strong>@{telegramBotStatus.bot_username || "YourQuestBot"}</strong></li>
-                                <li>Grant it at least "Read Messages" permission</li>
-                              </ol>
-                              <p className="mt-1 text-orange-500">
-                                Without this, submissions go to manual review.
+                  <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
+                    telegramBotStatus.is_admin === true
+                      ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800"
+                      : telegramBotStatus.is_admin === false
+                      ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800"
+                      : "bg-sky-50 border-sky-200 text-sky-800 dark:bg-sky-900/20 dark:border-sky-800"
+                  }`}>
+                    {telegramBotStatus.is_admin === true ? (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <span><strong>✅ Bot is admin.</strong> Auto-verification is fully enabled!</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex items-start gap-3">
+                          {telegramBotStatus.is_admin === false ? (
+                            <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <ShieldCheck className="h-5 w-5 text-sky-600 shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <strong className="block mb-1 text-base">
+                              {telegramBotStatus.is_admin === false 
+                                ? "Bot is not an admin yet!" 
+                                : "Action Required: Add Bot to Telegram"}
+                            </strong>
+                            To enable auto-verification, you must add our bot to your channel/group as an administrator.
+                            <ol className="mt-2 space-y-1 list-decimal list-inside text-xs opacity-90">
+                              <li>Open your Telegram channel/group settings</li>
+                              <li>Go to <strong>Admins → Add Admin</strong></li>
+                              <li>Search for <strong>@{telegramBotStatus.bot_username || "FaucetDropsauth_bot"}</strong></li>
+                              <li>Grant it at least "Read Messages" permission</li>
+                            </ol>
+                            {telegramBotStatus.is_admin === false && (
+                              <p className="mt-2 text-xs font-semibold text-orange-600 dark:text-orange-400">
+                                Without this, submissions will go to manual review.
                               </p>
-                            </div>
-                          </>
-                        )}
+                            )}
+                          </div>
+                        </div>
+            
+                        {/* Embedded Buttons */}
+                        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
+                          {/* Opens Telegram deep-link to add the bot directly to a group */}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-8 bg-white dark:bg-slate-900"
+                            onClick={() => window.open(`https://t.me/${telegramBotStatus.bot_username || "FaucetDropsauth_bot"}?startgroup=true`, "_blank")}
+                          >
+                            <Plus className="h-3 w-3 mr-2" /> Add Bot to Group
+                          </Button>
+            
+                          <Button
+                            type="button"
+                            size="sm"
+                            className={`text-xs h-8 ${
+                              telegramBotStatus.is_admin === false 
+                                ? "bg-orange-600 hover:bg-orange-700 text-white" 
+                                : "bg-sky-600 hover:bg-sky-700 text-white"
+                            }`}
+                            onClick={() => checkTelegramBotAdmin(newTask.url || "")}
+                            disabled={telegramBotStatus.checking || !newTask.url}
+                          >
+                            {telegramBotStatus.checking ? (
+                              <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                            ) : (
+                              <Send className="h-3 w-3 mr-2" />
+                            )}
+                            {telegramBotStatus.is_admin === false ? "Check Status Again" : "Verify Bot Status"}
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1074,12 +1163,26 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
                       }
 
                       // 2. Ensure Handle is present for 'quote' or 'tag' related actions
-                      if (t.action === 'quote' || t.action === 'comment') {
+                      if (t.targetPlatform === 'Twitter' && (t.action === 'quote' || t.action === 'comment')) {
                         if (!t.targetHandle) {
                             toast.error("A target handle is required for tag verification.")
                             return
                         }
                       }
+
+                      // ==========================================
+                      // 🟢 NEW: Discord & Telegram Validations 🟢
+                      // ==========================================
+                      if (t.targetPlatform === 'Discord' && t.action === 'role' && !t.targetHandle) {
+                        toast.error("Role ID is required for Discord Role verification.");
+                        return;
+                      }
+
+                      if (t.targetPlatform === 'Telegram' && t.action === 'message_count' && (!t.minTxCount || Number(t.minTxCount) < 1)) {
+                        toast.error("A valid message count threshold is required.");
+                        return;
+                      }
+                      // ==========================================
 
                       // Standard Validation
                       if (!t.title || !t.points) return;

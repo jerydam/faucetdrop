@@ -60,6 +60,7 @@ import {
   UserPlus,
   LogIn,
   ArrowLeftRight,
+  Rocket,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
@@ -1015,24 +1016,26 @@ const questStatusGuard = useMemo(() => {
           <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
             <CardHeader className="pb-2 pt-8">
               <div className="mx-auto bg-slate-100 dark:bg-slate-900 p-4 rounded-full mb-4 w-fit ring-1 ring-slate-200 dark:ring-slate-800">
-                <Wallet className="h-10 w-10 text-slate-600 dark:text-slate-400" />
+                {/* Changed from Wallet to Rocket. Make sure to update your lucide-react imports! */}
+                <Rocket className="h-10 w-10 text-slate-600 dark:text-slate-400" />
               </div>
               <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                Connect Wallet
+                Ready to Start?
               </CardTitle>
               <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
-                Please connect your wallet to view this Quest and participate.
+                Sign in or create an account to view this Quest and participate.
               </CardDescription>
             </CardHeader>
             <CardFooter className="pt-4 flex justify-center pb-8">
-              <p className="text-sm text-muted-foreground">Use the Connect button in the header.</p>
+              <p className="text-sm text-muted-foreground">
+                Click the "Get Started" button in the header.
+              </p>
             </CardFooter>
           </Card>
         </div>
       </div>
     );
   }
-
   if (!hasUsername) {
     return (
       <div className="flex flex-col min-h-screen">

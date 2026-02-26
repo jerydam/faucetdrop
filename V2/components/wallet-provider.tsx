@@ -15,8 +15,8 @@ interface WalletContextType {
   isConnecting: boolean
   walletType: 'embedded' | 'external' | null
   connect: () => Promise<void>
-  disconnect: () => void
-  disconnectExternalWallet: () => Promise<void> // NEW
+  disconnect: () => Promise<void>
+  disconnectExternalWallet: () => Promise<void> 
   ensureCorrectNetwork: (requiredChainId: number) => Promise<boolean>
   switchChain: (newChainId: number) => Promise<void>
 }
@@ -30,7 +30,7 @@ export const WalletContext = createContext<WalletContextType>({
   isConnecting: false,
   walletType: null,
   connect: async () => {},
-  disconnect: () => {},
+  disconnect: async () => {},
   disconnectExternalWallet: async () => {},
   ensureCorrectNetwork: async () => false,
   switchChain: async () => {},
@@ -50,31 +50,47 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { switchChain: wagmiSwitchChain } = useSwitchChain()
   const chainId = useChainId()
 
-  // Get active wallet (prefer embedded over external)
   const getActiveWallet = () => {
     if (!authenticated || wallets.length === 0) return null
     
-    // CRITICAL: Prioritize embedded wallet
+    // Prioritize embedded wallet
     const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
     const externalWallet = wallets.find(w => w.walletClientType !== 'privy')
     
-    // If user logged in with email/google/passkey (has user.email or user.google)
-    // AND has embedded wallet, ALWAYS use embedded wallet
-    const hasAuthMethod = user?.email || user?.google || user?.twitter
+    // Check if user has ANY standard social auth method
+    const hasAuthMethod = user?.email || user?.google || user?.twitter || user?.discord || user?.telegram
     
     if (hasAuthMethod && embeddedWallet) {
-      console.log('[WalletProvider] User has auth method + embedded wallet, using embedded')
       return embeddedWallet
     }
     
-    // Otherwise prefer embedded, fallback to external
     return embeddedWallet || externalWallet || wallets[0]
   }
 
   const activeWallet = getActiveWallet()
   const address = activeWallet?.address || null
-  const isConnected = ready && authenticated && !!address
-  const isConnecting = !ready || (authenticated && !address)
+  
+  // Derived state
+  const isConnected = ready && authenticated && !!address && !!signer
+  // FIX 1: Single declaration. Do not spin if authenticated but 0 physical wallets exist
+  const isConnecting = !ready || (authenticated && wallets.length > 0 && !address)
+
+  // FIX 2: The "Missing Wallet" Safety Net Detector for Mobile
+  useEffect(() => {
+    if (ready && authenticated && wallets.length === 0) {
+      // Delay slightly to give Privy a moment to inject the wallet
+      const timer = setTimeout(() => {
+        if (wallets.length === 0) {
+          toast.error(
+            "Account recognized, but your external wallet is missing on this device. Please log in using WalletConnect or your mobile wallet app browser.", 
+            { duration: 6000 }
+          )
+          logout() // Gracefully log them out so they aren't stuck on a blank screen
+        }
+      }, 2500)
+      return () => clearTimeout(timer)
+    }
+  }, [ready, authenticated, wallets.length, logout])
 
   // Auto-disconnect external wallet if embedded wallet exists + user has auth method
   useEffect(() => {
@@ -83,13 +99,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
       const externalWallet = wallets.find(w => w.walletClientType !== 'privy')
-      const hasAuthMethod = user?.email || user?.google || user?.twitter
+      const hasAuthMethod = user?.email || user?.google || user?.twitter || user?.discord || user?.telegram
       
-      // If user has both wallets + auth method, disconnect external
       if (hasAuthMethod && embeddedWallet && externalWallet) {
-        console.log('[WalletProvider] Auto-disconnecting external wallet...')
         try {
-          // Unlink external wallet from Privy account
           await externalWallet.disconnect()
           wagmiDisconnect()
           toast.info("Switched to embedded wallet")
@@ -104,74 +117,69 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   // Setup provider from the active wallet
   useEffect(() => {
+    let isMounted = true
+
     const setupProvider = async () => {
       if (!activeWallet) {
-        console.log('[WalletProvider] No wallet connected, clearing state')
-        setProvider(null)
-        setSigner(null)
-        setWalletType(null)
+        if (isMounted) {
+          setProvider(null)
+          setSigner(null)
+          setWalletType(null)
+        }
         return
       }
 
       try {
         const isEmbedded = activeWallet.walletClientType === 'privy'
-        
-        console.log('[WalletProvider] Setting up wallet:', {
-          totalWallets: wallets.length,
-          walletTypes: wallets.map(w => w.walletClientType),
-          selectedType: activeWallet.walletClientType,
-          isEmbedded,
-          address: activeWallet.address?.slice(0, 8)
-        })
-        
         const ethereumProvider = await activeWallet.getEthereumProvider()
         const ethersProvider = new BrowserProvider(ethereumProvider)
         const ethersSigner = await ethersProvider.getSigner()
         
-        setProvider(ethersProvider)
-        setSigner(ethersSigner)
-        setWalletType(isEmbedded ? 'embedded' : 'external')
-        
-        console.log('✅ [WalletProvider] Wallet ready:', {
-          address: activeWallet.address?.slice(0, 8),
-          type: isEmbedded ? 'embedded' : 'external'
-        })
+        if (isMounted) {
+          setProvider(ethersProvider)
+          setSigner(ethersSigner)
+          setWalletType(isEmbedded ? 'embedded' : 'external')
+        }
       } catch (error) {
         console.error('❌ [WalletProvider] Error setting up wallet:', error)
-        setProvider(null)
-        setSigner(null)
-        setWalletType(null)
+        
+        // FIX 3: Catch Provider initialization failures
+        if (activeWallet.walletClientType !== 'privy') {
+          toast.error("Could not connect to your wallet app. Please ensure it is unlocked.", { duration: 5000 })
+          logout()
+        }
+        
+        if (isMounted) {
+          setProvider(null)
+          setSigner(null)
+          setWalletType(null)
+        }
       }
     }
 
     setupProvider()
-  }, [authenticated, wallets, activeWallet])
+
+    // Cleanup to prevent memory leaks
+    return () => {
+      isMounted = false
+    }
+  }, [authenticated, wallets, activeWallet, logout])
 
   const connect = async () => {
     try {
-      console.log('[WalletProvider] Opening Privy login modal...')
       await login()
     } catch (error: any) {
-      console.error("[WalletProvider] Error connecting:", error)
       toast.error("Failed to connect wallet")
     }
   }
 
   const disconnect = async () => {
     try {
-      console.log('[WalletProvider] Disconnecting all wallets...')
-      
-      // Disconnect all external wallets
       wagmiDisconnect()
-      
-      // Clear state
       setProvider(null)
       setSigner(null)
       setWalletType(null)
-      
-      // Logout from Privy (clears all wallets)
       await logout()
-      
       toast.warning("Wallet disconnected")
     } catch (error) {
       console.error("[WalletProvider] Error disconnecting:", error)
@@ -182,65 +190,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const externalWallet = wallets.find(w => w.walletClientType !== 'privy')
       if (externalWallet) {
-        console.log('[WalletProvider] Disconnecting external wallet...')
         await externalWallet.disconnect()
         wagmiDisconnect()
         toast.success("External wallet disconnected")
       }
     } catch (error) {
-      console.error("[WalletProvider] Error disconnecting external wallet:", error)
       toast.error("Failed to disconnect external wallet")
     }
   }
 
   const switchChain = async (newChainId: number) => {
     try {
-      console.log('[WalletProvider] Switching to chain:', newChainId)
-      
-      if (!activeWallet) {
-        throw new Error("No wallet connected")
-      }
-      
+      if (!activeWallet) throw new Error("No wallet connected")
       await wagmiSwitchChain({ chainId: newChainId })
       toast.success("Network switched")
     } catch (error: any) {
-      console.error("[WalletProvider] Failed to switch network:", error)
       toast.error("Failed to switch network")
       throw error
     }
   }
 
   const ensureCorrectNetwork = async (requiredChainId: number): Promise<boolean> => {
-    console.log('[WalletProvider] Ensuring correct network:', { 
-      current: chainId, 
-      required: requiredChainId,
-      isConnected 
-    })
-    
     if (!isConnected) {
-      console.log('[WalletProvider] Wallet not connected, opening login...')
       try {
         await connect()
         await new Promise(resolve => setTimeout(resolve, 2000))
       } catch (error) {
-        console.error('[WalletProvider] Failed to connect:', error)
         return false
       }
     }
 
     if (chainId !== requiredChainId) {
-      console.log(`[WalletProvider] Network mismatch: ${chainId} → ${requiredChainId}`)
       try {
         await switchChain(requiredChainId)
         await new Promise(resolve => setTimeout(resolve, 1500))
         return true
       } catch (error) {
-        console.error('[WalletProvider] Failed to switch network:', error)
         return false
       }
     }
-
-    console.log('✅ [WalletProvider] On correct network')
     return true
   }
 

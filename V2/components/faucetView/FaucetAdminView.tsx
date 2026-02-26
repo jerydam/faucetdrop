@@ -910,7 +910,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       if (type === "web") {
         url = window.location.origin + "/faucet/" + faucetAddress;
       } else {
-        url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/faucetdrops?startapp/faucet=${faucetAddress}`;
+        url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
       }
 
       await navigator.clipboard.writeText(url);
@@ -2204,12 +2204,15 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
   </DialogContent>
 </Dialog>
          {/* QR Code Share Dialog - Mobile Optimized */}
-     <QRCodeShareDialog
-        open={showQRDialog}
-        onOpenChange={setShowQRDialog}
-        faucetAddress={faucetAddress}
-        faucetName={faucetDetails?.name || "Faucet"}
-      />
+    <QRCodeShareDialog
+  open={showQRDialog}
+  onOpenChange={setShowQRDialog}
+  faucetAddress={faucetAddress}
+  faucetDetails={faucetDetails}
+  faucetMetadata={faucetMetadata}
+  selectedNetwork={selectedNetwork} // Pass current network object
+  tokenSymbol={tokenSymbol}         // Pass current token symbol string
+/>
     </Card>
   );
 };

@@ -167,7 +167,7 @@ export const networks: Network[] = [
   },
 {
     name: "BNB",
-    symbol: "BSC",
+    symbol: "BNB",
     chainId: 56,
     rpcUrl: "https://bnb-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
     blockExplorerUrls: "https://bscscan.com",

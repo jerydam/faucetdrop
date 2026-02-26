@@ -20,12 +20,12 @@ export const privyConfig = {
       // CHANGED: Use 'system' to automatically toggle based on user's OS/Browser settings
       theme: 'system' as const, 
       accentColor: '#3b82f6',
-      logo: 'https://faucetdrops.io/favicon.png',
+      logo: 'https://FaucetDrops.io/favicon.png',
       landingHeader: 'Join FaucetDrops',
       loginMessage: 'Connect to start your onchain journey',
     },
     // All login methods available
-    loginMethods: ['email', 'wallet'] as const,
+    loginMethods: ['email', 'wallet', 'google', 'twitter', 'discord', 'telegram', 'farcaster', ] as const,
     embeddedWallets: {
       createOnLogin: 'all-users' as const,
       requireUserPasswordOnCreate: false,

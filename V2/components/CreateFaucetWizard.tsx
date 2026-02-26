@@ -523,7 +523,43 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       logoUrl: "/busdt.jpg", 
       description: "Binance-Peg BUSD Token",
     },
-]
+],
+
+  43114: [
+    {
+      address: zeroAddress,
+      name: "Avalanche",
+      symbol: "AVAX",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/avax.svg", 
+      description: "Native Avalanche for transaction fees",
+    },
+    {
+      address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+      name: "USD Coin",
+      symbol: "USDC",
+      decimals: 6,
+      logoUrl: "/usdc.jpg", 
+      description: "USD Coin on Avalanche",
+    },
+    {
+      address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
+      name: "Tether USD",
+      symbol: "USDT",
+      decimals: 6,
+      logoUrl: "/usdt.jpg",
+      description: "Tether USD on Avalanche",
+    },
+    {
+      address: "0xdD8bC0b33ca3EA16CA2C7eBf971B8a92A3B2F306",
+      name: "Agora",
+      symbol: "AGR",
+      decimals: 18,
+      logoUrl: "/ago.png", 
+      description: "Agora community token on Avalanche",
+    }
+  ],
 }
 
 const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{

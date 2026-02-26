@@ -45,7 +45,11 @@ const networks: Network[] = [
     },
     {
     name: "Bnb", symbol: "BNB", chainId: BigInt(56), rpcUrl: "https://binance.llamarpc.com", blockExplorer: "https://bscscan.com", explorerUrl: "https://bscscan.com", color: "#F3BA2F", 
-    logoUrl: "/bnb.png", iconUrl: "/bnb.png", factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"], factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" },    tokenAddress: ZeroAddress, nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },  isTestnet: false,
+    logoUrl: "/bnb.svg", iconUrl: "/bnb.svg", factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"], factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" },    tokenAddress: ZeroAddress, nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },  isTestnet: false,
+},
+{
+    name: "Avalanche", symbol: "AVAX", chainId: BigInt(43114), rpcUrl: "https://api.avax.network/ext/bc/C/rpc", blockExplorer: "https://snowtrace.io", explorerUrl: "https://snowtrace.io", color: "#E84142",
+    logoUrl: "/avax.svg", iconUrl: "/avax.svg", factoryAddresses: [""], factories: { custom: "" },    tokenAddress: ZeroAddress, nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 },  isTestnet: false,
 }
 
 ]
@@ -74,7 +78,42 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
         { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", name: "USD Coin", symbol: "USDC", decimals: 18, logoUrl: "/usdc.jpg", description: "Binance-Peg USD Coin" },
         { address: "0x55d398326f99059fF775485246999027B3197955", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/usdt.jpg", description: "Binance-Peg BSC-USD" },
         { address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", name: "BUSD", symbol: "BUSD", decimals: 18, logoUrl: "/busd.png", description: "Binance-Peg BUSD Token" },
-    ]
+    ],
+    43114: [
+        {
+          address: ZeroAddress,
+          name: "Avalanche",
+          symbol: "AVAX",
+          decimals: 18,
+          isNative: true,
+          logoUrl: "/avax.svg", 
+          description: "Native Avalanche for transaction fees",
+        },
+        {
+          address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+          name: "USD Coin",
+          symbol: "USDC",
+          decimals: 6,
+          logoUrl: "/usdc.jpg", 
+          description: "USD Coin on Avalanche",
+        },
+        {
+          address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
+          name: "Tether USD",
+          symbol: "USDT",
+          decimals: 6,
+          logoUrl: "/usdt.jpg",
+          description: "Tether USD on Avalanche",
+        },
+        {
+          address: "0xdD8bC0b33ca3EA16CA2C7eBf971B8a92A3B2F306",
+          name: "Agora",
+          symbol: "AGR",
+          decimals: 18,
+          logoUrl: "/ago.png", 
+          description: "Agora community token on Avalanche",
+        }
+      ],
 }
 
 // Map tokens to CoinGecko IDs for price fetching

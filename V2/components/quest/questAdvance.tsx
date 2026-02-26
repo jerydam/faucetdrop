@@ -130,7 +130,16 @@ const networks: Network[] = [
     name: "Base", symbol: "BASE", chainId: BigInt(8453), rpcUrl: "https://base.publicnode.com", blockExplorer: "https://basescan.org", explorerUrl: "https://basescan.org", color: "#0052FF", logoUrl: "/base.png", iconUrl: "/base.png",
     factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"],
     factories: { quest: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
-  }
+  },
+    {
+    name: "Bnb", symbol: "BNB", chainId: BigInt(56), rpcUrl: "https://binance.llamarpc.com", blockExplorer: "https://bscscan.com", explorerUrl: "https://bscscan.com", color: "#F3BA2F", 
+    logoUrl: "/bnb.svg", iconUrl: "/bnb.svg", factoryAddresses: [""], factories: { quest: "" },    tokenAddress: ZeroAddress, nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },  isTestnet: false,
+},
+{
+    name: "Avalanche", symbol: "AVAX", chainId: BigInt(43114), rpcUrl: "https://api.avax.network/ext/bc/C/rpc", blockExplorer: "https://snowtrace.io", explorerUrl: "https://snowtrace.io", color: "#E84142",
+    logoUrl: "/avax.svg", iconUrl: "/avax.svg", factoryAddresses: [""], factories: { quest: "" },    tokenAddress: ZeroAddress, nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 },  isTestnet: false,
+}
+
 ]
 
 const SYSTEM_TASKS: QuestTask[] = [
@@ -1284,7 +1293,7 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
       {/* 3. Finalize Button */}
       <div className="flex justify-center pt-8 border-t border-border/50">
         <Button size="lg" className="w-full sm:w-auto min-w-[200px]" onClick={handleDeployAndFinalize} disabled={!canFinalize}>
-          {!hasUserTask ? "Add at least 1 custom task" : timingErrors.length > 0 ? "Fix timing errors" : isDeploying ? "Creating Quest..." : "Create & Finalize Quest"}
+          {!hasUserTask ? "Add at least 1 quest task" : timingErrors.length > 0 ? "Fix timing errors" : isDeploying ? "Creating Quest..." : "Create & Finalize Quest"}
         </Button>
       </div>
     </div>

@@ -72,7 +72,7 @@ const Header = () => {
     ];
 
   return (
-    <header className="fixed w-full z-50 transition-colors bg-[#030712]/90 duration-300 text-white mx-auto max-w-full px-0 max-md:bg-[#020817]/80 max-md:backdrop-blur-sm">
+    <header className="fixed w-full z-100 transition-colors bg-[#030712]/90 duration-300 text-white mx-auto max-w-full px-0 max-md:bg-[#020817]/80 max-md:backdrop-blur-sm">
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Logo */}

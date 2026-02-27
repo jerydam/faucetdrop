@@ -194,7 +194,35 @@ export const networks: Network[] = [
       decimals: 18,
     },
     isTestnet: false,
-}
+},
+{
+  name: "Avalanche",
+  symbol: "AVAX",
+  chainId: 43114,
+  rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+  blockExplorerUrls: "https://snowtrace.io",
+  explorerUrl: "https://snowtrace.io",
+  color: "#E84142",
+  logoUrl: "/avax.svg", // Ensure you have this icon in your public folder
+  iconUrl: "/avax.svg",
+  factoryAddresses: [
+    "0x...", // Add your deployed factory addresses here
+  ],
+  factories: {
+    droplist: "0x...", // Replace with your Avalanche Droplist factory
+    dropcode: "0x...", // Replace with your Avalanche Dropcode factory
+    custom: "0x...",   // Replace with your Avalanche Custom factory
+    quest: "0x...",    // Replace with your Avalanche Quest factory
+    quiz: ""           // Leave empty if not deployed
+  },
+  tokenAddress: ZeroAddress, // Native AVAX is handled via ZeroAddress in your logic
+  nativeCurrency: {
+    name: "Avalanche",
+    symbol: "AVAX",
+    decimals: 18,
+  },
+  isTestnet: false,
+},
 ]
 
 interface NetworkContextType {

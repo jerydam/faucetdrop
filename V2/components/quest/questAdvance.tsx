@@ -473,11 +473,76 @@ const [telegramBotStatus, setTelegramBotStatus] = useState<{
   message: string;
 }>({ checking: false, is_admin: null, bot_username: "", message: "" });
 
+// 1. DISCORD BOT STATE
+  const [discordBotStatus, setDiscordBotStatus] = useState<{
+    checking: boolean;
+    is_in_server: boolean | null;
+    message: string;
+  }>({ checking: false, is_in_server: null, message: "" });
 
+  // 2. DISCORD BOT VERIFICATION FUNCTION
+  const checkDiscordBotStatus = async (inviteUrl: string) => {
+    if (!inviteUrl || !inviteUrl.includes("discord")) {
+      toast.error("Please enter a valid Discord invite link in the URL field first.");
+      return;
+    }
+    
+    setDiscordBotStatus(prev => ({ ...prev, checking: true }));
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/bot/check-discord-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteUrl })
+      });
+      const data = await res.json();
+      
+      setDiscordBotStatus({
+        checking: false,
+        is_in_server: data.is_in_server,
+        message: data.message || ""
+      });
+
+      if (!data.is_in_server) {
+        toast.error("Bot not detected. Did you invite it to the correct server?");
+      } else {
+        toast.success("Bot successfully detected in your server!");
+      }
+    } catch {
+      setDiscordBotStatus({ checking: false, is_in_server: false, message: "Check failed" });
+      toast.error("Failed to contact verification server.");
+    }
+  };
   useEffect(() => {
     setNewTask(initialNewTaskForm)
   }, [initialNewTaskForm])
+useEffect(() => {
+  const handleStorageChange = (e: StorageEvent) => {
+    if (e.key === 'discord_bot_added') {
+      try {
+        const data = JSON.parse(e.newValue || '{}');
+        if (data.guild_id) {
+          // 1. Mark as added
+          setDiscordBotStatus(prev => ({ ...prev, is_in_server: true }));
+          
+          // 2. Automatically update the task URL with a placeholder or the ID
+          // Most creators just need to know the bot is there; 
+          // you can also use this ID to verify status later.
+          setNewTask(prev => ({ 
+            ...prev, 
+            url: `https://discord.com/channels/${data.guild_id}` 
+          }));
 
+          toast.success("Discord Server linked automatically!");
+        }
+      } catch (err) {
+        console.error("Failed to sync Discord data", err);
+      }
+    }
+  };
+  window.addEventListener('storage', handleStorageChange);
+  return () => window.removeEventListener('storage', handleStorageChange);
+}, []);
   // Inject system tasks automatically
   useEffect(() => {
     setNewQuest((prev: any) => {
@@ -999,8 +1064,87 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
                     )}
                   </div>
                 )}
-                {/* Show Telegram Bot Admin checker when platform is Telegram */}
-                {/* Telegram Bot Checker UI */}
+                
+                {/* ========================================== */}
+                {/* 🤖 BOT INTEGRATION HELPERS FOR CREATORS 🤖 */}
+                {/* ========================================== */}
+                
+                {/* DISCORD ADD BOT HELPER */}
+                {newTask.targetPlatform === 'Discord' && newTask.verificationType === 'auto_social' && (
+                  <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
+                    discordBotStatus.is_in_server === true
+                      ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800"
+                      : discordBotStatus.is_in_server === false
+                      ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800"
+                      : "bg-indigo-50 border-indigo-200 text-indigo-800 dark:bg-indigo-900/20 dark:border-indigo-800"
+                  }`}>
+                    {discordBotStatus.is_in_server === true ? (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <span><strong>✅ Bot is in your server.</strong> Auto-verification is fully enabled!</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex items-start gap-3">
+                          {discordBotStatus.is_in_server === false ? (
+                            <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <ShieldCheck className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <strong className="block mb-1 text-base">
+                              {discordBotStatus.is_in_server === false 
+                                ? "Bot is not in the server yet!" 
+                                : "Action Required: Add Discord Bot"}
+                            </strong>
+                            To verify server memberships and roles automatically, our bot must be invited to your server.
+                            <ol className="mt-2 space-y-1 list-decimal list-inside text-xs opacity-90">
+                              <li>Paste your Server Invite Link into the URL field above</li>
+                              <li>Click <strong>Add Bot</strong> below to invite it to that server</li>
+                              <li>Click <strong>Verify Bot Status</strong> to confirm it worked</li>
+                            </ol>
+                          </div>
+                        </div>
+            
+                        {/* Embedded Buttons */}
+                        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-8 bg-white dark:bg-slate-900"
+                            onClick={() => {
+                              window.open(`https://discord.com/oauth2/authorize?client_id=1466125172342915145&permissions=8&integration_type=0&scope=bot`, "_blank");
+                            }}
+                          >
+                            <Plus className="h-3 w-3 mr-2" /> Add Bot to Discord Server
+                          </Button>
+            
+                          <Button
+                            type="button"
+                            size="sm"
+                            className={`text-xs h-8 ${
+                              discordBotStatus.is_in_server === false 
+                                ? "bg-orange-600 hover:bg-orange-700 text-white" 
+                                : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                            }`}
+                            onClick={() => checkDiscordBotStatus(newTask.url || "")}
+                            disabled={discordBotStatus.checking || !newTask.url}
+                          >
+                            {discordBotStatus.checking ? (
+                              <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                            ) : (
+                              <Send className="h-3 w-3 mr-2" />
+                            )}
+                            {discordBotStatus.is_in_server === false ? "Check Status Again" : "Verify Bot Status"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TELEGRAM ADD BOT HELPER */}
                 {newTask.targetPlatform === 'Telegram' && newTask.verificationType === 'auto_social' && (
                   <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
                     telegramBotStatus.is_admin === true
@@ -1029,12 +1173,6 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
                                 : "Action Required: Add Bot to Telegram"}
                             </strong>
                             To enable auto-verification, you must add our bot to your channel/group as an administrator.
-                            <ol className="mt-2 space-y-1 list-decimal list-inside text-xs opacity-90">
-                              <li>Open your Telegram channel/group settings</li>
-                              <li>Go to <strong>Admins → Add Admin</strong></li>
-                              <li>Search for <strong>@{telegramBotStatus.bot_username || "FaucetDropsauth_bot"}</strong></li>
-                              <li>Grant it at least "Read Messages" permission</li>
-                            </ol>
                             {telegramBotStatus.is_admin === false && (
                               <p className="mt-2 text-xs font-semibold text-orange-600 dark:text-orange-400">
                                 Without this, submissions will go to manual review.
@@ -1043,9 +1181,8 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
                           </div>
                         </div>
             
-                        {/* Embedded Buttons */}
                         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
-                          {/* Opens Telegram deep-link to add the bot directly to a group */}
+                          {/* Opens Telegram to add the bot directly to a group */}
                           <Button
                             type="button"
                             variant="outline"
@@ -1053,7 +1190,7 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
                             className="text-xs h-8 bg-white dark:bg-slate-900"
                             onClick={() => window.open(`https://t.me/${telegramBotStatus.bot_username || "FaucetDropsauth_bot"}?startgroup=true`, "_blank")}
                           >
-                            <Plus className="h-3 w-3 mr-2" /> Add Bot to Group
+                            <Plus className="h-3 w-3 mr-2" /> Add Bot to Telegram
                           </Button>
             
                           <Button
@@ -1072,13 +1209,14 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
                             ) : (
                               <Send className="h-3 w-3 mr-2" />
                             )}
-                            {telegramBotStatus.is_admin === false ? "Check Status Again" : "Verify Bot Status"}
+                            {telegramBotStatus.is_admin === false ? "Check Status Again" : "Verify Bot is Admin"}
                           </Button>
                         </div>
                       </div>
                     )}
                   </div>
                 )}
+                {/* ========================================== */}
 
                 {/* Conditional Fields based on Action */}
                 {showContractInput && (
@@ -1133,7 +1271,7 @@ const checkTelegramBotAdmin = async (channelUrl: string) => {
                   <SelectContent>
                     <SelectItem value="manual_link">Manual Link Submission</SelectItem>
                     <SelectItem value="manual_upload">Manual Proof Upload</SelectItem>
-                    <SelectItem value="auto_social" disabled={!['social','referral'].includes(newTask.category || '')}>API Auto-Verify (Socials)</SelectItem>
+                    <SelectItem value="auto_social" disabled={!['social','referral'].includes(newTask.category || '')}>Auto-Verify (Socials)</SelectItem>
                     {/* NEW OPTION */}
                     <SelectItem value="onchain" className="font-bold text-purple-600">⚡ On-Chain Verification Engine</SelectItem>
                     <SelectItem value="none">Instant Reward (Auto-Complete)</SelectItem>

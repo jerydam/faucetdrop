@@ -742,7 +742,6 @@ const handleSubmitTask = async () => {
 
       if (verifyJson.verified) {
         toast.success("✅ Telegram membership verified! Points awarded.");
-        // Refresh and close
         await loadUserProgress();
         const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
         const lbJson = await lbRes.json();
@@ -750,7 +749,6 @@ const handleSubmitTask = async () => {
         setShowSubmitModal(false);
         setSubmissionData({ proofUrl: "", notes: "", file: null });
       } else {
-        // Verification failed — cancel submission so task stays retryable
         await cancelSubmission(submissionId);
 
         if (verifyJson.reason === "telegram_not_linked") {
@@ -770,7 +768,58 @@ const handleSubmitTask = async () => {
       }
 
     // ─────────────────────────────────────────────────────────
-    // CASE 2: TWITTER / DISCORD AUTO-VERIFY
+    // CASE 1.5: DISCORD AUTO-VERIFY (NEW!)
+    // ─────────────────────────────────────────────────────────
+    } else if (
+      selectedTask.verificationType === "auto_social" &&
+      selectedTask.targetPlatform === "Discord"
+    ) {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-discord`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          faucetAddress,
+          walletAddress: userWalletAddress,
+          taskId: selectedTask.id,          // Crucial for Role ID lookup
+          taskUrl: selectedTask.url,        // The Discord invite link
+          taskAction: selectedTask.action,  // 'join' or 'role'
+        }),
+      });
+      const verifyJson = await verifyRes.json();
+
+      if (verifyJson.verified) {
+        toast.success(verifyJson.message || "✅ Discord task verified! Points awarded.");
+        await loadUserProgress();
+        const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+        const lbJson = await lbRes.json();
+        if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+        setShowSubmitModal(false);
+        setSubmissionData({ proofUrl: "", notes: "", file: null });
+      } else {
+        // Verification failed — cancel submission so user can retry
+        await cancelSubmission(submissionId);
+
+        if (verifyJson.reason === "discord_not_linked") {
+          toast.error("⚠️ Connect your Discord in Profile Settings first.", {
+            action: {
+              label: "Open Profile",
+              onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+            },
+          });
+        } else if (verifyJson.reason === "missing_role") {
+          toast.error(verifyJson.message || "❌ You do not have the required role yet.");
+        } else if (verifyJson.reason === "not_member") {
+          toast.error("❌ You have not joined this Discord server yet.");
+        } else if (verifyJson.reason === "bot_not_in_server") {
+          toast.error("❌ The FaucetDrops Bot is not in this server. Contact the creator.");
+        } else {
+          toast.error("❌ " + (verifyJson.message || "Verification failed. Please try again."));
+        }
+      }
+
+    // ─────────────────────────────────────────────────────────
+    // CASE 2: TWITTER & OTHER AUTO-VERIFY (FALLBACK)
     // ─────────────────────────────────────────────────────────
     } else if (selectedTask.verificationType === "auto_social") {
       const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
@@ -784,8 +833,7 @@ const handleSubmitTask = async () => {
           proofUrl: finalProofUrl,
           taskType: selectedTask.action,
         }),
-      });
-      const verifyJson = await verifyRes.json();
+      });  const verifyJson = await verifyRes.json();
 
       if (verifyJson.verified) {
         toast.success("✅ Task verified! Points added.");
@@ -1771,8 +1819,8 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                   <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-lg flex gap-3">
                     <Sparkles className="h-5 w-5 text-blue-500 shrink-0" />
                     <div className="text-sm text-blue-800 dark:text-blue-300">
-                      <strong>No link required.</strong><br/>
-                      Once you have completed the action above, click "Verify & Submit". Our system will check your social connection automatically.
+                     
+                      Once you have completed the action above, click "Verify Task". Our system will Verify the task automatically.
                     </div>
                   </div>
                 )}
@@ -2131,7 +2179,7 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                           {submittingTaskId === selectedTask?.id ? (
                             <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
                           ) : (
-                            selectedTask.verificationType === 'auto_social' ? "Verify & Submit" : "Submit Task"
+                            selectedTask.verificationType === 'auto_social' ? "Verify Task" : "Submit Task"
                           )}
                         </Button>
                       )}

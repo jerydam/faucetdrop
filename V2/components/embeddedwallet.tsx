@@ -292,7 +292,7 @@ export function EmbeddedWalletControlProduction() {
         setLoadingBalances(true);
         try {
             // Fetch balances from backend
-            const response = await fetch(`https://fauctdrop-backend.onrender.com/api/wallet/balances/${chainId}/${address}`);
+            const response = await fetch(`https://faucetdrop-backend.onrender.com/api/wallet/balances/${chainId}/${address}`);
             const data: BackendResponse = await response.json();
 
             // Get the full list of tokens we EXPECT to see for this network

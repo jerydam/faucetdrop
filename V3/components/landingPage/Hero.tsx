@@ -202,6 +202,7 @@ const Drops: React.FC = () => {
         className="relative w-full h-full z-10"
         style={{
           transform: 'scale(0.9)',
+          maskImage: 'linear-gradient(to right, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%)', 
         }}
       >
         <Image

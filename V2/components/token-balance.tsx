@@ -58,8 +58,13 @@ export function TokenBalance({
         return
       }
 
-      // Create a dedicated provider for this network
-      const provider = new JsonRpcProvider(network.rpcUrl)
+      // Safely extract the first RPC URL whether it's a string or array
+      const safeRpcUrl = Array.isArray(network.rpcUrl) 
+        ? network.rpcUrl[0] 
+        : network.rpcUrl;
+
+      // Create a dedicated provider for this network using the safe URL
+      const provider = new JsonRpcProvider(safeRpcUrl)
 
       let balanceValue
 

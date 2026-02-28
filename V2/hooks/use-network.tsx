@@ -47,6 +47,8 @@ export const networks: Network[] = [
     chainId: 42220,
     rpcUrl: [
       "https://forno.celo.org",
+      "https://celo-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
+      "https://celo-mainnet.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
       "https://rpc.ankr.com/celo",
       "https://1rpc.io/celo",
       "https://celo.drpc.org",
@@ -124,6 +126,8 @@ export const networks: Network[] = [
     chainId: 42161,
     rpcUrl: [
       "https://arb1.arbitrum.io/rpc",
+      "https://arb-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
+      "https://arbitrum.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
       "https://rpc.ankr.com/arbitrum",
       "https://1rpc.io/arb",
       "https://arbitrum.drpc.org",
@@ -160,9 +164,11 @@ export const networks: Network[] = [
     chainId: 8453,
     rpcUrl: [
       "https://base.publicnode.com",
+      "https://base-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
       "https://mainnet.base.org",
       "https://rpc.ankr.com/base",
       "https://1rpc.io/base",
+      "https://base-mainnet.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
       "https://base.drpc.org"
     ],
     blockExplorerUrls: "https://basescan.org",
@@ -199,6 +205,7 @@ export const networks: Network[] = [
       "https://bsc-dataseed.binance.org/",
       "https://rpc.ankr.com/bsc",
       "https://1rpc.io/bnb",
+      "https://bsc-mainnet.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
       "https://bsc.publicnode.com",
       "https://bsc.drpc.org"
     ],
@@ -231,8 +238,10 @@ export const networks: Network[] = [
     name: "Avalanche",
     symbol: "AVAX",
     chainId: 43114,
-    rpcUrl: [
+    rpcUrl: [                                                               
+      "https://avax-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
       "https://api.avax.network/ext/bc/C/rpc",
+      "https://avalanche-mainnet.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
       "https://rpc.ankr.com/avalanche",
       "https://1rpc.io/avax",
       "https://avalanche-c-chain.publicnode.com",

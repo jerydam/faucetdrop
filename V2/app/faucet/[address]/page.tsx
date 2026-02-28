@@ -29,7 +29,7 @@
   import { formatUnits, parseUnits, type BrowserProvider, JsonRpcProvider } from "ethers"
   import { Checkbox } from "@/components/ui/checkbox"
   import { claimViaBackend, claimNoCodeViaBackend, claimCustomViaBackend } from "@/lib/backend-service"
-  import { useNetwork } from "@/hooks/use-network"
+  import { createFallbackProvider, useNetwork } from "@/hooks/use-network"
   import LoadingPage from "@/components/loading"
   import FaucetAdminView from "@/components/faucetView/FaucetAdminView"
   import FaucetUserView from "@/components/faucetView/FaucetUserView"
@@ -350,7 +350,13 @@ const loadCustomXPostTemplate = async (faucetAddress: string): Promise<string> =
         if (!targetNetwork) { router.push("/"); return }
         
         setSelectedNetwork(targetNetwork)
-        const detailsProvider = new JsonRpcProvider(targetNetwork.rpcUrl)
+
+        // Safely grab the first URL whether it's an array or a string
+        const safeRpcUrl = Array.isArray(targetNetwork.rpcUrl) 
+          ? targetNetwork.rpcUrl[0] 
+          : targetNetwork.rpcUrl;
+
+        const detailsProvider = new JsonRpcProvider(safeRpcUrl)
         
         const detectedType = await detectFaucetType(detailsProvider, faucetAddress)
         setFaucetType(detectedType)

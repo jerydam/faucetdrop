@@ -8,16 +8,18 @@ import Link from "next/link";
 import { Menu, X, ChevronLeft, Plus } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
-import Image from "next/image"; // Added Image import
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme";
 
 export function Header({ 
   pageTitle, 
-  hideAction = false 
+  hideAction = false,
+  isDashboard = false // 💡 Added optional prop for strict control
 }: { 
   pageTitle: string; 
   hideAction?: boolean; 
+  isDashboard?: boolean;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -26,6 +28,12 @@ export function Header({
   const router = useRouter();
   const pathname = usePathname();
   const { isConnected } = useWallet();
+
+  // 💡 Auto-detect dashboard based on your dynamic page titles or route
+  const isDashboardPage = isDashboard || 
+    pageTitle.includes('Dashboard') || 
+    pageTitle.includes('Space') || 
+    pathname.includes('/dashboard');
 
   const getActionConfig = () => {
     if (pathname.includes('/quest')) {
@@ -64,18 +72,17 @@ export function Header({
             <div className="h-6 w-px bg-border hidden sm:block" />
             
             <Button
-            variant="outline"
-            size="icon"
-            onClick={() => router.back()}
-            // Removed 'hidden sm:flex' and added 'flex'
-            className=" rounded-full text-gray-400 hover:text-white transition-colors" 
-            title="Go Back"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
+              variant="outline"
+              size="icon"
+              onClick={() => router.back()}
+              className="rounded-full text-gray-400 hover:text-white transition-colors flex" 
+              title="Go Back"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
            
             <h1 className="text-sm sm:text-base font-black tracking-tighter uppercase text-foreground/90">
-                <Link href="/" className="hover:text-blue-500 transition-colors">
+              <Link href="/" className="hover:text-blue-500 transition-colors">
                 {pageTitle}
               </Link>
             </h1>
@@ -106,12 +113,15 @@ export function Header({
 
           {/* Mobile Actions */}
           <div className="lg:hidden flex items-center gap-2 sm:gap-3">
-            <ThemeToggle/>
+            {/* 💡 Conditionally hide ThemeToggle on mobile if we are on the dashboard */}
+            <ThemeToggle />
+            
             <WalletConnectButton />
 
             {isConnected && (
               <MiniNetworkIndicator className="h-9 w-9 border border-border rounded-md" />
             )}
+            {!isDashboardPage && 
             <Button
               ref={buttonRef}
               variant="outline"
@@ -121,6 +131,7 @@ export function Header({
             >
               {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
+                  }
           </div>
         </div>
 

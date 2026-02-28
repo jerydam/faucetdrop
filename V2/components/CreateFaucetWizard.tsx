@@ -962,7 +962,8 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     setNameValidation(prev => ({ ...prev, isValidating: true, validationError: null }))
     try {
       console.log(`Validating name "${nameToValidate}" across all factories on ${currentNetwork?.name}...`)
-      const validationResult = await checkFaucetNameExists(provider, currentNetwork, nameToValidate)
+      // Cast to 'any' to bypass the slight interface mismatch between the hook and lib
+      const validationResult = await checkFaucetNameExists(provider, currentNetwork as any, nameToValidate)
       if (validationResult.exists && validationResult.conflictingFaucets) {
         const conflictCount = validationResult.conflictingFaucets.length
         const factoryTypeList = validationResult.conflictingFaucets
@@ -2102,7 +2103,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
   const renderReviewAndCreate = () => {
     const selectedTokenConfig = getSelectedTokenConfiguration()
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
+    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork as any)
     const finalTokenAddress = getFinalTokenAddress()
     return (
       <div className="space-y-6">
@@ -2290,7 +2291,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
         return hasValidName && hasValidToken
       case 3:
         const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-        const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
+        const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork as any)
         return !!factoryAddress
       default:
         return false

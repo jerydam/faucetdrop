@@ -17,10 +17,13 @@ import {
 import { LayoutDashboard, LogOut, Copy, ChevronDown, Wallet, User as UserIcon } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
-
-export function WalletConnectButton() {
+ interface WalletConnectButtonProps {
+  className?: string; // 💡 Tell TypeScript it can accept a className
+}
+export function WalletConnectButton({ className }: WalletConnectButtonProps) {
   const { ready, authenticated, login, logout, user } = usePrivy()
   const { wallets } = useWallets()
   const { address, walletType, isConnected } = useWallet()
@@ -31,6 +34,9 @@ export function WalletConnectButton() {
   
   // Use a ref to prevent multiple sync calls during React strict mode renders
   const hasSyncedRef = useRef(false)
+  
+ 
+
 
   // --- FALLBACK HELPERS ---
   const getFallbackAvatar = useCallback((privyUser: User | null) => {
@@ -155,7 +161,13 @@ export function WalletConnectButton() {
 
   if (!ready) {
     return (
-      <Button size="sm" disabled variant="outline" className="text-xs font-bold uppercase tracking-widest px-6 opacity-50 border-border">
+      <Button 
+        size="sm" 
+        disabled 
+        variant="outline" 
+        // 💡 Merged here as well
+        className={cn("text-xs font-bold uppercase tracking-widest px-6 opacity-50 border-border", className)}
+      >
         Loading...
       </Button>
     )
@@ -163,7 +175,13 @@ export function WalletConnectButton() {
 
   if (!isConnected) {
     return (
-      <Button onClick={login} size="sm" variant="default" className="text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-all">
+      <Button 
+        onClick={login} 
+        size="sm" 
+        variant="default" 
+        // 💡 FIX: Use cn() to merge the incoming className with the default styles
+        className={cn("text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-all", className)}
+      >
         Get Started
       </Button>
     )
@@ -172,7 +190,12 @@ export function WalletConnectButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="flex items-center gap-2 p-1 sm:pr-3 border-primary/20 hover:bg-primary/5 transition-all rounded-full h-9 relative">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          // 💡 Merged here as well
+          className={cn("flex items-center gap-2 p-1 sm:pr-3 border-primary/20 hover:bg-primary/5 transition-all rounded-full h-9 relative", className)}
+        >
           <div className="relative">
             <Avatar className="h-7 w-7 border border-background shadow-sm">
               <AvatarImage src={displayAvatar} className="object-cover" />

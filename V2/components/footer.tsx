@@ -55,7 +55,7 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
     },
     {
       name: "GitHub",
-      href: "https://github.com/Priveedores-de-soluciones/Faucet_drops",
+      href: "https://github.com/priveedores-de-solucione/FaucetDrops",
       icon: Github,
       hoverColor: "hover:text-gray-600 dark:hover:text-gray-300"
     },

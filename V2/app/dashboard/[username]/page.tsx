@@ -192,6 +192,7 @@ export default function DashboardPage() {
     }
 
     // IMPROVED: Fetch data with better address/username handling
+   // IMPROVED: Fetch data with better address/username handling
     const fetchData = useCallback(async () => {
         console.log('[Dashboard] Starting fetchData for:', targetUsernameOrAddress)
         setLoading(true);
@@ -225,7 +226,7 @@ export default function DashboardPage() {
                         telegram_handle: fetchedData.telegram_handle || fetchedData.telegramHandle,
                         farcaster_handle: fetchedData.farcaster_handle || fetchedData.farcasterHandle
                     };
-                    console.log('✅ [Dashboard] Profile found by address:', userProfile.username)
+                    console.log('✅ [Dashboard] Profile found by address:', userProfile?.username) // Added ?
                 } else {
                     // No profile yet, but valid address -> Show "New User"
                     userProfile = {
@@ -246,7 +247,7 @@ export default function DashboardPage() {
                 if (profData.success && profData.profile) {
                     userProfile = profData.profile;
                     userWallet = profData.profile.wallet_address;
-                    console.log('✅ [Dashboard] Profile found by username:', userProfile.username)
+                    console.log('✅ [Dashboard] Profile found by username:', userProfile?.username) // Added ?
                 } else {
                     // Username not found
                     console.log('❌ [Dashboard] Username not found')
@@ -323,7 +324,6 @@ export default function DashboardPage() {
             setLoading(false);
         }
     }, [targetUsernameOrAddress, connectedAddress, backendUrl, toast]);
-
     // STEP 6: Trigger data fetch on mount and when params change
     useEffect(() => {
         if (!targetUsernameOrAddress) {

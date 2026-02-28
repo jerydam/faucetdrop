@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Coins, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
-import { formatUnits, Contract, JsonRpcProvider, isAddress, ZeroAddress } from "ethers";
+import { formatUnits, Contract, JsonRpcProvider,FallbackProvider, isAddress, ZeroAddress } from "ethers";
 import { Network } from "@/hooks/use-network";
 import { FACTORY_ABI_DROPCODE, FACTORY_ABI_DROPLIST, FACTORY_ABI_CUSTOM } from "@/lib/abis";
 
@@ -460,7 +460,12 @@ async function getAllClaimsFromAllNetworks(
     try {
       console.log(`Fetching claims from ${network.name}...`);
       
-      const provider = new JsonRpcProvider(network.rpcUrl);
+      // Safely extract the first RPC URL whether it's a string or array
+      const safeRpcUrl = Array.isArray(network.rpcUrl) 
+          ? network.rpcUrl[0] 
+          : network.rpcUrl;
+
+      const provider = new JsonRpcProvider(safeRpcUrl);
       const networkClaims = await getAllClaimsFromFactories(provider, network);
       
       // Convert to ClaimType format
@@ -575,7 +580,12 @@ export function FaucetList() {
         const network = networks.find(n => n.chainId === claim.chainId);
         if (!network) return null;
         
-        const provider = new JsonRpcProvider(network.rpcUrl);
+        // Safely extract the first RPC URL whether it's a string or array
+        const safeRpcUrl = Array.isArray(network.rpcUrl) 
+            ? network.rpcUrl[0] 
+            : network.rpcUrl;
+
+        const provider = new JsonRpcProvider(safeRpcUrl);
         const faucetContract = new Contract(faucetAddress, FAUCET_ABI, provider);
         
         let faucetName: string;

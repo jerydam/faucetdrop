@@ -1,207 +1,151 @@
 "use client";
 
 import { useEffect, useState } from "react";
-// Assuming useWallet and useNetwork are imported correctly
-import { useWallet } from "@/hooks/use-wallet"; 
-import { useNetwork } from "@/hooks/use-network"; 
-import { toast } from "sonner";
+import { createClient } from "@supabase/supabase-js";
+import { useWallet } from "@/hooks/use-wallet";
+import { useNetwork } from "@/hooks/use-network";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Loader2, Zap, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-// Assuming getFaucetsForNetwork is imported correctly
-import { getFaucetsForNetwork } from "@/lib/faucet"; 
+import { Network } from "@/hooks/use-network";
 
-// --- TYPE EXTENSIONS ---
-// Re-defining the structure with logoUrl for clarity in this component
-interface Network {
-  chainId: number;
-  name: string;
-  color: string;
-  logoUrl: string; // <-- New property used for the logo
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface NetworkCounts {
+  total: number;
+  active: number;
 }
 
-// --- NEW SUB-COMPONENT: StatusBadge ---
+// ─── StatusBadge ─────────────────────────────────────────────────────────────
+
 interface StatusBadgeProps {
-  status: { loading: boolean; error: string | null } | undefined;
+  loading: boolean;
+  error: boolean;
 }
 
-const StatusBadge = ({ status }: StatusBadgeProps) => {
-  if (status?.loading) {
-    return (
-      <div className="flex items-center text-xs text-blue-500">
-        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-        Loading
-      </div>
-    );
-  }
-  if (status?.error) {
-    return (
-      <div className="flex items-center text-xs text-amber-500">
-        <AlertTriangle className="mr-1 h-3 w-3" />
-        Issue
-      </div>
-    );
-  }
+const StatusBadge = ({ loading, error }: StatusBadgeProps) => {
+  if (loading) return (
+    <div className="flex items-center text-xs text-blue-500">
+      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+      Loading
+    </div>
+  );
+  if (error) return (
+    <div className="flex items-center text-xs text-amber-500">
+      <AlertTriangle className="mr-1 h-3 w-3" />
+      Issue
+    </div>
+  );
   return (
     <div className="flex items-center text-xs text-green-500">
-      <Zap className="mr-1 h-3 w-3 " />
+      <Zap className="mr-1 h-3 w-3" />
       Online
     </div>
   );
 };
 
-// --- MAIN COMPONENT: NetworkGrid ---
+// ─── Main component ───────────────────────────────────────────────────────────
 
 interface NetworkGridProps {
   className?: string;
 }
 
 export function NetworkGrid({ className = "" }: NetworkGridProps) {
-  // Assuming useWallet returns both chainId and the JsonRpcProvider
-  const { chainId, provider } = useWallet(); 
+  const { chainId } = useWallet();
   const { networks } = useNetwork();
- 
 
-  const [networkStatus, setNetworkStatus] = useState<
-    Record<string, { loading: boolean; error: string | null }>
-  >({});
-  const [faucetCounts, setFaucetCounts] = useState<Record<string, number>>({});
-  const [activeFaucetCounts, setActiveFaucetCounts] = useState<
-    Record<string, number>
-  >({});
+  const [counts, setCounts] = useState<Record<number, NetworkCounts>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    const initialStatus: Record<
-      string,
-      { loading: boolean; error: string | null }
-    > = {};
-    const initialFaucetCounts: Record<string, number> = {};
-    const initialActiveFaucetCounts: Record<string, number> = {};
+    if (!networks.length) return;
 
-    networks.forEach((network: Network) => {
-      initialStatus[network.name] = { loading: true, error: null };
-      initialFaucetCounts[network.name] = 0;
-      initialActiveFaucetCounts[network.name] = 0;
-    });
+    async function fetchCounts() {
+      setLoading(true);
+      setError(false);
 
-    setNetworkStatus(initialStatus);
-    setFaucetCounts(initialFaucetCounts);
-    setActiveFaucetCounts(initialActiveFaucetCounts);
+      try {
+        // Single query — fetch total and active counts for ALL networks at once.
+        // Supabase returns one row per chain_id with aggregated counts.
+        const { data, error: supaErr } = await supabase
+          .from("network_faucets")
+          .select("chain_id, is_claim_active");
 
-    const loadFaucetCounts = async () => {
-      const newStatus: Record<
-        string,
-        { loading: boolean; error: string | null }
-      > = {};
-      const newCounts: Record<string, number> = {};
-      const newActiveCounts: Record<string, number> = {};
+        if (supaErr) throw supaErr;
 
-      if (!provider) {
-        console.warn("Provider is missing; skipping faucet data load.");
-        return;
+        // Aggregate client-side — avoids needing a DB function
+        const map: Record<number, NetworkCounts> = {};
+        for (const row of data ?? []) {
+          const id = row.chain_id as number;
+          if (!map[id]) map[id] = { total: 0, active: 0 };
+          map[id].total += 1;
+          if (row.is_claim_active) map[id].active += 1;
+        }
+        setCounts(map);
+      } catch (err) {
+        console.error("NetworkGrid: failed to load faucet counts", err);
+        setError(true);
+      } finally {
+        setLoading(false);
       }
-
-      await Promise.all(
-        networks.map(async (network: Network) => {
-          // Only attempt to load for the currently connected network for efficiency
-          if (network.chainId !== chainId) {
-            newStatus[network.name] = { loading: false, error: null };
-            newCounts[network.name] = 0;
-            newActiveCounts[network.name] = 0;
-            return;
-          }
-          
-          try {
-            setNetworkStatus((prev) => ({
-              ...prev,
-              [network.name]: { loading: true, error: null },
-            }));
-
-            // FIX: Pass the provider as the second argument
-            const faucets = await getFaucetsForNetwork(network, provider); 
-
-            // Assuming FaucetMeta has a boolean 'isClaimActive' property
-            const activeFaucets = faucets.filter(
-              (faucet) => faucet.isClaimActive
-            );
-
-            newCounts[network.name] = faucets.length;
-            newActiveCounts[network.name] = activeFaucets.length;
-            newStatus[network.name] = { loading: false, error: null };
-          } catch (error) {
-            console.error(`Error loading faucets for ${network.name}:`, error);
-            const errorMessage = `Failed to load faucets`;
-
-            newStatus[network.name] = { loading: false, error: errorMessage };
-            newCounts[network.name] = 0;
-            newActiveCounts[network.name] = 0;
-
-            toast.error(`Connection Error on ${network.name}`);
-          }
-        })
-      );
-
-      setNetworkStatus((prev) => ({ ...prev, ...newStatus }));
-      setFaucetCounts((prev) => ({ ...prev, ...newCounts }));
-      setActiveFaucetCounts((prev) => ({ ...prev, ...newActiveCounts }));
-    };
-
-    if (networks.length > 0) {
-      loadFaucetCounts();
     }
-    
-  }, [networks, toast, provider, chainId]); 
 
-  // Find the network matching the current chainId
-  const currentNetwork: Network | undefined = networks.find(
-    (network: Network) => network.chainId === chainId
-  );
+    fetchCounts();
+  }, [networks]);
+
+  const currentNetwork = networks.find((n: Network) => n.chainId === chainId);
+  const currentCounts  = currentNetwork ? (counts[currentNetwork.chainId] ?? { total: 0, active: 0 }) : null;
 
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* --- CONNECTED NETWORK CARD (Enhanced) --- */}
       {currentNetwork ? (
-        <div className="w-full">
-          
-          <Link href={`/network/${currentNetwork.chainId}`}>
-            <Card className="overflow-hidden shadow-lg border-2 transition-all duration-300 ease-in-out hover:shadow-xl cursor-pointer">
-              <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
-                <div className="flex items-center gap-3">
-                  {/* ⭐️ LOGO IMPLEMENTATION: Replaced LayoutGrid with <img> */}
-                  <div
-                    className="h-8 w-8 rounded-full flex items-center justify-center overflow-hidden"
-                    style={{ border: `2px solid ${currentNetwork.color}` }}
-                  >
-                    <img
-                      src={currentNetwork.logoUrl}
-                      alt={`${currentNetwork.name} Logo`}
-                      className="h-full w-full object-contain p-1" // Added padding to prevent stretching
-                    />
-                  </div>
-                  <CardTitle className="text-lg font-bold truncate text-primary">
-                    {currentNetwork.name}
-                  </CardTitle>
+        <Link href={`/network/${currentNetwork.chainId}`}>
+          <Card className="overflow-hidden shadow-lg border-2 transition-all duration-300 ease-in-out hover:shadow-xl cursor-pointer">
+            <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-8 w-8 rounded-full flex items-center justify-center overflow-hidden"
+                  style={{ border: `2px solid ${currentNetwork.color}` }}
+                >
+                  <img
+                    src={currentNetwork.logoUrl}
+                    alt={`${currentNetwork.name} Logo`}
+                    className="h-full w-full object-contain p-1"
+                  />
                 </div>
-
-                {/* Status Badge */}
-                <StatusBadge status={networkStatus[currentNetwork.name]} />
-              </CardHeader>
-
-              <CardContent className="p-4 pt-0 grid grid-cols-2 gap-4 border-t border-dashed">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Total Faucets</p>
-                  <p className="text-2xl font-extrabold text-card-foreground">
-                    {faucetCounts[currentNetwork.name] ?? 0}
-                  </p>
-                </div>
-                
-              </CardContent>
-              <div className=" p-2 text-center text-xs text-primary/80 font-medium">
-                Click to explore available faucets on this network →
+                <CardTitle className="text-lg font-bold truncate text-primary">
+                  {currentNetwork.name}
+                </CardTitle>
               </div>
-            </Card>
-          </Link>
-        </div>
+
+              <StatusBadge loading={loading} error={error} />
+            </CardHeader>
+
+            <CardContent className="p-4 pt-0 grid grid-cols-2 gap-4 border-t border-dashed">
+              <div className="space-y-1">
+                <p className="text-sm text-muted-foreground">Total Faucets</p>
+                <p className="text-2xl font-extrabold text-card-foreground">
+                  {loading ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    currentCounts?.total ?? 0
+                  )}
+                </p>
+              </div>
+              
+            </CardContent>
+
+            <div className="p-2 text-center text-xs text-primary/80 font-medium">
+              Click to explore available faucets on this network →
+            </div>
+          </Card>
+        </Link>
       ) : (
         <Card className="p-8 text-center bg-gray-50 dark:bg-gray-900 border-dashed border-2 border-gray-300 dark:border-gray-700">
           <div className="space-y-4">
@@ -220,8 +164,6 @@ export function NetworkGrid({ className = "" }: NetworkGridProps) {
           </div>
         </Card>
       )}
-
-      {/* "All Supported Networks" section removed as requested. */}
     </div>
   );
 }

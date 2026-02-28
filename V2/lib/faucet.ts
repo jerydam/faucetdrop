@@ -10,12 +10,13 @@ import { appendDivviReferralData, getDivviStatus, reportTransactionToDivvi, isSu
   logoUrl: string
   explorerUrl: string
   iconUrl: string
-  tokenAdress: string
-  nativeCurrency: string
+  tokenAddress: string
+  nativeCurrency:{ name: string; symbol: string; decimals: number }
   rpcUrl: string | string[] // 💡 UPDATED to support array
   blockExplorer?: string
   factoryAddresses: string[]
   color?: string
+  isTestnet?: boolean
   storageAddress?: string
   factories?: any // Optional: if you want to use the specific factories map
 }

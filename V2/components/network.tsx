@@ -1,25 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { useWallet } from "@/hooks/use-wallet";
 import { useNetwork } from "@/hooks/use-network";
+import { useDashboard } from "@/hooks/useDashboard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Loader2, Zap, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { Network } from "@/hooks/use-network";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface NetworkCounts {
-  total: number;
-  active: number;
-}
 
 // ─── StatusBadge ─────────────────────────────────────────────────────────────
 
@@ -59,54 +46,25 @@ export function NetworkGrid({ className = "" }: NetworkGridProps) {
   const { chainId } = useWallet();
   const { networks } = useNetwork();
 
-  const [counts, setCounts] = useState<Record<number, NetworkCounts>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    if (!networks.length) return;
-
-    async function fetchCounts() {
-      setLoading(true);
-      setError(false);
-
-      try {
-        // Single query — fetch total and active counts for ALL networks at once.
-        // Supabase returns one row per chain_id with aggregated counts.
-        const { data, error: supaErr } = await supabase
-          .from("network_faucets")
-          .select("chain_id, is_claim_active");
-
-        if (supaErr) throw supaErr;
-
-        // Aggregate client-side — avoids needing a DB function
-        const map: Record<number, NetworkCounts> = {};
-        for (const row of data ?? []) {
-          const id = row.chain_id as number;
-          if (!map[id]) map[id] = { total: 0, active: 0 };
-          map[id].total += 1;
-          if (row.is_claim_active) map[id].active += 1;
-        }
-        setCounts(map);
-      } catch (err) {
-        console.error("NetworkGrid: failed to load faucet counts", err);
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchCounts();
-  }, [networks]);
+  // ✅ Single source of truth — same data as the analytics dashboard
+  const { data, loading, error } = useDashboard();
 
   const currentNetwork = networks.find((n: Network) => n.chainId === chainId);
-  const currentCounts  = currentNetwork ? (counts[currentNetwork.chainId] ?? { total: 0, active: 0 }) : null;
+
+  // Match by name (case-insensitive) against faucet_data rows
+  const currentNetworkFaucets = currentNetwork
+    ? (data?.network_faucets ?? []).find(
+        (nf) => nf.network.trim().toLowerCase() === currentNetwork.name.trim().toLowerCase()
+      )
+    : null;
+
+  const totalFaucets = currentNetworkFaucets?.faucets ?? 0;
 
   return (
     <div className={`space-y-6 ${className}`}>
       {currentNetwork ? (
         <Link href={`/network/${currentNetwork.chainId}`}>
-          <Card className="overflow-hidden shadow-lg border-2 transition-all duration-300 ease-in-out hover:shadow-xl cursor-pointer">
+          <Card className="overflow-hidden shadow-lg border-2 transition-all duration-300 ease-in-out hover:shadow-xl cursor-pointer group hover:scale-[1.02] active:scale-[0.99]">
             <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0">
               <div className="flex items-center gap-3">
                 <div
@@ -124,7 +82,16 @@ export function NetworkGrid({ className = "" }: NetworkGridProps) {
                 </CardTitle>
               </div>
 
-              <StatusBadge loading={loading} error={error} />
+              <div className="flex items-center gap-2">
+                <StatusBadge loading={loading} error={!!error} />
+                {/* Arrow shifts right on hover — signals navigation */}
+                <span
+                  className="transition-transform duration-200 group-hover:translate-x-1 font-bold"
+                  style={{ color: currentNetwork.color }}
+                >
+                  →
+                </span>
+              </div>
             </CardHeader>
 
             <CardContent className="p-4 pt-0 grid grid-cols-2 gap-4 border-t border-dashed">
@@ -134,15 +101,18 @@ export function NetworkGrid({ className = "" }: NetworkGridProps) {
                   {loading ? (
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   ) : (
-                    currentCounts?.total ?? 0
+                    totalFaucets
                   )}
                 </p>
               </div>
-              
             </CardContent>
 
-            <div className="p-2 text-center text-xs text-primary/80 font-medium">
-              Click to explore available faucets on this network →
+            {/* Footer */}
+            <div
+              className="p-2 text-center text-xs font-medium transition-all duration-200 group-hover:text-white"
+              style={{ color: currentNetwork.color }}
+            >
+              Explore available faucets on this network →
             </div>
           </Card>
         </Link>

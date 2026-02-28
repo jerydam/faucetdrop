@@ -224,6 +224,62 @@
   animation: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* ── Cyan electric blue — matches the image ── */
+.blue-shine {
+  filter: brightness(0) saturate(100%)
+          invert(72%) sepia(80%) saturate(500%)
+          hue-rotate(160deg) brightness(110%);
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    filter: brightness(0) saturate(100%)
+            invert(72%) sepia(80%) saturate(500%)
+            hue-rotate(160deg) brightness(110%)
+            drop-shadow(0 0 8px #0a16bb)
+            drop-shadow(0 0 16px #0c08df);
+  }
+  50% {
+    filter: brightness(0) saturate(100%)
+            invert(72%) sepia(80%) saturate(500%)
+            hue-rotate(160deg) brightness(145%)
+            drop-shadow(0 0 20px #00d4ff)
+            drop-shadow(0 0 48px #00aaff)
+            drop-shadow(0 0 80px #0066ff);
+  }
+}
+
+/* ── Sweep shine ── */
+.shine-sweep {
+  position: absolute;
+  top: -100%;
+  left: -60%;
+  width: 35%;
+  height: 300%;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    rgba(0, 212, 255, 0.18) 50%,
+    transparent 80%
+  );
+  transform: skewX(-15deg);
+  animation: sweep 4s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  0%   { left: -60%; opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { left: 120%; opacity: 0; }
+}
+
+/* ── Ambient blob pulse ── */
+@keyframes ambient-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.08); }
+}
+
 /* Hide default cursor on desktop */
 /* @media (min-width: 768px) {
   * {

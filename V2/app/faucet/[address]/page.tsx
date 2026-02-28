@@ -328,7 +328,15 @@ const resolveAndLoad = useCallback(async () => {
                 loadSocialMediaLinks(row.faucet_address),
             ]);
 
+            // In resolveAndLoad, after setFaucetDetails(...)
             setFaucetDetails({ ...details, customXPostTemplate: template });
+            setTokenSymbol(row.token_symbol);        // ← ADD THIS
+            setTokenDecimals(row.token_decimals);    // ← ADD THIS
+            setBackendMode(row.use_backend);         // ← ADD THIS (also missing)
+            setFaucetMetadata({                      // ← ADD THIS (also missing)
+                description: row.description || getDefaultFaucetDescription(row.network_name, row.owner_address),
+                imageUrl: row.image_url || DEFAULT_FAUCET_IMAGE,
+            });
             setDynamicTasks(tasks);
 
             // 5. User-specific Blockchain Checks

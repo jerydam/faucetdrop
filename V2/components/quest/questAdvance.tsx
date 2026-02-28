@@ -1222,12 +1222,12 @@ export default function Phase2TimingTasksFinalize({
                       finally { setEditingTask(null); setNewTask({ ...initialNewTaskForm, points: 100 }) }
                     }}
                     disabled={
-                        !newTask.title || 
-                        !newTask.points || 
-                        (showContractInput && !newTask.targetContractAddress?.trim() && newTask.action !== 'hold_token') ||
-                        // NEW: Block saving if on-chain verification is selected but the action isn't an on-chain action
-                        (newTask.verificationType === 'onchain' && !['hold_token', 'hold_nft', 'wallet_age', 'tx_count'].includes(newTask.action || ''))
-                      }
+                      !newTask.title || 
+                      !newTask.points || 
+                      (showContractInput && !newTask.targetContractAddress?.trim() && newTask.action !== 'hold_token') ||
+                      (newTask.verificationType === 'onchain' && newTask.category === 'social') || // <-- Blocks Social + Onchain
+                      (newTask.verificationType === 'onchain' && !['hold_token', 'hold_nft', 'wallet_age', 'tx_count'].includes(newTask.action || ''))
+                    }
                   >
                     {editingTask ? "Save Changes" : <><Plus className="mr-2 h-4 w-4" /> Add Task</>}
                   </Button>

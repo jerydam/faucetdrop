@@ -88,7 +88,7 @@ interface FaucetUserViewProps {
     showClaimPopup: boolean;
     setShowClaimPopup: (open: boolean) => void;
     handleVerifyAllTasks: () => Promise<void>;
-    handleGoBack: () => void; 
+  
 }
 
 const FaucetUserView: React.FC<FaucetUserViewProps> = ({
@@ -121,7 +121,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     showClaimPopup,
     setShowClaimPopup,
     handleVerifyAllTasks,
-    handleGoBack, 
+
 }) => {
    
 
@@ -205,14 +205,7 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     return (
         <>
             <div className="flex flex-row justify-between items-start sm:items-center gap-4">
-                <Button
-                    variant="outline"
-                    onClick={handleGoBack} 
-                    className="text-xs sm:text-sm hover:bg-accent hover:text-accent-foreground"
-                >
-                    <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    Back
-                </Button>
+               
                 <Button
                     variant="outline"
                     onClick={() => handleCopyFaucetLink()}

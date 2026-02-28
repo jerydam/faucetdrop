@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
 import { useNetwork, Network } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { buildFaucetSlug } from "@/lib/faucet-slug";
 import LoadingPage from "@/components/loading";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ interface FaucetMeta {
 /** Full row from `faucet_details` table */
 interface FaucetData {
   faucetAddress: string;
+  slug?: string;
   name?: string;
   tokenSymbol?: string;
   tokenDecimals?: number;
@@ -109,8 +111,8 @@ async function fetchAllMetaFromSupabase(chainId: number): Promise<FaucetMeta[]> 
   const { data, error } = await supabase
     .from("network_faucets")
     .select(
-      "faucet_address, is_claim_active, is_ether, start_time, token_symbol, faucet_name, owner_address, factory_address, factory_type"
-    )
+      "faucet_address, slug, is_claim_active, is_ether, start_time, token_symbol, faucet_name, owner_address, factory_address, factory_type"
+    ) // 👈 Added 'slug' here
     .eq("chain_id", chainId);
 
   if (error) throw new Error(`network_faucets: ${error.message}`);
@@ -119,6 +121,7 @@ async function fetchAllMetaFromSupabase(chainId: number): Promise<FaucetMeta[]> 
     faucetAddress:  r.faucet_address,
     isClaimActive:  r.is_claim_active,
     isEther:        r.is_ether,
+    slug:           r.slug,
     createdAt:      r.start_time,
     tokenSymbol:    r.token_symbol,
     name:           r.faucet_name,
@@ -364,13 +367,16 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
       </CardContent>
 
       <CardFooter className="px-3 sm:px-4">
-        <Link href={`/faucet/${faucet.faucetAddress}?networkId=${faucet.network?.chainId}`} className="w-full">
-          <Button variant="outline" className="w-full h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
-            <Coins className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-            View Details
-          </Button>
-        </Link>
-      </CardFooter>
+  <Link 
+    href={`/faucet/${faucet.slug || buildFaucetSlug(faucet.name || "faucet", faucet.faucetAddress)}`} 
+    className="w-full"
+  >
+    <Button variant="outline" className="w-full h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
+      <Coins className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+      View Details
+    </Button>
+  </Link>
+</CardFooter>
     </Card>
   );
 }
@@ -580,6 +586,7 @@ export default function NetworkFaucets() {
           return {
             faucetAddress:  row.faucet_address,
             name:           row.faucet_name,
+            slug:           row.slug,
             tokenSymbol:    row.token_symbol || (row.is_ether ? getNativeTokenSymbol(network.name) : "TOK"),
             tokenDecimals:  row.token_decimals ?? 18,
             isEther:        row.is_ether,
@@ -602,6 +609,7 @@ export default function NetworkFaucets() {
         return {
           faucetAddress:  meta.faucetAddress,
           name:           meta.name,
+          slug:           row.slug,
           tokenSymbol:    meta.tokenSymbol || (meta.isEther ? getNativeTokenSymbol(network.name) : "TOK"),
           tokenDecimals:  18,
           isEther:        meta.isEther,

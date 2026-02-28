@@ -5,21 +5,24 @@ import { Button } from "@/components/ui/button";
 import { WalletConnectButton } from "@/components/wallet-connect";
 import { NetworkSelector, MiniNetworkIndicator } from "@/components/network-selector";
 import Link from "next/link";
-import { Menu, X, ChevronLeft, Plus } from "lucide-react";
+import { Menu, X, ChevronLeft, Plus, RefreshCw } from "lucide-react"; // Added RefreshCw icon
 import { useRouter, usePathname } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme";
 
 export function Header({ 
   pageTitle, 
   hideAction = false,
-  isDashboard = false // 💡 Added optional prop for strict control
+  isDashboard = false,
+  onRefresh, // 💡 Added
+  loading = false // 💡 Added
 }: { 
   pageTitle: string; 
   hideAction?: boolean; 
   isDashboard?: boolean;
+  onRefresh?: () => void | Promise<void>; // 💡 Added type
+  loading?: boolean; // 💡 Added type
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -29,19 +32,14 @@ export function Header({
   const pathname = usePathname();
   const { isConnected } = useWallet();
 
-  // 💡 Auto-detect dashboard based on your dynamic page titles or route
   const isDashboardPage = isDashboard || 
     pageTitle.includes('Dashboard') || 
     pageTitle.includes('Space') || 
     pathname.includes('/dashboard');
 
   const getActionConfig = () => {
-    if (pathname.includes('/quest')) {
-      return { label: "Create Quest", path: "/quest/create-quest" };
-    }
-    if (pathname.includes('/quiz')) {
-      return { label: "Create Quiz", path: "/quiz/create-quiz" };
-    }
+    if (pathname.includes('/quest')) return { label: "Create Quest", path: "/quest/create-quest" };
+    if (pathname.includes('/quiz')) return { label: "Create Quiz", path: "/quiz/create-quiz" };
     return { label: "Create Faucet", path: "/faucet/create-faucet" };
   };
 
@@ -49,12 +47,8 @@ export function Header({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        menuRef.current && 
-        !menuRef.current.contains(event.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target as Node)
-      ) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
       }
     }
@@ -69,8 +63,6 @@ export function Header({
           
           {/* Left Section */}
           <div className="flex items-center gap-4">       
-            <div className="h-6 w-px bg-border hidden sm:block" />
-            
             <Button
               variant="outline"
               size="icon"
@@ -86,6 +78,22 @@ export function Header({
                 {pageTitle}
               </Link>
             </h1>
+
+            {/* 💡 Visual Feedback for Refreshing */}
+            {onRefresh && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onRefresh()}
+                disabled={loading}
+                className={cn("hidden md:flex items-center gap-2", loading && "opacity-50")}
+              >
+                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {loading ? "Syncing" : "Refresh"}
+                </span>
+              </Button>
+            )}
           </div>
         
           {/* Desktop Actions */}
@@ -113,25 +121,24 @@ export function Header({
 
           {/* Mobile Actions */}
           <div className="lg:hidden flex items-center gap-2 sm:gap-3">
-            {/* 💡 Conditionally hide ThemeToggle on mobile if we are on the dashboard */}
             <ThemeToggle />
-            
             <WalletConnectButton />
 
             {isConnected && (
               <MiniNetworkIndicator className="h-9 w-9 border border-border rounded-md" />
             )}
-            {!isDashboardPage && 
-            <Button
-              ref={buttonRef}
-              variant="outline"
-              size="sm"
-              className="px-2 border-border shadow-sm"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-            >
-              {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
-                  }
+
+            {!isDashboardPage && isConnected && 
+              <Button
+                ref={buttonRef}
+                variant="outline"
+                size="sm"
+                className="px-2 border-border shadow-sm"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+              >
+                {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </Button>
+            }
           </div>
         </div>
 
@@ -141,6 +148,19 @@ export function Header({
             ref={menuRef}
             className="lg:hidden absolute top-[79px] left-0 w-full bg-background border-b border-border p-6 flex flex-col gap-4 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200"
           >
+            {/* 💡 Mobile Refresh Option */}
+            {onRefresh && (
+              <Button 
+                variant="outline" 
+                onClick={() => { onRefresh(); setIsMenuOpen(false); }}
+                disabled={loading}
+                className="w-full text-xs font-bold uppercase tracking-widest py-6"
+              >
+                <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
+                Refresh Data
+              </Button>
+            )}
+
             {isConnected && !hideAction && (
               <Button
                 onClick={() => {

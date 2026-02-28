@@ -132,7 +132,7 @@ interface FaucetAdminViewProps {
   address: string | null;
   chainId: number | null;
   provider: any;
-  handleGoBack: () => void;
+  
   router: any;
   faucetMetadata: {
     description?: string;
@@ -200,7 +200,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   address,
   chainId,
   provider,
-  handleGoBack,
+  
   router,
   faucetMetadata,
 }) => {
@@ -1909,7 +1909,6 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
               showClaimPopup={false}
               setShowClaimPopup={() => {}}
               handleVerifyAllTasks={() => Promise.resolve()}
-              handleGoBack={() => setShowPreviewDialog(false)}
             />
           </div>
           <DialogFooter>

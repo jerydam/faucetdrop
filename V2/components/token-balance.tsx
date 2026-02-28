@@ -77,7 +77,10 @@ export function TokenBalance({
         balanceValue = await tokenContract.balanceOf(address)
       }
 
-      setBalance(formatUnits(balanceValue, tokenDecimals))
+      // 💡 FIX: Format to units, then parse to float and fix to 2 decimal places
+      const formattedBalance = formatUnits(balanceValue, tokenDecimals)
+      setBalance(parseFloat(formattedBalance).toFixed(4))
+
     } catch (error) {
       console.error("Error fetching token balance:", error)
       setBalance("Error")
@@ -100,7 +103,7 @@ export function TokenBalance({
             <span className="text-sm text-red-500">{error}</span>
           ) : (
             <span className="font-bold">
-              {balance || "0"} {tokenSymbol}
+              {balance || "0.00"} {tokenSymbol}
             </span>
           )}
         </div>

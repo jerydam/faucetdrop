@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Coins, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
-
+import { buildFaucetSlug } from "@/lib/faucet-slug";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,8 +27,9 @@ type ClaimRow = {
   claims: number;
   total_transactions: number;
   total_amount: string;
-  latest_claim_time: number;  // unix timestamp
+  latest_claim_time: number;
   updated_at: string;
+  slug?: string;   
 };
 
 /** Shape of a row in the `dashboard_meta` table */
@@ -62,17 +63,40 @@ function isCacheValid(): boolean {
   const ts = loadCache<number>(CACHE_KEY_TS);
   return !!ts && Date.now() - ts < CACHE_DURATION_MS;
 }
-
+const getFaucetHref = (claim: ClaimRow) =>
+  claim.slug
+    ? `/faucet/${claim.slug}`
+    : `/faucet/${buildFaucetSlug(claim.faucet_name, claim.faucet_address)}`;
 // ── Supabase fetchers ─────────────────────────────────────────────────────────
 
 async function fetchClaimRows(): Promise<ClaimRow[]> {
+  // Step 1: fetch claim_data normally
   const { data, error } = await supabase
     .from("claim_data")
     .select("*")
     .order("latest_claim_time", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as ClaimRow[];
+  if (!data?.length) return [];
+
+  // Step 2: batch fetch slugs from faucet_details using the addresses
+  const addresses = data.map((r) => r.faucet_address.toLowerCase());
+  const { data: slugRows } = await supabase
+    .from("faucet_details")
+    .select("faucet_address, slug")
+    .in("faucet_address", addresses);
+
+  // Step 3: build a slug lookup map
+  const slugMap: Record<string, string> = {};
+  for (const row of slugRows ?? []) {
+    slugMap[row.faucet_address.toLowerCase()] = row.slug;
+  }
+
+  // Step 4: merge slug into each claim row
+  return data.map((row) => ({
+    ...row,
+    slug: slugMap[row.faucet_address.toLowerCase()] ?? null,
+  })) as ClaimRow[];
 }
 
 async function fetchDashboardMeta(): Promise<DashboardMeta | null> {
@@ -239,7 +263,7 @@ export function FaucetList() {
                       <div className="flex justify-between items-start">
                         <span className="text-muted-foreground">Faucet:</span>
                         <Link
-                          href={`/faucet/${claim.faucet_address}?networkId=${claim.chain_id}`}
+                          href={getFaucetHref(claim)}
                           className="text-blue-600 hover:underline text-right max-w-[160px] truncate"
                         >
                           {claim.faucet_name ||
@@ -292,7 +316,7 @@ export function FaucetList() {
                         </TableCell>
                         <TableCell className="text-xs sm:text-sm">
                           <Link
-                            href={`/faucet/${claim.faucet_address}?networkId=${claim.chain_id}`}
+                            href={getFaucetHref(claim)}
                             className="text-blue-600 hover:underline max-w-[160px] truncate block"
                             title={claim.faucet_name}
                           >

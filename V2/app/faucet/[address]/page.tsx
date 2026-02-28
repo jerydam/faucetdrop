@@ -253,7 +253,7 @@ export default function FaucetDetails() {
     const [tokenSymbol, setTokenSymbol]                 = useState("ETH")
     const [tokenDecimals, setTokenDecimals]             = useState(18)
     const [faucetMetadata, setFaucetMetadata]           = useState<{ description?: string; imageUrl?: string }>({})
-    const [customXPostTemplate, setCustomXPostTemplate] = useState("")
+    const [customXPostTemplate, setCustomXPostTemplate] = useState(DEFAULT_X_POST_TEMPLATE)
     const [dynamicTasks, setDynamicTasks]               = useState<SocialMediaLink[]>([])
     const [transactions, setTransactions]               = useState<any[]>([])
     const [showAdminPopup, setShowAdminPopup]           = useState(false)
@@ -330,7 +330,8 @@ const resolveAndLoad = useCallback(async () => {
 
             // In resolveAndLoad, after setFaucetDetails(...)
             setFaucetDetails({ ...details, customXPostTemplate: template });
-            setTokenSymbol(row.token_symbol);        // ← ADD THIS
+            setTokenSymbol(row.token_symbol);     
+            setCustomXPostTemplate(template || DEFAULT_X_POST_TEMPLATE);
             setTokenDecimals(row.token_decimals);    // ← ADD THIS
             setBackendMode(row.use_backend);         // ← ADD THIS (also missing)
             setFaucetMetadata({                      // ← ADD THIS (also missing)
@@ -346,7 +347,7 @@ const resolveAndLoad = useCallback(async () => {
 
         } else {
             toast.error("Faucet slug not found.");
-            router.push("/faucets");
+            router.push("/faucet");
         }
     } catch (err) {
         console.error("Slug resolution failed:", err);

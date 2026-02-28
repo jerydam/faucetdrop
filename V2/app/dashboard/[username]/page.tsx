@@ -12,10 +12,14 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { createClient } from "@supabase/supabase-js"
+
 import { 
     Settings, Search, Copy, Wallet, Loader2,
     ScrollText, PencilRuler, Rocket, Trash2
 } from "lucide-react"
+import { buildFaucetSlug } from "@/lib/faucet-slug"
+
 import { useToast } from "@/hooks/use-toast"
 import { ProfileSettingsModal } from "@/components/profile-setting" 
 import { MyCreationsModal } from "@/components/my-creations-modal" 
@@ -32,11 +36,12 @@ const XIcon = ({ className }: { className?: string }) => (
 
 // --- Types ---
 interface FaucetData {
-    faucetAddress: string;
-    name: string;
-    chainId: number;
-    faucetType: string;
-    createdAt?: string;
+  faucetAddress: string;
+  name: string;
+  chainId: number;
+  faucetType: string;
+  createdAt?: string;
+  slug?: string;  
 }
 
 interface QuestData {
@@ -74,7 +79,10 @@ export default function DashboardPage() {
     
     // This could be "jerydam" OR "0x123..."
     const targetUsernameOrAddress = params.username as string;
-    
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
     // Data State
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
     const [publishedQuests, setPublishedQuests] = useState<QuestData[]>([]);
@@ -265,8 +273,24 @@ export default function DashboardPage() {
             if (userWallet) {
                 console.log('[Dashboard] Fetching faucets for wallet:', userWallet.slice(0, 8))
                 const faucetData = await getUserFaucets(userWallet);
-                console.log('[Dashboard] Faucets loaded:', faucetData.length)
-                setFaucets(faucetData);
+
+                const { data: slugRows } = await supabase
+                .from("network_faucets")
+                .select("faucet_address, slug")
+                .in("faucet_address", faucetData.map((f: FaucetData) => f.faucetAddress.toLowerCase()));
+
+                const slugMap: Record<string, string> = {};
+                for (const row of slugRows ?? []) {
+                slugMap[row.faucet_address] = row.slug;
+                }
+
+                const faucetsWithSlugs: FaucetData[] = faucetData.map((f: FaucetData) => ({
+                ...f,
+                slug: slugMap[f.faucetAddress.toLowerCase()] ?? undefined,
+                }));
+
+                console.log('[Dashboard] Faucets loaded:', faucetsWithSlugs.length)
+                setFaucets(faucetsWithSlugs);
 
                 // STEP 4: Fetch published quests
                 console.log('[Dashboard] Fetching quests...')
@@ -567,7 +591,11 @@ export default function DashboardPage() {
                                     faucet={faucet} 
                                     getNetworkName={getNetworkName}
                                     getNetworkColor={getNetworkColor}
-                                    onManage={() => router.push(`/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`)}
+                                    onManage={() => router.push(
+                                        faucet.slug
+                                            ? `/faucet/${faucet.slug}`
+                                            : `/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`
+                                        )}
                                     isOwner={isOwner}
                                 />
                             )) : (

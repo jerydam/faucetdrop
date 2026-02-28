@@ -1,8 +1,8 @@
+// config/privy.ts
 "use client"
 
 import { type Chain } from 'viem'
 import { arbitrum, base, lisk, celo, avalanche, bsc } from 'viem/chains'
-import type { PrivyClientConfig } from '@privy-io/react-auth' // Ensure this is imported!
 
 export const supportedChains: [Chain, ...Chain[]] = [
   arbitrum,
@@ -13,27 +13,24 @@ export const supportedChains: [Chain, ...Chain[]] = [
   avalanche,
 ]
 
-// Explicitly type the export to enforce strict checking
-export const privyConfig: { appId: string; config: PrivyClientConfig } = {
+// Privy configuration - supports BOTH embedded and external wallets
+export const privyConfig = {
   appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID || '',
   config: {
     appearance: {
-      // FIX 1: Set a strict static fallback. 
-      // (The dynamic light/dark switch still happens in Providers.tsx!)
-      theme: "dark", 
+      // CHANGED: Use 'system' to automatically toggle based on user's OS/Browser settings
+      theme: 'system' as const, 
       accentColor: '#3b82f6',
       logo: 'https://FaucetDrops.io/favicon.png',
       landingHeader: 'Join FaucetDrops',
       loginMessage: 'Connect to start your onchain journey',
     },
-    loginMethods: ['email', 'wallet', 'google', 'twitter', 'discord', 'telegram', 'farcaster'],
+    // All login methods available
+    loginMethods: ['email', 'wallet', 'google', 'twitter', 'discord', 'telegram', 'farcaster', ] as const,
     embeddedWallets: {
-      // FIX 2: In the latest Privy SDK, embedded wallet rules are scoped by chain ecosystem
-      ethereum: {
-        createOnLogin: 'all-users',
-      },
-      // Note: 'requireUserPasswordOnCreate' and 'noPromptOnSignature' were deprecated/moved 
-      // in recent SDK versions and are now managed via your Privy Dashboard.
+      createOnLogin: 'all-users' as const,
+      requireUserPasswordOnCreate: false,
+      noPromptOnSignature: false,
     },
     defaultChain: celo,
     supportedChains,

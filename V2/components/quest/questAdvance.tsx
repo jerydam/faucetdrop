@@ -23,7 +23,7 @@ import { BrowserProvider, ZeroAddress } from 'ethers'
 import { createQuestReward, type Network } from "@/lib/faucet"
 import { toast } from 'sonner'
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 const BACKEND_WALLET_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 
 // =========================================================
@@ -99,6 +99,8 @@ export interface QuestTask {
   isSystem?: boolean
   isRecurring?: boolean
   recurrenceInterval?: number
+  // NEW: Store the required task for referrals
+  requiredRefereeTaskId?: string 
 }
 
 export interface StagePassRequirements {
@@ -764,7 +766,54 @@ export default function Phase2TimingTasksFinalize({
           </div>
         </CardContent>
       </Card>
-
+{/* 2. Referral Program Configuration */}
+      <Card className="border-border/50 shadow-sm bg-card">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-500" /> Referral Program Settings
+          </CardTitle>
+          <CardDescription>Configure how users earn points for inviting others.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label>Points per Referral</Label>
+              <Input 
+                type="number" 
+                className="bg-background/50" 
+                value={newQuest.tasks.find((t: QuestTask) => t.id === 'sys_referral')?.points || 50} 
+                onChange={e => {
+                  setNewQuest((prev: any) => ({
+                    ...prev,
+                    tasks: prev.tasks.map((t: QuestTask) => t.id === 'sys_referral' ? { ...t, points: Number(e.target.value) || 0 } : t)
+                  }))
+                }} 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Referee Requirement</Label>
+              <Select 
+                value={newQuest.tasks.find((t: QuestTask) => t.id === 'sys_referral')?.requiredRefereeTaskId || "none"} 
+                onValueChange={v => {
+                  setNewQuest((prev: any) => ({
+                    ...prev,
+                    tasks: prev.tasks.map((t: QuestTask) => t.id === 'sys_referral' ? { ...t, requiredRefereeTaskId: v } : t)
+                  }))
+                }}
+              >
+                  <SelectTrigger className="bg-background/50"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="none">Just Join Quest (Default)</SelectItem>
+                      {newQuest.tasks.filter((t: QuestTask) => !t.isSystem).map((t: QuestTask) => (
+                        <SelectItem key={t.id} value={t.id}>Must complete: {t.title}</SelectItem>
+                      ))}
+                  </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">The referred user must complete this specific task before the referrer earns points.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       {/* 2. Tasks Management */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         

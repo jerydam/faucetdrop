@@ -2,8 +2,8 @@ import { BrowserProvider } from 'ethers';
 import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
 import { FAUCET_ABI_CUSTOM } from './abis';
 
-//const API_URL = "https://faucetdrop-backend.onrender.com"; // Update with your backend URL
-const API_URL = "https://faucetdrop-backend.onrender.com"; // Uncomment for production
+//const API_URL = "http://127.0.0.1:8000"; // Update with your backend URL
+const API_URL = "http://127.0.0.1:8000"; // Uncomment for production
 const ENABLE_DIVVI_REFERRAL = true;
 const DEBUG_MODE = process.env.NODE_ENV === 'development';
 
@@ -365,7 +365,7 @@ export async function getSecretCodeForAdmin(
   chainId: number
 ): Promise<{ secretCode: string; isValid: boolean; isFuture: boolean }> {
   try {
-    const response = await fetch("https://faucetdrop-backend.onrender.com/get-secret-code-for-admin", {
+    const response = await fetch("http://127.0.0.1:8000/get-secret-code-for-admin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -472,7 +472,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
             rewardPool: poolAmount.toString(),
             rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
             tokenAddress: selectedToken.address,
-            tokenSymbol: selectedToken.symbol,            THIS
+            tokenSymbol: selectedToken.symbol,           
             token_symbol: selectedToken.symbol,
             distributionConfig: newQuest.distributionConfig,
             faucetAddress: draftId,
@@ -608,7 +608,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                             ...prev, 
                                             rewardTokenType: 'erc20', 
                                             tokenAddress: customTokenAddress,
-                                            tokenSymbol: 'TOK'   THIS
+                                            tokenSymbol: 'TOK'   
                                         } as T))
                                         toast.success("Custom token address set")
                                     } else {

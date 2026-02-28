@@ -9,6 +9,7 @@ import {
   CardTitle,
   CardFooter,
 } from "@/components/ui/card";
+ import { QuestEditPanel } from "@/components/quest/questedit";
 import { QUEST_ABI } from "@/lib/abis";
 import { claimNoCodeViaBackend } from "@/lib/backend-service";
 import { Button } from "@/components/ui/button";
@@ -1613,7 +1614,15 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
             </TabsContent>
 
             {isCreator && (
-              <TabsContent value="admin" className="space-y-6">
+             
+ 
+            <TabsContent value="admin" className="space-y-6">
+                <QuestEditPanel
+                questData={questData}
+                faucetAddress={faucetAddress!}
+                  creatorAddress={userWalletAddress!}
+                  onQuestUpdated={(updated) => setQuestData((p: any) => ({ ...p, ...updated }))}
+                />
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <Card className="border-slate-200 dark:border-slate-800">
                     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pending Review</CardTitle></CardHeader>

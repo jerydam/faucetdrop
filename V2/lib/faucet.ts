@@ -2178,60 +2178,91 @@ async function deleteFaucetMetadata(faucetAddress: string, userAddress: string, 
     }
 }
 export async function createQuestReward(
-    provider: BrowserProvider,
-    factoryAddress: string,
-    name: string,
-    tokenAddress: string,
-    questEndTime: number,
-    claimWindowHours: number,
-    backendAddress: string // <--- 🚨 NEW: CRITICAL PARAMETER
+  provider: BrowserProvider,
+  factoryAddress: string,
+  name: string,
+  tokenAddress: string,
+  questEndTime: number,
+  claimWindowHours: number,
+  backendAddress: string
 ): Promise<string> {
+  // --- 1. Validation ---
+  if (!isAddress(factoryAddress) || !isAddress(tokenAddress) || !isAddress(backendAddress)) {
+    throw new Error("Invalid factory, token, or backend address");
+  }
+  if (!provider) {
+    throw new Error("Provider is not available");
+  }
+
+  try {
     const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+
+    // Use the same ABI you already import elsewhere
     const factory = new Contract(factoryAddress, QUEST_FACTORY_ABI, signer);
 
-    try {
-        console.log("Deploying Quest:", { name, tokenAddress, backendAddress, questEndTime, claimWindowHours });
+    console.log("🚀 Deploying QuestReward via low-level tx:", {
+      name,
+      tokenAddress,
+      backendAddress,
+      questEndTime,
+      claimWindowHours,
+      signerAddress,
+    });
 
-        const tx: ContractTransactionResponse = await factory.createQuestReward(
-            name,
-            tokenAddress,
-            backendAddress, // <--- Pass the real backend address here
-            questEndTime,
-            claimWindowHours
-        );
+    // --- 2. Encode data (low-level) ---
+    const data = factory.interface.encodeFunctionData("createQuestReward", [
+      name,
+      tokenAddress,
+      backendAddress,
+      questEndTime,
+      claimWindowHours,
+    ]);
 
-        console.log("Transaction sent:", tx.hash);
-        const receipt = await tx.wait();
+    const dataWithReferral = appendDivviReferralData(data); // keeps your Divvi tracking
 
-        if (!receipt) throw new Error("Transaction failed");
+    // --- 3. Send transaction (same pattern as createCustomFaucet / createFaucet) ---
+    const tx = await signer.sendTransaction({
+      to: factoryAddress,
+      data: dataWithReferral,
+    });
 
-        let deployedAddress = "";
-        
-        for (const log of receipt.logs) {
-            try {
-                const parsed = factory.interface.parseLog({
-                    topics: [...log.topics],
-                    data: log.data
-                });
-                if (parsed?.name === "QuestRewardCreated") {
-                    deployedAddress = parsed.args[0];
-                    break;
-                }
-            } catch (e) {
-                continue;
-            }
+    console.log("Transaction sent:", tx.hash);
+    const receipt = await tx.wait();
+    if (!receipt) throw new Error("Transaction receipt is null");
+
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(await provider.getNetwork().then(n => n.chainId)));
+
+    // --- 4. Parse event (same as before) ---
+    let deployedAddress = "";
+    const factoryInterface = new Interface(QUEST_FACTORY_ABI);
+
+    for (const log of receipt.logs) {
+      try {
+        const parsedLog = factoryInterface.parseLog(log as any);
+        if (parsedLog?.name === "QuestRewardCreated") {
+          deployedAddress = parsedLog.args[0]; // or parsedLog.args.questAddress if your event is named differently
+          break;
         }
-
-        if (!deployedAddress) {
-            throw new Error("Could not retrieve Quest address from events");
-        }
-
-        return deployedAddress;
-
-    } catch (error) {
-        console.error("Quest creation failed:", error);
-        throw error;
+      } catch (e) {
+        // ignore unrelated logs
+      }
     }
+
+    if (!deployedAddress) {
+      throw new Error("Quest deployed but QuestRewardCreated event not found");
+    }
+
+    console.log("✅ QuestReward created at:", deployedAddress);
+    return deployedAddress;
+
+  } catch (error: any) {
+    console.error("❌ Quest creation failed:", error);
+    if (error.data && typeof error.data === "string") {
+      throw new Error(decodeRevertError(error.data));
+    }
+    throw new Error(error.reason || error.message || "Failed to create quest reward");
+  }
 }
 export async function createFaucet(
   provider: BrowserProvider,

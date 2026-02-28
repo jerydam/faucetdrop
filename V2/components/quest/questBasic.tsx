@@ -743,15 +743,15 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                     <div key={i} className="flex gap-2 items-end">
                                         <div className="flex-1">
                                             <span className="text-xs text-muted-foreground">Rank From</span>
-                                            <Input type="number" value={tier.rankStart} onChange={(e) => handleTierChange(i, 'rankStart', parseInt(e.target.value) || 1)} />
+                                            <Input type="number" value={tier.rankStart} onChange={(e) => handleTierChange(i, 'rankStart', parseInt(e.target.value) )} />
                                         </div>
                                         <div className="flex-1">
                                             <span className="text-xs text-muted-foreground">Rank To</span>
-                                            <Input type="number" value={tier.rankEnd} onChange={(e) => handleTierChange(i, 'rankEnd', parseInt(e.target.value) || 1)} />
+                                            <Input type="number" value={tier.rankEnd} onChange={(e) => handleTierChange(i, 'rankEnd', parseInt(e.target.value) )} />
                                         </div>
                                         <div className="flex-1">
                                             <span className="text-xs text-muted-foreground">Amount</span>
-                                            <Input type="number" value={tier.amountPerUser} onChange={(e) => handleTierChange(i, 'amountPerUser', parseFloat(e.target.value) || 0)} />
+                                            <Input type="number" value={tier.amountPerUser} onChange={(e) => handleTierChange(i, 'amountPerUser', parseFloat(e.target.value) )} />
                                         </div>
                                         <Button variant="ghost" size="icon" onClick={() => removeTier(i)} className="mb-0.5"><Trash2 className="h-4 w-4" /></Button>
                                     </div>

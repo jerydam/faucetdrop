@@ -7,7 +7,11 @@ import {
   Droplets, PackageCheck, GraduationCap, Users, 
   ChevronRight, Zap, Layers, 
   CheckCircle2, Loader2, Globe, ArrowRight,
-  DropletIcon
+  DropletIcon,
+  GitGraph,
+  ChartBar,
+  ChartLine,
+  User
 } from 'lucide-react';
 import { CHECKIN_ABI } from '@/lib/abis';
 import { toast } from 'sonner';
@@ -19,6 +23,7 @@ import { MiniNetworkIndicator, NetworkSelector } from "@/components/network-sele
 import { WalletConnectButton } from "@/components/wallet-connect";
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/theme';
+import { useDashboard } from '@/hooks/useDashboard';
 
 const DROPLIST_CONTRACT_ADDRESS = "0xB8De8f37B263324C44FD4874a7FB7A0C59D8C58E";
 
@@ -224,7 +229,7 @@ export default function Home() {
       setShowScrollHint(false);
     }
   };
-
+  const { data: dashData, loading: dashLoading } = useDashboard();
   const handleJoinDroplist = async () => {
     if (!isConnected || !address || !signer) {
       toast.warning("Please connect your wallet first");
@@ -438,64 +443,115 @@ export default function Home() {
 
         {/* --- STATS SECTION --- */}
         <section className="py-24 bg-accent/5 border-y border-border">
-          <div className="max-w-[1400px] mx-auto px-8 sm:px-12 lg:px-16">
-            <div className="flex flex-col lg:flex-row gap-20 items-start">
-              <div className="lg:w-1/3">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-[0.2em] mb-6">
-                  Live Network Stats
-                </div>
-                <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight leading-[1.1]">
-                  Trusted by Top Web3 Protocols
-                </h2>
-                <p className="text-muted-foreground mb-8 leading-relaxed max-w-md">
-                  Powering growth for Celo, Lisk, Self Protocol & more through verifiable onchain metrics.
-                </p>
+  <div className="max-w-[1400px] mx-auto px-8 sm:px-12 lg:px-16">
+    <div className="flex flex-col lg:flex-row gap-20 items-start">
+      <div className="lg:w-1/3">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-[0.2em] mb-6">
+          Live Network Stats
+        </div>
+        <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight leading-[1.1]">
+          Trusted by Top Web3 Protocols
+        </h2>
+        <p className="text-muted-foreground mb-8 leading-relaxed max-w-md">
+          Powering growth for Celo, Lisk, Self Protocol & more through verifiable onchain metrics.
+        </p>
+        {dashData && (
+          <p className="text-[10px] text-muted-foreground">
+            Last updated: {new Date(dashData.last_updated).toLocaleTimeString()}
+          </p>
+        )}
+      </div>
+
+      <div className="lg:w-2/3 w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[
+          {
+            label: "Faucets",
+            value: dashLoading ? null : dashData?.total_faucets,
+            sub: "Total Faucets",
+            icon: <Droplets size={20} />,
+          },
+          {
+            label: "Transactions",
+            value: dashLoading ? null : dashData?.total_transactions,
+            sub: "Onchain Transactions",
+            icon: <ChartLine size={20} />,
+          },
+          {
+            label: "Users",
+            value: dashLoading ? null : dashData?.total_unique_users,
+            sub: "Active Users",
+            icon: <User size={20} />,
+          },
+        ].map((stat, i) => (
+          <div
+            key={i}
+            className="p-8 rounded-[2rem] bg-background border border-border group hover:border-primary/50 transition-all duration-500 shadow-sm"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div className="p-3 bg-primary/10 rounded-2xl text-primary group-hover:scale-110 transition-transform">
+                {stat.icon}
               </div>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                {stat.label}
+              </span>
+            </div>
 
-              <div className="lg:w-2/3 w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[
-                  { label: "Faucets", value: "100+", sub: "Total Faucets", icon: <Droplets size={20}/> },
-                  { label: "Quests", value: "8,000+", sub: "Transactions", icon: <PackageCheck size={20}/> },
-                  { label: "Quizzes", value: "2,000+", sub: "Active Users", icon: <GraduationCap size={20}/> }
-                ].map((stat, i) => (
-                  <div key={i} className="p-8 rounded-[2rem] bg-background border border-border group hover:border-primary/50 transition-all duration-500 shadow-sm">
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="p-3 bg-primary/10 rounded-2xl text-primary group-hover:scale-110 transition-transform">
-                        {stat.icon}
-                      </div>
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{stat.label}</span>
-                    </div>
-                    <div className="text-4xl font-black mb-1 tracking-tighter">{stat.value}</div>
-                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">{stat.sub}</div>
-                  </div>
-                ))}
+            {/* Value or skeleton */}
+            {stat.value == null ? (
+              <div className="h-10 w-24 rounded-lg bg-accent animate-pulse mb-1" />
+            ) : (
+              <div className="text-4xl font-black mb-1 tracking-tighter">
+                {stat.value.toLocaleString()}+
+              </div>
+            )}
 
-                <div className="sm:col-span-2 lg:col-span-3 p-8 rounded-[2.5rem] bg-background border border-border group hover:border-primary/50 transition-all duration-500 flex flex-col sm:flex-row sm:items-center justify-between gap-8 shadow-sm">
-                  <div className="flex items-center gap-6">
-                    <div className="p-4 bg-primary/10 rounded-2xl text-primary group-hover:rotate-12 transition-transform">
-                      <Globe size={28} />
-                    </div>
-                    <div>
-                      <div className="text-4xl font-black tracking-tighter">2,000+</div>
-                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Total Drops Distributed</div>
-                    </div>
-                  </div>
-                  <div className="hidden sm:block h-12 w-px bg-border" />
-                  <div className="flex gap-12">
-                      <div>
-                          <div className="text-xl font-bold tracking-tight">4.9/5</div>
-                          <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Satisfaction</div>
-                      </div>
-                      <div>
-                          <div className="text-xl font-bold tracking-tight">99.9%</div>
-                          <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Uptime</div>
-                      </div>
-                  </div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+              {stat.sub}
+            </div>
+          </div>
+        ))}
+
+        {/* Wide bottom card — Total Drops */}
+        <div className="sm:col-span-2 lg:col-span-3 p-8 rounded-[2.5rem] bg-background border border-border group hover:border-primary/50 transition-all duration-500 flex flex-col sm:flex-row sm:items-center justify-between gap-8 shadow-sm">
+          <div className="flex items-center gap-6">
+            <div className="p-4 bg-primary/10 rounded-2xl text-primary group-hover:rotate-12 transition-transform">
+              <Globe size={28} />
+            </div>
+            <div>
+              {dashLoading ? (
+                <div className="h-10 w-32 rounded-lg bg-accent animate-pulse mb-1" />
+              ) : (
+                <div className="text-4xl font-black tracking-tighter">
+                  {(dashData?.total_claims ?? 0).toLocaleString()}+
                 </div>
+              )}
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                Total Drops Distributed
               </div>
             </div>
           </div>
-        </section>
+
+          <div className="hidden sm:block h-12 w-px bg-border" />
+
+          <div className="flex gap-12">
+            <div>
+              <div className="text-xl font-bold tracking-tight">4.9/5</div>
+              <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+                Satisfaction
+              </div>
+            </div>
+            <div>
+              <div className="text-xl font-bold tracking-tight">99.9%</div>
+              <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+                Uptime
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
       </main>
     </div>
   );

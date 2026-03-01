@@ -95,6 +95,7 @@ export interface QuestTask {
   targetHandle?: string
   targetChainId?: string
   stage: TaskStage
+  targetServerId?: string
   minReferrals?: number | string
   isSystem?: boolean
   isRecurring?: boolean
@@ -480,9 +481,9 @@ export default function Phase2TimingTasksFinalize({
     checking: boolean; is_in_server: boolean | null; message: string;
   }>({ checking: false, is_in_server: null, message: "" });
 
-  const checkDiscordBotStatus = async (inviteUrl: string) => {
-    if (!inviteUrl || !inviteUrl.includes("discord")) {
-      toast.error("Please enter a valid Discord invite link in the URL field first.");
+  const checkDiscordBotStatus = async (serverId: string) => {
+    if (!serverId) {
+      toast.error("Please enter the Discord Server ID first.");
       return;
     }
     setDiscordBotStatus(prev => ({ ...prev, checking: true }));
@@ -490,7 +491,7 @@ export default function Phase2TimingTasksFinalize({
       const res = await fetch(`${API_BASE_URL}/api/bot/check-discord-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteUrl })
+        body: JSON.stringify({ serverId }) // Send serverId instead of inviteUrl
       });
       const data = await res.json();
       setDiscordBotStatus({ checking: false, is_in_server: data.is_in_server, message: data.message || "" });
@@ -934,6 +935,23 @@ export default function Phase2TimingTasksFinalize({
                 <div className="space-y-2">
                   <Label className="text-xs font-medium uppercase text-muted-foreground">Points</Label>
                   <Input type="number" className="bg-background" value={newTask.points ?? ""} onChange={e => setNewTask((p:any) => ({ ...p, points: e.target.value }))} disabled={!!editingTask?.isSystem} />
+                  {/* Discord Server ID Field (Mandatory for Auto-Verify) */}
+                    {newTask.targetPlatform === 'Discord' && newTask.verificationType === 'auto_social' && (
+                      <div className="space-y-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                        <Label className="text-xs font-bold text-indigo-500 flex items-center gap-1">
+                          <ShieldCheck className="h-3 w-3"/> Discord Server ID
+                        </Label>
+                        <Input 
+                          className="bg-background" 
+                          placeholder="e.g. 1476641584958144675"
+                          value={newTask.targetServerId || ""} 
+                          onChange={e => setNewTask((p: any) => ({ ...p, targetServerId: e.target.value }))} 
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Required to bypass rate limits. Enable Developer Mode in Discord, right-click your Server name, and select "Copy Server ID".
+                        </p>
+                      </div>
+                    )}
                 </div>
 
                 {isSocialTemplate && (
@@ -953,9 +971,7 @@ export default function Phase2TimingTasksFinalize({
                           }
                         }}
                       />
-                    </div>
-
-                    {/* Discord Role ID Field */}
+                       {/* Discord Role ID Field */}
                     {newTask.targetPlatform === 'Discord' && newTask.action === 'role' && (
                        <div className="space-y-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
                         <Label className="text-xs font-bold text-indigo-500 flex items-center gap-1">
@@ -970,6 +986,10 @@ export default function Phase2TimingTasksFinalize({
                         <p className="text-[10px] text-muted-foreground">Enable Developer Mode in Discord, right-click the Role in server settings, and select "Copy Role ID".</p>
                       </div>
                     )}
+                    </div>
+
+                    
+                    
 
                     {/* Telegram Message Count Field */}
                     {newTask.targetPlatform === 'Telegram' && newTask.action === 'message_count' && (
@@ -1047,7 +1067,8 @@ export default function Phase2TimingTasksFinalize({
                           </Button>
             
                           <Button type="button" size="sm" className={`text-xs h-8 ${discordBotStatus.is_in_server === false ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}
-                            onClick={() => checkDiscordBotStatus(newTask.url || "")} disabled={discordBotStatus.checking || !newTask.url}
+                            onClick={() => checkDiscordBotStatus(newTask.targetServerId || "")} 
+                            disabled={discordBotStatus.checking || !newTask.targetServerId}
                           >
                             {discordBotStatus.checking ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Send className="h-3 w-3 mr-2" />}
                             {discordBotStatus.is_in_server === false ? "Check Status Again" : "Verify Bot Status"}
@@ -1057,7 +1078,7 @@ export default function Phase2TimingTasksFinalize({
                     )}
                   </div>
                 )}
-
+                 
                 {/* TELEGRAM ADD BOT HELPER */}
                 {newTask.targetPlatform === 'Telegram' && newTask.verificationType === 'auto_social' && (
                   <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${

@@ -948,7 +948,7 @@ export default function Phase2TimingTasksFinalize({
                           onChange={e => setNewTask((p: any) => ({ ...p, targetServerId: e.target.value }))} 
                         />
                         <p className="text-[10px] text-muted-foreground">
-                          Required to bypass rate limits. Enable Developer Mode in Discord, right-click your Server name, and select "Copy Server ID".
+                          Required for auto-verification. Right-click your Server name, and select "Copy Server ID".
                         </p>
                       </div>
                     )}
@@ -983,7 +983,7 @@ export default function Phase2TimingTasksFinalize({
                           value={newTask.targetHandle || ""} 
                           onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value }))} 
                         />
-                        <p className="text-[10px] text-muted-foreground">Enable Developer Mode in Discord, right-click the Role in server settings, and select "Copy Role ID".</p>
+                        <p className="text-[10px] text-muted-foreground">Right-click the Role in server settings, and select "Copy Role ID".</p>
                       </div>
                     )}
                     </div>

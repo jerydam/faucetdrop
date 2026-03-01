@@ -39,7 +39,7 @@ const Footer = () => {
 
   const socialLinks = [
     { icon: <SimpleIcon icon={siX} size={20} />, href: 'https://x.com/faucetdrops', label: 'Twitter' },
-    { icon: <SimpleIcon icon={siGithub} size={20} />, href: 'https://github.com/Priveedores-de-soluciones/Faucet_drops', label: 'GitHub' },
+    { icon: <SimpleIcon icon={siGithub} size={20} />, href: 'https://github.com/priveedores-de-solucione/FaucetDrops', label: 'GitHub' },
     { icon: <SimpleIcon icon={siTelegram} size={20} />, href: 'https://t.me/faucetdropschat', label: 'Telegram' },
     { icon: <SimpleIcon icon={siGmail} size={20} />, href: 'mailto:drops.faucet@gmail.com', label: 'Email' },
     { icon: <SimpleIcon icon={siYoutube} size={20} />, href: 'https://www.youtube.com/@Faucet_Drops', label: 'Youtube' },

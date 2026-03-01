@@ -45,7 +45,6 @@ const COINGECKO_IDS: Record<string, string> = {
   "BNB": "binancecoin",
   "BUSD": "binance-usd"
 }
-
 interface TokenBalance {
     token: TokenConfiguration
     balance: string
@@ -290,73 +289,99 @@ export function EmbeddedWalletControlProduction() {
     const fetchBalances = async () => {
         if (!address || !chainId) return;
         setLoadingBalances(true);
+        
+        // Always get the full list of predefined tokens for this chain
+        const configTokens = NETWORK_TOKENS[chainId] || [];
+
         try {
-            // Fetch balances from backend
-            const response = await fetch(`https://fauctdrop-backend.onrender.com/api/wallet/balances/${chainId}/${address}`);
-            const data: BackendResponse = await response.json();
+            // 1. Initialize our base list with 0 balances so they always show up
+            let defaultBalances = configTokens.map(token => ({
+                token,
+                balance: "0",
+                balanceFormatted: "0",
+                usdValue: "0.00"
+            }));
 
-            // Get the full list of tokens we EXPECT to see for this network
-            const configTokens = NETWORK_TOKENS[chainId] || [];
-            
-            // Get unique CoinGecko IDs for price fetching
-            const uniqueSymbols = [...new Set(configTokens.map(t => t.symbol))];
-            const coingeckoIds = uniqueSymbols
-                .map(symbol => COINGECKO_IDS[symbol])
-                .filter(Boolean)
-                .join(',');
+            // 2. Fetch balances from backend safely
+            let backendData: BackendResponse | null = null;
+            try {
+                const response = await fetch(`https://faucetdrop-backend.onrender.com/api/wallet/balances/${chainId}/${address}`);
+                if (response.ok) {
+                    backendData = await response.json();
+                }
+            } catch (backendError) {
+                console.warn("Backend balance fetch failed, defaulting to 0s:", backendError);
+            }
 
-            // Fetch prices from CoinGecko
+            // 3. Fetch prices from CoinGecko safely
             let prices: Record<string, { usd: number }> = {};
             try {
+                const uniqueSymbols = [...new Set(configTokens.map(t => t.symbol))];
+                const coingeckoIds = uniqueSymbols
+                    .map(symbol => COINGECKO_IDS[symbol])
+                    .filter(Boolean)
+                    .join(',');
+
                 if (coingeckoIds) {
-                    const priceResponse = await fetch(
-                        `https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoIds}&vs_currencies=usd`
-                    );
-                    prices = await priceResponse.json();
+                    const priceResponse = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoIds}&vs_currencies=usd`);
+                    if (priceResponse.ok) {
+                        prices = await priceResponse.json();
+                    }
                 }
             } catch (priceError) {
-                console.error("Error fetching prices:", priceError);
+                console.warn("CoinGecko price fetch failed, defaulting to $0.00:", priceError);
             }
 
             let totalValue = 0;
             
-            const allBalances = configTokens.map((token) => {
-                // Find if the backend has a balance for this specific token
-                const backendMatch = data.balances.find(
-                    (b) => b.token_address.toLowerCase() === token.address.toLowerCase()
+            // 4. Merge everything together
+            const finalBalances = defaultBalances.map((item) => {
+                // Find if the backend has a real balance for this specific token
+                const backendMatch = backendData?.balances?.find(
+                    (b) => b.token_address.toLowerCase() === item.token.address.toLowerCase()
                 );
                 
                 const rawBalance = backendMatch ? backendMatch.balance : "0";
-                const formatted = formatUnits(BigInt(rawBalance), token.decimals);
-                
-                // Get price for this token
-                const coingeckoId = COINGECKO_IDS[token.symbol];
-                const price = coingeckoId && prices[coingeckoId] ? prices[coingeckoId].usd : 0;
+                const formatted = formatUnits(BigInt(rawBalance), item.token.decimals);
                 
                 // Calculate USD value
+                const coingeckoId = COINGECKO_IDS[item.token.symbol];
+                const price = coingeckoId && prices[coingeckoId] ? prices[coingeckoId].usd : 0;
+                
                 const balanceNum = parseFloat(formatted);
                 const usdValue = (balanceNum * price).toFixed(2);
                 
-                // Add to total
                 totalValue += parseFloat(usdValue);
                 
                 return {
-                    token,
+                    token: item.token,
                     balance: rawBalance,
                     balanceFormatted: formatted,
                     usdValue: usdValue
                 };
             });
 
-            setBalances(allBalances);
+            setBalances(finalBalances);
             setTotalUsdValue(totalValue.toFixed(2));
+
         } catch (error) {
-            console.error("Fetch error:", error);
+            console.error("Critical fetch error:", error);
+            
+            // Absolute fallback: If everything breaks, show the tokens with 0 balances anyway
+            const fallbackBalances = configTokens.map(token => ({
+                token,
+                balance: "0",
+                balanceFormatted: "0",
+                usdValue: "0.00"
+            }));
+            setBalances(fallbackBalances);
+            setTotalUsdValue("0.00");
+            
             toast({ 
-                title: "Failed to fetch balances", 
-                description: "Please try again",
+                title: "Network Error", 
+                description: "Showing local tokens with 0 balances. Refresh to try again.",
                 variant: "destructive" 
-            })
+            });
         } finally {
             setLoadingBalances(false);
         }
@@ -459,18 +484,13 @@ export function EmbeddedWalletControlProduction() {
 
         setExporting(true)
         try {
-            const exported = await exportWallet()
+            // Privy handles the secure display UI automatically.
+            await exportWallet() 
             
-            if (exported && typeof exported === 'object' && 'privateKey' in exported) {
-                const wallet = exported as ExportedWallet
-                setExportedKey(wallet.privateKey)
-                toast({ 
-                    title: "Private key exported",
-                    description: "Keep this safe!"
-                })
-            } else {
-                throw new Error("Failed to export key")
-            }
+            toast({ 
+                title: "Export flow completed",
+                description: "You have successfully accessed your private key."
+            })
         } catch (error: unknown) {
             console.error("Export error:", error)
             const errorMessage = error instanceof Error ? error.message : "Export failed"
@@ -601,10 +621,10 @@ export function EmbeddedWalletControlProduction() {
                                         >
                                             <div className="flex items-center gap-2 sm:gap-3">
                                                 <img 
-                                                    src={item.token.logoUrl} 
+                                                    src={item.token.logoUrl || undefined} 
                                                     alt={item.token.symbol}
                                                     className="h-8 w-8 sm:h-10 sm:w-10 rounded-full"
-                                                />
+/>
                                                 <div className="text-left">
                                                     <p className="font-medium text-sm sm:text-base">{item.token.symbol}</p>
                                                     <p className="text-[10px] sm:text-xs text-muted-foreground line-clamp-1">
@@ -658,10 +678,11 @@ export function EmbeddedWalletControlProduction() {
                                                 }`}
                                             >
                                                 <img 
-                                                    src={token.logoUrl} 
+                                                    src={token.logoUrl || undefined} 
                                                     alt={token.symbol}
                                                     className="h-6 w-6 sm:h-8 sm:w-8 rounded-full"
-                                                />
+/>
+                                                
                                                 <div className="text-left flex-1">
                                                     <p className="font-medium text-xs sm:text-sm">{token.symbol}</p>
                                                     {balance && (
@@ -780,71 +801,31 @@ export function EmbeddedWalletControlProduction() {
                             </AlertDescription>
                         </Alert>
 
-                        {!exportedKey ? (
-                            <div className="space-y-3 sm:space-y-4">
-                                <p className="text-xs sm:text-sm text-muted-foreground">
-                                    Export your private key to import this wallet into MetaMask or other wallets.
-                                </p>
-                                <Button 
-                                    onClick={handleExportKey}
-                                    disabled={exporting}
-                                    className="w-full text-xs sm:text-sm h-9 sm:h-10"
-                                    variant="outline"
-                                >
-                                    {exporting ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
-                                            Exporting...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                                            Export Private Key
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="space-y-3 sm:space-y-4">
-                                <div className="space-y-2">
-                                    <Label className="text-xs sm:text-sm">Your Private Key</Label>
-                                    <div className="relative">
-                                        <Input
-                                            value={exportedKey}
-                                            type={showKey ? "text" : "password"}
-                                            readOnly
-                                            className="pr-16 sm:pr-20 font-mono text-[10px] sm:text-xs h-9 sm:h-10"
-                                        />
-                                        <div className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                className="h-6 w-6 sm:h-7 sm:w-7"
-                                                onClick={() => setShowKey(!showKey)}
-                                            >
-                                                {showKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                                            </Button>
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                className="h-6 w-6 sm:h-7 sm:w-7"
-                                                onClick={() => copyToClipboard(exportedKey, "Key")}
-                                            >
-                                                <Copy className="h-3 w-3" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <Alert>
-                                    <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    <AlertDescription className="text-[10px] sm:text-xs">
-                                        Store this securely. Anyone with this key can access your funds.
-                                    </AlertDescription>
-                                </Alert>
-                            </div>
-                        )}
+                        <div className="space-y-3 sm:space-y-4">
+                            <p className="text-xs sm:text-sm text-muted-foreground">
+                                Click below to securely reveal and export your private key. You can use this to import your wallet into MetaMask or other providers.
+                            </p>
+                            <Button 
+                                onClick={handleExportKey}
+                                disabled={exporting}
+                                className="w-full text-xs sm:text-sm h-9 sm:h-10"
+                                variant="outline"
+                            >
+                                {exporting ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                                        Opening Secure Export...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                                        Reveal Private Key
+                                    </>
+                                )}
+                            </Button>
+                        </div>
                     </TabsContent>
+
                 </Tabs>
             </DialogContent>
         </Dialog>

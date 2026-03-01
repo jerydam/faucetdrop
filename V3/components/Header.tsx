@@ -57,7 +57,7 @@ const Header = () => {
         dropdown: [
           { name: 'Documentation', href: '/coming-soon', icon: <FileMinus />, description: 'A comprehensive guide for seamless integration' },
           // href: '/developers/docs' // path to follow
-          { name: 'GitHub', href: 'https://github.com/Priveedores-de-soluciones/Faucet_drops', target: '_blank', icon: <Github />, description: 'Explore our open-source projects' },
+          { name: 'GitHub', href: 'https://github.com/priveedores-de-solucione/FaucetDrops', target: '_blank', icon: <Github />, description: 'Explore our open-source projects' },
         ]
       },
       {

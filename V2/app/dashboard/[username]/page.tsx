@@ -12,15 +12,19 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { createClient } from "@supabase/supabase-js"
+
 import { 
     Settings, Search, Copy, Wallet, Loader2,
     ScrollText, PencilRuler, Rocket, Trash2
 } from "lucide-react"
+import { buildFaucetSlug } from "@/lib/faucet-slug"
+
 import { useToast } from "@/hooks/use-toast"
 import { ProfileSettingsModal } from "@/components/profile-setting" 
 import { MyCreationsModal } from "@/components/my-creations-modal" 
 import { CreateNewModal } from "@/components/create-new-modal" 
-import { usePrivy } from "@privy-io/react-auth" // Add this import
+import { usePrivy } from "@privy-io/react-auth" 
 import { EmbeddedWalletControlProduction } from "@/components/embeddedwallet"
 
 // --- Custom Icons ---
@@ -32,11 +36,12 @@ const XIcon = ({ className }: { className?: string }) => (
 
 // --- Types ---
 interface FaucetData {
-    faucetAddress: string;
-    name: string;
-    chainId: number;
-    faucetType: string;
-    createdAt?: string;
+  faucetAddress: string;
+  name: string;
+  chainId: number;
+  faucetType: string;
+  createdAt?: string;
+  slug?: string;  
 }
 
 interface QuestData {
@@ -64,17 +69,20 @@ interface UserProfileData {
 }
 
 export default function DashboardPage() {
-    const backendUrl = "https://fauctdrop-backend.onrender.com"; 
+    const backendUrl = "https://faucetdrop-backend.onrender.com"; 
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
     const { address: connectedAddress, isConnected } = useWallet(); 
     const { networks } = useNetwork();
-    const { user: privyUser } = usePrivy(); // Get Privy user data
+    const { user: privyUser } = usePrivy(); 
     
     // This could be "jerydam" OR "0x123..."
     const targetUsernameOrAddress = params.username as string;
-    
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
     // Data State
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
     const [publishedQuests, setPublishedQuests] = useState<QuestData[]>([]);
@@ -94,7 +102,32 @@ export default function DashboardPage() {
         if (!connectedAddress || !profile?.wallet_address) return false;
         return connectedAddress.toLowerCase() === profile.wallet_address.toLowerCase();
     }, [connectedAddress, profile]);
+    const getDisplayAvatar = () => {
+    if (profile?.avatar_url) return profile.avatar_url;
+    // Only use Privy fallback if the dashboard owner is the current logged-in user
+    if (isOwner && privyUser) {
+        const google = privyUser.google as any;
+        const twitter = privyUser.twitter as any;
+        return google?.picture || google?.profilePictureUrl || twitter?.profilePictureUrl || "";
+    }
+    return "";
+}
 
+    const getDisplayName = () => {
+    // If they have a real DB username, use it. If it's the "New User" placeholder, try to upgrade it.
+    if (profile?.username && profile.username !== "New User") return profile.username;
+    
+    if (isOwner && privyUser) {
+        if (privyUser.twitter?.username) return privyUser.twitter.username;
+        if (privyUser.discord?.username) return privyUser.discord.username;
+        if (privyUser.google?.name) return privyUser.google.name.replace(/\s+/g, '');
+        if (privyUser.email?.address) return privyUser.email.address.split('@')[0];
+    }
+    return profile?.username || "Anonymous";
+}
+
+    const displayAvatar = getDisplayAvatar();
+    const displayName = getDisplayName();
     // --- NEW: Sync Email with Backend ---
     const syncEmailToBackend = useCallback(async (walletAddress: string, email: string) => {
         try {
@@ -167,6 +200,7 @@ export default function DashboardPage() {
     }
 
     // IMPROVED: Fetch data with better address/username handling
+   // IMPROVED: Fetch data with better address/username handling
     const fetchData = useCallback(async () => {
         console.log('[Dashboard] Starting fetchData for:', targetUsernameOrAddress)
         setLoading(true);
@@ -200,7 +234,7 @@ export default function DashboardPage() {
                         telegram_handle: fetchedData.telegram_handle || fetchedData.telegramHandle,
                         farcaster_handle: fetchedData.farcaster_handle || fetchedData.farcasterHandle
                     };
-                    console.log('✅ [Dashboard] Profile found by address:', userProfile.username)
+                    console.log('✅ [Dashboard] Profile found by address:', userProfile?.username) // Added ?
                 } else {
                     // No profile yet, but valid address -> Show "New User"
                     userProfile = {
@@ -221,7 +255,7 @@ export default function DashboardPage() {
                 if (profData.success && profData.profile) {
                     userProfile = profData.profile;
                     userWallet = profData.profile.wallet_address;
-                    console.log('✅ [Dashboard] Profile found by username:', userProfile.username)
+                    console.log('✅ [Dashboard] Profile found by username:', userProfile?.username) // Added ?
                 } else {
                     // Username not found
                     console.log('❌ [Dashboard] Username not found')
@@ -239,8 +273,24 @@ export default function DashboardPage() {
             if (userWallet) {
                 console.log('[Dashboard] Fetching faucets for wallet:', userWallet.slice(0, 8))
                 const faucetData = await getUserFaucets(userWallet);
-                console.log('[Dashboard] Faucets loaded:', faucetData.length)
-                setFaucets(faucetData);
+
+                const { data: slugRows } = await supabase
+                .from("network_faucets")
+                .select("faucet_address, slug")
+                .in("faucet_address", faucetData.map((f: FaucetData) => f.faucetAddress.toLowerCase()));
+
+                const slugMap: Record<string, string> = {};
+                for (const row of slugRows ?? []) {
+                slugMap[row.faucet_address] = row.slug;
+                }
+
+                const faucetsWithSlugs: FaucetData[] = faucetData.map((f: FaucetData) => ({
+                ...f,
+                slug: slugMap[f.faucetAddress.toLowerCase()] ?? undefined,
+                }));
+
+                console.log('[Dashboard] Faucets loaded:', faucetsWithSlugs.length)
+                setFaucets(faucetsWithSlugs);
 
                 // STEP 4: Fetch published quests
                 console.log('[Dashboard] Fetching quests...')
@@ -298,7 +348,6 @@ export default function DashboardPage() {
             setLoading(false);
         }
     }, [targetUsernameOrAddress, connectedAddress, backendUrl, toast]);
-
     // STEP 6: Trigger data fetch on mount and when params change
     useEffect(() => {
         if (!targetUsernameOrAddress) {
@@ -390,9 +439,9 @@ export default function DashboardPage() {
                             
                             <div className="relative">
                                 <Avatar className="h-24 w-24 border-4 border-background shadow-lg relative z-10">
-                                    <AvatarImage src={profile.avatar_url} className="object-cover" />
+                                    <AvatarImage src={displayAvatar} className="object-cover" />
                                     <AvatarFallback className="bg-primary text-white text-2xl">
-                                        {profile.username.charAt(0).toUpperCase()}
+                                        {displayName.charAt(0).toUpperCase()}
                                     </AvatarFallback>
                                 </Avatar>
 
@@ -406,13 +455,39 @@ export default function DashboardPage() {
                             <div className="flex-1 space-y-2">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
                                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-                                        {profile.username}
+                                        {displayName}
                                     </h1>
                                     <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
+                                        {/* Twitter / X */}
                                         {profile?.twitter_handle && (
                                             <a href={getSocialUrl('twitter', profile.twitter_handle)} target="_blank" rel="noopener noreferrer" className="no-underline">
                                                 <Badge variant="secondary" className="bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-100 gap-1.5 pl-2 pr-2.5 cursor-pointer">
                                                     <XIcon className="h-3 w-3" /> {profile.twitter_handle.replace('@', '')}
+                                                </Badge>
+                                            </a>
+                                        )}
+
+                                        {/* Discord */}
+                                        {profile?.discord_handle && (
+                                            <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-100 gap-1.5 pl-2 pr-2.5">
+                                                Discord: {profile.discord_handle}
+                                            </Badge>
+                                        )}
+
+                                        {/* Telegram */}
+                                        {profile?.telegram_handle && (
+                                            <a href={getSocialUrl('telegram', profile.telegram_handle)} target="_blank" rel="noopener noreferrer" className="no-underline">
+                                                <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-100 gap-1.5 pl-2 pr-2.5 cursor-pointer">
+                                                    Telegram: @{profile.telegram_handle}
+                                                </Badge>
+                                            </a>
+                                        )}
+
+                                        {/* Farcaster */}
+                                        {profile?.farcaster_handle && (
+                                            <a href={getSocialUrl('farcaster', profile.farcaster_handle)} target="_blank" rel="noopener noreferrer" className="no-underline">
+                                                <Badge variant="secondary" className="bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-100 gap-1.5 pl-2 pr-2.5 cursor-pointer">
+                                                    Farcaster: @{profile.farcaster_handle}
                                                 </Badge>
                                             </a>
                                         )}
@@ -516,7 +591,11 @@ export default function DashboardPage() {
                                     faucet={faucet} 
                                     getNetworkName={getNetworkName}
                                     getNetworkColor={getNetworkColor}
-                                    onManage={() => router.push(`/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`)}
+                                    onManage={() => router.push(
+                                        faucet.slug
+                                            ? `/faucet/${faucet.slug}`
+                                            : `/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`
+                                        )}
                                     isOwner={isOwner}
                                 />
                             )) : (

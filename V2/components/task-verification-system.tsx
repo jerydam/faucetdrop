@@ -4,8 +4,8 @@
 
 import { toast } from "sonner";
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com";
-const VERIFIER_API_URL = "https://fauctdrop-backend.onrender.com";
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const VERIFIER_API_URL = "https://faucetdrop-backend.onrender.com";
 
 // ============================================
 // TYPE DEFINITIONS
@@ -106,7 +106,7 @@ export const getVerificationConfig = (
         ? "https://x.com/yourusername"
         : "https://...",
       helperText: isTweetTask
-        ? `Paste the link to your ${action} that mentions ${task.targetHandle || "@faucetdrops"}`
+        ? `Paste the link to your ${action} that mentions ${task.targetHandle || "@FaucetDrops"}`
         : isFollowTask
         ? "We'll verify that you're following the required account"
         : "Provide a link to verify your completion",
@@ -312,10 +312,10 @@ async function verifySocialTask(
   // Determine target criteria
   let targetCriteria = "";
   if (task.action === "follow") {
-    targetCriteria = task.targetHandle || "@faucetdrops";
+    targetCriteria = task.targetHandle || "@FaucetDrops";
   } else {
     // For tweets, we look for the handle mention
-    targetCriteria = task.targetHandle || "@faucetdrops";
+    targetCriteria = task.targetHandle || "@FaucetDrops";
   }
 
   const verifyRes = await fetch(`${VERIFIER_API_URL}/verify/social`, {

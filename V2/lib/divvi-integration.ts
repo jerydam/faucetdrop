@@ -99,7 +99,15 @@ export async function reportTransactionToDivvi(txHash: `0x${string}`, chainId: n
     console.warn("Divvi reporting failed (non-critical):", error);
   }
 }
-
+export function getDivviStatus() {
+  if (importError) {
+    return { status: "error", message: `Import failed: ${importError}` };
+  }
+  if (!getReferralTag || !submitReferral) {
+    return { status: "error", message: "Divvi SDK functions not available" };
+  }
+  return { status: "ok", message: "Divvi SDK loaded successfully" };
+} 
 export function isSupportedNetwork(chainId: number): boolean {
   // Added 42161 (Arbitrum) to supported list
   return [1, 42220, 44787, 62320, 1135, 4202, 8453, 84532, 137, 42161, 421614].includes(chainId);

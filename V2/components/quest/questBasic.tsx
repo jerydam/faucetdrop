@@ -19,12 +19,12 @@ import { ZeroAddress, isAddress as ethersIsAddress } from 'ethers'
 import { type Network } from "@/lib/faucet"
 
 // ==== CONFIG ====
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
 const MIN_POOL_USD_VALUE = 50; // $50 Minimum
 
 const networks: Network[] = [
     {
-        name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png",
+        name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png", explorerUrl: "https://celoscan.io",
         factoryAddresses: ["0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"],
         factories: { custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
     },
@@ -44,7 +44,7 @@ const networks: Network[] = [
         factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
     },
     {
-    name: "Bnb", symbol: "BSC", chainId: BigInt(56), rpcUrl: "https://binance.llamarpc.com", blockExplorer: "https://bscscan.com", explorerUrl: "https://bscscan.com", color: "#F3BA2F", 
+    name: "Bnb", symbol: "BNB", chainId: BigInt(56), rpcUrl: "https://binance.llamarpc.com", blockExplorer: "https://bscscan.com", explorerUrl: "https://bscscan.com", color: "#F3BA2F", 
     logoUrl: "/bnb.png", iconUrl: "/bnb.png", factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"], factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" },    tokenAddress: ZeroAddress, nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },  isTestnet: false,
 }
 
@@ -472,7 +472,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
             rewardPool: poolAmount.toString(),
             rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
             tokenAddress: selectedToken.address,
-            tokenSymbol: selectedToken.symbol,           // ← ADD THIS
+            tokenSymbol: selectedToken.symbol,           
             token_symbol: selectedToken.symbol,
             distributionConfig: newQuest.distributionConfig,
             faucetAddress: draftId,
@@ -608,7 +608,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                             ...prev, 
                                             rewardTokenType: 'erc20', 
                                             tokenAddress: customTokenAddress,
-                                            tokenSymbol: 'TOK'  // ← ADD THIS
+                                            tokenSymbol: 'TOK'   
                                         } as T))
                                         toast.success("Custom token address set")
                                     } else {
@@ -743,15 +743,15 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                     <div key={i} className="flex gap-2 items-end">
                                         <div className="flex-1">
                                             <span className="text-xs text-muted-foreground">Rank From</span>
-                                            <Input type="number" value={tier.rankStart} onChange={(e) => handleTierChange(i, 'rankStart', parseInt(e.target.value) || 1)} />
+                                            <Input type="number" value={tier.rankStart} onChange={(e) => handleTierChange(i, 'rankStart', parseInt(e.target.value) )} />
                                         </div>
                                         <div className="flex-1">
                                             <span className="text-xs text-muted-foreground">Rank To</span>
-                                            <Input type="number" value={tier.rankEnd} onChange={(e) => handleTierChange(i, 'rankEnd', parseInt(e.target.value) || 1)} />
+                                            <Input type="number" value={tier.rankEnd} onChange={(e) => handleTierChange(i, 'rankEnd', parseInt(e.target.value) )} />
                                         </div>
                                         <div className="flex-1">
                                             <span className="text-xs text-muted-foreground">Amount</span>
-                                            <Input type="number" value={tier.amountPerUser} onChange={(e) => handleTierChange(i, 'amountPerUser', parseFloat(e.target.value) || 0)} />
+                                            <Input type="number" value={tier.amountPerUser} onChange={(e) => handleTierChange(i, 'amountPerUser', parseFloat(e.target.value) )} />
                                         </div>
                                         <Button variant="ghost" size="icon" onClick={() => removeTier(i)} className="mb-0.5"><Trash2 className="h-4 w-4" /></Button>
                                     </div>

@@ -27,7 +27,7 @@ interface UserProfile {
     avatar_url?: string;
 }
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
 
 // Helper to decode errors
 const getUserFriendlyError = (error: any): string => {
@@ -68,7 +68,7 @@ const SYSTEM_TASKS: QuestTask[] = [
         id: 'sys_referral',
         title: 'Refer Friends',
         description: 'Share your unique referral link to earn points.',
-        points: 10,
+        points: 50,
         required: false,
         category: 'referral',
         url: '',
@@ -79,23 +79,23 @@ const SYSTEM_TASKS: QuestTask[] = [
         minReferrals: 1
     },
     {
-    id: 'sys_share_quest_x',
-    title: 'Share Quest on X',
-    description: 'Share this quest page on X with @faucetdrops and your referral link to earn points.',
-    points: 20,
-    required: false,
-    category: 'social',
-    url: '',                           // ← intentionally empty
-    action: 'share_quest',             // ← new distinct action
-    verificationType: 'manual_link',
-    stage: 'Beginner',
-    isSystem: true,
-  },
+        id: 'sys_share_quest_x',
+        title: 'Share Quest on X',
+        description: 'Share this quest page on X with @FaucetDrops and your referral link to earn points.',
+        points: 50,
+        required: false,
+        category: 'social',
+        url: '',
+        action: 'share_quest',
+        verificationType: 'manual_link',
+        stage: 'Beginner',
+        isSystem: true,
+    },
     {
         id: 'sys_daily',
         title: 'Daily Check-in',
         description: 'Return every 24 hours to claim free points.',
-        points: 10,
+        points: 50,
         required: false,
         category: 'general',
         url: '',
@@ -401,7 +401,7 @@ const handleRemoveTask = async (taskId: string) => {
     const stageTotals = useMemo(() => {
         const totals = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0 }
         newQuest.tasks.forEach(task => {
-            if (task.stage && totals[task.stage as TaskStage] !== undefined) {
+            if (!task.isSystem && task.stage && totals[task.stage as TaskStage] !== undefined) {
                 totals[task.stage as TaskStage] += Number(task.points) || 0
             }
         })
@@ -411,12 +411,14 @@ const handleRemoveTask = async (taskId: string) => {
     const stageTaskCounts = useMemo(() => {
         const counts = { Beginner: 0, Intermediate: 0, Advance: 0, Legend: 0, Ultimate: 0 }
         newQuest.tasks.forEach(task => {
-            if (task.stage && counts[task.stage as TaskStage] !== undefined) {
+            if (!task.isSystem && task.stage && counts[task.stage as TaskStage] !== undefined) {
                 counts[task.stage as TaskStage]++
             }
         })
         return counts
     }, [newQuest.tasks])
+
+    
 
     const handleImageUpload = async (file: File) => {
         setIsUploadingImage(true);

@@ -132,7 +132,7 @@ interface FaucetAdminViewProps {
   address: string | null;
   chainId: number | null;
   provider: any;
-  handleGoBack: () => void;
+  
   router: any;
   faucetMetadata: {
     description?: string;
@@ -200,7 +200,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   address,
   chainId,
   provider,
-  handleGoBack,
+  
   router,
   faucetMetadata,
 }) => {
@@ -482,7 +482,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       // 2. Call Backend to clean up Database
       try {
         const response = await fetch(
-          "https://fauctdrop-backend.onrender.com/delete-faucet-metadata",
+          "https://faucetdrop-backend.onrender.com/delete-faucet-metadata",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -630,7 +630,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
 
     // ====================== PATH A: SHARE POST TEMPLATE (Backend) ======================
     if (isTemplateChanged) {
-      const response = await fetch("https://fauctdrop-backend.onrender.com/faucet-x-template", {
+      const response = await fetch("https://faucetdrop-backend.onrender.com/faucet-x-template", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -672,7 +672,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       }
 
       // Sync parameters to backend
-      await fetch("https://fauctdrop-backend.onrender.com/set-claim-parameters", {
+      await fetch("https://faucetdrop-backend.onrender.com/set-claim-parameters", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -696,7 +696,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
           action: link.action,
         }));
 
-      await fetch("https://fauctdrop-backend.onrender.com/add-faucet-tasks", {
+      await fetch("https://faucetdrop-backend.onrender.com/add-faucet-tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -876,7 +876,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
     try {
       setIsGeneratingNewCode(true);
       const response = await fetch(
-        "https://fauctdrop-backend.onrender.com/generate-new-drop-code",
+        "https://faucetdrop-backend.onrender.com/generate-new-drop-code",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -910,7 +910,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
       if (type === "web") {
         url = window.location.origin + "/faucet/" + faucetAddress;
       } else {
-        url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/faucetdrops?startapp/faucet=${faucetAddress}`;
+        url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
       }
 
       await navigator.clipboard.writeText(url);
@@ -1909,7 +1909,6 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
               showClaimPopup={false}
               setShowClaimPopup={() => {}}
               handleVerifyAllTasks={() => Promise.resolve()}
-              handleGoBack={() => setShowPreviewDialog(false)}
             />
           </div>
           <DialogFooter>
@@ -2204,12 +2203,15 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
   </DialogContent>
 </Dialog>
          {/* QR Code Share Dialog - Mobile Optimized */}
-     <QRCodeShareDialog
-        open={showQRDialog}
-        onOpenChange={setShowQRDialog}
-        faucetAddress={faucetAddress}
-        faucetName={faucetDetails?.name || "Faucet"}
-      />
+    <QRCodeShareDialog
+  open={showQRDialog}
+  onOpenChange={setShowQRDialog}
+  faucetAddress={faucetAddress}
+  faucetDetails={faucetDetails}
+  faucetMetadata={faucetMetadata}
+  selectedNetwork={selectedNetwork} // Pass current network object
+  tokenSymbol={tokenSymbol}         // Pass current token symbol string
+/>
     </Card>
   );
 };

@@ -1,16 +1,24 @@
-import {Interface, type BrowserProvider, Contract, JsonRpcProvider, ZeroAddress,type ContractTransactionResponse, isAddress, getAddress } from "ethers"
+import {Interface, type BrowserProvider, Contract, JsonRpcProvider,type Provider, ZeroAddress,type ContractTransactionResponse, isAddress, FallbackProvider, getAddress } from "ethers"
 import { FAUCET_ABI_DROPCODE, FAUCET_ABI_CUSTOM, FAUCET_ABI_DROPLIST, ERC20_ABI, CHECKIN_ABI, FACTORY_ABI_DROPCODE, FACTORY_ABI_DROPLIST,QUEST_FACTORY_ABI, FACTORY_ABI_CUSTOM, STORAGE_ABI} from "./abis"
-import { appendDivviReferralData, reportTransactionToDivvi, getDivviStatus, isSupportedNetwork } from "./divvi-integration"
+import { appendDivviReferralData, getDivviStatus, reportTransactionToDivvi, isSupportedNetwork } from "./divvi-integration"
 
 // Fetch faucets for a specific network using getAllFaucets and getFaucetDetails
- interface Network {
-  chainId: bigint
+ export interface Network {
+  chainId: bigint | number
   name: string
-  rpcUrl: string
-  blockExplorer: string
-  factoryAddresses: string[] // Changed to array to handle multiple addresses
-  color: string
-  storageAddress?: string // Optional, defaults to FAUCET_STORAGE_ADDRESS
+  symbol: string
+  logoUrl: string
+  explorerUrl: string
+  iconUrl: string
+  tokenAddress: string
+  nativeCurrency:{ name: string; symbol: string; decimals: number }
+  rpcUrl: string | string[] // 💡 UPDATED to support array
+  blockExplorer?: string
+  factoryAddresses: string[]
+  color?: string
+  isTestnet?: boolean
+  storageAddress?: string
+  factories?: any // Optional: if you want to use the specific factories map
 }
 interface FaucetMeta {
     faucetAddress: string;
@@ -98,7 +106,7 @@ function determineFactoryType(useBackend: boolean, isCustom: boolean = false): F
 
 
 // Helper function to detect factory type by trying different function calls
-async function detectFactoryType(provider: BrowserProvider | JsonRpcProvider, factoryAddress: string): Promise<FactoryType> {
+async function detectFactoryType(provider: Provider, factoryAddress: string): Promise<FactoryType> {
   const factoryTypes: FactoryType[] = ['dropcode', 'droplist', 'custom']
   
   for (const type of factoryTypes) {
@@ -127,7 +135,7 @@ async function detectFactoryType(provider: BrowserProvider | JsonRpcProvider, fa
 export async function getFaucetDetailsFromFactory(
     factoryAddress: string, // Needed to determine type/ABI later if not cached
     faucetAddress: string,
-    provider: BrowserProvider | JsonRpcProvider
+    provider: Provider
 ): Promise<any> {
     try {
         console.log(`[getFaucetDetailsFromFactory] Fetching full details for ${faucetAddress} from factory ${factoryAddress}`);
@@ -152,7 +160,7 @@ export async function getFaucetDetailsFromFactory(
 }
 
 // Helper function to detect faucet type by trying different ABIs
-export async function detectFaucetType(provider: BrowserProvider | JsonRpcProvider, faucetAddress: string): Promise<FaucetType> {
+export async function detectFaucetType(provider: Provider, faucetAddress: string): Promise<FaucetType> {
   const faucetTypes: FaucetType[] = ['dropcode', 'droplist', 'custom']
   
   for (const type of faucetTypes) {
@@ -213,7 +221,7 @@ export async function detectFaucetType(provider: BrowserProvider | JsonRpcProvid
 
 // Helper function to get faucet type from factory address and factory type
 async function getFaucetTypeFromFactory(
-  provider: BrowserProvider | JsonRpcProvider,
+  provider: Provider,
   faucetAddress: string,
   networks: Network[]
 ): Promise<FaucetType> {
@@ -288,7 +296,32 @@ const STORAGE_CONTRACT_ADDRESS = "0xc26c4Ea50fd3b63B6564A5963fdE4a3A474d4024"
 const CHECKIN_CONTRACT_ADDRESS = "0x051dDcB3FaeA6004fD15a990d753449F81733440"
 
 // Celo RPC URL
-const CELO_RPC_URL = "https://forno.celo.org"
+const CELO_RPC_URLS = [
+  "https://forno.celo.org",
+  "https://rpc.ankr.com/celo",
+  "https://1rpc.io/celo",
+  "https://celo.drpc.org",
+  "https://celo-rpc.publicnode.com"
+]
+
+// 💡 NEW: Helper function to create the right provider
+export function getProviderForNetwork(network: Network | { rpcUrl: string | string[] }): JsonRpcProvider | FallbackProvider {
+  const urls = Array.isArray(network.rpcUrl) ? network.rpcUrl : [network.rpcUrl];
+  const validUrls = urls.filter(Boolean);
+  
+  if (validUrls.length === 0) {
+    throw new Error("No RPC URLs provided");
+  }
+  
+  // If only one URL, return a standard JsonRpcProvider
+  if (validUrls.length === 1) {
+    return new JsonRpcProvider(validUrls[0]);
+  }
+  
+  // If multiple URLs, create a FallbackProvider for rate-limit protection
+  const providers = validUrls.map(url => new JsonRpcProvider(url));
+  return new FallbackProvider(providers, 1); // Quorum of 1 is usually enough for data fetching
+}
 
 if (!isAddress(BACKEND_ADDRESS)) {
   throw new Error(`Invalid BACKEND_ADDRESS in .env: ${BACKEND_ADDRESS}`)
@@ -312,9 +345,9 @@ const STORAGE_KEYS = {
 const CACHE_DURATION = 60 * 60 * 1000
 
 // Helper to check network
-function checkNetwork(chainId: bigint, networkId: bigint): boolean {
+function checkNetwork(chainId: bigint | number, networkId: bigint | number): boolean {
   console.log(`Checking network: chainId=${chainId}, networkId=${networkId}`)
-  return chainId === networkId
+  return BigInt(chainId) === BigInt(networkId)
 }
 
 // Check permissions and contract state with faucet type detection
@@ -394,9 +427,8 @@ export async function fetchCheckInData(): Promise<{
   allUsers: Set<string>
 }> {
   try {
-    const provider = new JsonRpcProvider(CELO_RPC_URL)
+    const provider = getProviderForNetwork({ rpcUrl: CELO_RPC_URLS })
     const contract = new Contract(CHECKIN_CONTRACT_ADDRESS, CHECKIN_ABI, provider)
-
     // Check if we have cached data and if it's still valid
     const cachedData = getFromStorage(STORAGE_KEYS.CHECKIN_DATA)
     const lastBlock = getFromStorage(STORAGE_KEYS.CHECKIN_LAST_BLOCK) || 0
@@ -514,7 +546,7 @@ export async function fetchStorageData(): Promise<
   }[]
 > {
   try {
-    const provider = new JsonRpcProvider(CELO_RPC_URL)
+    const provider = getProviderForNetwork({ rpcUrl: CELO_RPC_URLS })
 
     // Check if storage contract exists
     const code = await provider.getCode(STORAGE_CONTRACT_ADDRESS)
@@ -690,7 +722,7 @@ export async function createCustomFaucet(
 }
 
 export async function checkFaucetNameExistsAcrossAllFactories(
-  provider: BrowserProvider | JsonRpcProvider,
+  provider: Provider,
   factoryAddresses: string[],
   proposedName: string
 ): Promise<NameValidationResult & { 
@@ -761,7 +793,7 @@ export async function checkFaucetNameExistsAcrossAllFactories(
             });
           }
           
-        } catch (getAllError) {
+        } catch (getAllError:any) {
           console.warn(`getAllFaucetDetails failed for factory ${factoryAddress}, trying fallback method:`, getAllError.message);
           
           // Method 2: Fallback - Get all faucet addresses and check each individually
@@ -812,7 +844,7 @@ export async function checkFaucetNameExistsAcrossAllFactories(
               }
             }
             
-          } catch (fallbackError) {
+          } catch (fallbackError:any) {
             console.warn(`Fallback method also failed for factory ${factoryAddress}:`, fallbackError.message);
             continue;
           }
@@ -895,7 +927,7 @@ export async function checkFaucetNameExists(
  * Get all faucet names from all factories on a single network (for comparison/statistics)
  */
 export async function getAllFaucetNamesOnNetwork(
-  provider: BrowserProvider | JsonRpcProvider,
+  provider: Provider,
   network: Network
 ): Promise<Array<{
   faucetAddress: string
@@ -944,7 +976,7 @@ export async function getAllFaucetNamesOnNetwork(
         try {
           faucetDetails = await factoryContract.getAllFaucetDetails();
           console.log(`Got ${faucetDetails.length} faucet details from factory ${factoryAddress}`);
-        } catch (getAllError) {
+        } catch (getAllError:any) {
           console.warn(`getAllFaucetDetails failed for ${factoryAddress}, trying individual approach:`, getAllError.message);
           
           // Fallback: Get addresses and fetch names individually
@@ -1221,7 +1253,7 @@ export async function checkContractMethod(
 }
 
 export async function getAllAdmins(
-  provider: BrowserProvider | JsonRpcProvider,
+  provider: Provider,
   faucetAddress: string,
   faucetType?: FaucetType
 ): Promise<string[]> {
@@ -1248,7 +1280,7 @@ export async function getAllAdmins(
 }
 
 export async function isAdmin(
-  provider: BrowserProvider | JsonRpcProvider,
+  provider: Provider,
   faucetAddress: string,
   userAddress: string,
   faucetType?: FaucetType
@@ -1270,7 +1302,7 @@ export async function isAdmin(
 
 // Check if an address is whitelisted for a faucet (only for droplist faucets)
 export async function isWhitelisted(
-  provider: BrowserProvider | JsonRpcProvider,
+  provider: Provider,
   faucetAddress: string,
   userAddress: string,
   faucetType?: FaucetType
@@ -1302,7 +1334,7 @@ export async function isWhitelisted(
 
 // Get faucet backend mode from contract
 export async function getFaucetBackendMode(
-  provider: BrowserProvider | JsonRpcProvider,
+  provider: Provider,
   faucetAddress: string,
   faucetType?: FaucetType
 ): Promise<boolean> {
@@ -1327,7 +1359,7 @@ export async function getFaucetBackendMode(
 
 // Get faucet details with admin check and backend mode from contract
 export async function getFaucetDetails(
-  provider: BrowserProvider | JsonRpcProvider, 
+  provider: Provider, 
   faucetAddress: string,
   faucetType?: FaucetType
 ) {
@@ -1515,7 +1547,7 @@ export async function getFaucetDetails(
 }
 export const getUserFaucets = async (userAddress: string) => {
   try {
-    const response = await fetch(`https://fauctdrop-backend.onrender.com/user-faucets/${userAddress}`);
+    const response = await fetch(`https://faucetdrop-backend.onrender.com/user-faucets/${userAddress}`);
     
     if (!response.ok) {
         if(response.status === 404) return []; 
@@ -1533,7 +1565,7 @@ export const getUserFaucets = async (userAddress: string) => {
 async function getDeletedFaucets(chainId: number): Promise<Set<string>> {
     try {
         // Adjust endpoint if necessary (e.g. /deleted-faucets or similar)
-        const response = await fetch(`https://fauctdrop-backend.onrender.com/deleted-faucets?chainId=${chainId}`);
+        const response = await fetch(`https://faucetdrop-backend.onrender.com/deleted-faucets?chainId=${chainId}`);
         
         if (!response.ok) {
             console.warn("Failed to fetch deleted faucets list");
@@ -1553,7 +1585,7 @@ async function getDeletedFaucets(chainId: number): Promise<Set<string>> {
 
 export async function getFaucetsForNetwork(
     network: Network,
-    provider: JsonRpcProvider
+    provider: JsonRpcProvider | FallbackProvider
 ): Promise<FaucetMeta[]> {
     try {
         // 1. Start fetching the blacklist immediately (Non-blocking)
@@ -1715,7 +1747,7 @@ export async function getFaucetTransactionHistory(
   }
 }
 
-async function contractExists(provider: JsonRpcProvider, address: string): Promise<boolean> {
+async function contractExists(provider: JsonRpcProvider | FallbackProvider, address: string): Promise<boolean> {
   try {
     const code = await provider.getCode(address)
     return code !== "0x"
@@ -1747,7 +1779,7 @@ export async function getAllClaims(
       throw new Error(`Network with chainId ${chainId} not found`)
     }
 
-    const provider = new JsonRpcProvider(network.rpcUrl)
+    const provider = getProviderForNetwork(network)
     const storageAddress = STORAGE_CONTRACT_ADDRESS
     const contract = new Contract(storageAddress, STORAGE_ABI, provider)
 
@@ -1835,7 +1867,7 @@ export async function getAllClaimsFromFactoryTransactions(
 
     for (const network of networks) {
       try {
-        const provider = new JsonRpcProvider(network.rpcUrl)
+        const provider = getProviderForNetwork(network)
         
         // Iterate through all factory addresses for this network
         for (const factoryAddress of network.factoryAddresses) {
@@ -2062,7 +2094,7 @@ export async function retrieveSecretCode(faucetAddress: string): Promise<string>
     }
 
     // Fallback to backend if not found in localStorage
-    const response = await fetch("https://fauctdrop-backend.onrender.com/retrieve-secret-code", {
+    const response = await fetch("https://faucetdrop-backend.onrender.com/retrieve-secret-code", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -2125,7 +2157,7 @@ function decodeRevertError(data: string): string {
 
 async function deleteFaucetMetadata(faucetAddress: string, userAddress: string, chainId: number): Promise<void> {
     try {
-        const response = await fetch("https://fauctdrop-backend.onrender.com/delete-faucet-metadata", { // Replace with your actual backend URL
+        const response = await fetch("https://faucetdrop-backend.onrender.com/delete-faucet-metadata", { // Replace with your actual backend URL
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2146,60 +2178,91 @@ async function deleteFaucetMetadata(faucetAddress: string, userAddress: string, 
     }
 }
 export async function createQuestReward(
-    provider: BrowserProvider,
-    factoryAddress: string,
-    name: string,
-    tokenAddress: string,
-    questEndTime: number,
-    claimWindowHours: number,
-    backendAddress: string // <--- 🚨 NEW: CRITICAL PARAMETER
+  provider: BrowserProvider,
+  factoryAddress: string,
+  name: string,
+  tokenAddress: string,
+  questEndTime: number,
+  claimWindowHours: number,
+  backendAddress: string
 ): Promise<string> {
+  // --- 1. Validation ---
+  if (!isAddress(factoryAddress) || !isAddress(tokenAddress) || !isAddress(backendAddress)) {
+    throw new Error("Invalid factory, token, or backend address");
+  }
+  if (!provider) {
+    throw new Error("Provider is not available");
+  }
+
+  try {
     const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+
+    // Use the same ABI you already import elsewhere
     const factory = new Contract(factoryAddress, QUEST_FACTORY_ABI, signer);
 
-    try {
-        console.log("Deploying Quest:", { name, tokenAddress, backendAddress, questEndTime, claimWindowHours });
+    console.log("🚀 Deploying QuestReward via low-level tx:", {
+      name,
+      tokenAddress,
+      backendAddress,
+      questEndTime,
+      claimWindowHours,
+      signerAddress,
+    });
 
-        const tx: ContractTransactionResponse = await factory.createQuestReward(
-            name,
-            tokenAddress,
-            backendAddress, // <--- Pass the real backend address here
-            questEndTime,
-            claimWindowHours
-        );
+    // --- 2. Encode data (low-level) ---
+    const data = factory.interface.encodeFunctionData("createQuestReward", [
+      name,
+      tokenAddress,
+      backendAddress,
+      questEndTime,
+      claimWindowHours,
+    ]);
 
-        console.log("Transaction sent:", tx.hash);
-        const receipt = await tx.wait();
+    const dataWithReferral = appendDivviReferralData(data); // keeps your Divvi tracking
 
-        if (!receipt) throw new Error("Transaction failed");
+    // --- 3. Send transaction (same pattern as createCustomFaucet / createFaucet) ---
+    const tx = await signer.sendTransaction({
+      to: factoryAddress,
+      data: dataWithReferral,
+    });
 
-        let deployedAddress = "";
-        
-        for (const log of receipt.logs) {
-            try {
-                const parsed = factory.interface.parseLog({
-                    topics: [...log.topics],
-                    data: log.data
-                });
-                if (parsed?.name === "QuestRewardCreated") {
-                    deployedAddress = parsed.args[0];
-                    break;
-                }
-            } catch (e) {
-                continue;
-            }
+    console.log("Transaction sent:", tx.hash);
+    const receipt = await tx.wait();
+    if (!receipt) throw new Error("Transaction receipt is null");
+
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(await provider.getNetwork().then(n => n.chainId)));
+
+    // --- 4. Parse event (same as before) ---
+    let deployedAddress = "";
+    const factoryInterface = new Interface(QUEST_FACTORY_ABI);
+
+    for (const log of receipt.logs) {
+      try {
+        const parsedLog = factoryInterface.parseLog(log as any);
+        if (parsedLog?.name === "QuestRewardCreated") {
+          deployedAddress = parsedLog.args[0]; // or parsedLog.args.questAddress if your event is named differently
+          break;
         }
-
-        if (!deployedAddress) {
-            throw new Error("Could not retrieve Quest address from events");
-        }
-
-        return deployedAddress;
-
-    } catch (error) {
-        console.error("Quest creation failed:", error);
-        throw error;
+      } catch (e) {
+        // ignore unrelated logs
+      }
     }
+
+    if (!deployedAddress) {
+      throw new Error("Quest deployed but QuestRewardCreated event not found");
+    }
+
+    console.log("✅ QuestReward created at:", deployedAddress);
+    return deployedAddress;
+
+  } catch (error: any) {
+    console.error("❌ Quest creation failed:", error);
+    if (error.data && typeof error.data === "string") {
+      throw new Error(decodeRevertError(error.data));
+    }
+    throw new Error(error.reason || error.message || "Failed to create quest reward");
+  }
 }
 export async function createFaucet(
   provider: BrowserProvider,
@@ -3005,7 +3068,7 @@ export async function removeAdmin(
     const faucetContract = new Contract(faucetAddress, config.abi, signer);
     
     const data = faucetContract.interface.encodeFunctionData("removeAdmin", [adminAddress]);
-    const dataWithReferral = appendDivviReferralData(data, signerAddress);
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
 
     // Simplified transaction
     const tx = await signer.sendTransaction({
@@ -3071,7 +3134,7 @@ export async function storeClaim(
     // Append Divvi referral data with additional validation
     const divviStatus = getDivviStatus();
     console.log("Divvi SDK status before appending referral:", divviStatus);
-    const dataWithReferral = appendDivviReferralData(data, signerAddress);
+    const dataWithReferral = appendDivviReferralData(data, signerAddress as `0x${string}`);
     const referralTag = dataWithReferral.slice(data.length);
     console.log("Divvi referral data appended:", {
       originalDataLength: data.length,
@@ -3120,7 +3183,7 @@ export async function storeClaim(
 
     console.log("Store claim transaction hash:", tx.hash);
     const receipt = await tx.wait();
-    console.log("Store claim transaction confirmed:", receipt.transactionHash);
+    console.log("Store claim transaction confirmed:",);
 
     // Ensure transaction is mined before reporting to Divvi
     if (!receipt || !receipt.blockNumber) {

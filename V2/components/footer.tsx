@@ -37,7 +37,7 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
   const socialLinks = [
     {
       name: "X (Twitter)",
-      href: "https://x.com/faucetdrops",
+      href: "https://x.com/FaucetDrops",
       icon: XIcon,
       hoverColor: "hover:text-sky-500"
     },
@@ -49,13 +49,13 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
     },
     {
       name: "Telegram",
-      href: "https://t.me/faucetdropschat",
+      href: "https://t.me/FaucetDropschat",
       icon: TelegramIcon,
       hoverColor: "hover:text-blue-500"
     },
     {
       name: "GitHub",
-      href: "https://github.com/Priveedores-de-soluciones/Faucet_drops",
+      href: "https://github.com/priveedores-de-solucione/FaucetDrops",
       icon: Github,
       hoverColor: "hover:text-gray-600 dark:hover:text-gray-300"
     },

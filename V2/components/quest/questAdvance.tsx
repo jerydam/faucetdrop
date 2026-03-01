@@ -6,22 +6,24 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import {
   Clock, Trash2, Loader2, Rocket,
   Plus, Zap, Lock, Unlock, Trophy, Settings,
   LayoutList, GripVertical, Percent, ShieldAlert, CalendarClock, Users, AlertTriangle,
-  Link as LinkIcon, Code, CalendarDays, CheckCircle2,
-  XIcon
+  Link as LinkIcon, Code, CalendarDays, CheckCircle2, MessageSquareText,
+  ShieldCheck,
+  XIcon,
+  Send
 } from "lucide-react"
 import { useWallet } from "@/hooks/use-wallet"
 import { BrowserProvider, ZeroAddress } from 'ethers'
 import { createQuestReward, type Network } from "@/lib/faucet"
 import { toast } from 'sonner'
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
 const BACKEND_WALLET_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 
 // =========================================================
@@ -40,12 +42,12 @@ const STAGE_TASK_REQUIREMENTS: Record<TaskStage, { min: number; max: number }> =
   Ultimate: { min: 1, max: 3 },
 }
 
-// 1. Updated Verification Type to include 'onchain'
 export type VerificationType = 
   | 'auto_social' 
   | 'auto_tx' 
-  | 'onchain' // New backend engine type
+  | 'onchain' 
   | 'manual_link' 
+  | 'manual_link_image' // <-- NEW ADDITION
   | 'manual_upload' 
   | 'system_referral' 
   | 'system_daily' 
@@ -54,9 +56,19 @@ export type VerificationType =
 
 export type SocialPlatform = 'Twitter' | 'Facebook' | 'Tiktok' | 'Youtube' | 'Discord' | 'Thread' | 'Linkedin' | 'Farcaster' | 'Instagram' | 'Website' | 'Telegram'
 const SOCIAL_PLATFORMS: SocialPlatform[] = ['Twitter', 'Facebook', 'Telegram','Tiktok', 'Youtube', 'Discord', 'Thread', 'Linkedin', 'Farcaster', 'Instagram', 'Website']
-const SOCIAL_ACTIONS = ['follow', 'like & retweet', 'join', 'subscribe', 'visit', 'comment', 'quote']
+const SOCIAL_ACTIONS = ['follow', 'like & retweet', 'join', 'subscribe', 'visit', 'comment', 'quote', 'signup', 'interact']
 
-// 2. New Onchain Actions Definition for Dropdown
+const getAvailableActions = (platform: string) => {
+  switch (platform) {
+    case 'Twitter': return ['follow', 'like & retweet', 'quote', 'comment'];
+    case 'Discord': return ['join', 'role'];
+    case 'Telegram': return ['join', 'message_count'];
+    case 'Youtube': return ['subscribe', 'watch'];
+    case 'Website': return ['visit', 'signup', 'interact']; // <-- NEW ACTIONS ADDED
+    default: return ['follow', 'join', 'visit', 'like'];
+  }
+}
+
 const ONCHAIN_ACTIONS = [
   { value: 'hold_token', label: 'Hold Token Balance' },
   { value: 'hold_nft', label: 'Hold NFT' },
@@ -73,13 +85,11 @@ export interface QuestTask {
   category: 'social' | 'trading' | 'swap' | 'referral' | 'content' | 'general'
   url: string
   action: string
-  // Onchain specific fields
   minTxCount?: number | string
   minDays?: number | string
   minDurationHours?: number | string
   minAmount?: number | string
   targetContractAddress?: string
-  
   verificationType: VerificationType
   targetPlatform?: string
   targetHandle?: string
@@ -99,9 +109,43 @@ export interface StagePassRequirements {
   Ultimate: number
 }
 
+
+// UPDATED: System Tasks Points
+const SYSTEM_TASKS: QuestTask[] = [
+  {
+    id: 'sys_referral',
+    title: 'Refer Friends',
+    description: 'Share your unique referral link to earn points.',
+    points: 50,
+    required: false,
+    category: 'referral',
+    url: '',
+    action: 'refer',
+    verificationType: 'system_referral',
+    stage: 'Beginner',
+    isSystem: true,
+    minReferrals: 1
+  },
+  {
+    id: 'sys_daily',
+    title: 'Daily Check-in',
+    description: 'Return every 24 hours to claim free points.',
+    points: 50,
+    required: false,
+    category: 'general',
+    url: '',
+    action: 'checkin',
+    verificationType: 'system_daily',
+    stage: 'Beginner',
+    isSystem: true,
+    isRecurring: true,
+    recurrenceInterval: 24
+  }
+]
+
 const networks: Network[] = [
   {
-    name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png",
+    name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png", explorerUrl: "https://celoscan.io",
     factoryAddresses: ["0x17cFed7fEce35a9A71D60Fbb5CA52237103A21FB", "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"],
     factories: { quest: "0xdC9b027B6453560ce8C4390E0B609b343a8eBd62" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
   },
@@ -122,37 +166,6 @@ const networks: Network[] = [
   }
 ]
 
-const SYSTEM_TASKS: QuestTask[] = [
-  {
-    id: 'sys_referral',
-    title: 'Refer Friends',
-    description: 'Share your unique referral link to earn points.',
-    points: 10,
-    required: false,
-    category: 'referral',
-    url: '',
-    action: 'refer',
-    verificationType: 'system_referral',
-    stage: 'Beginner',
-    isSystem: true,
-    minReferrals: 1
-  },
-  {
-    id: 'sys_daily',
-    title: 'Daily Check-in',
-    description: 'Return every 24 hours to claim free points.',
-    points: 10,
-    required: false,
-    category: 'general',
-    url: '',
-    action: 'checkin',
-    verificationType: 'system_daily',
-    stage: 'Beginner',
-    isSystem: true,
-    isRecurring: true,
-    recurrenceInterval: 24
-  }
-]
 
 // 3. Updated Suggested Tasks (including Onchain examples)
 const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
@@ -163,7 +176,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       category: "social",
       action: "visit",
       targetPlatform: "Website",
-      points: 30,
+      points: 100,
       verificationType: "none",
     },
     {
@@ -172,7 +185,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       category: "social",
       action: "follow",
       targetPlatform: "Twitter",
-      points: 50,
+      points: 100,
       verificationType: "auto_social",
     },
     {
@@ -181,7 +194,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       category: "social",
       action: "quote",
       targetPlatform: "Twitter",
-      points: 20,
+      points: 100,
       verificationType: "auto_social",
     },
      {
@@ -190,7 +203,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       category: "social",
       action: "like & retweet",
       targetPlatform: "Twitter",
-      points: 20,
+      points: 100,
       verificationType: "auto_social",
     },
     {
@@ -199,7 +212,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       category: "social",
       action: "join",
       targetPlatform: "Discord",
-      points: 50,
+      points: 100,
       verificationType: "auto_social",
     },
     {
@@ -208,7 +221,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       category: "social",
       action: "join",
       targetPlatform: "Telegram",
-      points: 40,
+      points: 100,
       verificationType: "manual_upload",
     },
     {
@@ -216,7 +229,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Watch our short introduction video (2–3 minutes).",
       category: "content",
       action: "watch",
-      points: 30,
+      points: 100,
       verificationType: "none",
     },
   ],
@@ -228,16 +241,36 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       category: "social",
       action: "follow",
       targetPlatform: "Instagram",
-      points: 40,
+      points: 200,
       verificationType: "manual_upload",
     },
+    { 
+      title: "Attain 'Verified' Discord Role", 
+      description: "Get the Verified role in our server.", 
+      category: "social", 
+      action: "role", 
+      targetPlatform: "Discord", 
+      points: 200, 
+      verificationType: "auto_social", 
+      targetHandle: "1234567890" 
+    },
+    {
+       title: "Send 2 Messages in Telegram", 
+       description: "Be active and send 2 messages in the main chat.", 
+       category: "social", 
+       action: "message_count", 
+       targetPlatform: "Telegram", 
+       points: 200, 
+       verificationType: "auto_social", 
+       minTxCount: 2 
+      },
     {
       title: "Subscribe to YouTube Channel",
       description: "Subscribe to our YouTube channel and turn on notifications.",
       category: "social",
       action: "subscribe",
       targetPlatform: "Youtube",
-      points: 60,
+      points: 200,
       verificationType: "manual_upload",
     },
     {
@@ -245,7 +278,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Hold a small amount of the chain's native token in your wallet.",
       category: "trading",
       action: "hold_token", // Mapped to Onchain Action
-      points: 80,
+      points: 200,
       verificationType: "onchain", // Mapped to Onchain Type
       minAmount: "0.01",
       targetChainId: "any",
@@ -255,7 +288,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Execute at least one swap on a decentralized exchange.",
       category: "swap",
       action: "swap",
-      points: 120,
+      points: 200,
       verificationType: "manual_link",
     },
     {
@@ -263,7 +296,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Use a bridge to move at least 0.005 ETH/native across chains.",
       category: "trading",
       action: "bridge",
-      points: 150,
+      points: 200,
       verificationType: "manual_link",
       minAmount: "0.005",
     },
@@ -275,7 +308,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Add liquidity to any pool with at least $50 equivalent value.",
       category: "trading",
       action: "add_liquidity",
-      points: 250,
+      points: 300,
       verificationType: "manual_link",
       minAmount: "50",
     },
@@ -292,7 +325,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Own at least 1 NFT from the official collection.",
       category: "trading",
       action: "hold_nft", // Mapped to Onchain Action
-      points: 200,
+      points: 300,
       verificationType: "onchain", // Mapped to Onchain Type
       targetContractAddress: "0x...your-nft-collection...",
     },
@@ -301,7 +334,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Complete at least 3 transactions on the target chain.",
       category: "trading",
       action: "tx_count", // Mapped to Onchain Action
-      points: 180,
+      points: 300,
       verificationType: "onchain", // Mapped to Onchain Type
       minTxCount: 3,
     },
@@ -313,7 +346,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Add liquidity and maintain position for at least 7 days.",
       category: "trading",
       action: "provide_liquidity_duration",
-      points: 500,
+      points: 400,
       verificationType: "manual_link",
       minDurationHours: 168,
     },
@@ -322,7 +355,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Bridge assets between at least two different chains.",
       category: "trading",
       action: "bridge",
-      points: 600,
+      points: 400,
       verificationType: "manual_link",
     },
     {
@@ -330,7 +363,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Claim rewards from any staking pool or farm.",
       category: "trading",
       action: "claim_rewards",
-      points: 450,
+      points: 400,
       verificationType: "manual_link",
     },
     {
@@ -338,7 +371,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Send at least one transaction to our main contract.",
       category: "trading",
       action: "interact_contract",
-      points: 350,
+      points: 400,
       verificationType: "manual_link",
       targetContractAddress: "0x...your-contract...",
     },
@@ -350,7 +383,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Execute swaps with a cumulative value of $10k or more.",
       category: "swap",
       action: "swap",
-      points: 1500,
+      points: 500,
       verificationType: "manual_link",
       minAmount: "10000",
     },
@@ -358,7 +391,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       title: "Become an Ambassador",
       category: "general",
       action: "apply",
-      points: 1000,
+      points: 500,
       verificationType: "manual_upload",
       description: "Upload proof of Ambassador role assignment.",
     },
@@ -367,7 +400,7 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
       description: "Have an aged wallet with significant on-chain history.",
       category: "trading",
       action: "wallet_age", // Mapped to Onchain Action
-      points: 1200,
+      points: 500,
       verificationType: "onchain", // Mapped to Onchain Type
       minDays: 90,
       minTxCount: 50,
@@ -376,23 +409,18 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
 }
 
 
-type QuestFormState = {
-  title: string;
-  description: string;
-  imageUrl: string;
-  rewardPool: string;
-  rewardTokenType?: 'native' | 'erc20';
-  tokenAddress?: string;
-  distributionConfig: any;
-  faucetAddress?: string;
-  tasks: QuestTask[];
-  startDate?: string;
-  startTime?: string;
-  endDate?: string;
-  endTime?: string;
-  claimWindowHours?: string;
-  enforceStageRules?: boolean;
-};
+
+// HELPER: Stage default points
+const getDefaultPointsForStage = (stage: TaskStage): number => {
+    switch (stage) {
+        case 'Beginner': return 100;
+        case 'Intermediate': return 200;
+        case 'Advance': return 300;
+        case 'Legend': return 400;
+        case 'Ultimate': return 500;
+        default: return 100;
+    }
+}
 
 interface Phase2Props {
   newQuest: any
@@ -409,6 +437,12 @@ interface Phase2Props {
   handleUseSuggestedTask: (suggestedTask: Partial<QuestTask>) => void
   isFinalizing: boolean
   setError: React.Dispatch<React.SetStateAction<string | null>>
+  saveDraftProgress?: any // Kept for prop compatibility
+  handleStagePassRequirementChange?: any
+  getStageColor?: any
+  getCategoryColor?: any
+  getVerificationIcon?: any
+  handleFinalize?: any
 }
 
 // =========================================================
@@ -429,32 +463,77 @@ export default function Phase2TimingTasksFinalize({
   isFinalizing,
   setError,
 }: Phase2Props) {
-  const { isConnected, chainId, address } = useWallet()
+  const { isConnected, chainId, address, provider } = useWallet()
   const router = useRouter()
-  const [newTask, setNewTask] = useState<Partial<QuestTask>>(initialNewTaskForm)
+  // Inject default points for the form initial state
+  const [newTask, setNewTask] = useState<Partial<QuestTask>>({ ...initialNewTaskForm, points: 100 })
   const [editingTask, setEditingTask] = useState<QuestTask | null>(null)
   const [isDeploying, setIsDeploying] = useState(false)
 
+  const [telegramBotStatus, setTelegramBotStatus] = useState<{
+    checking: boolean; is_admin: boolean | null; bot_username: string; message: string;
+  }>({ checking: false, is_admin: null, bot_username: "", message: "" });
+
+  const [discordBotStatus, setDiscordBotStatus] = useState<{
+    checking: boolean; is_in_server: boolean | null; message: string;
+  }>({ checking: false, is_in_server: null, message: "" });
+
+  const checkDiscordBotStatus = async (inviteUrl: string) => {
+    if (!inviteUrl || !inviteUrl.includes("discord")) {
+      toast.error("Please enter a valid Discord invite link in the URL field first.");
+      return;
+    }
+    setDiscordBotStatus(prev => ({ ...prev, checking: true }));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/bot/check-discord-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteUrl })
+      });
+      const data = await res.json();
+      setDiscordBotStatus({ checking: false, is_in_server: data.is_in_server, message: data.message || "" });
+      if (!data.is_in_server) toast.error("Bot not detected. Did you invite it to the correct server?");
+      else toast.success("Bot successfully detected in your server!");
+    } catch {
+      setDiscordBotStatus({ checking: false, is_in_server: false, message: "Check failed" });
+      toast.error("Failed to contact verification server.");
+    }
+  };
+
   useEffect(() => {
-    setNewTask(initialNewTaskForm)
+    setNewTask({ ...initialNewTaskForm, points: 100 })
   }, [initialNewTaskForm])
 
-  // Inject system tasks automatically
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'discord_bot_added') {
+        try {
+          const data = JSON.parse(e.newValue || '{}');
+          if (data.guild_id) {
+            setDiscordBotStatus(prev => ({ ...prev, is_in_server: true }));
+            setNewTask(prev => ({ ...prev, url: `https://discord.com/channels/${data.guild_id}` }));
+            toast.success("Discord Server linked automatically!");
+          }
+        } catch (err) {
+          console.error("Failed to sync Discord data", err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   useEffect(() => {
     setNewQuest((prev: any) => {
       const existingIds = new Set(prev.tasks.map((t: QuestTask) => t.id))
       const tasksToAdd = SYSTEM_TASKS.filter(st => !existingIds.has(st.id))
       if (tasksToAdd.length > 0) {
-        return {
-          ...prev,
-          tasks: [...prev.tasks, ...tasksToAdd]
-        }
+        return { ...prev, tasks: [...prev.tasks, ...tasksToAdd] }
       }
       return prev
     })
   }, [setNewQuest])
 
-  // Auto-calculate 70% pass requirements
   useEffect(() => {
     setStagePassRequirements(prev => {
       const next = { ...prev }
@@ -471,61 +550,38 @@ export default function Phase2TimingTasksFinalize({
     })
   }, [stageTotals, setStagePassRequirements])
 
-  const enforceRules = newQuest.enforceStageRules ?? false
+  const enforceRules = false // Removed strict mode logic
 
-  // =========================================================
-  // LOGIC HELPERS
-  // =========================================================
-  // Auto-appends https:// if missing and removes trailing slashes
-const normalizeUrl = (url: string): string => {
-  if (!url) return ""
-  let cleanUrl = url.trim()
-  if (!/^https?:\/\//i.test(cleanUrl)) {
-    cleanUrl = `https://${cleanUrl}`
+  const normalizeUrl = (url: string): string => {
+    if (!url) return ""
+    let cleanUrl = url.trim()
+    if (!/^https?:\/\//i.test(cleanUrl)) cleanUrl = `https://${cleanUrl}`
+    return cleanUrl.replace(/\/+$/, "")
   }
-  return cleanUrl.replace(/\/+$/, "")
-}
 
-// Extracts the username from common social URLs
-const extractHandleFromUrl = (url: string): string | null => {
-  const twitterMatch = url.match(/(?:x\.com|twitter\.com)\/([a-zA-Z0-9_]{1,15})/i)
-  if (twitterMatch) return twitterMatch[1]
-
-  const telegramMatch = url.match(/(?:t\.me|telegram\.me)\/([a-zA-Z0-9_]+)/i)
-  if (telegramMatch) return telegramMatch[1]
-
-  const instagramMatch = url.match(/instagram\.com\/([a-zA-Z0-9._]+)/i)
-  if (instagramMatch) return instagramMatch[1]
-
-  return null
-}
-  // 1. Is this task using the Onchain Engine?
   const isOnchainVerification = newTask.verificationType === 'onchain'
-  
-  // 2. Is this a Social Template (API verified)?
   const isSocialTemplate = newTask.category === 'social'
-  
   const availableCategories = ['social', 'trading', 'swap', 'referral', 'content', 'general']
-  const suggestedTasks = SUGGESTED_TASKS_BY_STAGE[newTask.stage || 'Beginner'] || []
-  const generateSocialTaskTitle = (platform: string, action: string): string => {
-  if (!platform || !action) return ""
-  return `${action.charAt(0).toUpperCase() + action.slice(1)} our ${platform}`
-}
-const getSocialInputLabel = () => {
-    // Fix: Fallback to empty string if undefined
-    const platform = newTask.targetPlatform || "" 
 
-    if (['Twitter'].includes(platform)) return "Target Handle (no @)"
-    if (['Discord', 'Telegram'].includes(platform)) return "Invite Link"
+  const generateSocialTaskTitle = (platform: string, action: string): string => {
+    if (!platform || !action) return ""
+    if (action === 'role') return `Attain Role in ${platform}`
+    if (action === 'message_count') return `Send Messages in ${platform}`
+    return `${action.charAt(0).toUpperCase() + action.slice(1)} our ${platform}`
+  }
+
+  const getSocialInputLabel = () => {
+    const platform = newTask.targetPlatform || "" 
+    if (['Discord', 'Telegram'].includes(platform)) return "Server/Group Invite Link"
     if (['Youtube', 'Instagram', 'Tiktok', 'Website'].includes(platform)) return "Profile / Content URL"
-    return "Target URL / Handle"
-}
+    return "Target Profile/Post URL"
+  }
+
   const showContractInput = ['hold_token', 'hold_nft'].includes(newTask.action || '')
   const showAmountInput = ['hold_token'].includes(newTask.action || '')
   const showDaysInput = ['wallet_age'].includes(newTask.action || '')
   const showTxCountInput = ['tx_count'].includes(newTask.action || '')
 
-  // Timing Validation
   const timingErrors = useMemo(() => {
     const errors: string[] = []
     const now = new Date()
@@ -549,22 +605,10 @@ const getSocialInputLabel = () => {
   const hasUserTask = useMemo(() => newQuest.tasks.some((t: QuestTask) => !t.isSystem), [newQuest.tasks])
   const canFinalize = useMemo(() => timingErrors.length === 0 && hasUserTask && !isDeploying && !isFinalizing, [timingErrors, hasUserTask, isDeploying, isFinalizing])
 
-  // =========================================================
-  // HANDLERS
-  // =========================================================
-
   const handleUseSuggestedTaskInternal = (suggestion: Partial<QuestTask>) => {
     let updated = { ...suggestion }
-
-    // Auto-set targetChainId for Onchain tasks
-    if (suggestion.verificationType === 'onchain') {
-      updated.targetChainId = chainId?.toString() || "8453"
-    }
-
-    // Auto-fix URL for Twitter Quotes
-    if (suggestion.action === 'quote' && suggestion.targetPlatform === 'Twitter') {
-      updated.url = "https://x.com/faucetdrops"
-    }
+    if (suggestion.verificationType === 'onchain') updated.targetChainId = chainId?.toString() || "8453"
+    if (suggestion.action === 'quote' && suggestion.targetPlatform === 'Twitter') updated.url = "https://x.com/FaucetDrops"
 
     setNewTask(prev => ({
       ...prev,
@@ -573,7 +617,21 @@ const getSocialInputLabel = () => {
     }))
   }
 
- const handleDeployAndFinalize = async () => {
+  const checkTelegramBotAdmin = async (channelUrl: string) => {
+    if (!channelUrl || !channelUrl.includes("t.me")) return;
+    setTelegramBotStatus(prev => ({ ...prev, checking: true }));
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/bot/check-telegram-admin`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channelUrl })
+      });
+      const data = await res.json();
+      setTelegramBotStatus({ checking: false, is_admin: data.is_admin, bot_username: data.bot_username || "", message: data.message || "" });
+    } catch {
+      setTelegramBotStatus({ checking: false, is_admin: false, bot_username: "", message: "Check failed" });
+    }
+  };
+
+  const handleDeployAndFinalize = async () => {
     const now = new Date();
     const startTime = new Date(`${newQuest.startDate}T${newQuest.startTime}`);
     if (startTime < now) {
@@ -587,7 +645,6 @@ const getSocialInputLabel = () => {
     try {
         if (!isConnected) throw new Error("Please connect your wallet first.");
 
-        // 1. Save Draft
         const draftPayload = {
             creatorAddress: address,
             title: newQuest.title.trim(),
@@ -596,7 +653,6 @@ const getSocialInputLabel = () => {
             rewardPool: newQuest.rewardPool,
             rewardTokenType: newQuest.rewardTokenType,
             tokenAddress: newQuest.tokenAddress,
-            // Ensure tokenSymbol is sent to draft
             tokenSymbol: newQuest.tokenSymbol, 
             distributionConfig: newQuest.distributionConfig,
             faucetAddress: newQuest.faucetAddress,
@@ -604,14 +660,11 @@ const getSocialInputLabel = () => {
         };
 
         const draftRes = await fetch(`${API_BASE_URL}/api/quests/draft`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(draftPayload)
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draftPayload)
         });
         const draftJson = await draftRes.json();
         const activeDraftId = draftJson.faucetAddress || newQuest.faucetAddress;
 
-        // 2. Deploy Contract
         const currentNetwork = networks.find(n => Number(n.chainId) === Number(chainId));
         const targetFactory = currentNetwork?.factories?.quest;
         if (!targetFactory) throw new Error("Quest Factory not found for this network.");
@@ -620,19 +673,11 @@ const getSocialInputLabel = () => {
         const nowInSeconds = Math.floor(Date.now() / 1000);
         const questEndTime = nowInSeconds + hoursInt * 3600;
 
-        const provider = new BrowserProvider((window as any).ethereum);
+        if (!provider) throw new Error("Wallet provider is not ready.");
         const deployedAddress = await createQuestReward(
-            provider,
-            targetFactory,
-            newQuest.title.trim(),
-            newQuest.tokenAddress,
-            questEndTime,
-            hoursInt,
-            BACKEND_WALLET_ADDRESS
+            provider, targetFactory, newQuest.title.trim(), newQuest.tokenAddress, questEndTime, hoursInt, BACKEND_WALLET_ADDRESS
         );
 
-        // 3. Finalize
-        // We generate a local slug as fallback, but we will prefer the server-side slug
         const baseSlug = newQuest.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
         const localSlug = `${baseSlug}-${deployedAddress.slice(-4).toLowerCase()}`;
 
@@ -649,56 +694,25 @@ const getSocialInputLabel = () => {
             claimWindowHours: hoursInt,
             tasks: newQuest.tasks,
             stagePassRequirements,
-            enforceStageRules: newQuest.enforceStageRules ?? false
+            enforceStageRules: false
         };
 
         const res = await fetch(`${API_BASE_URL}/api/quests/finalize`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(finalizePayload)
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(finalizePayload)
         });
 
         if (!res.ok) throw new Error("Finalization failed.");
-        
         const finalizeResult = await res.json();
 
         toast.success("Quest published successfully!");
-        
-        // REDIRECT using the slug from database response
-        if (finalizeResult.slug) {
-            router.push(`/quest/${finalizeResult.slug}`);
-        } else {
-            router.push(`/quest/${deployedAddress}`);
-        }
+        if (finalizeResult.slug) router.push(`/quest/${finalizeResult.slug}`);
+        else router.push(`/quest/${deployedAddress}`);
     } catch (e: any) {
         console.error("Deployment Error:", e);
         toast.error(e.message || "Deployment failed");
         setIsDeploying(false);
     }
-};
-
-  const isStageUnlocked = (targetStage: TaskStage): boolean => {
-    if (!enforceRules) return true
-    if (editingTask && editingTask.stage === targetStage) return true
-    const targetIndex = TASK_STAGES.indexOf(targetStage)
-    if (targetIndex === 0) return true
-    for (let i = 0; i < targetIndex; i++) {
-      const prevStage = TASK_STAGES[i]
-      const prevCount = stageTaskCounts[prevStage]
-      const minRequired = STAGE_TASK_REQUIREMENTS[prevStage].min
-      if (prevCount < minRequired) return false
-    }
-    return true
-  }
-
-  const currentStage = newTask.stage || 'Beginner'
-  const currentStageReq = STAGE_TASK_REQUIREMENTS[currentStage]
-  const currentStageCount = stageTaskCounts[currentStage]
-  const isAtMax = enforceRules && currentStageCount >= currentStageReq.max
-
-  // =========================================================
-  // RENDER
-  // =========================================================
+  };
 
   return (
     <div className="space-y-10 max-w-7xl mx-auto py-8 px-4">
@@ -735,11 +749,18 @@ const getSocialInputLabel = () => {
             </div>
           )}
           <div className="space-y-2">
-            <Label className="text-muted-foreground">Claim Window (hours after end)</Label>
-            <div className="flex items-center gap-4">
-              <Input type="number" className="w-32 bg-background/50" value={newQuest.claimWindowHours || "168"} onChange={e => setNewQuest((p:any) => ({...p, claimWindowHours: e.target.value}))} />
-              <span className="text-xs text-muted-foreground">Typically 168 hours (7 days)</span>
-            </div>
+            <Label className="text-muted-foreground">Claim Window (Duration after end)</Label>
+            <Select value={newQuest.claimWindowHours || "168"} onValueChange={v => setNewQuest((p:any) => ({...p, claimWindowHours: v}))}>
+                <SelectTrigger className="bg-background/50 w-full sm:w-48"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="24">24 Hours</SelectItem>
+                    <SelectItem value="72">3 Days</SelectItem>
+                    <SelectItem value="120">5 Days</SelectItem>
+                    <SelectItem value="168">7 Days</SelectItem>
+                    <SelectItem value="336">14 Days</SelectItem>
+                    <SelectItem value="504">21 Days</SelectItem>
+                </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -759,33 +780,18 @@ const getSocialInputLabel = () => {
             </CardHeader>
 
             <CardContent className="space-y-5">
-              {/* Strict Mode */}
-              <div className="flex items-start gap-3 p-3 border rounded-lg bg-muted/40">
-                <Switch className="mt-1" checked={enforceRules} onCheckedChange={(c) => setNewQuest((p:any) => ({ ...p, enforceStageRules: c }))} />
-                <div>
-                  <Label className="font-semibold text-sm">Strict Progression Mode</Label>
-                  <p className="text-xs text-muted-foreground">Enforces minimum tasks per stage before unlocking next.</p>
-                </div>
-              </div>
-
               {/* Stage & Category */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs font-medium uppercase text-muted-foreground">Target Stage</Label>
-                  <Select value={newTask.stage || "Beginner"} onValueChange={(v: TaskStage) => setNewTask(p => ({ ...p, stage: v }))} disabled={!!editingTask?.isSystem}>
+                  <Select value={newTask.stage || "Beginner"} onValueChange={(v: TaskStage) => setNewTask(p => ({ ...p, stage: v, points: getDefaultPointsForStage(v) }))} disabled={!!editingTask?.isSystem}>
                     <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {TASK_STAGES.map(stage => {
-                        const unlocked = isStageUnlocked(stage)
-                        return (
-                          <SelectItem key={stage} value={stage} disabled={enforceRules && !unlocked}>
-                            <div className="flex items-center gap-2">
-                              {enforceRules && !unlocked ? <Lock className="h-3 w-3 text-muted-foreground"/> : null}
-                              <span>{stage}</span>
-                            </div>
-                          </SelectItem>
-                        )
-                      })}
+                      {TASK_STAGES.map(stage => (
+                        <SelectItem key={stage} value={stage}>
+                          <div className="flex items-center gap-2"><span>{stage}</span></div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -812,54 +818,67 @@ const getSocialInputLabel = () => {
                 </div>
               )}
 
-              
               {/* Task Configuration */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium uppercase text-muted-foreground">Task Details</Label>
-                  {isSocialTemplate ? (
-                    <div className="p-3 border border-blue-500/20 rounded-lg bg-blue-500/10 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs text-blue-400">Platform</Label>
-                          <Select value={newTask.targetPlatform} onValueChange={(v:any) => setNewTask(p => ({ ...p, targetPlatform: v, title: generateSocialTaskTitle(v, p.action || '') }))}>
-                            <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
-                            <SelectContent>{SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-blue-400">Action</Label>
-                          <Select value={newTask.action} onValueChange={(v:any) => setNewTask(p => ({ ...p, action: v, title: generateSocialTaskTitle(p.targetPlatform || '', v) }))}>
-                            <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
-                            <SelectContent>{SOCIAL_ACTIONS.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-medium uppercase text-muted-foreground">Task Details</Label>
+                {isSocialTemplate ? (
+                  <div className="p-3 border border-blue-500/20 rounded-lg bg-blue-500/10 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs text-blue-400">Platform</Label>
+                        <Select value={newTask.targetPlatform} onValueChange={(v:any) => setNewTask(p => ({ ...p, targetPlatform: v, title: generateSocialTaskTitle(v, p.action || '') }))}>
+                          <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
+                          <SelectContent>{SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                        </Select>
                       </div>
-                      {/* CHANGED: Removed 'disabled' and added 'onChange' */}
-                      <Input 
-                        value={newTask.title || ""} 
-                        onChange={(e) => setNewTask(p => ({ ...p, title: e.target.value }))}
-                        className="h-8 bg-background/50 border-blue-500/30 text-sm font-medium" 
-                      />
+                    <div className="space-y-1">
+                      <Label className="text-xs text-blue-400">Action</Label>
+                      <Select value={newTask.action} onValueChange={(v:any) => setNewTask(p => ({ ...p, action: v, title: generateSocialTaskTitle(p.targetPlatform || '', v) }))}>
+                        <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {getAvailableActions(newTask.targetPlatform || 'Twitter').map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <Input className="bg-background" placeholder="Task Title (e.g., Hold 100 USDC)" value={newTask.title || ""} onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))} disabled={!!editingTask?.isSystem} />
-                      
-                      {/* Onchain Action Selector */}
-                      {isOnchainVerification && (
-                        <div className="p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg space-y-2">
-                          <Label className="text-xs text-purple-600 font-bold flex items-center gap-2"><Zap className="h-3 w-3"/> On-Chain Requirement</Label>
-                          <Select value={newTask.action} onValueChange={(v) => setNewTask(p => ({ ...p, action: v }))}>
-                            <SelectTrigger className="bg-background border-purple-500/30"><SelectValue placeholder="Select Requirement Type" /></SelectTrigger>
-                            <SelectContent>
-                              {ONCHAIN_ACTIONS.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
                     </div>
-                  )}
+                    <Input 
+                      value={newTask.title || ""} 
+                      onChange={(e) => setNewTask(p => ({ ...p, title: e.target.value }))}
+                      className="h-8 bg-background/50 border-blue-500/30 text-sm font-medium" 
+                      placeholder="Task Title"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Input className="bg-background" placeholder="Task Title (e.g., Hold 100 USDC)" value={newTask.title || ""} onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))} disabled={!!editingTask?.isSystem} />
+                    
+                    {/* Onchain Action Selector */}
+                    {isOnchainVerification && (
+                      <div className="p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg space-y-2">
+                        <Label className="text-xs text-purple-600 font-bold flex items-center gap-2"><Zap className="h-3 w-3"/> On-Chain Requirement</Label>
+                        <Select value={newTask.action} onValueChange={(v) => setNewTask(p => ({ ...p, action: v }))}>
+                          <SelectTrigger className="bg-background border-purple-500/30"><SelectValue placeholder="Select Requirement Type" /></SelectTrigger>
+                          <SelectContent>
+                            {ONCHAIN_ACTIONS.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Custom Task Description Field */}
+                <div className="pt-2">
+                   <Label className="text-xs font-medium uppercase text-muted-foreground">Task Description & Instructions</Label>
+                   <Textarea
+                     className="bg-background mt-1 min-h-[60px] text-sm"
+                     placeholder="e.g. Share link to profile, upload screenshot of tx, sign up on our website..."
+                     value={newTask.description || ""}
+                     onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))}
+                     disabled={!!editingTask?.isSystem}
+                   />
                 </div>
+              </div>
 
               {/* Dynamic Inputs */}
               <div className="grid gap-4 md:grid-cols-2">
@@ -868,48 +887,184 @@ const getSocialInputLabel = () => {
                   <Input type="number" className="bg-background" value={newTask.points ?? ""} onChange={e => setNewTask((p:any) => ({ ...p, points: e.target.value }))} disabled={!!editingTask?.isSystem} />
                 </div>
 
-                {/* --- FIX START: SOCIAL INPUTS --- */}
                 {isSocialTemplate && (
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center">
-                      {newTask.targetPlatform === 'Twitter' ? <XIcon className="h-3 w-3 text-blue-400"/> : <LinkIcon className="h-3 w-3"/>}
-                      {getSocialInputLabel()}
-                    </Label>
-                    <Input 
-                      className="bg-background" 
-                      placeholder={newTask.targetPlatform === 'Twitter' ? "Paste link or handle" : "https://..."}
-                      value={newTask.url || newTask.targetHandle || ""} 
-                      onChange={e => {
-                        const val = e.target.value.trim()
-                        
-                        // 1. Try to extract handle if they paste a full URL
-                        const extracted = extractHandleFromUrl(val)
-                        
-                        setNewTask((p: any) => ({ 
-                          ...p, 
-                          // If it's a URL, save it. If they just typed a handle, don't force https yet
-                          url: val.includes('.') ? val : p.url,
-                          // If we found a handle in the URL, use it. Otherwise, use the raw text as handle
-                          targetHandle: extracted || val.replace('@', '')
-                        }))
-                      }} 
-                      onBlur={() => {
-                        // 2. Final normalization when user finishes typing
-                        if (newTask.url && newTask.url.includes('.')) {
-                          const finalUrl = normalizeUrl(newTask.url)
-                          setNewTask((p: any) => ({ ...p, url: finalUrl }))
-                        }
-                      }}
-                    />
-                    {newTask.targetHandle && (
-                      <p className="text-[10px] text-blue-500 font-medium">
-                        Detected Handle: @{newTask.targetHandle}
-                      </p>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center">
+                        <LinkIcon className="h-3 w-3"/> {getSocialInputLabel()}
+                      </Label>
+                      <Input 
+                        className="bg-background" 
+                        placeholder="https://..."
+                        value={newTask.url || ""} 
+                        onChange={e => setNewTask((p: any) => ({ ...p, url: e.target.value }))} 
+                        onBlur={() => {
+                          if (newTask.url && newTask.url.includes('.')) {
+                            setNewTask((p: any) => ({ ...p, url: normalizeUrl(p.url) }))
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {/* Discord Role ID Field */}
+                    {newTask.targetPlatform === 'Discord' && newTask.action === 'role' && (
+                       <div className="space-y-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                        <Label className="text-xs font-bold text-indigo-500 flex items-center gap-1">
+                          <ShieldCheck className="h-3 w-3"/> Required Role ID
+                        </Label>
+                        <Input 
+                          className="bg-background" 
+                          placeholder="e.g. 104239849202392"
+                          value={newTask.targetHandle || ""} 
+                          onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value }))} 
+                        />
+                        <p className="text-[10px] text-muted-foreground">Enable Developer Mode in Discord, right-click the Role in server settings, and select "Copy Role ID".</p>
+                      </div>
+                    )}
+
+                    {/* Telegram Message Count Field */}
+                    {newTask.targetPlatform === 'Telegram' && newTask.action === 'message_count' && (
+                       <div className="space-y-2 p-3 bg-sky-500/10 border border-sky-500/20 rounded-lg">
+                        <Label className="text-xs font-bold text-sky-600 flex items-center gap-1">
+                          <MessageSquareText className="h-3 w-3"/> Required Message Count
+                        </Label>
+                        <Input 
+                          type="number"
+                          className="bg-background" 
+                          placeholder="e.g. 10"
+                          value={newTask.minTxCount || ""} 
+                          onChange={e => setNewTask((p: any) => ({ ...p, minTxCount: e.target.value }))} 
+                        />
+                        <p className="text-[10px] text-muted-foreground">Users must send this many messages in the group to pass.</p>
+                      </div>
+                    )}
+
+                    {newTask.targetPlatform === 'Twitter' && ['quote', 'comment'].includes(newTask.action || '') && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium uppercase text-muted-foreground">Target Tag/Handle</Label>
+                        <Input 
+                          className="bg-background" 
+                          placeholder="@FaucetDrops"
+                          value={newTask.targetHandle || ""} 
+                          onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value.replace('@', '') }))} 
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* DISCORD ADD BOT HELPER */}
+                {newTask.targetPlatform === 'Discord' && newTask.verificationType === 'auto_social' && (
+                  <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
+                    discordBotStatus.is_in_server === true
+                      ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800"
+                      : discordBotStatus.is_in_server === false
+                      ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800"
+                      : "bg-indigo-50 border-indigo-200 text-indigo-800 dark:bg-indigo-900/20 dark:border-indigo-800"
+                  }`}>
+                    {discordBotStatus.is_in_server === true ? (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <span><strong>✅ Bot is in your server.</strong> Auto-verification is fully enabled!</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex items-start gap-3">
+                          {discordBotStatus.is_in_server === false ? (
+                            <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <ShieldCheck className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <strong className="block mb-1 text-base">
+                              {discordBotStatus.is_in_server === false 
+                                ? "Bot is not in the server yet!" 
+                                : "Action Required: Add Discord Bot"}
+                            </strong>
+                            To verify server memberships and roles automatically, our bot must be invited to your server.
+                            <ol className="mt-2 space-y-1 list-decimal list-inside text-xs opacity-90">
+                              <li>Paste your Server Invite Link into the URL field above</li>
+                              <li>Click <strong>Add Bot</strong> below to invite it to that server</li>
+                              <li>Click <strong>Verify Bot Status</strong> to confirm it worked</li>
+                            </ol>
+                          </div>
+                        </div>
+            
+                        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
+                          <Button type="button" variant="outline" size="sm" className="text-xs h-8 bg-white dark:bg-slate-900"
+                            onClick={() => window.open(`https://discord.com/oauth2/authorize?client_id=1466125172342915145&permissions=8&integration_type=0&scope=bot`, "_blank")}
+                          >
+                            <Plus className="h-3 w-3 mr-2" /> Add Bot to Discord Server
+                          </Button>
+            
+                          <Button type="button" size="sm" className={`text-xs h-8 ${discordBotStatus.is_in_server === false ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}
+                            onClick={() => checkDiscordBotStatus(newTask.url || "")} disabled={discordBotStatus.checking || !newTask.url}
+                          >
+                            {discordBotStatus.checking ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Send className="h-3 w-3 mr-2" />}
+                            {discordBotStatus.is_in_server === false ? "Check Status Again" : "Verify Bot Status"}
+                          </Button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
 
-                {/* Conditional Fields based on Action */}
+                {/* TELEGRAM ADD BOT HELPER */}
+                {newTask.targetPlatform === 'Telegram' && newTask.verificationType === 'auto_social' && (
+                  <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
+                    telegramBotStatus.is_admin === true
+                      ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800"
+                      : telegramBotStatus.is_admin === false
+                      ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800"
+                      : "bg-sky-50 border-sky-200 text-sky-800 dark:bg-sky-900/20 dark:border-sky-800"
+                  }`}>
+                    {telegramBotStatus.is_admin === true ? (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <span><strong>✅ Bot is admin.</strong> Auto-verification is fully enabled!</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex items-start gap-3">
+                          {telegramBotStatus.is_admin === false ? (
+                            <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <ShieldCheck className="h-5 w-5 text-sky-600 shrink-0 mt-0.5" />
+                          )}
+                          <div>
+                            <strong className="block mb-1 text-base">
+                              {telegramBotStatus.is_admin === false 
+                                ? "Bot is not an admin yet!" 
+                                : "Action Required: Add Bot to Telegram"}
+                            </strong>
+                            To enable auto-verification, you must add our bot to your channel/group as an administrator.
+                            {telegramBotStatus.is_admin === false && (
+                              <p className="mt-2 text-xs font-semibold text-orange-600 dark:text-orange-400">
+                                Without this, submissions will go to manual review.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+            
+                        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
+                          <Button type="button" variant="outline" size="sm" className="text-xs h-8 bg-white dark:bg-slate-900"
+                            onClick={() => window.open(`https://t.me/${telegramBotStatus.bot_username || "FaucetDropsauth_bot"}?startgroup=true`, "_blank")}
+                          >
+                            <Plus className="h-3 w-3 mr-2" /> Add Bot to Telegram
+                          </Button>
+            
+                          <Button type="button" size="sm" className={`text-xs h-8 ${telegramBotStatus.is_admin === false ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-sky-600 hover:bg-sky-700 text-white"}`}
+                            onClick={() => checkTelegramBotAdmin(newTask.url || "")} disabled={telegramBotStatus.checking || !newTask.url}
+                          >
+                            {telegramBotStatus.checking ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Send className="h-3 w-3 mr-2" />}
+                            {telegramBotStatus.is_admin === false ? "Check Status Again" : "Verify Bot is Admin"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {showContractInput && (
                   <div className="space-y-2">
                     <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center"><Code className="h-3 w-3"/> Contract Address</Label>
@@ -944,7 +1099,7 @@ const getSocialInputLabel = () => {
               </div>
 
               {/* Verification Method */}
-              <div className="space-y-2">
+              <div className="space-y-2 pt-2 border-t">
                 <Label className="text-xs font-medium uppercase text-muted-foreground flex justify-between">
                   Verification Method
                   {newTask.verificationType === 'none' && <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20 text-[10px]">Auto-complete</Badge>}
@@ -961,9 +1116,9 @@ const getSocialInputLabel = () => {
                   <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="manual_link">Manual Link Submission</SelectItem>
-                    <SelectItem value="manual_upload">Manual Proof Upload</SelectItem>
-                    <SelectItem value="auto_social" disabled={!['social','referral'].includes(newTask.category || '')}>API Auto-Verify (Socials)</SelectItem>
-                    {/* NEW OPTION */}
+                    <SelectItem value="manual_upload">Manual Proof Upload (Image)</SelectItem>
+                    <SelectItem value="manual_link_image">Manual Link & Image Upload</SelectItem>
+                    <SelectItem value="auto_social" disabled={!['social','referral'].includes(newTask.category || '')}>Auto-Verify (Socials)</SelectItem>
                     <SelectItem value="onchain" className="font-bold text-purple-600">⚡ On-Chain Verification Engine</SelectItem>
                     <SelectItem value="none">Instant Reward (Auto-Complete)</SelectItem>
                   </SelectContent>
@@ -973,33 +1128,86 @@ const getSocialInputLabel = () => {
                     <CheckCircle2 className="h-3 w-3"/> Automatic check on {networks.find(n => n.chainId.toString() === chainId?.toString())?.name || "Current Chain"}.
                   </p>
                 )}
+                {/* Fallback Warning for Unsupported Auto-Verify */}
+              {newTask.verificationType === 'auto_social' && !['Twitter', 'Discord', 'Telegram'].includes(newTask.targetPlatform || '') && (
+                <div className="p-3 mt-2 bg-orange-500/10 border border-orange-500/20 rounded-lg text-xs flex flex-col gap-2 text-orange-600 dark:text-orange-400">
+                    <div className="flex items-start">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mr-1.5 mt-0.5" />
+                      <span>Auto-verify is not fully supported for <b>{newTask.targetPlatform}</b>. Participants will automatically be asked to submit a link and image as a fallback.</span>
+                    </div>
+                    
+                    {/* Smart Recommendation Box */}
+                    <div className="ml-5 p-2 bg-orange-500/10 rounded border border-orange-500/10">
+                      <span className="font-semibold text-orange-700 dark:text-orange-300">💡 Recommended Method: </span>
+                      <span className="font-medium text-orange-800 dark:text-orange-200">
+                      {['Youtube', 'Instagram', 'Tiktok', 'Facebook'].includes(newTask.targetPlatform || '') 
+                          ? 'Manual Link & Image Upload' 
+                          : ['Linkedin', 'Thread', 'Farcaster'].includes(newTask.targetPlatform || '') 
+                          ? 'Manual Link Submission'
+                          : newTask.targetPlatform === 'Website'
+                          ? 'Instant Reward (for visits) or Manual Proof Upload'
+                          : 'Manual Link & Image Upload'}
+                      </span>
+                    </div>
+                </div>
+              )}
+            
+              {/* Warning for Invalid On-Chain Action or Social Category Mismatch */}
+              {newTask.verificationType === 'onchain' && (newTask.category === 'social' || !['hold_token', 'hold_nft', 'wallet_age', 'tx_count'].includes(newTask.action || '')) && (
+                <div className="p-3 mt-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs flex flex-col gap-2 text-purple-700 dark:text-purple-300">
+                    <div className="flex items-start">
+                      <AlertTriangle className="h-4 w-4 shrink-0 mr-1.5 mt-0.5" />
+                      <span>
+                        <b>Action Mismatch:</b> {newTask.category === 'social' 
+                          ? "Social tasks cannot use on-chain verification." 
+                          : "On-chain verification is only supported for specific on-chain requirements (Hold Token, Hold NFT, Wallet Age, or Tx Count)."}
+                      </span>
+                    </div>
+                    <div className="ml-5 p-2 bg-purple-500/10 rounded border border-purple-500/10">                     
+                      <span className="font-semibold text-purple-700 dark:text-purple-300">💡 Recommended Fix: </span>
+                      <span className="font-medium text-purple-800 dark:text-purple-200">
+                        {newTask.category === 'social' 
+                            ? 'Change Verification Method to "Auto-Verify (Socials)" or "Manual Link & Image Upload"' 
+                            : ['trading', 'swap'].includes(newTask.category || '') 
+                            ? 'Select a valid On-Chain Action from the dropdown above, OR change Verification to "Manual Link Submission"'
+                            : newTask.category === 'content'
+                            ? 'Change Verification Method to "Manual Link Submission" or "Manual Proof Upload (Image)"'
+                            : 'Change Verification Method to "Manual Link Submission" or "Instant Reward"'}
+                      </span>
+                    </div>
+                </div>
+              )}
               </div>
 
               {/* Action Buttons */}
               <div className="pt-4 flex items-center justify-end gap-3 border-t">
-                {editingTask && <Button variant="ghost" onClick={() => { setEditingTask(null); setNewTask(initialNewTaskForm) }}>Cancel</Button>}
+                {editingTask && <Button variant="ghost" onClick={() => { setEditingTask(null); setNewTask({ ...initialNewTaskForm, points: 100 }) }}>Cancel</Button>}
                 {editingTask?.isSystem ? (
                   <div className="text-xs text-yellow-600 bg-yellow-50 px-3 py-1 rounded">System tasks are read-only</div>
                 ) : (
                   <Button 
                     onClick={async () => {
-                      // CLONE the current task to modify it before saving
                       let t = { ...newTask } as QuestTask
 
-                      // 1. Force URL normalization one last time
-                      if (t.url && t.url.includes('.')) {
-                        t.url = normalizeUrl(t.url)
-                      }
+                      if (t.url && t.url.includes('.')) t.url = normalizeUrl(t.url)
 
-                      // 2. Ensure Handle is present for 'quote' or 'tag' related actions
-                      if (t.action === 'quote' || t.action === 'comment') {
+                      if (t.targetPlatform === 'Twitter' && (t.action === 'quote' || t.action === 'comment')) {
                         if (!t.targetHandle) {
                             toast.error("A target handle is required for tag verification.")
                             return
                         }
                       }
 
-                      // Standard Validation
+                      if (t.targetPlatform === 'Discord' && t.action === 'role' && !t.targetHandle) {
+                        toast.error("Role ID is required for Discord Role verification.");
+                        return;
+                      }
+
+                      if (t.targetPlatform === 'Telegram' && t.action === 'message_count' && (!t.minTxCount || Number(t.minTxCount) < 1)) {
+                        toast.error("A valid message count threshold is required.");
+                        return;
+                      }
+
                       if (!t.title || !t.points) return;
                       
                       try {
@@ -1011,13 +1219,14 @@ const getSocialInputLabel = () => {
                           toast.success("Task added")
                         }
                       } catch { toast.error("Failed to save task") }
-                      finally { setEditingTask(null); setNewTask(initialNewTaskForm) }
+                      finally { setEditingTask(null); setNewTask({ ...initialNewTaskForm, points: 100 }) }
                     }}
                     disabled={
                       !newTask.title || 
                       !newTask.points || 
-                      (enforceRules && !editingTask && isAtMax) ||
-                      (showContractInput && !newTask.targetContractAddress?.trim() && newTask.action !== 'hold_token')
+                      (showContractInput && !newTask.targetContractAddress?.trim() && newTask.action !== 'hold_token') ||
+                      (newTask.verificationType === 'onchain' && newTask.category === 'social') || // <-- Blocks Social + Onchain
+                      (newTask.verificationType === 'onchain' && !['hold_token', 'hold_nft', 'wallet_age', 'tx_count'].includes(newTask.action || ''))
                     }
                   >
                     {editingTask ? "Save Changes" : <><Plus className="mr-2 h-4 w-4" /> Add Task</>}
@@ -1034,7 +1243,7 @@ const getSocialInputLabel = () => {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center justify-between">
                 <span className="flex items-center gap-2"><Trophy className="h-5 w-5 text-yellow-500"/> Stages</span>
-                <Badge variant="outline">{newQuest.tasks.length} Tasks</Badge>
+                <Badge variant="outline">{newQuest.tasks.filter((t: any) => !t.isSystem).length} Tasks</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto pr-1 space-y-6">
@@ -1042,47 +1251,44 @@ const getSocialInputLabel = () => {
                 const totalPoints = stageTotals[stage] || 0
                 const count = stageTaskCounts[stage] || 0
                 const reqPass = stagePassRequirements[stage]
-                const isLocked = enforceRules && count < STAGE_TASK_REQUIREMENTS[stage].min
-                const stageTasks = newQuest.tasks.filter((t: QuestTask) => t.stage === stage)
+                // Only showing custom user-created tasks in this view
+                const stageTasks = newQuest.tasks.filter((t: QuestTask) => t.stage === stage && !t.isSystem)
 
                 return (
                   <div key={stage} className={`relative pl-4 ${index !== TASK_STAGES.length - 1 ? 'border-l-2 border-muted pb-6' : ''}`}>
-                    <div className={`absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 bg-background ${isLocked ? 'border-muted' : 'border-primary'}`} />
+                    <div className={`absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 bg-background border-primary`} />
                     
-                    <div className={`mb-3 p-3 rounded-lg border ${isLocked ? 'bg-muted/30 border-muted' : 'bg-card dark:bg-slate-900 border-border shadow-sm'}`}>
+                    <div className={`mb-3 p-3 rounded-lg border bg-card dark:bg-slate-900 border-border shadow-sm`}>
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h4 className={`text-sm font-semibold ${isLocked ? 'text-muted-foreground' : 'text-foreground'}`}>{stage}</h4>
+                          <h4 className="text-sm font-semibold text-foreground">{stage}</h4>
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{count} Tasks • {totalPoints} Pts</p>
                         </div>
-                        {isLocked ? <Lock className="h-4 w-4 text-muted-foreground/50"/> : <Unlock className="h-4 w-4 text-green-500"/>}
+                        <Unlock className="h-4 w-4 text-green-500"/>
                       </div>
                       <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
                         <Label className="text-[10px] whitespace-nowrap text-muted-foreground flex items-center gap-1"><Percent className="h-3 w-3"/> Pass Req (70%)</Label>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="font-mono text-xs bg-muted/30">{reqPass} Pts</Badge>
-                          <Lock className="h-3 w-3 text-muted-foreground/40" />
                         </div>
                       </div>
                     </div>
 
                     <div className="space-y-1.5">
                       {stageTasks.map((t: QuestTask) => (
-                        <div key={t.id} className={`group flex items-center justify-between p-2 rounded border transition-all ${t.isSystem ? 'bg-blue-50/50 border-blue-100 dark:bg-blue-900/10' : 'bg-muted/20 hover:bg-muted/40'}`}>
+                        <div key={t.id} className="group flex items-center justify-between p-2 rounded border transition-all bg-muted/20 hover:bg-muted/40">
                           <div className="flex items-center gap-2 overflow-hidden">
-                            {t.isSystem ? (t.isRecurring ? <CalendarClock className="h-3 w-3 text-blue-500"/> : <Users className="h-3 w-3 text-blue-500"/>) : <GripVertical className="h-3 w-3 text-muted-foreground/30"/>}
+                            <GripVertical className="h-3 w-3 text-muted-foreground/30"/>
                             <span className={`text-xs truncate text-foreground/90 ${t.required ? 'font-medium' : ''}`}>{t.title}</span>
                             {t.required && <Badge variant="destructive" className="h-1.5 w-1.5 rounded-full p-0" />}
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-mono text-muted-foreground">{t.points}</span>
                             <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
-                              {!t.isSystem && (
                                 <>
                                   <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => { setEditingTask(t); setNewTask(t) }}><Settings className="h-3 w-3 text-muted-foreground"/></Button>
                                   <Button size="icon" variant="ghost" className="h-5 w-5 hover:bg-red-500/10 text-destructive" onClick={async () => await handleRemoveTask(t.id)}><Trash2 className="h-3 w-3"/></Button>
                                 </>
-                              )}
                             </div>
                           </div>
                         </div>

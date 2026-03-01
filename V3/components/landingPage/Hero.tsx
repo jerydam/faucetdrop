@@ -196,6 +196,7 @@ const Drops: React.FC = () => {
         ))}
       </div>
 
+      
       {/* Main Faucet Image */}
       <div 
         ref={imageRef}

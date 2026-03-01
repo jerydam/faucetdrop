@@ -9,6 +9,7 @@ import {
   CardTitle,
   CardFooter,
 } from "@/components/ui/card";
+ import { QuestEditPanel } from "@/components/quest/questedit";
 import { QUEST_ABI } from "@/lib/abis";
 import { claimNoCodeViaBackend } from "@/lib/backend-service";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ import {
   UserPlus,
   LogIn,
   ArrowLeftRight,
+  Rocket,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
@@ -67,7 +69,7 @@ import { Contract, BrowserProvider, parseEther } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
-const API_BASE_URL = "https://fauctdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
 // ============= TYPES =============
 export type VerificationType =
@@ -343,7 +345,7 @@ const totalPoints = participantData?.points || 0;
 };
 
   const handleXShareAction = (task: QuestTask) => {
-    const targetHandle = "@faucetdrops";
+    const targetHandle = "@FaucetDrops";
     // Constructing the message with the user's referral link
     const referralLink = `${window.location.origin}${window.location.pathname}?ref=${participantData?.referral_id}`;
     
@@ -683,6 +685,19 @@ const handleSubmitTask = async () => {
   if (!selectedTask || !userWalletAddress) return;
   setSubmittingTaskId(selectedTask.id);
 
+  // Helper: cancel a submission so the task goes back to "available"
+  const cancelSubmission = async (submissionId: string) => {
+    try {
+      await fetch(
+        `${API_BASE_URL}/api/quests/${faucetAddress}/submissions/${submissionId}`,
+        { method: "DELETE" }
+      );
+    } catch {
+      // Best-effort — even if this fails the user can reload
+    }
+    await loadUserProgress(); // Re-render task as "available"
+  };
+
   try {
     const formData = new FormData();
     formData.append("walletAddress", userWalletAddress);
@@ -696,67 +711,174 @@ const handleSubmitTask = async () => {
 
     formData.append("submittedData", finalProofUrl || "");
 
+    // Create the submission record
     const response = await fetch(
       `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
-      {
-        method: "POST",
-        body: formData,
-      }
+      { method: "POST", body: formData }
     );
     const result = await response.json();
-
     if (!result.success) throw new Error(result.message || "Failed to submit task");
 
-    // CASE 1: AUTO SOCIAL (Twitter/X Bot)
-    if (selectedTask.verificationType === "auto_social") {
+    const submissionId = result.submissionId;
+
+    // ─────────────────────────────────────────────────────────
+    // CASE 1: TELEGRAM AUTO-VERIFY
+    // ─────────────────────────────────────────────────────────
+    if (
+      selectedTask.verificationType === "auto_social" &&
+      selectedTask.targetPlatform === "Telegram"
+    ) {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-telegram`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          faucetAddress,
+          walletAddress: userWalletAddress,
+          taskUrl: selectedTask.url,
+          taskAction: selectedTask.action,
+        }),
+      });
+      const verifyJson = await verifyRes.json();
+
+      if (verifyJson.verified) {
+        toast.success("✅ Telegram membership verified! Points awarded.");
+        await loadUserProgress();
+        const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+        const lbJson = await lbRes.json();
+        if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+        setShowSubmitModal(false);
+        setSubmissionData({ proofUrl: "", notes: "", file: null });
+      } else {
+        await cancelSubmission(submissionId);
+
+        if (verifyJson.reason === "telegram_not_linked") {
+          toast.error("⚠️ Connect your Telegram in Profile Settings first.", {
+            action: {
+              label: "Open Profile",
+              onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+            },
+          });
+        } else if (verifyJson.reason === "not_member") {
+          toast.error("❌ You are not a member of this channel yet. Join first then try again.");
+        } else if (verifyJson.reason === "bot_not_admin") {
+          toast.error("❌ Bot verification unavailable for this channel. Contact the quest creator.");
+        } else {
+          toast.error("❌ " + (verifyJson.message || "Verification failed. Please try again."));
+        }
+      }
+
+    // ─────────────────────────────────────────────────────────
+    // CASE 1.5: DISCORD AUTO-VERIFY (NEW!)
+    // ─────────────────────────────────────────────────────────
+    } else if (
+      selectedTask.verificationType === "auto_social" &&
+      selectedTask.targetPlatform === "Discord"
+    ) {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-discord`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          faucetAddress,
+          walletAddress: userWalletAddress,
+          taskId: selectedTask.id,          // Crucial for Role ID lookup
+          taskUrl: selectedTask.url,        // The Discord invite link
+          taskAction: selectedTask.action,  // 'join' or 'role'
+        }),
+      });
+      const verifyJson = await verifyRes.json();
+
+      if (verifyJson.verified) {
+        toast.success(verifyJson.message || "✅ Discord task verified! Points awarded.");
+        await loadUserProgress();
+        const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+        const lbJson = await lbRes.json();
+        if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+        setShowSubmitModal(false);
+        setSubmissionData({ proofUrl: "", notes: "", file: null });
+      } else {
+        // Verification failed — cancel submission so user can retry
+        await cancelSubmission(submissionId);
+
+        if (verifyJson.reason === "discord_not_linked") {
+          toast.error("⚠️ Connect your Discord in Profile Settings first.", {
+            action: {
+              label: "Open Profile",
+              onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+            },
+          });
+        } else if (verifyJson.reason === "missing_role") {
+          toast.error(verifyJson.message || "❌ You do not have the required role yet.");
+        } else if (verifyJson.reason === "not_member") {
+          toast.error("❌ You have not joined this Discord server yet.");
+        } else if (verifyJson.reason === "bot_not_in_server") {
+          toast.error("❌ The FaucetDrops Bot is not in this server. Contact the creator.");
+        } else {
+          toast.error("❌ " + (verifyJson.message || "Verification failed. Please try again."));
+        }
+      }
+
+    // ─────────────────────────────────────────────────────────
+    // CASE 2: TWITTER & OTHER AUTO-VERIFY (FALLBACK)
+    // ─────────────────────────────────────────────────────────
+    } else if (selectedTask.verificationType === "auto_social") {
       const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          submissionId: result.submissionId,
-          faucetAddress: faucetAddress,
+          submissionId,
+          faucetAddress,
           walletAddress: userWalletAddress,
           handle: userProfile?.twitter_handle || userProfile?.username || "",
           proofUrl: finalProofUrl,
           taskType: selectedTask.action,
         }),
-      });
+      });  const verifyJson = await verifyRes.json();
 
-      const verifyJson = await verifyRes.json();
       if (verifyJson.verified) {
-        toast.success("Task verified! Points added.");
+        toast.success("✅ Task verified! Points added.");
+        await loadUserProgress();
+        const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+        const lbJson = await lbRes.json();
+        if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+        setShowSubmitModal(false);
+        setSubmissionData({ proofUrl: "", notes: "", file: null });
       } else {
-        toast.error(verifyJson.message || "Verification failed.");
+        // Verification failed — cancel so user can retry
+        await cancelSubmission(submissionId);
+        toast.error("❌ " + (verifyJson.message || "Verification failed. Complete the action then try again."));
       }
-    } 
-    
-    // CASE 2: NO VERIFICATION (Watch/Visit)
-    // If the backend is set to auto-approve 'none' types, we just need to refresh
-    else if (selectedTask.verificationType === "none") {
-      toast.success("Task completed! Points added.");
-    } 
-    
-    // CASE 3: MANUAL
-    else {
-      toast.info("Task submitted for manual review.");
+
+    // ─────────────────────────────────────────────────────────
+    // CASE 3: NO VERIFICATION (Watch / Visit)
+    // ─────────────────────────────────────────────────────────
+    } else if (selectedTask.verificationType === "none") {
+      toast.success("✅ Task completed! Points added.");
+      await loadUserProgress();
+      const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
+      const lbJson = await lbRes.json();
+      if (lbJson.success) setLeaderboard(lbJson.leaderboard);
+      setShowSubmitModal(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
+
+    // ─────────────────────────────────────────────────────────
+    // CASE 4: MANUAL / UPLOAD / AUTO_TX / ONCHAIN
+    // ─────────────────────────────────────────────────────────
+    } else {
+      toast.info("📋 Task submitted for manual review.");
+      await loadUserProgress();
+      setShowSubmitModal(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
     }
 
-    // ALWAYS refresh progress and leaderboard after a submission attempt
-    await loadUserProgress();
-    // Refresh Leaderboard to show updated "Tasks Done" and "Points"
-    const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
-    const lbJson = await lbRes.json();
-    if (lbJson.success) setLeaderboard(lbJson.leaderboard);
-
-    setShowSubmitModal(false);
-    setSubmissionData({ proofUrl: "", notes: "", file: null });
-
   } catch (error: any) {
-    toast.error(error.message || "An error occurred");
+    toast.error(error.message || "An error occurred. Please try again.");
   } finally {
     setSubmittingTaskId(null);
   }
 };
+
 
   const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected") => {
     try {
@@ -943,24 +1065,26 @@ const questStatusGuard = useMemo(() => {
           <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
             <CardHeader className="pb-2 pt-8">
               <div className="mx-auto bg-slate-100 dark:bg-slate-900 p-4 rounded-full mb-4 w-fit ring-1 ring-slate-200 dark:ring-slate-800">
-                <Wallet className="h-10 w-10 text-slate-600 dark:text-slate-400" />
+                {/* Changed from Wallet to Rocket. Make sure to update your lucide-react imports! */}
+                <Rocket className="h-10 w-10 text-slate-600 dark:text-slate-400" />
               </div>
               <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                Connect Wallet
+                Ready to Start?
               </CardTitle>
               <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
-                Please connect your wallet to view this Quest and participate.
+                Sign in or create an account to view this Quest and participate.
               </CardDescription>
             </CardHeader>
             <CardFooter className="pt-4 flex justify-center pb-8">
-              <p className="text-sm text-muted-foreground">Use the Connect button in the header.</p>
+              <p className="text-sm text-muted-foreground">
+                Click the "Get Started" button in the header.
+              </p>
             </CardFooter>
           </Card>
         </div>
       </div>
     );
   }
-
   if (!hasUsername) {
     return (
       <div className="flex flex-col min-h-screen">
@@ -1490,7 +1614,15 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
             </TabsContent>
 
             {isCreator && (
-              <TabsContent value="admin" className="space-y-6">
+             
+ 
+            <TabsContent value="admin" className="space-y-6">
+                <QuestEditPanel
+                questData={questData}
+                faucetAddress={faucetAddress!}
+                  creatorAddress={userWalletAddress!}
+                  onQuestUpdated={(updated) => setQuestData((p: any) => ({ ...p, ...updated }))}
+                />
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <Card className="border-slate-200 dark:border-slate-800">
                     <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Pending Review</CardTitle></CardHeader>
@@ -1596,15 +1728,24 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
         )}
             {/* ============= SUBMISSION MODAL (UPDATED) ============= */}
         {showSubmitModal && selectedTask && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <Card className="w-full max-w-lg shadow-2xl border-0 dark:bg-slate-900 animate-in zoom-in-95 duration-200">
-              <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-5 relative">
-                <Button variant="ghost" size="icon" className="absolute right-4 top-4 h-8 w-8 rounded-full" onClick={() => setShowSubmitModal(false)}><X className="h-5 w-5" /></Button>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200 overflow-y-auto">
+            <Card className="w-full max-w-lg shadow-2xl border-0 dark:bg-slate-900 animate-in zoom-in-95 duration-200 my-8 max-h-[90vh] flex flex-col">
+              <CardHeader className="bg-slate-50 dark:bg-slate-950 border-b dark:border-slate-800 pb-5 relative flex-shrink-0">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-4 top-4 h-8 w-8 rounded-full" 
+                  onClick={() => setShowSubmitModal(false)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
                 <CardTitle className="text-xl pr-10">{selectedTask.title}</CardTitle>
-                <CardDescription className="text-base font-medium mt-1">{selectedTask.description}</CardDescription>
+                <CardDescription className="text-base font-medium mt-1">
+                  {selectedTask.description}
+                </CardDescription>
               </CardHeader>
 
-              <CardContent className="pt-6 space-y-6">
+               <CardContent className="pt-6 space-y-6 overflow-y-auto flex-1">
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-300 flex gap-3">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>{selectedTask.description}</div>
@@ -1687,8 +1828,8 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                   <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-lg flex gap-3">
                     <Sparkles className="h-5 w-5 text-blue-500 shrink-0" />
                     <div className="text-sm text-blue-800 dark:text-blue-300">
-                      <strong>No link required.</strong><br/>
-                      Once you have completed the action above, click "Verify & Submit". Our system will check your social connection automatically.
+                     
+                      Once you have completed the action above, click "Verify Task". Our system will Verify the task automatically.
                     </div>
                   </div>
                 )}
@@ -1739,7 +1880,7 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                       </div>
                       <h4 className="text-lg font-semibold mb-3">Share this Quest on X</h4>
                       <p className="text-sm text-muted-foreground mb-5">
-                        Post about this quest including @faucetdrops and your referral link
+                        Post about this quest including @FaucetDrops and your referral link
                       </p>
 
                       <Button
@@ -1752,7 +1893,7 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                           }
                           const cleanUrl = window.location.href.split("?")[0];
                           const refLink = `${cleanUrl}?ref=${participantData.referral_id}`;
-                          const text = `I'm participating in this awesome quest on @faucetdrops!\nJoin me here: ${refLink}`;
+                          const text = `I'm participating in this awesome quest on @FaucetDrops!\nJoin me here: ${refLink}`;
                           window.open(
                             `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`,
                             "_blank",
@@ -1772,7 +1913,7 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
                       </Button>
 
                       <p className="text-xs text-amber-700 dark:text-amber-300">
-                        Make sure your tweet contains @faucetdrops and the referral link
+                        Make sure your tweet contains @FaucetDrops and the referral link
                       </p>
                     </div>
 
@@ -2023,36 +2164,36 @@ const progressPercent = Math.min((totalPoints / requiredForCurrent) * 100, 100);
               </CardContent>
 
               {/* Footer with Submit / Cancel */}
-              <CardFooter className="justify-between border-t p-5 dark:border-slate-800">
-                <Button variant="outline" onClick={() => setShowSubmitModal(false)}>
-                  Cancel
-                </Button>
+                    <CardFooter className="justify-between border-t p-5 dark:border-slate-800 flex-shrink-0">
+                      <Button variant="outline" onClick={() => setShowSubmitModal(false)}>
+                        Cancel
+                      </Button>
 
-                {/* Only show submit button for tasks that require manual action */}
-                {selectedTask.verificationType !== "none" && (
-                    <Button
-                      onClick={handleSubmitTask}
-                      disabled={
-                        submittingTaskId === selectedTask?.id || // Only disable THIS task
-                        (selectedTask.verificationType === "manual_link" && !submissionData.proofUrl) ||
-                        (selectedTask.verificationType === "auto_social" && 
-                          ['quote', 'tweet', 'comment'].includes(selectedTask.action) && 
-                          !submissionData.proofUrl) ||
-                        (selectedTask.category === "trading" && 
-                          selectedTask.verificationType !== "auto_tx" && 
-                          selectedTask.verificationType !== "onchain" &&
-                          !submissionData.proofUrl)
-                      }
-                      className="bg-primary hover:bg-primary/90 min-w-[160px]"
-                    >
-                      {submittingTaskId === selectedTask?.id ? (
-                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
-                      ) : (
-                        selectedTask.verificationType === 'auto_social' ? "Verify & Submit" : "Submit Task"
+                      {selectedTask.verificationType !== "none" && (
+                        <Button
+                          onClick={handleSubmitTask}
+                          disabled={
+                            submittingTaskId === selectedTask?.id ||
+                            (selectedTask.verificationType === "manual_link" && !submissionData.proofUrl) ||
+                            (selectedTask.verificationType === "auto_social" && 
+                              ['quote', 'tweet', 'comment'].includes(selectedTask.action) && 
+                              !submissionData.proofUrl) ||
+                            (selectedTask.category === "trading" && 
+                              selectedTask.verificationType !== "auto_tx" && 
+                              selectedTask.verificationType !== "onchain" &&
+                              !submissionData.proofUrl)
+                          }
+                          className="bg-primary hover:bg-primary/90 min-w-[160px]"
+                        >
+                          {submittingTaskId === selectedTask?.id ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
+                          ) : (
+                            selectedTask.verificationType === 'auto_social' ? "Verify Task" : "Submit Task"
+                          )}
+                        </Button>
                       )}
-                    </Button>
-                  )}
-              </CardFooter>
+                    </CardFooter>
+
             </Card>
           </div>
         )}

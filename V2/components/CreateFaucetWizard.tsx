@@ -682,7 +682,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     formData.append('file', file)
 
     try {
-      const response = await fetch('https://fauctdrop-backend.onrender.com/upload-image', {
+      const response = await fetch('https://faucetdrop-backend.onrender.com/upload-image', {
         method: 'POST',
         body: formData,
       })
@@ -740,7 +740,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`💾 Saving faucet metadata for ${faucetAddress}`)
         
-      const response = await fetch('https://fauctdrop-backend.onrender.com/faucet-metadata', {
+      const response = await fetch('https://faucetdrop-backend.onrender.com/faucet-metadata', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -888,7 +888,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`📝 Registering faucet ${name} (${faucetAddress}) in backend...`)
 
-      const response = await fetch('https://fauctdrop-backend.onrender.com/register-faucet', {
+      const response = await fetch('https://faucetdrop-backend.onrender.com/register-faucet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -962,7 +962,8 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     setNameValidation(prev => ({ ...prev, isValidating: true, validationError: null }))
     try {
       console.log(`Validating name "${nameToValidate}" across all factories on ${currentNetwork?.name}...`)
-      const validationResult = await checkFaucetNameExists(provider, currentNetwork, nameToValidate)
+      // Cast to 'any' to bypass the slight interface mismatch between the hook and lib
+      const validationResult = await checkFaucetNameExists(provider, currentNetwork as any, nameToValidate)
       if (validationResult.exists && validationResult.conflictingFaucets) {
         const conflictCount = validationResult.conflictingFaucets.length
         const factoryTypeList = validationResult.conflictingFaucets
@@ -2102,7 +2103,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
   const renderReviewAndCreate = () => {
     const selectedTokenConfig = getSelectedTokenConfiguration()
     const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
+    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork as any)
     const finalTokenAddress = getFinalTokenAddress()
     return (
       <div className="space-y-6">
@@ -2290,7 +2291,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
         return hasValidName && hasValidToken
       case 3:
         const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-        const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
+        const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork as any)
         return !!factoryAddress
       default:
         return false

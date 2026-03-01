@@ -7856,3 +7856,5 @@ export const QUEST_ABI= [
 		"type": "receive"
 	}
 ]
+
+export const STORAGE_ABI = []

@@ -15,7 +15,8 @@ const wagmiConfig = createConfig({
     [supportedChains[1].id]: http(), // Base
     [supportedChains[2].id]: http(), // Celo
     [supportedChains[3].id]: http(), // Lisk
-    [supportedChains[4].id]: http(), // <--- ADD THIS (BSC)
+    [supportedChains[4].id]: http(), // BSC
+    [supportedChains[5].id]: http(), // Avalanche
   },
 })
 

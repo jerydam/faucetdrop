@@ -115,6 +115,8 @@ interface FullQuestState extends QuestData {
     startTime?: string
     endDate?: string
     endTime?: string
+    claimWindowValue: string,
+  claimWindowUnit: string,
     claimWindowHours?: string
     enforceStageRules?: boolean
 }
@@ -131,7 +133,8 @@ const initialNewQuest: FullQuestState = {
     startTime: "",
     endDate: "",
     endTime: "",
-    claimWindowHours: "168",
+    claimWindowValue: "7",
+    claimWindowUnit: "days",
     enforceStageRules: false
 }
 
@@ -278,7 +281,9 @@ function QuestCreatorContent() {
                         enforceStageRules: rulesVal,
                         faucetAddress: draftId, 
                         rewardTokenType: 'erc20', 
-                        tokenAddress: tokenAddrVal
+                        tokenAddress: tokenAddrVal,                 
+                        claimWindowValue: "7",
+                        claimWindowUnit: "days",
                     })
 
                     if (stageReqsVal) setStagePassRequirements(stageReqsVal)

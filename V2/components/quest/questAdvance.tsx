@@ -411,7 +411,23 @@ const SUGGESTED_TASKS_BY_STAGE: Record<TaskStage, Array<Partial<QuestTask>>> = {
   ],
 }
 
+const getDefaultTiming = () => {
+  const now = new Date()
+  const end = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) // +7 days
 
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const formatDate = (d: Date) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const formatTime = (d: Date) =>
+    `${pad(d.getHours())}:${pad(d.getMinutes())}`
+
+  return {
+    startDate: formatDate(now),
+    startTime: formatTime(now),
+    endDate: formatDate(end),
+    endTime: formatTime(end),
+  }
+}
 
 // HELPER: Stage default points
 const getDefaultPointsForStage = (stage: TaskStage): number => {
@@ -444,6 +460,7 @@ interface Phase2Props {
   handleStagePassRequirementChange?: any
   getStageColor?: any
   getCategoryColor?: any
+  
   getVerificationIcon?: any
   handleFinalize?: any
 }
@@ -552,7 +569,39 @@ export default function Phase2TimingTasksFinalize({
       return hasChanged ? next : prev
     })
   }, [stageTotals, setStagePassRequirements])
+  
+// Initialize default dates if they are empty
+  useEffect(() => {
+    if (!newQuest.startDate || !newQuest.endDate) {
+      const defaults = getDefaultTiming();
+      setNewQuest((prev: any) => ({
+        ...prev,
+        startDate: prev.startDate || defaults.startDate,
+        startTime: prev.startTime || defaults.startTime,
+        endDate: prev.endDate || defaults.endDate,
+        endTime: prev.endTime || defaults.endTime,
+        claimWindowValue: prev.claimWindowValue || "7",
+        claimWindowUnit: prev.claimWindowUnit || "days"
+      }));
+    }
+  }, []); // Run once on mount
 
+  // Helper to calculate end date based on quick-picks
+  const handleDurationSelect = (days: number) => {
+    let start = new Date();
+    if (newQuest.startDate && newQuest.startTime) {
+      start = new Date(`${newQuest.startDate}T${newQuest.startTime}`);
+    }
+    const end = new Date(start.getTime() + days * 24 * 60 * 60 * 1000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    
+    setNewQuest((prev: any) => ({
+      ...prev,
+      endDate: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`,
+      endTime: `${pad(end.getHours())}:${pad(end.getMinutes())}`
+    }));
+  };
+  
   const enforceRules = false // Removed strict mode logic
 
   const normalizeUrl = (url: string): string => {
@@ -672,7 +721,8 @@ export default function Phase2TimingTasksFinalize({
         const targetFactory = currentNetwork?.factories?.quest;
         if (!targetFactory) throw new Error("Quest Factory not found for this network.");
 
-        const hoursInt = parseInt(newQuest.claimWindowHours || "168", 10);
+        const claimValue = parseInt(newQuest.claimWindowValue || "7", 10)
+        const hoursInt = newQuest.claimWindowUnit === "hours" ? claimValue : claimValue * 24
         const nowInSeconds = Math.floor(Date.now() / 1000);
         const questEndTime = nowInSeconds + hoursInt * 3600;
 
@@ -729,41 +779,122 @@ export default function Phase2TimingTasksFinalize({
           <CardDescription>Define start/end times and claim duration.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          
+          {/* Start & End Date/Time */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label>Start Date & Time</Label>
               <div className="flex gap-2">
-                <Input type="date" className="bg-background/50" value={newQuest.startDate || ""} onChange={e => setNewQuest((p:any) => ({...p, startDate: e.target.value}))} />
-                <Input type="time" className="bg-background/50" value={newQuest.startTime || ""} onChange={e => setNewQuest((p:any) => ({...p, startTime: e.target.value}))} />
+                <Input 
+                  type="date" 
+                  className="bg-background/50" 
+                  value={newQuest.startDate || ""} 
+                  onChange={e => setNewQuest((p:any) => ({...p, startDate: e.target.value}))} 
+                />
+                <Input 
+                  type="time" 
+                  className="bg-background/50" 
+                  value={newQuest.startTime || ""} 
+                  onChange={e => setNewQuest((p:any) => ({...p, startTime: e.target.value}))} 
+                />
               </div>
             </div>
+            
             <div className="space-y-2">
               <Label>End Date & Time</Label>
               <div className="flex gap-2">
-                <Input type="date" className="bg-background/50" value={newQuest.endDate || ""} onChange={e => setNewQuest((p:any) => ({...p, endDate: e.target.value}))} />
-                <Input type="time" className="bg-background/50" value={newQuest.endTime || ""} onChange={e => setNewQuest((p:any) => ({...p, endTime: e.target.value}))} />
+                <Input 
+                  type="date" 
+                  className="bg-background/50" 
+                  value={newQuest.endDate || ""} 
+                  onChange={e => setNewQuest((p:any) => ({...p, endDate: e.target.value}))} 
+                />
+                <Input 
+                  type="time" 
+                  className="bg-background/50" 
+                  value={newQuest.endTime || ""} 
+                  onChange={e => setNewQuest((p:any) => ({...p, endTime: e.target.value}))} 
+                />
+              </div>
+            </div>
+
+            {/* Quest Duration Quick Picks */}
+            <div className="space-y-2 col-span-1 md:col-span-2">
+              <Label className="text-xs text-muted-foreground">Quick Set Quest Duration</Label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: '24hrs', days: 1 },
+                  { label: '3 Days', days: 3 },
+                  { label: '5 Days', days: 5 },
+                  { label: '7 Days', days: 7 },
+                  { label: '14 Days', days: 14 },
+                  { label: '21 Days', days: 21 },
+                ].map(preset => (
+                  <Badge
+                    key={`duration-${preset.label}`}
+                    variant="outline"
+                    className="cursor-pointer hover:bg-primary/10 transition-colors"
+                    onClick={() => handleDurationSelect(preset.days)}
+                  >
+                    {preset.label}
+                  </Badge>
+                ))}
               </div>
             </div>
           </div>
+
           {timingErrors.length > 0 && (
             <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
               <AlertTriangle className="h-4 w-4" />
               <ul>{timingErrors.map((err, i) => <li key={i}>{err}</li>)}</ul>
             </div>
           )}
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Claim Window (Duration after end)</Label>
-            <Select value={newQuest.claimWindowHours || "168"} onValueChange={v => setNewQuest((p:any) => ({...p, claimWindowHours: v}))}>
-                <SelectTrigger className="bg-background/50 w-full sm:w-48"><SelectValue /></SelectTrigger>
+
+          <div className="space-y-3 pt-2 border-t border-border/50">
+            <Label className="text-muted-foreground">Claim Window After End</Label>
+            <div className="flex gap-3 items-center">
+              <Input
+                type="number"
+                className="bg-background/50 w-28"
+                value={newQuest.claimWindowValue ?? "7"}
+                onChange={e => setNewQuest((p: any) => ({ ...p, claimWindowValue: e.target.value }))}
+                min="1"
+              />
+              <Select
+                value={newQuest.claimWindowUnit || "days"}
+                onValueChange={v => setNewQuest((p: any) => ({ ...p, claimWindowUnit: v }))}
+              >
+                <SelectTrigger className="bg-background/50 w-32">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="24">24 Hours</SelectItem>
-                    <SelectItem value="72">3 Days</SelectItem>
-                    <SelectItem value="120">5 Days</SelectItem>
-                    <SelectItem value="168">7 Days</SelectItem>
-                    <SelectItem value="336">14 Days</SelectItem>
-                    <SelectItem value="504">21 Days</SelectItem>
+                  <SelectItem value="days">Days</SelectItem>
+                  <SelectItem value="hours">Hours</SelectItem>
                 </SelectContent>
-            </Select>
+              </Select>
+            </div>
+            
+            {/* Claim Window Quick Picks */}
+            <div className="flex flex-wrap gap-2 mt-2">
+              {[
+                { label: '24hrs', v: '24', u: 'hours' },
+                { label: '3 Days', v: '3', u: 'days' },
+                { label: '5 Days', v: '5', u: 'days' },
+                { label: '7 Days', v: '7', u: 'days' },
+                { label: '14 Days', v: '14', u: 'days' },
+                { label: '21 Days', v: '21', u: 'days' },
+              ].map(preset => (
+                <Badge
+                  key={`claim-${preset.label}`}
+                  variant="outline"
+                  className="cursor-pointer hover:bg-primary/10 transition-colors"
+                  onClick={() => setNewQuest((p: any) => ({ ...p, claimWindowValue: preset.v, claimWindowUnit: preset.u }))}
+                >
+                  {preset.label}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Default: 7 Days • You can change it anytime</p>
           </div>
         </CardContent>
       </Card>

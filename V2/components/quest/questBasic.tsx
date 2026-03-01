@@ -488,6 +488,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
 
             toast.success("Draft saved successfully!")
             onDraftSaved(draftId)
+            console.log("DRAFT PAYLOAD:", JSON.stringify(payload, null, 2))
         } catch (e: any) {
             setError(e.message || "Draft save failed")
         } finally {

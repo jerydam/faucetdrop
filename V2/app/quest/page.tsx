@@ -4,15 +4,17 @@ import { useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Settings, ArrowRight, Coins, Loader2, Calendar, Sparkles, Users } from 'lucide-react'; // Fixed imports
+import { 
+    Settings, ArrowRight, Coins, Loader2, 
+    Calendar, Sparkles, Users, LayoutGrid, List 
+} from 'lucide-react'; // Added LayoutGrid and List imports
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header"; 
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 interface QuestOverview {
     faucetAddress: string;
-    // 1. Add slug to the interface
     slug: string; 
     title: string;
     description: string;
@@ -53,6 +55,9 @@ export default function QuestHomePage() {
     const [quests, setQuests] = useState<QuestOverview[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
+    // NEW: State for View Mode
+    const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
     const fetchQuests = async () => {
         setIsLoading(true);
@@ -86,7 +91,6 @@ export default function QuestHomePage() {
         });
     }, [quests]);
 
-    // 2. Updated handler to use the database slug directly
     const handleNavigate = (slug: string) => {
         router.push(`/quest/${slug}`);
     };
@@ -96,6 +100,7 @@ export default function QuestHomePage() {
         <Header pageTitle='Quest Hub' />
         <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-8">
             
+            {/* Header Area */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                <div>
                     <div className="flex items-center gap-3">
@@ -107,7 +112,29 @@ export default function QuestHomePage() {
                     <p className="text-muted-foreground mt-1">Participate in active campaigns to earn crypto rewards.</p>
                 </div>
                 
-                <div className="flex gap-2 w-full md:w-auto">
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    {/* NEW: View Mode Toggle */}
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border dark:border-slate-700 hidden sm:flex">
+                        <Button
+                            variant={viewMode === 'list' ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-8 px-2.5 shadow-none"
+                            onClick={() => setViewMode('list')}
+                            title="List View"
+                        >
+                            <List className="h-4 w-4" />
+                        </Button>
+                        <Button
+                            variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-8 px-2.5 shadow-none"
+                            onClick={() => setViewMode('grid')}
+                            title="Grid View"
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </Button>
+                    </div>
+
                     <Button 
                         variant="outline"
                         onClick={() => router.push(address ? `/dashboard/${address}` : '/')}
@@ -118,6 +145,7 @@ export default function QuestHomePage() {
                 </div>
             </div>
 
+            {/* Content Area */}
             {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                     <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
@@ -139,54 +167,56 @@ export default function QuestHomePage() {
                     </Button>
                 </Card>
             ) : (
-                <div className="grid grid-cols-1 gap-6">
+                /* NEW: Dynamic Grid Layout based on viewMode */
+                <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>
                     {filteredQuests.map((quest) => {
                         const isOwner = address && quest.creatorAddress.toLowerCase() === address.toLowerCase();
                         const status = getQuestStatus(quest);
                         
                         return (
-                            <Card key={quest.faucetAddress} className="group hover:shadow-lg transition-all duration-300 border-slate-200 dark:border-slate-800 overflow-hidden">
-                                <div className="flex flex-col md:flex-row">
+                            <Card key={quest.faucetAddress} className="group hover:shadow-lg transition-all duration-300 border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col bg-white dark:bg-slate-950">
+                                {/* NEW: Dynamic Card Layout based on viewMode */}
+                                <div className={`flex flex-1 ${viewMode === 'list' ? 'flex-col md:flex-row' : 'flex-col'}`}>
                                     
+                                    {/* Image Section */}
                                     {quest.imageUrl && (
-                                        <div className="w-full md:w-48 h-48 md:h-48 bg-slate-100 dark:bg-slate-900 relative shrink-0">
+                                        <div className={`shrink-0 bg-slate-100 dark:bg-slate-900 border-b md:border-b-0 ${viewMode === 'list' ? 'md:border-r border-slate-200 dark:border-slate-800 w-full md:w-64 h-48 md:h-auto min-h-[12rem]' : 'w-full h-48'}`}>
                                              <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
                                         </div>
                                     )}
 
+                                    {/* Content Section */}
                                     <div className="flex-1 flex flex-col p-5 md:p-6">
-                                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
-                                            <div className="space-y-2">
+                                        <div className={`flex mb-4 gap-4 ${viewMode === 'list' ? 'flex-col sm:flex-row sm:items-start justify-between' : 'flex-col'}`}>
+                                            <div className="space-y-2 flex-1">
                                                 <div className="flex items-center gap-3 flex-wrap">
-                                                    <h3 className="text-xl font-bold group-hover:text-primary transition-colors">
+                                                    <h3 className="text-xl font-bold group-hover:text-primary transition-colors line-clamp-1">
                                                         {quest.title}
                                                     </h3>
-                                                    <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${status.color}`}>
+                                                    <span className={`px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full border ${status.color}`}>
                                                         {status.label}
                                                     </span>
                                                 </div>
-                                                <p className="text-sm text-muted-foreground line-clamp-2">
+                                                <p className={`text-sm text-muted-foreground ${viewMode === 'grid' ? 'line-clamp-3' : 'line-clamp-2'}`}>
                                                     {quest.description}
                                                 </p>
                                             </div>
                                             
-                                            <div className="shrink-0 w-full md:w-auto">
+                                            {/* Button Container */}
+                                            <div className={`shrink-0 ${viewMode === 'grid' ? 'w-full mt-2' : 'w-full sm:w-auto'}`}>
                                                 <Button 
-                                                    size="sm" 
-                                                    className={`w-full md:w-auto font-semibold ${
+                                                    size={viewMode === 'grid' ? 'default' : 'sm'} 
+                                                    className={`w-full font-semibold ${
                                                         isOwner 
                                                             ? "bg-slate-900 text-white hover:bg-slate-800" 
                                                             : status.interactable 
                                                                 ? "bg-primary text-white hover:bg-primary/90" 
                                                                 : "bg-secondary text-secondary-foreground"
                                                     }`}
-                                                    /* 3. Pass the correct database slug here */
                                                     onClick={() => handleNavigate(quest.slug || quest.faucetAddress)}
                                                 >
                                                     {isOwner ? (
-                                                        <>
-                                                            <Settings className="h-4 w-4 mr-2" /> Manage
-                                                        </>
+                                                        <><Settings className="h-4 w-4 mr-2" /> Manage</>
                                                     ) : (
                                                         <>
                                                             {status.interactable ? "Join Quest" : "View Details"} 
@@ -197,9 +227,10 @@ export default function QuestHomePage() {
                                             </div>
                                         </div>
 
-                                        <div className="mt-auto pt-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs sm:text-sm text-muted-foreground">
+                                        {/* Footer Stats */}
+                                        <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-x-6 gap-y-3 text-xs sm:text-sm text-muted-foreground">
                                             <div className="flex items-center gap-2">
-                                                <div className="p-1.5 bg-blue-50 text-blue-600 rounded-md">
+                                                <div className="p-1 bg-blue-50 text-blue-600 rounded">
                                                     <Coins className="h-4 w-4" />
                                                 </div>
                                                 <span>
@@ -209,7 +240,7 @@ export default function QuestHomePage() {
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <div className="p-1.5 bg-purple-50 text-purple-600 rounded-md">
+                                                <div className="p-1 bg-purple-50 text-purple-600 rounded">
                                                     <Users className="h-4 w-4" />
                                                 </div>
                                                 <span>
@@ -218,8 +249,8 @@ export default function QuestHomePage() {
                                                     </span> Participants
                                                 </span>
                                             </div>
-                                            <div className="flex items-center gap-2 sm:justify-end">
-                                                <div className="p-1.5 bg-orange-50 text-orange-600 rounded-md">
+                                            <div className="flex items-center gap-2">
+                                                <div className="p-1 bg-orange-50 text-orange-600 rounded">
                                                     <Calendar className="h-4 w-4" />
                                                 </div>
                                                 <span>Ends: {new Date(quest.endDate).toLocaleDateString()}</span>

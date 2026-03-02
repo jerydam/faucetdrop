@@ -87,7 +87,8 @@ const SYSTEM_TASKS: QuestTask[] = [
         category: 'social',
         url: '',
         action: 'share_quest',
-        verificationType: 'manual_link',
+        targetPlatform: 'Twitter',           // Good to add for UI rendering
+        verificationType: 'system_x_share',  // <--- CHANGED FROM 'manual_link'
         stage: 'Beginner',
         isSystem: true,
     },

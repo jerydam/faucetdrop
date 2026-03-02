@@ -327,7 +327,8 @@ export default function Networks() {
           ref={headlineRef}
           className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-white leading-relaxed relative"
         >
-          The future of Web3 user acquisition is automated, <br/>verifiable and fun. We&apos;re building it!
+          The future of Web3 user acquisition is automated, <br/>
+          verifiable and fun. We&apos;re building it!
         </h2>
 
         {/* Network Logos Infinite Scroll */}

@@ -1,11 +1,18 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-// import fetch from 'node-fetch';
+import fetch from 'node-fetch';
+
+interface GoogleSearchResponse {
+  items?: {
+    title: string;
+    link: string;
+  }[];
+}
 
 const apiKey = process.env.GEMINI_API_KEY;
 const TELEGRAM_SUPPORT_LINK = "https://t.me/faucetdropschat";
-// const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY;
-// const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX;
+const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY;
+const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX;
 
 if (!apiKey) {
   console.error("GEMINI_API_KEY environment variable is not set");
@@ -46,8 +53,9 @@ function classifyIntent(message: string) {
   if (text.includes("price") || text.includes("cost"))
     return "pricing_question";
 
-  // if (text.includes("search") || text.includes("google"))
-  //   return "web_search";
+  if (text.includes("search")) {
+    return "web_search";
+  }
 
   return "general";
 }
@@ -151,30 +159,33 @@ RESPONSE STRUCTURE:
 `;
 }
 
-// async function googleSearch(query: string): Promise<string> {
-//   if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_CX) {
-//     throw new Error('Google Search API key or CX not configured');
-//   }
+async function googleSearch(query: string): Promise<string> {
+  if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_CX) {
+    throw new Error('Google Search API key or CX not configured');
+  }
 
-//   const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_SEARCH_API_KEY}&cx=${GOOGLE_SEARCH_CX}&q=${encodeURIComponent(query)}`;
+  const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_SEARCH_API_KEY}&cx=${GOOGLE_SEARCH_CX}&q=${encodeURIComponent(query)}`;
 
-//   const response = await fetch(url);
-//   if (!response.ok) {
-//     throw new Error(`Google Search API error: ${response.statusText}`);
-//   }
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Google Search API error: ${response.statusText}`);
+  }
 
-//   const data = await response.json();
-//   if (!data.items || data.items.length === 0) {
-//     return 'No results found.';
-//   }
+  const data = await response.json() as GoogleSearchResponse;
 
-//   // Format top 3 search results
-//   const results = data.items.slice(0, 3).map((item: any) => {
-//     return `${item.title}: ${item.link}`;
-//   });
+  console.log('data from google search', data);
+  if (!data.items || data?.items?.length === 0) {
+    return 'No results found.';
+  }
 
-//   return results.join('\n');
-// }
+  // Format top 3 search results
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results = data.items.slice(0, 3).map((item: any) => {
+    return `${item.title}: ${item.link}`;
+  });
+
+  return results.join('\n');
+}
 
 export async function POST(req: Request) {
   try {
@@ -224,18 +235,18 @@ export async function POST(req: Request) {
     const language = detectLanguage(message);
     const intent = classifyIntent(message);
 
-    // if (intent === 'web_search') {
-    //   try {
-    //     const searchResults = await googleSearch(message);
-    //     return NextResponse.json({
-    //       text: `Here are the top search results:\n${searchResults}`,
-    //       meta: { language, intent },
-    //     });
-    //   } catch (error) {
-    //     console.error('Google Search error:', error);
-    //     // Fallback to Gemini API if search fails
-    //   }
-    // }
+    if (intent === 'web_search') {
+      try {
+        const searchResults = await googleSearch(message);
+        return NextResponse.json({
+          text: `Here are the top search results:\n${searchResults}`,
+          meta: { language, intent },
+        });
+      } catch (error) {
+        console.error('Google Search error:', error);
+        // Fallback to Gemini API if search fails
+      }
+    }
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",

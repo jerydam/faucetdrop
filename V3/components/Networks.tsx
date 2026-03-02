@@ -200,8 +200,10 @@ export default function Networks() {
     { src: "/networks/celo.svg", alt: "Celo" },
     { src: "/networks/base.svg", alt: "Base" },
     { src: "/networks/lisk.svg", alt: "Lisk" },
-    { src: "/networks/arbitrum.svg", alt: "Arbitrum" },
-    { src: "/networks/self.svg", alt: "Self" }
+    { src: "/networks/arb.png", alt: "Arbitrum" },
+    { src: "/networks/self.png", alt: "Self" },
+    { src: "/networks/BNB.svg", alt: "BNB" },
+    { src: "/networks/avalanche.svg", alt: "Avalanche" }
   ];
 
   useEffect(() => {
@@ -325,7 +327,8 @@ export default function Networks() {
           ref={headlineRef}
           className="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-bold text-white leading-relaxed relative"
         >
-          The future of Web3 user acquisition is automated, verifiable and fun. We&apos;re building it!
+          The future of Web3 user acquisition is automated, <br/>
+          verifiable and fun. We&apos;re building it!
         </h2>
 
         {/* Network Logos Infinite Scroll */}

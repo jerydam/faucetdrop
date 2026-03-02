@@ -199,33 +199,22 @@ const Drops: React.FC = () => {
       
       {/* Main Faucet Image */}
       <div 
-  ref={imageRef}
-  className="relative w-full h-full z-10"
-  style={{ transform: 'scale(0.9)' }}
->
-  {/* Outer ambient glow blob */}
-  <div className="absolute inset-0 z-0 rounded-full pointer-events-none"
-    style={{
-      background: 'radial-gradient(ellipse at center, rgba(0,180,255,0.18) 0%, rgba(0,100,255,0.08) 50%, transparent 75%)',
-      filter: 'blur(24px)',
-      animation: 'ambient-pulse 3s ease-in-out infinite',
-    }}
-  />
-
-  {/* Sweep shine layer */}
-  <div className="absolute inset-0 z-20 overflow-hidden rounded-full pointer-events-none">
-    <div className="shine-sweep" />
-  </div>
-
-  <Image
-    src="/dripin.png"
-    alt="DripIn Icon"
-    width={800}
-    height={800}
-    className="w-full h-full object-contain blue-shine"
-    priority
-  />
-</div>
+        ref={imageRef}
+        className="relative w-full h-full z-10"
+        style={{
+          transform: 'scale(0.9)',
+          maskImage: 'linear-gradient(to right, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%)', 
+        }}
+      >
+        <Image
+          src="/dripin2.png"
+          alt="DripIn Icon"
+          width={800}
+          height={800}
+          className="w-full h-full object-contain"
+          priority
+        />
+      </div>
 
       {/* Ripples */}
       {ripples.map(ripple => (

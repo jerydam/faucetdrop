@@ -207,7 +207,7 @@ const Drops: React.FC = () => {
         }}
       >
         <Image
-          src="/dripin.png"
+          src="/dripin2.png"
           alt="DripIn Icon"
           width={800}
           height={800}

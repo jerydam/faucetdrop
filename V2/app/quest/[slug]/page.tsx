@@ -9,6 +9,7 @@ import {
   CardTitle,
   CardFooter,
 } from "@/components/ui/card";
+import { useWallets } from '@privy-io/react-auth';
 import { QuestEditPanel } from "@/components/quest/questedit";
 import { QUEST_ABI } from "@/lib/abis";
 import { claimNoCodeViaBackend } from "@/lib/backend-service";
@@ -36,43 +37,29 @@ import {
   Clock,
   Trophy,
   Shield,
-  Save,
-  Edit2,
   X,
   Upload,
   Lock,
   ImageIcon,
   UserCircle,
-  AlertTriangle,
   Coins,
   Sparkles,
   Gift,
   ZoomIn,
-  Wallet,
   Copy,
   CalendarClock,
   Users,
-  Twitter,
-  Play,
-  Link,
   Zap,
-  MessageCircle,
-  Send,
-  UserPlus,
-  LogIn,
-  ArrowLeftRight,
   Rocket,
   MessageSquareText,
-  Check,
   ShieldCheck,
   ArrowLeft,
-  Settings2,
   Settings,
   RefreshCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
-import { Contract, BrowserProvider, parseEther } from "ethers";
+import { Contract, BrowserProvider, parseEther,ZeroAddress   } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
@@ -242,7 +229,7 @@ export default function QuestDetailsPage() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [hasUsername, setHasUsername] = useState(false);
-
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -262,7 +249,8 @@ export default function QuestDetailsPage() {
 
   const [showFundModal, setShowFundModal] = useState(false);
   const [fundAmount, setFundAmount] = useState<string>("");
-
+  const { wallets } = useWallets();
+  const activeWallet = wallets[0];
   const [editForm, setEditForm] = useState({
     title: "",
     description: "",
@@ -282,7 +270,21 @@ export default function QuestDetailsPage() {
   const activeStages = userProgress.activeStages?.length > 0
     ? userProgress.activeStages
     : ALL_STAGES;
-
+  useEffect(() => {
+  if (!faucetAddress || !userWalletAddress || !hasUsername) return;
+  const checkParticipant = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/participant/${userWalletAddress}`);
+      const json = await res.json();
+      if (json.success && json.participant) {
+        setParticipantData(json.participant);
+      }
+    } catch (e) {
+      console.error("Participant lookup failed", e);
+    }
+  };
+  checkParticipant();
+}, [faucetAddress, userWalletAddress, hasUsername]);
   useEffect(() => {
     const slug = params.slug as string;
     if (!slug) return;
@@ -351,12 +353,17 @@ export default function QuestDetailsPage() {
   }, [faucetAddress, userWalletAddress, hasUsername, isCreator]);
 
   const tokenSymbol = questData?.tokenSymbol || "Tokens";
-
   const rewardPoolAmount = parseFloat(questData?.rewardPool || "0");
   const platformFeePercentage = 0.05;
   const requiredFee = rewardPoolAmount * platformFeePercentage;
   const totalRequired = rewardPoolAmount + requiredFee;
+  const now = new Date();
+  const endDate = new Date(questData?.endDate || Date.now());
+  const isQuestEnded = now > endDate;
 
+  const claimWindowHours = questData?.claimWindowHours || 24; 
+  const claimWindowEnd = new Date(endDate.getTime() + (claimWindowHours * 60 * 60 * 1000));
+  const isClaimWindowClosed = now > claimWindowEnd;
   const isValidFundingAmount = useMemo(() => {
     const input = parseFloat(fundAmount || "0");
     return Math.abs(input - totalRequired) < 0.0001;
@@ -377,7 +384,7 @@ export default function QuestDetailsPage() {
   );
 
   const totalPoints = participantData?.points || 0;
-
+  
   const loadUserProgress = async () => {
     if (!faucetAddress || !userWalletAddress) return;
     try {
@@ -529,11 +536,6 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
     const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
     return { canCheckin: false, message: `Next check-in in ${hours}h ${minutes}m` };
   };
-
-  useEffect(() => {
-    if (!hasUsername || !userWalletAddress || !faucetAddress || participantData) return;
-    handleJoin();
-  }, [hasUsername, userWalletAddress, faucetAddress]);
 
   useEffect(() => {
     if (!userWalletAddress) { setIsProfileLoading(false); return; }
@@ -945,21 +947,83 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
     }
   };
 
+
+  // --- PARTICIPANT: CLAIM REWARD (VIA BACKEND) ---
   const handleClaimReward = async () => {
-    if (!walletProvider || !userWalletAddress || !faucetAddress) return;
+    if (!activeWallet) return toast.error("Wallet not connected");
     setIsClaiming(true);
+    
     try {
-      const provider = walletProvider as BrowserProvider;
-      const result = await claimNoCodeViaBackend(userWalletAddress, faucetAddress, provider);
-      if (result.success) {
-        toast.success("Reward distributed successfully!");
-        await loadUserProgress();
+      // Parse the chainId from Privy (e.g., "eip155:42220" -> 42220)
+      const currentChainId = parseInt(activeWallet.chainId.split(':')[1]);
+
+      const res = await fetch(`${API_BASE_URL}/claim-no-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userAddress: activeWallet.address,
+          faucetAddress: faucetAddress,
+          chainId: currentChainId, // Now dynamically pulled from Privy
+          shouldWhitelist: false
+        })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        toast.success("Reward Claimed Successfully! Tx: " + data.txHash);
+      } else {
+        toast.error(data.detail || "Claim failed.");
       }
     } catch (e: any) {
-      console.error(e);
-      toast.error(e.message || "Claim process failed");
+      toast.error("Network error during claim.");
     } finally {
       setIsClaiming(false);
+    }
+  };
+  // --- ADMIN: WITHDRAW FUNDS (DIRECT CONTRACT INTERACTION) ---
+  const handleAdminWithdraw = async () => {
+    if (!activeWallet) return toast.error("Wallet not connected");
+    setIsWithdrawing(true);
+    
+    try {
+      // 1. Ask Privy for the raw provider
+      const privyProvider = await activeWallet.getEthereumProvider();
+      
+      // 2. Wrap it in ethers so we can use standard contract methods
+      const ethersProvider = new BrowserProvider(privyProvider);
+      const signer = await ethersProvider.getSigner();
+      
+      const questContract = new Contract(faucetAddress!, QUEST_ABI, signer);
+      
+      let amountToWithdraw;
+      
+      // Figure out how much is left inside the contract
+      if (questData.rewardTokenType === 'native' || questData.tokenAddress === ZeroAddress) {
+          amountToWithdraw = await ethersProvider.getBalance(faucetAddress!);
+      } else {
+          // Fetch ERC20 balance
+          const erc20Abi = ["function balanceOf(address account) view returns (uint256)"];
+          const tokenContract = new Contract(questData.tokenAddress, erc20Abi, signer);
+          amountToWithdraw = await tokenContract.balanceOf(faucetAddress!);
+      }
+
+      if (amountToWithdraw === 0n) {
+          throw new Error("No funds left to withdraw.");
+      }
+
+      toast.info("Please confirm the withdrawal in your wallet...");
+      const tx = await questContract.withdraw(amountToWithdraw);
+      
+      toast.info("Withdrawing funds. Waiting for confirmation...");
+      await tx.wait();
+      toast.success("Funds successfully withdrawn to your wallet!");
+      
+    } catch (e: any) {
+      console.error(e);
+      const errorMsg = e.reason || e.shortMessage || e.message || "Transaction failed";
+      toast.error("Withdrawal failed: " + errorMsg);
+    } finally {
+      setIsWithdrawing(false);
     }
   };
 
@@ -1135,16 +1199,20 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
       <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-8 pb-20 relative">
         {/* ============= HERO SECTION ============= */}
-        <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl min-h-[300px]">
+        <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl min-h-[160px] md:min-h-[300px]">
           <div className="absolute inset-0 z-0">
             <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/90 to-transparent" />
             {editForm.imageUrl || questData.imageUrl ? (
-              <img src={editForm.imageUrl || questData.imageUrl} alt="Background" className="w-full h-full object-cover opacity-30 blur-sm scale-105" />
+              <img 
+                src={editForm.imageUrl || questData.imageUrl} 
+                alt="Background" 
+                className="w-full h-full object-cover opacity-30 blur-sm   origin-center md:origin-top scale-75 md:scale-105" 
+              />
             ) : null}
           </div>
 
-          <div className="relative z-10 p-6 md:p-10 flex flex-col md:flex-row gap-8 items-start h-full">
-            <div className="w-full md:w-64 h-64 shrink-0 rounded-lg overflow-hidden border-2 border-slate-700/50 shadow-xl bg-slate-950 flex items-center justify-center group relative">
+          <div className="relative z-10 p-4 md:p-10 flex flex-col md:flex-row gap-4 md:gap-8 items-start h-full">
+            <div className="w-24 h-24 sm:w-32 sm:h-32 md:w-64 md:h-64 shrink-0 rounded-lg overflow-hidden border-2 border-slate-700/50 shadow-xl bg-slate-950 flex items-center justify-center group relative">
               {isEditing ? (
                 <div className="absolute inset-0 z-20 bg-black/80 flex flex-col items-center justify-center p-4">
                   <ImageIcon className="h-8 w-8 text-slate-400 mb-2" />
@@ -1170,7 +1238,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                     ) : (
                       <div className="flex items-center gap-3 flex-wrap">
                         <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">{questData.title}</h1>
-                        <Badge variant="secondary" className="bg-purple-100 text-blue-800 border-purple-200 flex items-center gap-1 shadow-sm h-6 px-3"><Sparkles className="h-3 w-3" /> Beta Phase</Badge>
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-800 flex items-center gap-1 shadow-sm h-6 px-3"><Sparkles className="h-3 w-3" /> Beta Phase</Badge>
                         <Badge variant={questData.isActive ? "default" : "destructive"} className="h-6 px-3">{questData.isActive ? "Live" : "Paused"}</Badge>
                         {questData.isFunded && <Badge className="bg-green-500 hover:bg-green-600 h-6 px-3">Funded</Badge>}
                       </div>
@@ -1184,25 +1252,15 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                 </div>
                 {isCreator && (
                   <div className="hidden md:block pl-4 space-y-2">
-                    {isEditing ? (
-                      <div className="flex gap-2 flex-col">
-                        <Button size="sm" className="bg-green-600 hover:bg-green-500 w-full" onClick={handleSaveDetails} disabled={isSaving}>
-                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Save
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={isSaving} className="w-full text-black bg-white/80 hover:bg-white">
-                          <X className="w-4 h-4 mr-2" /> Cancel
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <Button variant="secondary" size="sm" className="w-full" onClick={() => setIsEditing(true)}><Edit2 className="w-4 h-4 mr-2" /> Edit</Button>
+                    
+                      
                         {!questData.isFunded && (
                           <Button size="sm" onClick={() => { setFundAmount(""); setShowFundModal(true); }} className="w-full bg-green-600 hover:bg-green-700 text-white">
                             <Coins className="mr-2 h-4 w-4" /> Fund Quest
                           </Button>
                         )}
-                      </>
-                    )}
+                      
+                    
                   </div>
                 )}
               </div>
@@ -1224,7 +1282,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                     <div className="p-2 bg-green-500/20 rounded-full text-green-400"><Users className="h-6 w-6" /></div>
                     <div>
                       <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Participants</div>
-                      <div className="text-xl font-bold text-white">{questData.totalParticipants || 0}</div>
+                      <div className="text-xl font-bold text-white">{allParticipants.length}</div>
                     </div>
                   </div>
                   <Button variant="outline" size="lg" className="bg-white/5 border-white/10 text-white hover:bg-white/10 h-auto py-3 px-6" onClick={() => { const link = window.location.href.split("?")[0]; navigator.clipboard.writeText(link); toast.success("Quest link copied to clipboard!"); }}>
@@ -1233,12 +1291,14 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                   <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-lg px-5 py-3 flex items-center gap-4 min-w-[160px]">
                     <div className="p-2 bg-blue-500/20 rounded-full text-blue-400"><Shield className="h-6 w-6" /></div>
                     <div>
-                      <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Your Stage</div>
-                      <div className="text-xl font-bold text-white">{participantData ? userProgress.currentStage : "Not Joined"}</div>
+                      <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{isCreator ? "Your Role" : "Your Stage"}</div>
+                      <div className="text-xl font-bold text-white">
+                        {isCreator ? "Admin" : participantData ? userProgress.currentStage : "Not Joined"}
+                      </div>
                     </div>
                   </div>
                 </div>
-                {!participantData && (
+                {!participantData && !isCreator && (
                   <Button size="lg" onClick={handleJoin} disabled={isJoining} className="min-w-[200px]">
                     {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
                     {isJoining ? "Joining..." : "Join Quest to Participate"}
@@ -1324,7 +1384,6 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
         {/* ============= TABS ============= */}
         <div className="relative">
-          {!participantData && <div className="absolute inset-0 z-40 pointer-events-auto cursor-not-allowed" />}
 
           <Tabs defaultValue="tasks" className="w-full">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b mb-8 gap-4 pb-2 sm:pb-0">
@@ -1369,11 +1428,15 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
             {/* ── TASKS TAB ── */}
             <TabsContent value="tasks" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {stagesToRender.map((stage) => {
+            <div className="relative">
+              {!participantData && (
+                <div className="absolute inset-0 z-40 pointer-events-auto cursor-not-allowed" />
+              )}
+            {stagesToRender.map((stage) => {
                 // Only render stages that have tasks
                 const stageTasks = questData.tasks.filter((t: any) => t.stage === stage) || [];
                 if (stageTasks.length === 0) return null;
-
+                const isQuestNotStarted = questTiming.notStartedYet;
                 // ── UPDATED: use stagesMeta for lock state ──
                 const stageMeta = userProgress.stagesMeta?.[stage];
                 let isLockedStage: boolean;
@@ -1390,11 +1453,14 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                     isLockedStage = !(prevMeta?.isUnlocked ?? false);
                   }
                 } else {
-                  // Fallback: old index-based logic
-                  const stageIdx = ALL_STAGES.indexOf(stage);
-                  const userStageIdx = ALL_STAGES.indexOf(userProgress.currentStage);
-                  isLockedStage = stageIdx > userStageIdx;
-                }
+                    // Fallback: old index-based logic
+                    const stageIdx = ALL_STAGES.indexOf(stage);
+                    const userStageIdx = ALL_STAGES.indexOf(userProgress.currentStage);
+                    isLockedStage = stageIdx > userStageIdx;
+                  }
+
+                  // Lock everything if quest hasn't started
+                  if (isQuestNotStarted) isLockedStage = true;
 
                 // ── Per-stage progress info (shown in stage header) ──
                 const stageProgressLabel = stageMeta
@@ -1406,7 +1472,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                   : null;
 
                 return (
-                  <div key={stage} className={`space-y-4 ${isLockedStage || !participantData ? "opacity-50" : ""}`}>
+                  <div key={stage} className={`space-y-4 ${isLockedStage || !participantData || isQuestNotStarted ? "opacity-50" : ""}`}>
                     <div className="flex items-center gap-4">
                       <Badge
                         variant="outline"
@@ -1434,7 +1500,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                       )}
 
                       <div className="h-px bg-border flex-1" />
-                      {(isLockedStage || !participantData) && <Lock className="h-4 w-4 text-muted-foreground" />}
+                      {(isLockedStage || !participantData || isQuestNotStarted) && <Lock className="h-4 w-4 text-muted-foreground" />}  
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1520,7 +1586,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                                 <div className="text-[10px] font-bold text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
                                   {task.verificationType === "auto_social" && <Sparkles className="h-3 w-3 text-blue-500" />}
                                   {task.verificationType === "auto_tx" && <Shield className="h-3 w-3 text-green-500" />}
-                                  {task.verificationType === "onchain" && <Zap className="h-3 w-3 text-purple-500" />}
+                                  {task.verificationType === "onchain" && <Zap className="h-3 w-3 text-blue-500" />}
                                   {task.verificationType === "manual_link" && <ExternalLink className="h-3 w-3" />}
                                   {task.verificationType.replace("manual_", "").replace("auto_", "")}
                                 </div>
@@ -1551,6 +1617,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                   </div>
                 );
               })}
+              </div>
             </TabsContent>
 
             {/* ── LEADERBOARD TAB ── */}
@@ -1605,11 +1672,36 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                               <TableCell className="text-right">
                                 {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
                                   entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
-                                    <Button size="sm" onClick={handleClaimReward} disabled={isClaiming} className="bg-green-600 hover:bg-green-700 text-white">
-                                      {isClaiming ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim Reward"}
-                                    </Button>
+                                    
+                                    // If quest hasn't ended yet
+                                    !isQuestEnded ? (
+                                        <Badge variant="outline" className="text-amber-500 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+                                          Awaiting End
+                                        </Badge>
+                                    ) : 
+                                    // If window is completely closed
+                                    isClaimWindowClosed ? (
+                                        <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20">
+                                          Expired
+                                        </Badge>
+                                    ) : 
+                                    // If quest ended AND window is open
+                                    (
+                                        <Button 
+                                          size="sm" 
+                                          onClick={handleClaimReward} 
+                                          disabled={isClaiming} 
+                                          className="bg-green-600 hover:bg-green-700 text-white shadow-sm font-bold"
+                                        >
+                                          {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                                          Claim Reward
+                                        </Button>
+                                    )
+                                    
                                   ) : (
-                                    <span className="text-xs text-muted-foreground">Not Eligible</span>
+                                    <span className="text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                                      Not Eligible
+                                    </span>
                                   )
                                 )}
                               </TableCell>
@@ -1683,7 +1775,40 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                         </CardContent>
                       </Card>
                     </div>
-
+                    {/* ── POST-QUEST MANAGEMENT (Only shows if quest is over) ── */}
+                {isQuestEnded && !isAdminEditing && (
+                    <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-slate-50 dark:bg-slate-900/50">
+                        <CardHeader className="pb-3 border-b dark:border-slate-800">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <ShieldCheck className="h-5 w-5 text-indigo-500" /> Post-Quest Actions
+                            </CardTitle>
+                            <CardDescription>
+                                Winners have been automatically processed by the system.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div>
+                                    <h4 className="font-semibold text-sm">Withdraw Unclaimed Funds</h4>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {isClaimWindowClosed 
+                                            ? "The claim window has closed. You can safely withdraw the remaining pool." 
+                                            : `Withdrawals are locked. The claim window closes on: ${claimWindowEnd.toLocaleString()}`}
+                                    </p>
+                                </div>
+                                <Button 
+                                    onClick={handleAdminWithdraw} 
+                                    disabled={isWithdrawing || !isClaimWindowClosed}
+                                    variant={isClaimWindowClosed ? "default" : "outline"}
+                                    className="w-full sm:w-auto"
+                                >
+                                    {isWithdrawing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    {isClaimWindowClosed ? "Withdraw Funds" : "Locked"}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
                     {/* ── SUBMISSION REVIEW QUEUE ── */}
                     <Card className="border-slate-200 dark:border-slate-800 shadow-md overflow-hidden">
                       <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
@@ -2071,33 +2196,41 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
         {/* ============= FUNDING MODAL ============= */}
         {showFundModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md shadow-2xl">
-              <CardHeader>
-                <CardTitle>Fund Reward Pool</CardTitle>
-                <CardDescription>Deposit tokens to activate this quest.<br />Includes <strong>5% Platform Fee</strong>.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg space-y-2 text-sm">
-                  <div className="flex justify-between"><span>Reward Pool Goal:</span><span className="font-bold">{rewardPoolAmount}</span></div>
-                  <div className="flex justify-between text-muted-foreground"><span>Platform Fee (5%):</span><span>+ {requiredFee.toFixed(4)}</span></div>
-                  <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold text-primary"><span>Total Required:</span><span>{totalRequired.toFixed(4)}</span></div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Enter Deposit Amount (Total)</Label>
-                  <Input type="number" placeholder="0.00" value={totalRequired.toFixed(4)} onChange={(e) => setFundAmount(e.target.value)} className={isValidFundingAmount ? "border-green-500" : "border-red-500"} />
-                  {!isValidFundingAmount && fundAmount && <p className="text-xs text-red-500">Amount must be exactly {totalRequired.toFixed(4)}</p>}
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setShowFundModal(false)} disabled={isFunding}>Cancel</Button>
-                <Button onClick={handleFundQuest} disabled={!isValidFundingAmount || isFunding} className="bg-green-600 hover:bg-green-700 text-white">
-                  {isFunding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} {isFunding ? "Processing..." : "Confirm & Deposit"}
-                </Button>
-              </CardFooter>
-            </Card>
-          </div>
-        )}
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <Card className="w-full max-w-md shadow-2xl">
+      <CardHeader>
+        <CardTitle>Fund Reward Pool</CardTitle>
+        <CardDescription>Deposit tokens to activate this quest.<br />Includes <strong>5% Platform Fee</strong>.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg space-y-2 text-sm">
+          <div className="flex justify-between"><span>Reward Pool Goal:</span><span className="font-bold">{rewardPoolAmount}</span></div>
+          <div className="flex justify-between text-muted-foreground"><span>Platform Fee (5%):</span><span>+ {requiredFee.toFixed(4)}</span></div>
+          <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold text-primary"><span>Total Required:</span><span>{totalRequired.toFixed(4)}</span></div>
+        </div>
+        <div className="space-y-2">
+          <Label>Deposit Amount</Label>
+          {/* Changed to readOnly since the exact amount is required */}
+          <Input 
+            type="number" 
+            value={totalRequired.toFixed(4)} 
+            readOnly 
+            className="bg-slate-50 dark:bg-slate-900/50 text-muted-foreground cursor-not-allowed font-medium" 
+          />
+        </div>
+      </CardContent>
+      <CardFooter className="flex justify-end gap-3">
+        <Button variant="outline" onClick={() => setShowFundModal(false)} disabled={isFunding}>Cancel</Button>
+        
+        {/* Removed !isValidFundingAmount so it is always active */}
+        <Button onClick={handleFundQuest} disabled={isFunding} className="bg-green-600 hover:bg-green-700 text-white">
+          {isFunding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} 
+          {isFunding ? "Processing..." : "Confirm & Deposit"}
+        </Button>
+      </CardFooter>
+    </Card>
+  </div>
+)}
       </div>
     </div>
   );

@@ -10,6 +10,14 @@ import {
   CardDescription,
   CardFooter,
 } from "@/components/ui/card";
+import { 
+  ZeroAddress,
+  isAddress as 
+  ethersIsAddress,
+  BrowserProvider,
+  Contract, 
+  parseUnits 
+} from 'ethers'
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +46,9 @@ import {
   CheckCircle2, ChevronDown, ChevronUp, Upload, ExternalLink,
   Shield, Sparkles, Zap, AlertTriangle, Send, ShieldCheck,
   MessageSquareText, Code, Link as LinkIcon,
+  DollarSign,
 } from "lucide-react";
+import { useWallet } from "../wallet-provider";
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -747,10 +757,11 @@ export function QuestEditPanel({
   const [isSavingMeta, setIsSavingMeta] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const { provider } = useWallet();
 
   // ── Distribution State ──
   const [distModel, setDistModel] = useState(questData?.distributionConfig?.model || "equal");
-  const [totalWinners, setTotalWinners] = useState(questData?.distributionConfig?.totalWinners || 1);
+  const [totalWinners, setTotalWinners] = useState(questData?.distributionConfig?.totalWinners || "");
   const [tiers, setTiers] = useState<any[]>(questData?.distributionConfig?.tiers || []);
   const [isSavingDist, setIsSavingDist] = useState(false);
 
@@ -872,18 +883,92 @@ export function QuestEditPanel({
       toast.error("Please enter a valid amount to fund.");
       return;
     }
+    if (!provider) {
+      toast.error("Wallet not connected. Please connect your wallet.");
+      return;
+    }
+
     setIsFunding(true);
     try {
-      // NOTE: Insert your actual smart contract funding logic here using Ethers.js
-      // e.g., const tx = await contract.fund(ethers.parseUnits(fundAmount, decimals));
-      // await tx.wait();
+      // 1. Get the signer directly from your existing provider
+      const signer = await provider.getSigner();
+
+      // Check if the reward token is Native (ETH/CELO) or ERC20
+      const isNative = questData?.rewardTokenType === 'native' || questData?.tokenAddress === ZeroAddress;
       
-      // Mocking the backend update for the UI
+      let amountWei;
+      // Minimal ABI for the Faucet's fund function
+      const faucetAbi = ["function fund(uint256 _tokenAmount) payable"];
+
+      if (isNative) {
+        // Native tokens always use 18 decimals
+        amountWei = parseUnits(fundAmount, 18);
+        const contract = new Contract(faucetAddress, faucetAbi, signer);
+        
+        toast.info("Please confirm the funding transaction in your wallet...");
+        // For native, we pass the amount as the argument AND as msg.value
+        const tx = await contract.fund(amountWei, { value: amountWei });
+        toast.info("Transaction submitted. Waiting for confirmation...");
+        await tx.wait();
+
+      } else {
+        // 2. Handle ERC20 Tokens (Requires Approval first)
+        const tokenAddress = questData?.tokenAddress;
+        if (!tokenAddress) throw new Error("Token address is missing from quest data.");
+
+        const erc20Abi = [
+          "function decimals() view returns (uint8)",
+          "function approve(address spender, uint256 amount) returns (bool)"
+        ];
+        const tokenContract = new Contract(tokenAddress, erc20Abi, signer);
+        
+        toast.info("Fetching token details...");
+        const decimals = await tokenContract.decimals();
+        amountWei = parseUnits(fundAmount, decimals);
+
+        // A. Approve Faucet to spend the tokens
+        toast.info("Please approve the token transfer in your wallet...");
+        const approveTx = await tokenContract.approve(faucetAddress, amountWei);
+        toast.info("Approval submitted. Waiting for confirmation...");
+        await approveTx.wait();
+
+        // B. Fund the Faucet
+        toast.info("Please confirm the funding transaction...");
+        const faucetContract = new Contract(faucetAddress, faucetAbi, signer);
+        const tx = await faucetContract.fund(amountWei);
+        toast.info("Transaction submitted. Waiting for confirmation...");
+        await tx.wait();
+      }
+
+      // 3. Update Database to reflect new reward pool size
+      toast.info("Syncing new balance to database...");
+      const currentPool = parseFloat(questData?.rewardPool || "0");
+      const addedAmount = parseFloat(fundAmount);
+      const newTotal = (currentPool + addedAmount).toString();
+
+      const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/meta`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          adminAddress: creatorAddress, 
+          rewardPool: newTotal 
+        }),
+      });
+
+      const json = await res.json();
+      if (!json.success) throw new Error(json.detail || "Failed to sync database.");
+
+      // 4. Update UI
       toast.success(`Successfully funded the quest with ${fundAmount} ${questData?.tokenSymbol || "Tokens"}!`);
       setFundAmount("");
       
+      // Tell parent component to update the UI immediately
+      onQuestUpdated?.({ rewardPool: newTotal });
+      
     } catch (e: any) {
-      toast.error("Funding transaction failed: " + e.message);
+      console.error(e);
+      const errorMsg = e.reason || e.shortMessage || e.message || "Transaction failed";
+      toast.error("Funding failed: " + errorMsg);
     } finally {
       setIsFunding(false);
     }
@@ -1010,7 +1095,7 @@ export function QuestEditPanel({
         <Card className="border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
           <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800">
             <CardTitle className="text-base flex items-center gap-2">
-              <Zap className="h-4 w-4 text-slate-500" /> Funding & Distribution
+              <DollarSign className="h-4 w-4 text-slate-500" /> Funding & Distribution
             </CardTitle>
             <CardDescription className="mt-1">Manage quest liquidity and winner models.</CardDescription>
           </CardHeader>
@@ -1030,7 +1115,7 @@ export function QuestEditPanel({
                   className="bg-white dark:bg-slate-950 flex-1" 
                 />
                 <Button onClick={handleFundQuest} disabled={isFunding || !fundAmount} className="bg-green-600 hover:bg-green-700 text-white shrink-0">
-                  {isFunding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />} Fund
+                  {isFunding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <DollarSign className="h-4 w-4 mr-2" />} Fund
                 </Button>
               </div>
             </div>
@@ -1040,7 +1125,7 @@ export function QuestEditPanel({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold uppercase text-muted-foreground">Winners</Label>
-                  <Input type="number" min={1} value={totalWinners} onChange={(e) => setTotalWinners(Number(e.target.value))} />
+                  <Input type="number" min={""} value={totalWinners} onChange={(e) => setTotalWinners(Number(e.target.value))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold uppercase text-muted-foreground">Model</Label>
@@ -1058,7 +1143,7 @@ export function QuestEditPanel({
                 <div className="space-y-2 border-t pt-4">
                   <div className="flex justify-between items-center mb-2">
                     <Label className="text-xs font-semibold">Tiers</Label>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setTiers([...tiers, { rankStart: 1, rankEnd: 1, amountPerUser: 0 }])}>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setTiers([...tiers, { rankStart: "", rankEnd: "", amountPerUser: 0 }])}>
                       <Plus className="h-3 w-3 mr-1"/> Add Tier
                     </Button>
                   </div>

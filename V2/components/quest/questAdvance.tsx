@@ -765,7 +765,8 @@
               rewardTokenType: newQuest.rewardTokenType, 
               tokenAddress: newQuest.tokenAddress,       
               tokenSymbol: newQuest.tokenSymbol,         
-              distributionConfig: newQuest.distributionConfig
+              distributionConfig: newQuest.distributionConfig,
+              chainId: Number(chainId)
           };
 
           const res = await fetch(`${API_BASE_URL}/api/quests/finalize`, {

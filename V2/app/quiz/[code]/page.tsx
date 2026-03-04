@@ -18,7 +18,7 @@ import { BrowserProvider, Contract } from "ethers";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 // ── Safe WS URL — evaluated at runtime, not module level (avoids SSR crash) ──
 function getWsBaseUrl(): string {
@@ -699,8 +699,8 @@ export default function QuizCodePage() {
       const me = leaderboard.find(e => e.walletAddress.toLowerCase() === myWallet);
       if (me) {
         // Play winning sound if in top 3, else losing sound
-        if (me.rank <= 3) playSound("/sounds/game-win.mp3");
-        else playSound("/sounds/game-lose.mp3");
+        if (me.rank <= 3) playSound("/sounds/winner.mp3");
+        else playSound("/sounds/loseer.mp3");
         
         gameOverSoundPlayed.current = true;
       }

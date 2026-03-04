@@ -27,7 +27,7 @@ interface UserProfile {
     avatar_url?: string;
 }
 
-const API_BASE_URL = "http://127.0.0.1:8000"
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
 
 // Helper to decode errors
 const getUserFriendlyError = (error: any): string => {

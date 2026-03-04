@@ -23,7 +23,7 @@
   import { createQuestReward, type Network } from "@/lib/faucet"
   import { toast } from 'sonner'
 
-  const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
+  const API_BASE_URL = "http://127.0.0.1:8000"
   const BACKEND_WALLET_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 
   // =========================================================
@@ -121,7 +121,7 @@
       id: 'sys_referral',
       title: 'Refer Friends',
       description: 'Share your unique referral link to earn points.',
-      points: 50,
+      points: 500,
       required: false,
       category: 'referral',
       url: '',
@@ -135,7 +135,7 @@
       id: 'sys_daily',
       title: 'Daily Check-in',
       description: 'Return every 24 hours to claim free points.',
-      points: 50,
+      points: 100,
       required: false,
       category: 'general',
       url: '',

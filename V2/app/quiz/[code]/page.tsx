@@ -18,7 +18,7 @@ import { BrowserProvider, Contract } from "ethers";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ── Safe WS URL — evaluated at runtime, not module level (avoids SSR crash) ──
 function getWsBaseUrl(): string {
@@ -75,6 +75,15 @@ const OPTION_STYLES: Record<string, { bg: string; hover: string; border: string;
   D: { bg: "bg-green-500",  hover: "hover:bg-green-400",  border: "border-green-300",  shape: "■" },
 };
 
+// ── Sound Helper ─────────────────────────────────────────────
+const playSound = (url: string) => {
+  if (typeof window !== "undefined") {
+    const audio = new Audio(url);
+    audio.volume = 0.5;
+    audio.play().catch(e => console.log("Audio play blocked by browser:", e));
+  }
+};
+
 // ── Confetti ─────────────────────────────────────────────────
 const CONFETTI_COLORS = ["#FFD700","#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98FB98"];
 
@@ -117,6 +126,41 @@ function Confetti({ active }: { active: boolean }) {
   );
 }
 
+// ── Rank Reaction Overlay ────────────────────────────────────
+function RankReaction({ change }: { change: number }) {
+  if (change === 0) return null;
+  const isUp = change > 0;
+
+  return (
+    <div 
+      className="fixed inset-0 pointer-events-none z-[100] flex items-center justify-center"
+      style={{ animation: "reactionFade 3s ease-in-out forwards" }}
+    >
+      <div className={cn(
+        "p-8 rounded-[3rem] flex flex-col items-center gap-3 backdrop-blur-sm border-2 shadow-2xl",
+        isUp ? "bg-green-500/20 border-green-500/50 shadow-green-500/20" : "bg-red-500/20 border-red-500/50 shadow-red-500/20"
+      )}>
+        <span className="text-8xl md:text-9xl drop-shadow-2xl">{isUp ? "🚀" : "😢"}</span>
+        <span className={cn(
+          "text-3xl md:text-5xl font-black italic uppercase tracking-tighter drop-shadow-lg",
+          isUp ? "text-green-400" : "text-red-400"
+        )}>
+          {isUp ? `+${change} POSITIONS!` : `${change} POSITIONS`}
+        </span>
+      </div>
+      <style>{`
+        @keyframes reactionFade {
+          0%   { transform: scale(0.5); opacity: 0; }
+          15%  { transform: scale(1.1); opacity: 1; }
+          25%  { transform: scale(1);   opacity: 1; }
+          80%  { transform: scale(1);   opacity: 1; }
+          100% { transform: scale(0.8); opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ── Rank badge ───────────────────────────────────────────────
 function RankBadge({ change }: { change: number }) {
   if (change > 0) return (
@@ -132,28 +176,17 @@ function RankBadge({ change }: { change: number }) {
   return <Minus className="h-3 w-3 text-slate-400" />;
 }
 
-// ── Circular timer ───────────────────────────────────────────
-function CircleTimer({ seconds, total }: { seconds: number; total: number }) {
-  const r = 38;
-  const circ = 2 * Math.PI * r;
-  const ratio = Math.max(0, seconds / total);
-  const dash = ratio * circ;
-  const color = ratio > 0.5 ? "#22c55e" : ratio > 0.25 ? "#f59e0b" : "#ef4444";
+// ── Horizontal Timer ─────────────────────────────────────────
+function LinearTimer({ seconds, total }: { seconds: number; total: number }) {
+  const percentage = Math.max(0, (seconds / total) * 100);
+  const color = percentage > 50 ? "bg-green-500" : percentage > 25 ? "bg-yellow-500" : "bg-red-500";
+  
   return (
-    <div className="relative inline-flex items-center justify-center">
-      <svg width="96" height="96" className="-rotate-90">
-        <circle cx="48" cy="48" r={r} fill="none" stroke="#1e293b" strokeWidth="7" />
-        <circle
-          cx="48" cy="48" r={r} fill="none"
-          stroke={color} strokeWidth="7"
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-          style={{ transition: "stroke-dasharray 0.5s linear, stroke 0.3s" }}
-        />
-      </svg>
-      <span className="absolute text-2xl font-black text-white tabular-nums" style={{ color }}>
-        {Math.ceil(seconds)}
-      </span>
+    <div className="w-full h-3 bg-white/10 overflow-hidden shrink-0">
+      <div 
+        className={cn("h-full transition-all duration-300 ease-linear", color)}
+        style={{ width: `${percentage}%` }}
+      />
     </div>
   );
 }
@@ -452,7 +485,9 @@ export default function QuizCodePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
+  
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const gameOverSoundPlayed = useRef<boolean>(false);
 
   const [revealCorrectId, setRevealCorrectId] = useState<string | null>(null);
   const [personalResult, setPersonalResult] = useState<PersonalResult | null>(null);
@@ -519,7 +554,6 @@ export default function QuizCodePage() {
   }, [code, userWalletAddress]);
 
   // ── Auto-rejoin for non-creator players ──────────────────
-  // Only fires when quiz is in lobby (waiting), never for finished quizzes
   useEffect(() => {
     if (isCreator || !userWalletAddress || !username.trim() || hasJoined || phase !== "lobby") return;
 
@@ -535,10 +569,8 @@ export default function QuizCodePage() {
           setHasJoined(true);
           toast.success("Welcome back!", { duration: 1200 });
         } else if (data.finished) {
-          // Quiz ended while we were loading — jump to results
           setPhase("game_over");
         } else if (data.active) {
-          // Quiz in progress — still connect WS to spectate
           setHasJoined(true);
           setIsSpectator(true);
         }
@@ -653,6 +685,28 @@ export default function QuizCodePage() {
     };
   }, [hasJoined, connectWS]);
 
+  // ── SOUND EFFECTS TRIGGERS ────────────────────────────────
+  useEffect(() => {
+    if (phase === "reveal" && personalResult) {
+      if (personalResult.isCorrect) playSound("/sounds/correct.mp3");
+      else playSound("/sounds/wrong.mp3");
+    }
+    if (phase === "leaderboard") {
+      if (myRankChange > 0) playSound("/sounds/rank-up.mp3");
+      else if (myRankChange < 0) playSound("/sounds/rank-down.mp3");
+    }
+    if (phase === "game_over" && leaderboard.length > 0 && !gameOverSoundPlayed.current) {
+      const me = leaderboard.find(e => e.walletAddress.toLowerCase() === myWallet);
+      if (me) {
+        // Play winning sound if in top 3, else losing sound
+        if (me.rank <= 3) playSound("/sounds/game-win.mp3");
+        else playSound("/sounds/game-lose.mp3");
+        
+        gameOverSoundPlayed.current = true;
+      }
+    }
+  }, [phase, personalResult, myRankChange, leaderboard, myWallet]);
+
   // ── Join quiz ─────────────────────────────────────────────
   const handleJoin = async () => {
     if (!userWalletAddress || !username) { toast.error("Set a username in your profile"); return; }
@@ -671,7 +725,6 @@ export default function QuizCodePage() {
         setPhase("game_over");
         toast.info("This quiz has already ended. Showing results.");
       } else if (d.active) {
-        // Join as spectator mid-game
         setHasJoined(true);
         setIsSpectator(true);
         toast.info("Quiz in progress — joining as spectator");
@@ -865,105 +918,94 @@ export default function QuizCodePage() {
     );
   }
 
-  // Question / Reveal
+  // Mobile-Optimized Stacked Question & Reveal View
   if ((phase === "question" || phase === "reveal") && currentQ) {
     const isReveal = phase === "reveal";
+    
     return (
-      <div className="fixed inset-0 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col overflow-hidden">
-        {isSpectator && (
-          <div className="bg-amber-500/10 border border-amber-500 text-amber-400 py-3 px-4 text-center font-medium">
-            👁️ You are spectating this round
-          </div>
-        )}
-        <div className="flex items-center justify-between px-4 sm:px-8 py-3 bg-black/30 border-b border-white/10">
-          <div className="text-white/60 text-sm font-bold">Q{currentQ.index + 1} / {currentQ.total}</div>
-          <div className="text-white font-black text-base sm:text-lg truncate max-w-[50%] text-center">{quizMeta?.title}</div>
-          <div className="flex items-center gap-2">
-            {myEntry && (
-              <Badge className="bg-white/10 text-white border-0 font-bold">
-                #{myEntry.rank} · {myEntry.points} pts
-              </Badge>
-            )}
+      <div className="fixed inset-0 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col overflow-hidden select-none">
+        
+        {/* Header & Horizontal Timer */}
+        <div className="w-full shrink-0">
+          {!isReveal && <LinearTimer seconds={timeLeft} total={currentQ.timeLimit} />}
+          {isSpectator && (
+            <div className="bg-amber-500/10 border border-amber-500 text-amber-400 py-1 px-4 text-center text-xs font-bold uppercase tracking-wider">
+              👁️ Spectator Mode
+            </div>
+          )}
+          <div className="flex items-center justify-between px-5 py-3 bg-white/5 border-b border-white/10">
+            <Badge variant="outline" className="text-white/60 border-white/20 rounded-full font-bold">
+              Q{currentQ.index + 1} / {currentQ.total}
+            </Badge>
+            <div className="font-black text-white/80 italic tracking-tighter text-lg">{quizMeta?.title}</div>
+            <div className="flex items-center gap-1 font-bold text-primary bg-primary/20 px-3 py-1 rounded-full">
+              <Zap className="h-4 w-4 fill-primary" /> {myEntry?.points || 0}
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-between p-4 sm:p-6 max-w-3xl mx-auto w-full">
-          <div className="w-full space-y-4 pt-2">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 bg-white/10 backdrop-blur rounded-2xl px-6 py-5 text-center">
-                <p className="text-white text-xl sm:text-2xl font-black leading-snug">{currentQ.question}</p>
-              </div>
-              {!isReveal && (
-                <div className="shrink-0">
-                  <CircleTimer seconds={timeLeft} total={currentQ.timeLimit} />
-                </div>
+        {/* Question Area */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6 py-6 text-center">
+          <h2 className="text-2xl md:text-3xl font-bold text-white leading-snug">
+            {currentQ.question}
+          </h2>
+          
+          {/* Reaction Pill for correct/wrong reveal */}
+          {isReveal && personalResult && (
+            <div className={cn(
+              "mt-6 px-8 py-3 rounded-full font-black text-lg shadow-xl border-2 animate-in zoom-in-90",
+              personalResult.isCorrect ? "bg-green-500/20 text-green-400 border-green-500" : "bg-red-500/20 text-red-400 border-red-500"
+            )}>
+              {personalResult.isCorrect ? (
+                <span className="flex items-center gap-2">
+                  <Check className="h-6 w-6" /> CORRECT +{personalResult.pointsEarned}
+                  {personalResult.streak > 1 && <span className="ml-2 bg-orange-500 text-white px-2 py-0.5 rounded-full text-xs">🔥 {personalResult.streak}</span>}
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <X className="h-6 w-6" /> INCORRECT
+                </span>
               )}
             </div>
+          )}
+        </div>
 
-            {isReveal && personalResult && (
-              <div className={cn(
-                "rounded-2xl px-6 py-4 text-center font-black text-xl border-2 animate-in zoom-in-95 duration-300",
-                personalResult.isCorrect
-                  ? "bg-green-500/20 border-green-500 text-green-400"
-                  : "bg-red-500/20 border-red-500 text-red-400"
-              )}>
-                {personalResult.isCorrect ? (
-                  <span className="flex items-center justify-center gap-3">
-                    <Check className="h-7 w-7" /> Correct! +{personalResult.pointsEarned} pts
-                    {personalResult.streak > 1 && (
-                      <Badge className="bg-orange-500 border-0 text-sm">🔥 {personalResult.streak} streak</Badge>
-                    )}
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <X className="h-7 w-7" /> Incorrect
-                  </span>
+        {/* Answer Stack (Vertical layout optimized for thumbs) */}
+        <div className="w-full max-w-xl mx-auto px-4 pb-8 grid grid-cols-1 gap-3 shrink-0">
+          {currentQ.options.map(opt => {
+            const style = OPTION_STYLES[opt.id];
+            const isSelected = selectedId === opt.id;
+            const isCorrect = isReveal && opt.id === revealCorrectId;
+            const isWrong   = isReveal && isSelected && opt.id !== revealCorrectId;
+
+            return (
+              <button
+                key={opt.id}
+                disabled={isSpectator || isReveal || timeLeft <= 0}
+                onClick={() => handleSelectAnswer(opt.id)}
+                className={cn(
+                  "relative w-full flex items-center justify-between px-6 py-5 rounded-2xl text-white font-black text-lg md:text-xl transition-all active:scale-[0.98]",
+                  style.bg,
+                  !isReveal && !isSelected && style.hover,
+                  isSelected && !isReveal && "ring-4 ring-white shadow-xl scale-[0.98]",
+                  isReveal && !isCorrect && !isWrong && "opacity-30 scale-95 grayscale-[0.5]",
+                  isCorrect && "ring-4 ring-green-400 scale-[1.02] z-10 brightness-110 shadow-2xl shadow-green-500/20",
+                  isWrong && "ring-4 ring-red-500 opacity-80"
                 )}
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 w-full pb-2">
-            {currentQ.options.map(opt => {
-              const style = OPTION_STYLES[opt.id];
-              const isSelected = selectedId === opt.id;
-              const isCorrect = isReveal && opt.id === revealCorrectId;
-              const isWrong   = isReveal && isSelected && opt.id !== revealCorrectId;
-
-              return (
-                <button
-                  key={opt.id}
-                  disabled={isSpectator || isReveal || timeLeft <= 0}
-                  onClick={() => handleSelectAnswer(opt.id)}
-                  className={cn(
-                    "relative flex items-center gap-3 rounded-2xl px-4 py-5 sm:py-6 text-white font-bold text-base sm:text-lg text-left transition-all duration-200 select-none border-2 border-transparent",
-                    style.bg,
-                    !isReveal && !isSelected && style.hover,
-                    isSelected && !isReveal && "ring-4 ring-white scale-[0.97]",
-                    isCorrect && "ring-4 ring-white scale-[1.02] brightness-110",
-                    isWrong && "opacity-50 scale-95",
-                    isReveal && !isCorrect && !isWrong && "opacity-40",
-                  )}
-                >
-                  <span className="text-2xl shrink-0 opacity-80">{style.shape}</span>
+              >
+                <div className="flex items-center gap-4 text-left">
+                  <span className="text-2xl drop-shadow-md opacity-80">{style.shape}</span>
                   <span className="leading-snug">{opt.text}</span>
-                  {isCorrect && <div className="ml-auto shrink-0 bg-white/20 rounded-full p-1"><Check className="h-5 w-5" /></div>}
-                  {isWrong   && <div className="ml-auto shrink-0 bg-white/20 rounded-full p-1"><X className="h-5 w-5" /></div>}
-                  {isSelected && !isReveal && (
-                    <div className="absolute top-2 right-2 bg-white/30 rounded-full p-0.5">
-                      <Check className="h-3 w-3" />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="text-white/40 text-xs text-center pb-1">
-            {isReveal ? "Correct answer revealed — leaderboard coming up..." :
-             hasSubmitted ? `Answer locked in: ${currentQ.options.find(o => o.id === selectedId)?.text} · tap to change` :
-             timeLeft > 0 ? "Tap an answer to respond" : "Time's up!"}
-          </div>
+                </div>
+                
+                {isReveal && isCorrect && <div className="bg-white/20 rounded-full p-1"><Check className="h-6 w-6 stroke-[4px]" /></div>}
+                {isReveal && isWrong && <div className="bg-white/20 rounded-full p-1"><X className="h-6 w-6 stroke-[4px]" /></div>}
+                {isSelected && !isReveal && (
+                  <div className="h-3 w-3 bg-white rounded-full shadow-[0_0_10px_rgba(255,255,255,0.8)] animate-pulse" />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -974,7 +1016,9 @@ export default function QuizCodePage() {
     return (
       <div className="fixed inset-0 bg-gradient-to-b from-slate-900 to-slate-950 flex flex-col overflow-hidden">
         <Confetti active={showConfetti} />
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <RankReaction change={myRankChange} />
+        
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 z-10 bg-slate-900/50 backdrop-blur-md">
           <h2 className="text-white font-black text-xl flex items-center gap-2">
             <Trophy className="h-5 w-5 text-yellow-400" /> Leaderboard
           </h2>
@@ -983,22 +1027,7 @@ export default function QuizCodePage() {
           </Badge>
         </div>
 
-        {myRankChange !== 0 && (
-          <div className={cn(
-            "mx-auto mt-4 px-6 py-3 rounded-2xl font-black text-lg flex items-center gap-3 animate-in zoom-in-95 duration-500",
-            myRankChange > 0
-              ? "bg-green-500/20 text-green-400 border border-green-500/50"
-              : "bg-red-500/20 text-red-400 border border-red-500/50"
-          )}>
-            {myRankChange > 0 ? (
-              <><ArrowUp className="h-6 w-6" /> You moved up {myRankChange} {myRankChange === 1 ? "place" : "places"}! 🎉</>
-            ) : (
-              <><ArrowDown className="h-6 w-6" /> Down {Math.abs(myRankChange)} {Math.abs(myRankChange) === 1 ? "place" : "places"}</>
-            )}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-2 max-w-xl mx-auto w-full">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-2 max-w-xl mx-auto w-full z-10">
           {leaderboard.slice(0, 10).map((entry, i) => {
             const isMe = entry.walletAddress.toLowerCase() === myWallet;
             return (
@@ -1006,20 +1035,20 @@ export default function QuizCodePage() {
                 key={entry.walletAddress}
                 className={cn(
                   "flex items-center gap-4 rounded-2xl px-4 py-3.5 transition-all duration-500 animate-in slide-in-from-bottom-2",
-                  isMe ? "bg-primary/20 border-2 border-primary/50" : "bg-white/5 border border-white/10",
+                  isMe ? "bg-primary/20 border-2 border-primary/50 shadow-lg shadow-primary/10" : "bg-white/5 border border-white/10",
                 )}
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <div className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shrink-0",
-                  entry.rank === 1 ? "bg-yellow-500 text-black" :
-                  entry.rank === 2 ? "bg-slate-400 text-black" :
-                  entry.rank === 3 ? "bg-amber-700 text-white" :
+                  entry.rank === 1 ? "bg-yellow-500 text-black shadow-lg shadow-yellow-500/20" :
+                  entry.rank === 2 ? "bg-slate-300 text-black" :
+                  entry.rank === 3 ? "bg-amber-600 text-white" :
                   "bg-white/10 text-white"
                 )}>
                   {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : entry.rank}
                 </div>
-                <Avatar className="h-9 w-9 shrink-0 border border-white/20">
+                <Avatar className="h-10 w-10 shrink-0 border-2 border-white/10">
                   <AvatarImage src={entry.avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-700 text-white text-xs font-bold">
                     {entry.username?.slice(0, 2).toUpperCase()}
@@ -1027,16 +1056,16 @@ export default function QuizCodePage() {
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-white font-bold text-sm truncate">{entry.username}</span>
-                    {isMe && <Badge className="text-[9px] h-4 px-1 bg-primary border-0">You</Badge>}
-                    {entry.streak > 1 && <Badge className="text-[9px] h-4 px-1 bg-orange-500 border-0">🔥{entry.streak}</Badge>}
+                    <span className="text-white font-bold text-base truncate">{entry.username}</span>
+                    {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-primary text-black border-0">YOU</Badge>}
+                    {entry.streak > 1 && <Badge className="text-[9px] h-4 px-1.5 bg-orange-500 border-0">🔥{entry.streak}</Badge>}
                   </div>
                   {entry.pointsThisRound > 0 && (
-                    <span className="text-green-400 text-xs font-bold">+{entry.pointsThisRound}</span>
+                    <span className="text-green-400 text-xs font-black">+{entry.pointsThisRound} pts</span>
                   )}
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-white font-black text-lg">{entry.points}</div>
+                  <div className="text-white font-black text-xl">{entry.points}</div>
                   <div className="flex items-center justify-end">
                     <RankBadge change={entry.rankChange} />
                   </div>
@@ -1046,7 +1075,7 @@ export default function QuizCodePage() {
           })}
         </div>
 
-        <div className="text-center text-white/30 text-sm pb-4 animate-pulse">
+        <div className="text-center text-white/30 text-sm font-bold tracking-widest uppercase pb-6 pt-2 animate-pulse z-10 bg-gradient-to-t from-slate-950">
           {isLastQuestion ? "Final results — Quiz over!" : "Next question coming up..."}
         </div>
       </div>

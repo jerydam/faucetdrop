@@ -31,7 +31,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWallets } from "@privy-io/react-auth";
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ── Types ──────────────────────────────────────────────────────
 interface QuizOption { id: "A" | "B" | "C" | "D"; text: string }
@@ -990,7 +990,7 @@ export default function CreateQuizPage() {
                   <div className="flex items-start gap-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 rounded-lg p-4">
                     <Lightbulb className="h-4 w-4 text-purple-500 mt-0.5 shrink-0" />
                     <div className="text-xs text-purple-800 dark:text-purple-300">
-                      <p className="font-semibold">Powered by Gemini 2.5 Flash</p>
+                      <p className="font-semibold">Powered by FaucetDrops Ai Engine</p>
                       <p className="mt-0.5">AI generates {aiNumQ} unique {aiDifficulty} questions. Quiz is created instantly and you're redirected to the lobby.</p>
                     </div>
                   </div>

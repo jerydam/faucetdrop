@@ -27,7 +27,7 @@ interface UserProfile {
     avatar_url?: string;
 }
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 
 // Helper to decode errors
 const getUserFriendlyError = (error: any): string => {
@@ -68,7 +68,7 @@ const SYSTEM_TASKS: QuestTask[] = [
         id: 'sys_referral',
         title: 'Refer Friends',
         description: 'Share your unique referral link to earn points.',
-        points: 50,
+        points: 500,
         required: false,
         category: 'referral',
         url: '',
@@ -82,7 +82,7 @@ const SYSTEM_TASKS: QuestTask[] = [
         id: 'sys_share_quest_x',
         title: 'Share Quest on X',
         description: 'Share this quest page on X with @FaucetDrops and your referral link to earn points.',
-        points: 50,
+        points: 100,
         required: false,
         category: 'social',
         url: '',
@@ -96,7 +96,7 @@ const SYSTEM_TASKS: QuestTask[] = [
         id: 'sys_daily',
         title: 'Daily Check-in',
         description: 'Return every 24 hours to claim free points.',
-        points: 50,
+        points: 100,
         required: false,
         category: 'general',
         url: '',

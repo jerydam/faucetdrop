@@ -63,7 +63,7 @@ import { Contract, BrowserProvider, parseEther,ZeroAddress   } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
-const API_BASE_URL = "http://127.0.0.1:8000"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
 // ============= TYPES =============
 export type VerificationType =
@@ -2186,7 +2186,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                   ) : (
                     ['auto_social', 'system_x_share', 'onchain', 'auto_tx'].includes(selectedTask.verificationType) 
                       ? "Verify Task" 
-                      : "Submit for Review"
+                      : "Submit Task"
                   )}
                 </Button>
               </CardFooter>

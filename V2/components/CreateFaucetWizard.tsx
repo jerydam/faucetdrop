@@ -682,7 +682,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     formData.append('file', file)
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/upload-image', {
+      const response = await fetch('https://faucetdrop-backend.onrender.com/upload-image', {
         method: 'POST',
         body: formData,
       })
@@ -740,7 +740,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`💾 Saving faucet metadata for ${faucetAddress}`)
         
-      const response = await fetch('http://127.0.0.1:8000/faucet-metadata', {
+      const response = await fetch('https://faucetdrop-backend.onrender.com/faucet-metadata', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -888,7 +888,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`📝 Registering faucet ${name} (${faucetAddress}) in backend...`)
 
-      const response = await fetch('http://127.0.0.1:8000/register-faucet', {
+      const response = await fetch('https://faucetdrop-backend.onrender.com/register-faucet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

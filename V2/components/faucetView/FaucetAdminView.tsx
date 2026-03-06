@@ -482,7 +482,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       // 2. Call Backend to clean up Database
       try {
         const response = await fetch(
-          "http://127.0.0.1:8000/delete-faucet-metadata",
+          "https://faucetdrop-backend.onrender.com/delete-faucet-metadata",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -630,7 +630,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
 
     // ====================== PATH A: SHARE POST TEMPLATE (Backend) ======================
     if (isTemplateChanged) {
-      const response = await fetch("http://127.0.0.1:8000/faucet-x-template", {
+      const response = await fetch("https://faucetdrop-backend.onrender.com/faucet-x-template", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -667,7 +667,7 @@ if (hasBlockchainChanges) {
   toast.success("Blockchain parameters updated");
 
   // Sync parameters to backend
-  await fetch("http://127.0.0.1:8000/set-claim-parameters", {
+  await fetch("https://faucetdrop-backend.onrender.com/set-claim-parameters", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -682,7 +682,7 @@ if (hasBlockchainChanges) {
   // --- THE FIX: Generate DropCode and trigger the popup ---
   if (faucetType === "dropcode") {
     try {
-      const codeResponse = await fetch("http://127.0.0.1:8000/generate-new-drop-code", {
+      const codeResponse = await fetch("https://faucetdrop-backend.onrender.com/generate-new-drop-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -717,7 +717,7 @@ if (hasBlockchainChanges) {
           action: link.action,
         }));
 
-      await fetch("http://127.0.0.1:8000/add-faucet-tasks", {
+      await fetch("https://faucetdrop-backend.onrender.com/add-faucet-tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -897,7 +897,7 @@ if (hasBlockchainChanges) {
     try {
       setIsGeneratingNewCode(true);
       const response = await fetch(
-        "http://127.0.0.1:8000/generate-new-drop-code",
+        "https://faucetdrop-backend.onrender.com/generate-new-drop-code",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

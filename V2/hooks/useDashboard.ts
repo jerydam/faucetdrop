@@ -8,7 +8,7 @@ const supabase = createClient(
 );
 
 // Backend URL — only used for the manual refresh trigger
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:8001';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'https://faucetdrops-indexer.onrender.com';
 
 export interface DashboardData {
   total_claims: number;

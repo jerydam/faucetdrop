@@ -52,7 +52,7 @@ import { useWallet } from "../wallet-provider";
 
 // ─── Constants ───────────────────────────────────────────────
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 const STAGES = ["Beginner", "Intermediate", "Advance", "Legend", "Ultimate"] as const;
 type Stage = (typeof STAGES)[number];

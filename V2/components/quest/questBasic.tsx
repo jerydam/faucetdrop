@@ -85,7 +85,10 @@ const COINGECKO_IDS: Record<string, string> = {
     "USDC": "usd-coin",
     "ETH": "ethereum",
     "LSK": "lisk",
-    "BNB": "bnb"
+    "BNB": "bnb",
+    "BUSD": "binance-usd",
+    "AGR": "agora-coin",
+    "AVAX": "avalanche-2",
 }
 
 export interface TokenConfiguration {

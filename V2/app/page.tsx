@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams, useRouter } from "next/navigation"; // <-- ADDED
 import { motion } from 'framer-motion';
 import { Contract } from "ethers";
 import { 
@@ -17,7 +18,7 @@ import { CHECKIN_ABI } from '@/lib/abis';
 import { toast } from 'sonner';
 import { useWallet } from "@/hooks/use-wallet";
 import { appendDivviReferralData, reportTransactionToDivvi } from "@/lib/divvi-integration";
-
+import { usePrivy } from "@privy-io/react-auth";
 import Image from 'next/image';
 import { MiniNetworkIndicator, NetworkSelector } from "@/components/network-selector";
 import { WalletConnectButton } from "@/components/wallet-connect";
@@ -87,11 +88,8 @@ export const StarkNetLogo = ({ className = "" }: { className?: string }) => (
   </svg>
 );
 
-// --- INFRASTRUCTURE & PROTOCOLS ---
-
 export const FuelLogo = ({ className = "" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Swapped green for primary and foreground for better contrast */}
     <rect width="24" height="24" rx="12" className="fill-primary"/>
     <path d="M8 8H11V11H8V8Z" className="fill-primary-foreground"/>
     <path d="M13 8H16V11H13V8Z" className="fill-primary-foreground"/>
@@ -107,12 +105,9 @@ export const PendleLogo = ({ className = "" }: { className?: string }) => (
   </svg>
 );
 
-// --- ECOSYSTEMS & CHAINS ---
-
 export const PolygonGuildLogo = ({ className = "" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" fill="#8247E5"/>
-    {/* White parts changed to background for a "cutout" look in light/dark */}
     <path d="M15.4 12.6L13.8 11.7L12.2 12.6V14.4L13.8 15.3L15.4 14.4V12.6Z" className="fill-background"/>
     <path d="M11.8 11.7L10.2 12.6V14.4L11.8 15.3V11.7Z" className="fill-background"/>
     <path d="M15.4 9.9L13.8 9L12.2 9.9V11.7L13.8 12.6L15.4 11.7V9.9Z" className="fill-background"/>
@@ -135,8 +130,6 @@ export const BaseEcosystemLogo = ({ className = "" }: { className?: string }) =>
     <circle cx="12" cy="12" r="8" className="stroke-background" strokeWidth="3"/>
   </svg>
 );
-
-// --- COMMUNITIES & DAOs ---
 
 export const EthGlobalLogo = ({ className = "" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -204,7 +197,6 @@ const NEW_SPACES = [
   { id: 5, name: "Pendle Finance", tags: ["DeFi", "Yield"], quests: "2", funding: "$11M", followers: "110K", logo: PendleLogo },
 ];
 
-
 const HOT_SPACES = [
   { rank: "1", name: "ETH Global", participation: "2.62K", verified: true, logo: EthGlobalLogo},
   { rank: "2", name: "Nigeria Web3 Community", participation: "2.41K", verified: true, logo:NigeriaWeb3Logo },
@@ -218,38 +210,86 @@ const HOT_SPACES = [
   { rank: "10", name: "Base Ecosystem", participation: "1.44K", verified: true, logo: BaseEcosystemLogo },
 ];
 
-
-export default function Home() {
-  const { address, isConnected, signer, chainId, ensureCorrectNetwork } = useWallet();
+// --- MAIN CLIENT COMPONENT ---
+function HomeContent() {
+const { address, isConnected, signer, chainId, ensureCorrectNetwork } = useWallet();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  const { login, ready } = usePrivy();
   const [isJoining, setIsJoining] = useState(false);
   const [showScrollHint, setShowScrollHint] = useState(true);
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (e.currentTarget.scrollLeft > 20) {
-      setShowScrollHint(false);
-    }
-  };
+  const hasPromptedLogin = useRef(false);
+  const hasTriggeredTx = useRef(false);
+  const hasToastedLoading = useRef(false);
+  
   const { data: dashData, loading: dashLoading } = useDashboard();
+
   const handleJoinDroplist = async () => {
     if (!isConnected || !address || !signer) {
-      toast.warning("Please connect your wallet first");
+      toast.warning("Please connect your wallet to join the Droplist");
       return;
     }
     const isCorrectNetwork = await ensureCorrectNetwork(42220); 
     if (!isCorrectNetwork) return;
+    
     setIsJoining(true);
     try {
       const contract = new Contract(DROPLIST_CONTRACT_ADDRESS, CHECKIN_ABI, signer);
       const txData = contract.interface.encodeFunctionData("droplist", []);
       const enhancedData = appendDivviReferralData(txData, address as `0x${string}`);
       const tx = await signer.sendTransaction({ to: DROPLIST_CONTRACT_ADDRESS, data: enhancedData });
+      toast.info("Transaction sent, awaiting confirmation...");
       await tx.wait();
       await reportTransactionToDivvi(tx.hash as `0x${string}`, chainId!);
-      toast.success("Successfully joined!");
+      toast.success("Successfully joined the Droplist!");
     } catch (error: any) {
-      toast.error(`Failed: ${error.message}`);
+      toast.error(`Failed to join: ${error.reason || error.message}`);
     } finally {
       setIsJoining(false);
+    }
+  };
+
+useEffect(() => {
+    const action = searchParams?.get("action");
+
+    if (action === "join-droplist" && !hasTriggeredTx.current) {
+      
+      // A. Immediate feedback while Privy initializes
+      if (!ready) {
+        if (!hasToastedLoading.current) {
+          hasToastedLoading.current = true;
+          // Show a loading toast with an ID so we can dismiss it later
+          toast.loading("Preparing to join Droplist...", { id: "droplist-loading" });
+        }
+        return; // Wait for Privy
+      }
+
+      // B. Privy is ready! Dismiss the loading toast
+      toast.dismiss("droplist-loading");
+
+      // C. If not connected, prompt login exactly ONCE
+      if (!isConnected) {
+        if (!hasPromptedLogin.current) {
+          hasPromptedLogin.current = true; 
+          toast.info("Please sign in or connect your wallet to join.");
+          login(); 
+        }
+        return; // Wait for them to finish logging in
+      }
+
+      // D. They are connected! Fire the transaction
+      hasTriggeredTx.current = true; // Mark tx as triggered
+      handleJoinDroplist();
+
+      // E. Clean the URL so refreshing doesn't loop
+      router.replace("/", { scroll: false });
+    }
+  }, [ready, searchParams, isConnected, address, login, router]);
+  
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (e.currentTarget.scrollLeft > 20) {
+      setShowScrollHint(false);
     }
   };
 
@@ -259,28 +299,16 @@ export default function Home() {
       {/* --- NAVIGATION --- */}
       <nav className="fixed top-0 w-full z-[100] bg-background/90 backdrop-blur-md border-b border-border px-4 h-16 sm:h-20 flex justify-between items-center">
         <Link href="/" className="flex items-center">
-  {/* Dark Mode Logo: Hidden by default, shown only in dark mode */}
-  <div className="relative w-28 sm:w-40 h-8 sm:h-10 transition-transform hover:scale-105 hidden dark:block">
-    <Image 
-      src="/darklogo.png" 
-      alt="Logo" 
-      fill 
-      className="object-contain" 
-      priority 
-    />
-  </div>
+          {/* Dark Mode Logo */}
+          <div className="relative w-28 sm:w-40 h-8 sm:h-10 transition-transform hover:scale-105 hidden dark:block">
+            <Image src="/darklogo.png" alt="Logo" fill className="object-contain" priority />
+          </div>
 
-  {/* Light Mode Logo: Shown by default, hidden in dark mode */}
-  <div className="relative w-28 sm:w-40 h-8 sm:h-10 transition-transform hover:scale-105 block dark:hidden">
-    <Image 
-      src="/lightlogo.png" 
-      alt="Logo" 
-      fill 
-      className="object-contain" 
-      priority 
-    />
-  </div>
-</Link>
+          {/* Light Mode Logo */}
+          <div className="relative w-28 sm:w-40 h-8 sm:h-10 transition-transform hover:scale-105 block dark:hidden">
+            <Image src="/lightlogo.png" alt="Logo" fill className="object-contain" priority />
+          </div>
+        </Link>
 
         <div className="flex items-center gap-2 sm:gap-4">
           <ThemeToggle/>
@@ -302,89 +330,83 @@ export default function Home() {
         
         {/* --- HERO SECTION --- */}
         <div className="flex flex-col lg:flex-row gap-8 items-stretch">
-  <div className="flex-1 w-full overflow-hidden">
-    <h1 className="text-xl sm:text-xl lg:text-xl font-bold mb-6 tracking-tight leading-tight text-center lg:text-left">
-      The all-in-one stack for your Web3 Growth, <br className="hidden sm:block" /> 
-      Engagement and Reward Distribution.
-    </h1>
-    
-    <div className="relative group">
-      {showScrollHint && (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="lg:hidden absolute right-4 top-1/2 -translate-y-1/2 z-20 pointer-events-none"
-        >
-          <div className="bg-primary/20 backdrop-blur-md border border-primary/50 p-3 rounded-full animate-bounce">
-            <ArrowRight size={20} className="text-primary" />
-          </div>
-        </motion.div>
-      )}
+          <div className="flex-1 w-full overflow-hidden">
+            <h1 className="text-xl sm:text-xl lg:text-xl font-bold mb-6 tracking-tight leading-tight text-center lg:text-left">
+              The all-in-one stack for your Web3 Growth, <br className="hidden sm:block" /> 
+              Engagement and Reward Distribution.
+            </h1>
+            
+            <div className="relative group">
+              {showScrollHint && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="lg:hidden absolute right-4 top-1/2 -translate-y-1/2 z-20 pointer-events-none"
+                >
+                  <div className="bg-primary/20 backdrop-blur-md border border-primary/50 p-3 rounded-full animate-bounce">
+                    <ArrowRight size={20} className="text-primary" />
+                  </div>
+                </motion.div>
+              )}
 
-      <div 
-        onScroll={handleScroll}
-        className="flex gap-4 overflow-x-auto pb-4 no-scrollbar snap-x snap-mandatory"
-      >
-        {CAMPAIGNS.map((c) => (
-          <Link href={c.path} key={c.id}>
-            {/* THEME LOGIC: 
-                - bg-card provides the base system color.
-                - to-accent/30 in light mode adds a subtle "weight" to the card bottom.
-                - dark:to-accent/10 reduces the gradient intensity in dark mode for a cleaner look.
-            */}
-            <div className="min-w-[85vw] sm:min-w-[400px] h-64 sm:h-72 rounded-2xl p-6 sm:p-8 bg-card bg-gradient-to-br from-card via-card to-accent/30 dark:to-accent/10 border border-border flex flex-col justify-between snap-center cursor-pointer transition-all duration-300 hover:shadow-xl hover:border-primary/50 overflow-hidden relative group">
-              
-              {/* Pattern visibility tuned for light mode (opacity-15) vs dark mode (dark:opacity-20) */}
-              <div className="absolute inset-0 z-0 opacity-[0.15] dark:opacity-20 group-hover:opacity-25 transition-opacity">
-                <Image src={c.bgImage} alt="pattern" fill className="object-cover" />
-              </div>
+              <div 
+                onScroll={handleScroll}
+                className="flex gap-4 overflow-x-auto pb-4 no-scrollbar snap-x snap-mandatory"
+              >
+                {CAMPAIGNS.map((c) => (
+                  <Link href={c.path} key={c.id}>
+                    <div className="min-w-[85vw] sm:min-w-[400px] h-64 sm:h-72 rounded-2xl p-6 sm:p-8 bg-card bg-gradient-to-br from-card via-card to-accent/30 dark:to-accent/10 border border-border flex flex-col justify-between snap-center cursor-pointer transition-all duration-300 hover:shadow-xl hover:border-primary/50 overflow-hidden relative group">
+                      
+                      <div className="absolute inset-0 z-0 opacity-[0.15] dark:opacity-20 group-hover:opacity-25 transition-opacity">
+                        <Image src={c.bgImage} alt="pattern" fill className="object-cover" />
+                      </div>
 
-              <div className="relative z-10">
-                <div className="mb-2">{c.icon}</div>
-                <h3 className="text-xl sm:text-2xl font-bold mt-2 leading-tight">{c.title}</h3>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-2 line-clamp-2">{c.desc}</p>
-              </div>
-              
-              <div className="flex justify-between items-end relative z-10">
-                <button className="px-4 sm:px-6 py-2 bg-primary text-primary-foreground hover:opacity-90 rounded-lg font-bold text-xs sm:text-sm transition-colors shadow-md">
-                  {c.cta}
-                </button>
-                <div className="bg-accent/50 dark:bg-accent px-3 py-1 rounded-md text-[10px] sm:text-xs font-mono text-accent-foreground border border-border/50">
-                  {c.points}
-                </div>
+                      <div className="relative z-10">
+                        <div className="mb-2">{c.icon}</div>
+                        <h3 className="text-xl sm:text-2xl font-bold mt-2 leading-tight">{c.title}</h3>
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-2 line-clamp-2">{c.desc}</p>
+                      </div>
+                      
+                      <div className="flex justify-between items-end relative z-10">
+                        <button className="px-4 sm:px-6 py-2 bg-primary text-primary-foreground hover:opacity-90 rounded-lg font-bold text-xs sm:text-sm transition-colors shadow-md">
+                          {c.cta}
+                        </button>
+                        <div className="bg-accent/50 dark:bg-accent px-3 py-1 rounded-md text-[10px] sm:text-xs font-mono text-accent-foreground border border-border/50">
+                          {c.points}
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  </div>
+          </div>
 
-  {/* MY ASSETS CARD */}
-  <div className="w-full lg:w-[320px] flex flex-col justify-end">
-    <div className="bg-card bg-gradient-to-b from-card to-accent/20 dark:to-transparent rounded-2xl border border-border p-6 h-auto min-h-[144px] lg:h-72 flex flex-col justify-between shadow-sm">
-      <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">My Assets</h4>
-      
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-3">
-           <div className="p-2 bg-primary/10 rounded-lg text-primary"><DropletIcon size={18}/></div>
-           <div className="flex flex-col">
-              <span className="text-xs font-bold">Earn Drop Points</span>
-              <span className="text-[10px] text-muted-foreground">Coming Soon</span>
-           </div>
+          {/* MY ASSETS CARD */}
+          <div className="w-full lg:w-[320px] flex flex-col justify-end" id="join-droplist">
+            <div className="bg-card bg-gradient-to-b from-card to-accent/20 dark:to-transparent rounded-2xl border border-border p-6 h-auto min-h-[144px] lg:h-72 flex flex-col justify-between shadow-sm">
+              <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">My Assets</h4>
+              
+              <div className="flex flex-col gap-6">
+                <div className="flex items-center gap-3">
+                   <div className="p-2 bg-primary/10 rounded-lg text-primary"><DropletIcon size={18}/></div>
+                   <div className="flex flex-col">
+                      <span className="text-xs font-bold">Earn Drop Points</span>
+                      <span className="text-[10px] text-muted-foreground">Coming Soon</span>
+                   </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleJoinDroplist}
+                disabled={isJoining}
+                className="w-full text-[11px] font-bold text-primary border border-primary/30 px-4 py-3 rounded-xl hover:bg-primary/10 transition-colors disabled:opacity-50 shadow-sm"
+              >
+                {isJoining ? "Joining..." : "Join Droplist"}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <button 
-        onClick={handleJoinDroplist}
-        disabled={isJoining}
-        className="w-full text-[11px] font-bold text-primary border border-primary/30 px-4 py-3 rounded-xl hover:bg-primary/10 transition-colors disabled:opacity-50 shadow-sm"
-      >
-        {isJoining ? "Joining..." : "Join Droplist"}
-      </button>
-    </div>
-  </div>
-</div>
 
         {/* --- TRENDING SECTION --- */}
         <section>
@@ -443,116 +465,123 @@ export default function Home() {
 
         {/* --- STATS SECTION --- */}
         <section className="py-24 bg-accent/5 border-y border-border">
-  <div className="max-w-[1400px] mx-auto px-8 sm:px-12 lg:px-16">
-    <div className="flex flex-col lg:flex-row gap-20 items-start">
-      <div className="lg:w-1/3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-[0.2em] mb-6">
-          Live Network Stats
-        </div>
-        <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight leading-[1.1]">
-          Trusted by Top Web3 Protocols
-        </h2>
-        <p className="text-muted-foreground mb-8 leading-relaxed max-w-md">
-          Powering growth for Celo, Lisk, Self Protocol & more through verifiable onchain metrics.
-        </p>
-        {dashData && (
-          <p className="text-[10px] text-muted-foreground">
-            Last updated: {new Date(dashData.last_updated).toLocaleTimeString()}
-          </p>
-        )}
-      </div>
-
-      <div className="lg:w-2/3 w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[
-          {
-            label: "Faucets",
-            value: dashLoading ? null : dashData?.total_faucets,
-            sub: "Total Faucets",
-            icon: <Droplets size={20} />,
-          },
-          {
-            label: "Transactions",
-            value: dashLoading ? null : dashData?.total_transactions,
-            sub: "Onchain Transactions",
-            icon: <ChartLine size={20} />,
-          },
-          {
-            label: "Users",
-            value: dashLoading ? null : dashData?.total_unique_users,
-            sub: "Active Users",
-            icon: <User size={20} />,
-          },
-        ].map((stat, i) => (
-          <div
-            key={i}
-            className="p-8 rounded-[2rem] bg-background border border-border group hover:border-primary/50 transition-all duration-500 shadow-sm"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div className="p-3 bg-primary/10 rounded-2xl text-primary group-hover:scale-110 transition-transform">
-                {stat.icon}
-              </div>
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                {stat.label}
-              </span>
-            </div>
-
-            {/* Value or skeleton */}
-            {stat.value == null ? (
-              <div className="h-10 w-24 rounded-lg bg-accent animate-pulse mb-1" />
-            ) : (
-              <div className="text-4xl font-black mb-1 tracking-tighter">
-                {stat.value.toLocaleString()}+
-              </div>
-            )}
-
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-              {stat.sub}
-            </div>
-          </div>
-        ))}
-
-        {/* Wide bottom card — Total Drops */}
-        <div className="sm:col-span-2 lg:col-span-3 p-8 rounded-[2.5rem] bg-background border border-border group hover:border-primary/50 transition-all duration-500 flex flex-col sm:flex-row sm:items-center justify-between gap-8 shadow-sm">
-          <div className="flex items-center gap-6">
-            <div className="p-4 bg-primary/10 rounded-2xl text-primary group-hover:rotate-12 transition-transform">
-              <Globe size={28} />
-            </div>
-            <div>
-              {dashLoading ? (
-                <div className="h-10 w-32 rounded-lg bg-accent animate-pulse mb-1" />
-              ) : (
-                <div className="text-4xl font-black tracking-tighter">
-                  {(dashData?.total_claims ?? 0).toLocaleString()}+
+          <div className="max-w-[1400px] mx-auto px-8 sm:px-12 lg:px-16">
+            <div className="flex flex-col lg:flex-row gap-20 items-start">
+              <div className="lg:w-1/3">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-[0.2em] mb-6">
+                  Live Network Stats
                 </div>
-              )}
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                Total Drops Distributed
+                <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight leading-[1.1]">
+                  Trusted by Top Web3 Protocols
+                </h2>
+                <p className="text-muted-foreground mb-8 leading-relaxed max-w-md">
+                  Powering growth for Celo, Lisk, Self Protocol & more through verifiable onchain metrics.
+                </p>
+                {dashData && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Last updated: {new Date(dashData.last_updated).toLocaleTimeString()}
+                  </p>
+                )}
+              </div>
+
+              <div className="lg:w-2/3 w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[
+                  {
+                    label: "Faucets",
+                    value: dashLoading ? null : dashData?.total_faucets,
+                    sub: "Total Faucets",
+                    icon: <Droplets size={20} />,
+                  },
+                  {
+                    label: "Transactions",
+                    value: dashLoading ? null : dashData?.total_transactions,
+                    sub: "Onchain Transactions",
+                    icon: <ChartLine size={20} />,
+                  },
+                  {
+                    label: "Users",
+                    value: dashLoading ? null : dashData?.total_unique_users,
+                    sub: "Active Users",
+                    icon: <User size={20} />,
+                  },
+                ].map((stat, i) => (
+                  <div
+                    key={i}
+                    className="p-8 rounded-[2rem] bg-background border border-border group hover:border-primary/50 transition-all duration-500 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="p-3 bg-primary/10 rounded-2xl text-primary group-hover:scale-110 transition-transform">
+                        {stat.icon}
+                      </div>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                        {stat.label}
+                      </span>
+                    </div>
+
+                    {stat.value == null ? (
+                      <div className="h-10 w-24 rounded-lg bg-accent animate-pulse mb-1" />
+                    ) : (
+                      <div className="text-4xl font-black mb-1 tracking-tighter">
+                        {stat.value.toLocaleString()}+
+                      </div>
+                    )}
+
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                      {stat.sub}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="sm:col-span-2 lg:col-span-3 p-8 rounded-[2.5rem] bg-background border border-border group hover:border-primary/50 transition-all duration-500 flex flex-col sm:flex-row sm:items-center justify-between gap-8 shadow-sm">
+                  <div className="flex items-center gap-6">
+                    <div className="p-4 bg-primary/10 rounded-2xl text-primary group-hover:rotate-12 transition-transform">
+                      <Globe size={28} />
+                    </div>
+                    <div>
+                      {dashLoading ? (
+                        <div className="h-10 w-32 rounded-lg bg-accent animate-pulse mb-1" />
+                      ) : (
+                        <div className="text-4xl font-black tracking-tighter">
+                          {(dashData?.total_claims ?? 0).toLocaleString()}+
+                        </div>
+                      )}
+                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                        Total Drops Distributed
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="hidden sm:block h-12 w-px bg-border" />
+
+                  <div className="flex gap-12">
+                    <div>
+                      <div className="text-xl font-bold tracking-tight">4.9/5</div>
+                      <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+                        Satisfaction
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-bold tracking-tight">99.9%</div>
+                      <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+                        Uptime
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-
-          <div className="hidden sm:block h-12 w-px bg-border" />
-
-          <div className="flex gap-12">
-            <div>
-              <div className="text-xl font-bold tracking-tight">4.9/5</div>
-              <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-                Satisfaction
-              </div>
-            </div>
-            <div>
-              <div className="text-xl font-bold tracking-tight">99.9%</div>
-              <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-                Uptime
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
+        </section>
       </main>
     </div>
+  );
+}
+
+// Ensure the page doesn't break when statically exported because of useSearchParams
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <HomeContent />
+    </Suspense>
   );
 }

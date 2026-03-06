@@ -10,6 +10,14 @@ import {
   CardDescription,
   CardFooter,
 } from "@/components/ui/card";
+import { 
+  ZeroAddress,
+  isAddress as 
+  ethersIsAddress,
+  BrowserProvider,
+  Contract, 
+  parseUnits 
+} from 'ethers'
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +46,9 @@ import {
   CheckCircle2, ChevronDown, ChevronUp, Upload, ExternalLink,
   Shield, Sparkles, Zap, AlertTriangle, Send, ShieldCheck,
   MessageSquareText, Code, Link as LinkIcon,
+  DollarSign,
 } from "lucide-react";
+import { useWallet } from "../wallet-provider";
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -63,6 +73,7 @@ const ONCHAIN_ACTIONS = [
   { value: "hold_nft", label: "Hold NFT" },
   { value: "wallet_age", label: "Wallet Age Check" },
   { value: "tx_count", label: "Transaction Count" },
+  { value: "timebound_interaction", label: "Timebound Contract Interaction" },
 ];
 
 const getAvailableActions = (platform: string) => {
@@ -140,10 +151,13 @@ interface EditableTask {
   targetPlatform: string;
   stage: Stage;
   targetHandle: string;
+  targetServerId: string; 
   targetContractAddress: string;
   minAmount: string;
   minTxCount: string;
   minDays: string;
+  startDate?: string; // <-- ADDED
+  endDate?: string;   // <-- ADDED
   isSystem?: boolean;
   _isDirty?: boolean;
   _isNew?: boolean;
@@ -172,6 +186,7 @@ function makeBlankTask(stage: Stage = "Beginner"): EditableTask {
     targetPlatform: "Twitter",
     stage,
     targetHandle: "",
+    targetServerId: "", // <-- Initialize
     targetContractAddress: "",
     minAmount: "",
     minTxCount: "",
@@ -220,10 +235,24 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
 
   const isSocial = task.category === "social";
   const isOnchain = task.verificationType === "onchain";
-  const showContractAddress = ["hold_token", "hold_nft", "swap", "trade", "interact_contract"].includes(task.action);
+  const showContractAddress = ["hold_token", "hold_nft", "swap", "trade", "interact_contract", "timebound_interaction"].includes(task.action);
   const showMinAmount = ["hold_token", "swap", "trade"].includes(task.action);
   const showMinTxCount = task.action === "tx_count";
   const showMinDays = task.action === "wallet_age";
+  const showTimeboundInputs = task.action === "timebound_interaction";
+
+  // ADDED FORMATTER
+  const formatForDateTimeLocal = (isoString?: string) => {
+    if (!isoString) return "";
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return "";
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
+    } catch {
+      return "";
+    }
+  };
 
   const getSocialInputLabel = () => {
     const p = task.targetPlatform;
@@ -233,12 +262,12 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
   };
 
   const checkDiscord = async () => {
-    if (!task.url) { toast.error("Enter a Discord URL first"); return; }
+    if (!task.targetServerId) { toast.error("Enter the Discord Server ID first"); return; }
     setDiscordStatus({ checking: true, ok: null, msg: "" });
     try {
       const res = await fetch(`${API_BASE_URL}/api/bot/check-discord-status`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inviteUrl: task.url }),
+        body: JSON.stringify({ serverId: task.targetServerId }), // <-- Changed from URL to targetServerId
       });
       const data = await res.json();
       setDiscordStatus({ checking: false, ok: data.is_in_server, msg: data.message || "" });
@@ -281,8 +310,17 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
   const handleSave = () => {
     if (!task.title.trim()) { toast.error("Title is required"); return; }
     if (task.points < 0) { toast.error("Points must be ≥ 0"); return; }
+    if (task.action === "timebound_interaction") {
+      if (!task.targetContractAddress) { toast.error("Contract address is required."); return; }
+      if (!task.url) { toast.error("Platform/dApp URL is required."); return; }
+      if (!task.startDate || !task.endDate) { toast.error("Start and End dates are required."); return; }
+    }
     if (task.targetPlatform === "Twitter" && ["quote", "comment"].includes(task.action) && !task.targetHandle) {
       toast.error("Target handle is required for quote/comment tasks"); return;
+    }
+    // Updated Validation: Discord requires a Server ID for auto_social Verification
+    if (task.targetPlatform === "Discord" && task.verificationType === "auto_social" && !task.targetServerId) {
+      toast.error("Server ID is required for Discord auto-verification"); return;
     }
     if (task.targetPlatform === "Discord" && task.action === "role" && !task.targetHandle) {
       toast.error("Role ID is required for Discord Role verification"); return;
@@ -378,7 +416,7 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
           <Select value={task.verificationType}
             onValueChange={(v) => patch({
               verificationType: v,
-              action: v === "onchain" && !["hold_token","hold_nft","wallet_age","tx_count"].includes(task.action) ? "hold_token" : task.action,
+              action: v === "onchain" && !["hold_token","hold_nft","wallet_age","tx_count","timebound_interaction"].includes(task.action) ? "hold_token" : task.action,
             })}>
             <SelectTrigger className="h-10 bg-white dark:bg-slate-950"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -463,16 +501,30 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
             </div>
           )}
 
-          {/* Discord: Role ID */}
-          {task.targetPlatform === "Discord" && task.action === "role" && (
-            <div className="space-y-1.5 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-              <Label className="text-xs font-bold text-indigo-600 flex items-center gap-1">
-                <ShieldCheck className="h-3 w-3" /> Required Role ID
-              </Label>
-              <Input className="h-9 bg-white dark:bg-slate-950" placeholder="e.g. 104239849202392"
-                value={task.targetHandle}
-                onChange={(e) => patch({ targetHandle: e.target.value })} />
-              <p className="text-[10px] text-muted-foreground">Enable Developer Mode in Discord → right-click Role → "Copy Role ID"</p>
+          {/* Discord: Server ID & Role ID */}
+          {task.targetPlatform === "Discord" && task.verificationType === "auto_social" && (
+            <div className="space-y-3">
+              <div className="space-y-1.5 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                <Label className="text-xs font-bold text-indigo-600 flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3" /> Discord Server ID
+                </Label>
+                <Input className="h-9 bg-white dark:bg-slate-950" placeholder="e.g. 1476641584958144675"
+                  value={task.targetServerId}
+                  onChange={(e) => patch({ targetServerId: e.target.value })} />
+                <p className="text-[10px] text-muted-foreground">Required for auto-verification. Right-click your Server name, and select "Copy Server ID".</p>
+              </div>
+
+              {task.action === "role" && (
+                <div className="space-y-1.5 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                  <Label className="text-xs font-bold text-indigo-600 flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" /> Required Role ID
+                  </Label>
+                  <Input className="h-9 bg-white dark:bg-slate-950" placeholder="e.g. 104239849202392"
+                    value={task.targetHandle}
+                    onChange={(e) => patch({ targetHandle: e.target.value })} />
+                  <p className="text-[10px] text-muted-foreground">Enable Developer Mode in Discord → right-click Role → "Copy Role ID"</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -517,7 +569,7 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
                       onClick={() => window.open("https://discord.com/oauth2/authorize?client_id=1466125172342915145&permissions=8&integration_type=0&scope=bot", "_blank")}>
                       <Plus className="h-3 w-3 mr-1" /> Add Bot
                     </Button>
-                    <Button type="button" size="sm" onClick={checkDiscord} disabled={discordStatus.checking || !task.url}
+                    <Button type="button" size="sm" onClick={checkDiscord} disabled={discordStatus.checking || !task.targetServerId}
                       className={`text-xs h-8 text-white ${discordStatus.ok === false ? "bg-orange-600 hover:bg-orange-700" : "bg-indigo-600 hover:bg-indigo-700"}`}>
                       {discordStatus.checking ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
                       {discordStatus.ok === false ? "Check Again" : "Verify Bot"}
@@ -592,11 +644,33 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
                 <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
                   <Code className="h-3 w-3" /> Contract Address
                 </Label>
-                <Input value={task.targetContractAddress} placeholder="0x… (empty for native token)"
+                <Input value={task.targetContractAddress} placeholder="0x… (Target Contract)"
                   onChange={(e) => patch({ targetContractAddress: e.target.value })}
                   className="h-9 font-mono text-xs bg-white dark:bg-slate-950" />
               </div>
             )}
+            
+            {/* NEW: Timebound Inputs */}
+            {showTimeboundInputs && (
+              <div className="space-y-4 col-span-1 sm:col-span-2 p-4 bg-white/50 dark:bg-slate-950/50 border border-violet-500/20 rounded-lg">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Platform / dApp URL</Label>
+                  <Input value={task.url} placeholder="https://your-dapp.com/swap" onChange={e => patch({url: e.target.value})} className="h-9 bg-white dark:bg-slate-950 font-mono text-xs border-violet-500/30" />
+                  <p className="text-[10px] text-muted-foreground">Participants will click this link to perform the interaction.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase text-muted-foreground">Start Date & Time (Local)</Label>
+                    <Input type="datetime-local" value={formatForDateTimeLocal(task.startDate)} onChange={e => patch({startDate: e.target.value ? new Date(e.target.value).toISOString() : ""})} className="h-9 bg-white dark:bg-slate-950 border-violet-500/30 text-xs" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase text-muted-foreground">End Date & Time (Local)</Label>
+                    <Input type="datetime-local" value={formatForDateTimeLocal(task.endDate)} onChange={e => patch({endDate: e.target.value ? new Date(e.target.value).toISOString() : ""})} className="h-9 bg-white dark:bg-slate-950 border-violet-500/30 text-xs" />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {showMinAmount && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Min Amount</Label>
@@ -671,19 +745,31 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
 }
 
 // ─── Main Component ──────────────────────────────────────────
-
 export function QuestEditPanel({
   questData,
   faucetAddress,
   creatorAddress,
   onQuestUpdated,
 }: QuestEditPanelProps) {
+  // ── Meta State ──
   const [metaTitle, setMetaTitle] = useState(questData?.title ?? "");
   const [metaImage, setMetaImage] = useState(questData?.imageUrl ?? "");
   const [isSavingMeta, setIsSavingMeta] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const { provider } = useWallet();
 
+  // ── Distribution State ──
+  const [distModel, setDistModel] = useState(questData?.distributionConfig?.model || "equal");
+  const [totalWinners, setTotalWinners] = useState(questData?.distributionConfig?.totalWinners || "");
+  const [tiers, setTiers] = useState<any[]>(questData?.distributionConfig?.tiers || []);
+  const [isSavingDist, setIsSavingDist] = useState(false);
+
+  // ── Funding State ──
+  const [fundAmount, setFundAmount] = useState("");
+  const [isFunding, setIsFunding] = useState(false);
+
+  // ── Tasks State ──
   const [tasks, setTasks] = useState<EditableTask[]>([]);
   const [isFetchingTasks, setIsFetchingTasks] = useState(true);
   const [isSavingTasks, setIsSavingTasks] = useState(false);
@@ -721,10 +807,13 @@ export function QuestEditPanel({
             targetPlatform: t.targetPlatform ?? "",
             stage: (STAGES.includes(t.stage) ? t.stage : "Beginner") as Stage,
             targetHandle: t.targetHandle ?? "",
+            targetServerId: t.targetServerId ?? "", 
             targetContractAddress: t.targetContractAddress ?? "",
             minAmount: String(t.minAmount ?? ""),
             minTxCount: String(t.minTxCount ?? ""),
             minDays: String(t.minDays ?? ""),
+            startDate: t.startDate ?? "",
+            endDate: t.endDate ?? "",
           }));
           setTasks(mapped);
           setSystemTaskCount(json.systemTasksCount ?? 0);
@@ -740,7 +829,7 @@ export function QuestEditPanel({
     load();
   }, [faucetAddress, creatorAddress]);
 
-  // ── Meta save ──
+  // ── Actions ──
   const handleSaveMeta = async () => {
     if (!metaTitle.trim() || metaTitle.trim().length < 3) { toast.error("Title must be at least 3 characters"); return; }
     setIsSavingMeta(true);
@@ -764,7 +853,127 @@ export function QuestEditPanel({
     }
   };
 
-  // ── Image upload ──
+  const handleSaveDistribution = async () => {
+    setIsSavingDist(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/meta`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          adminAddress: creatorAddress, 
+          distributionConfig: { model: distModel, totalWinners: totalWinners, tiers }
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Reward Distribution updated successfully!");
+        onQuestUpdated?.({ distributionConfig: { model: distModel, totalWinners, tiers } });
+      } else {
+        toast.error(json.detail ?? "Failed to update distribution");
+      }
+    } catch (e: any) {
+      toast.error(e.message ?? "Network error");
+    } finally {
+      setIsSavingDist(false);
+    }
+  };
+
+  const handleFundQuest = async () => {
+    if (!fundAmount || Number(fundAmount) <= 0) {
+      toast.error("Please enter a valid amount to fund.");
+      return;
+    }
+    if (!provider) {
+      toast.error("Wallet not connected. Please connect your wallet.");
+      return;
+    }
+
+    setIsFunding(true);
+    try {
+      // 1. Get the signer directly from your existing provider
+      const signer = await provider.getSigner();
+
+      // Check if the reward token is Native (ETH/CELO) or ERC20
+      const isNative = questData?.rewardTokenType === 'native' || questData?.tokenAddress === ZeroAddress;
+      
+      let amountWei;
+      // Minimal ABI for the Faucet's fund function
+      const faucetAbi = ["function fund(uint256 _tokenAmount) payable"];
+
+      if (isNative) {
+        // Native tokens always use 18 decimals
+        amountWei = parseUnits(fundAmount, 18);
+        const contract = new Contract(faucetAddress, faucetAbi, signer);
+        
+        toast.info("Please confirm the funding transaction in your wallet...");
+        // For native, we pass the amount as the argument AND as msg.value
+        const tx = await contract.fund(amountWei, { value: amountWei });
+        toast.info("Transaction submitted. Waiting for confirmation...");
+        await tx.wait();
+
+      } else {
+        // 2. Handle ERC20 Tokens (Requires Approval first)
+        const tokenAddress = questData?.tokenAddress;
+        if (!tokenAddress) throw new Error("Token address is missing from quest data.");
+
+        const erc20Abi = [
+          "function decimals() view returns (uint8)",
+          "function approve(address spender, uint256 amount) returns (bool)"
+        ];
+        const tokenContract = new Contract(tokenAddress, erc20Abi, signer);
+        
+        toast.info("Fetching token details...");
+        const decimals = await tokenContract.decimals();
+        amountWei = parseUnits(fundAmount, decimals);
+
+        // A. Approve Faucet to spend the tokens
+        toast.info("Please approve the token transfer in your wallet...");
+        const approveTx = await tokenContract.approve(faucetAddress, amountWei);
+        toast.info("Approval submitted. Waiting for confirmation...");
+        await approveTx.wait();
+
+        // B. Fund the Faucet
+        toast.info("Please confirm the funding transaction...");
+        const faucetContract = new Contract(faucetAddress, faucetAbi, signer);
+        const tx = await faucetContract.fund(amountWei);
+        toast.info("Transaction submitted. Waiting for confirmation...");
+        await tx.wait();
+      }
+
+      // 3. Update Database to reflect new reward pool size
+      toast.info("Syncing new balance to database...");
+      const currentPool = parseFloat(questData?.rewardPool || "0");
+      const addedAmount = parseFloat(fundAmount);
+      const newTotal = (currentPool + addedAmount).toString();
+
+      const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/meta`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          adminAddress: creatorAddress, 
+          rewardPool: newTotal 
+        }),
+      });
+
+      const json = await res.json();
+      if (!json.success) throw new Error(json.detail || "Failed to sync database.");
+
+      // 4. Update UI
+      toast.success(`Successfully funded the quest with ${fundAmount} ${questData?.tokenSymbol || "Tokens"}!`);
+      setFundAmount("");
+      
+      // Tell parent component to update the UI immediately
+      onQuestUpdated?.({ rewardPool: newTotal });
+      
+    } catch (e: any) {
+      console.error(e);
+      const errorMsg = e.reason || e.shortMessage || e.message || "Transaction failed";
+      toast.error("Funding failed: " + errorMsg);
+    } finally {
+      setIsFunding(false);
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -782,42 +991,18 @@ export function QuestEditPanel({
     finally { setIsUploadingImage(false); if (imageInputRef.current) imageInputRef.current.value = ""; }
   };
 
-  // ── Task CRUD ──
+  // ── Task Array Handlers ──
   const startAddingTask = () => {
-    const blank = makeBlankTask(defaultStageForNew());
-    setNewTaskDraft(blank);
+    setNewTaskDraft(makeBlankTask(defaultStageForNew()));
     setAddingNew(true);
     setEditingTaskId(null);
     setExpandedTask(null);
   };
-
-  const handleNewTaskSave = (task: EditableTask) => {
-    setTasks((prev) => [...prev, task]);
-    setAddingNew(false);
-    setNewTaskDraft(null);
-    toast.success("Task added — click Save All Tasks to persist");
-  };
-
-  const startEditing = (id: string) => {
-    setEditingTaskId(id);
-    setAddingNew(false);
-    setNewTaskDraft(null);
-    setExpandedTask(null);
-  };
-
-  const handleEditSave = (updated: EditableTask) => {
-    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    setEditingTaskId(null);
-    toast.success("Task updated — click Save All Tasks to persist");
-  };
-
-  const deleteTask = (id: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-    setDeleteCandidate(null);
-    if (editingTaskId === id) setEditingTaskId(null);
-    toast.success("Task removed");
-  };
-
+  const handleNewTaskSave = (task: EditableTask) => { setTasks((p) => [...p, task]); setAddingNew(false); setNewTaskDraft(null); toast.success("Task added — click Save All Tasks to persist"); };
+  const startEditing = (id: string) => { setEditingTaskId(id); setAddingNew(false); setNewTaskDraft(null); setExpandedTask(null); };
+  const handleEditSave = (updated: EditableTask) => { setTasks((p) => p.map((t) => (t.id === updated.id ? updated : t))); setEditingTaskId(null); toast.success("Task updated — click Save All Tasks to persist"); };
+  const deleteTask = (id: string) => { setTasks((p) => p.filter((t) => t.id !== id)); setDeleteCandidate(null); if (editingTaskId === id) setEditingTaskId(null); toast.success("Task removed"); };
+  
   const moveTask = (index: number, direction: "up" | "down") => {
     setTasks((prev) => {
       const next = [...prev];
@@ -838,127 +1023,168 @@ export function QuestEditPanel({
       const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/tasks`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          adminAddress: creatorAddress,
-          tasks: tasks.map(({ _isDirty, _isNew, ...t }) => t),
-        }),
+        body: JSON.stringify({ adminAddress: creatorAddress, tasks: tasks.map(({ _isDirty, _isNew, ...t }) => t) }),
       });
       const json = await res.json();
       if (json.success) {
-        toast.success(json.message ?? "Tasks saved!");
+        toast.success(json.message ?? "Tasks saved successfully!");
         setTasks((prev) => prev.map((t) => ({ ...t, _isDirty: false, _isNew: false })));
+        setTimeout(() => window.location.reload(), 1000);
       } else {
         toast.error(json.detail ?? "Save failed");
       }
-    } catch (e: any) {
-      toast.error(e.message ?? "Network error");
-    } finally {
-      setIsSavingTasks(false);
-    }
+    } catch (e: any) { toast.error(e.message ?? "Network error"); } 
+    finally { setIsSavingTasks(false); }
   };
 
   const hasDirtyTasks = tasks.some((t) => t._isDirty || t._isNew) || addingNew;
-  const metaChanged =
-    metaTitle.trim() !== (questData?.title ?? "").trim() ||
-    metaImage.trim() !== (questData?.imageUrl ?? "").trim();
+  const metaChanged = metaTitle.trim() !== (questData?.title ?? "").trim() || metaImage.trim() !== (questData?.imageUrl ?? "").trim();
 
   return (
     <div className="space-y-8">
-      {/* ══════════════════════════════════════════════════
-          SECTION 1 — QUEST META
-      ══════════════════════════════════════════════════ */}
-      <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
-        <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Edit2 className="h-4 w-4 text-slate-500" /> Quest Details
-              </CardTitle>
-              <CardDescription className="mt-1">
-                Edit the quest name and cover image.{" "}
-                <span className="text-amber-600 dark:text-amber-400 font-medium">
-                  Reward pool &amp; token details cannot be changed post-deploy.
-                </span>
-              </CardDescription>
-            </div>
-            {metaChanged && (
-              <Badge variant="outline" className="border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/20 animate-pulse">
-                Unsaved changes
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-
-        <CardContent className="pt-6 space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="meta-title" className="text-sm font-semibold">
-              Quest Title <span className="text-red-500">*</span>
-            </Label>
-            <Input id="meta-title" value={metaTitle} maxLength={80} placeholder="e.g. DeFi Explorer Season 1"
-              onChange={(e) => setMetaTitle(e.target.value)} className="h-11" />
-            <p className="text-xs text-muted-foreground text-right">{metaTitle.length}/80</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold">Quest Cover Image</Label>
-            <div className="flex gap-3">
-              <Input value={metaImage} placeholder="https://..." onChange={(e) => setMetaImage(e.target.value)}
-                className="h-11 flex-1 font-mono text-sm" />
-              <input type="file" accept="image/*" className="hidden" ref={imageInputRef} onChange={handleImageUpload} />
-              <Button variant="outline" className="h-11 px-4 shrink-0" onClick={() => imageInputRef.current?.click()} disabled={isUploadingImage}>
-                {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                <span className="ml-2 hidden sm:inline">Upload</span>
-              </Button>
-            </div>
-            {metaImage && (
-              <div className="relative w-full h-40 rounded-lg overflow-hidden border bg-slate-100 dark:bg-slate-900">
-                <img src={metaImage} alt="Preview" className="w-full h-full object-cover"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                <button className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
-                  onClick={() => setMetaImage("")}>
-                  <X className="h-4 w-4" />
-                </button>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* ══════════════════════════════════════════════════
+            SECTION 1 — QUEST META
+        ══════════════════════════════════════════════════ */}
+        <Card className="border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+          <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Edit2 className="h-4 w-4 text-slate-500" /> Quest Details
+                </CardTitle>
+                <CardDescription className="mt-1">Edit the quest name and cover image.</CardDescription>
               </div>
-            )}
-          </div>
-
-          <div className="flex items-start gap-3 p-4 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
-            <Lock className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
-            <div className="text-sm text-slate-500 dark:text-slate-400">
-              <strong className="text-slate-700 dark:text-slate-300">Locked after deployment:</strong>{" "}
-              Reward pool, token address, token symbol, and distribution config.
+              {metaChanged && <Badge variant="outline" className="border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/20 animate-pulse">Unsaved</Badge>}
             </div>
-          </div>
-        </CardContent>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-6 flex-1">
+            <div className="space-y-2">
+              <Label htmlFor="meta-title" className="text-sm font-semibold">Quest Title <span className="text-red-500">*</span></Label>
+              <Input id="meta-title" value={metaTitle} maxLength={80} onChange={(e) => setMetaTitle(e.target.value)} className="h-11" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Quest Cover Image</Label>
+              <div className="flex gap-3">
+                <Input value={metaImage} placeholder="https://..." onChange={(e) => setMetaImage(e.target.value)} className="h-11 flex-1 font-mono text-sm" />
+                <input type="file" accept="image/*" className="hidden" ref={imageInputRef} onChange={handleImageUpload} />
+                <Button variant="outline" className="h-11 px-4 shrink-0" onClick={() => imageInputRef.current?.click()} disabled={isUploadingImage}>
+                  {isUploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  <span className="ml-2 hidden sm:inline">Upload</span>
+                </Button>
+              </div>
+              {metaImage && (
+                <div className="relative w-full h-32 rounded-lg overflow-hidden border bg-slate-100 dark:bg-slate-900 mt-3">
+                  <img src={metaImage} alt="Preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  <button className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1" onClick={() => setMetaImage("")}><X className="h-4 w-4" /></button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+          <CardFooter className="border-t border-slate-100 dark:border-slate-800 pt-4 flex justify-end">
+            <Button onClick={handleSaveMeta} disabled={isSavingMeta || !metaChanged} className="min-w-[140px]">
+              {isSavingMeta ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />} Save Details
+            </Button>
+          </CardFooter>
+        </Card>
 
-        <CardFooter className="border-t border-slate-100 dark:border-slate-800 pt-4 flex justify-end">
-          <Button onClick={handleSaveMeta} disabled={isSavingMeta || !metaChanged} className="min-w-[140px]">
-            {isSavingMeta ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-            Save Details
-          </Button>
-        </CardFooter>
-      </Card>
+        {/* ══════════════════════════════════════════════════
+            SECTION 1.5 — FUNDING & REWARDS
+        ══════════════════════════════════════════════════ */}
+        <Card className="border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col">
+          <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800">
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-slate-500" /> Funding & Distribution
+            </CardTitle>
+            <CardDescription className="mt-1">Manage quest liquidity and winner models.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-6 flex-1">
+            {/* Top-up Funding */}
+            <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="flex justify-between items-center mb-1">
+                <Label className="text-sm font-bold">Add Liquidity (Top-up)</Label>
+                <Badge variant="secondary" className="font-mono">{questData?.rewardPool || 0} {questData?.tokenSymbol}</Badge>
+              </div>
+              <div className="flex gap-3">
+                <Input 
+                  type="number" 
+                  placeholder="Amount to add..." 
+                  value={fundAmount} 
+                  onChange={(e) => setFundAmount(e.target.value)} 
+                  className="bg-white dark:bg-slate-950 flex-1" 
+                />
+                <Button onClick={handleFundQuest} disabled={isFunding || !fundAmount} className="bg-green-600 hover:bg-green-700 text-white shrink-0">
+                  {isFunding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <DollarSign className="h-4 w-4 mr-2" />} Fund
+                </Button>
+              </div>
+            </div>
+
+            {/* Distribution Editing */}
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground">Winners</Label>
+                  <Input type="number" min={""} value={totalWinners} onChange={(e) => setTotalWinners(Number(e.target.value))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase text-muted-foreground">Model</Label>
+                  <Select value={distModel} onValueChange={setDistModel}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="equal">Equal</SelectItem>
+                      <SelectItem value="custom_tiers">Custom Tiers</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              {distModel === "custom_tiers" && (
+                <div className="space-y-2 border-t pt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <Label className="text-xs font-semibold">Tiers</Label>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setTiers([...tiers, { rankStart: "", rankEnd: "", amountPerUser: 0 }])}>
+                      <Plus className="h-3 w-3 mr-1"/> Add Tier
+                    </Button>
+                  </div>
+                  {tiers.map((tier, i) => (
+                    <div key={i} className="flex gap-2 items-end">
+                      <Input type="number" placeholder="Start" value={tier.rankStart} onChange={(e) => { const nt = [...tiers]; nt[i].rankStart = Number(e.target.value); setTiers(nt); }} className="h-8 text-xs" />
+                      <Input type="number" placeholder="End" value={tier.rankEnd} onChange={(e) => { const nt = [...tiers]; nt[i].rankEnd = Number(e.target.value); setTiers(nt); }} className="h-8 text-xs" />
+                      <Input type="number" placeholder="Amount" value={tier.amountPerUser} onChange={(e) => { const nt = [...tiers]; nt[i].amountPerUser = Number(e.target.value); setTiers(nt); }} className="h-8 text-xs" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 shrink-0" onClick={() => setTiers(tiers.filter((_, idx) => idx !== i))}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+          <CardFooter className="border-t border-slate-100 dark:border-slate-800 pt-4 flex justify-end">
+            <Button onClick={handleSaveDistribution} disabled={isSavingDist} variant="secondary" className="min-w-[140px]">
+              {isSavingDist ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />} Update Config
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
 
       {/* ══════════════════════════════════════════════════
-          SECTION 2 — TASK EDITOR
+          SECTION 2 — TASK EDITOR (GRID LAYOUT)
       ══════════════════════════════════════════════════ */}
       <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
         <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <CardTitle className="text-base flex items-center gap-2">
-                <Zap className="h-4 w-4 text-slate-500" /> Quest Tasks
+                <ShieldCheck className="h-4 w-4 text-slate-500" /> Quest Tasks
               </CardTitle>
               <CardDescription className="mt-1">
-                Add, edit, or remove user tasks. Use templates to speed up task creation.
-                System tasks (Daily Check-in, Referral) are locked and preserved automatically.
+                Add or edit user tasks below. Grid layout optimizes space for quick management.
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
               {systemTaskCount > 0 && (
                 <Badge variant="outline" className="text-xs gap-1">
-                  <Lock className="h-3 w-3" />
-                  {systemTaskCount} system task{systemTaskCount !== 1 ? "s" : ""} locked
+                  <Lock className="h-3 w-3" /> {systemTaskCount} system tasks hidden
                 </Badge>
               )}
               {hasDirtyTasks && (
@@ -970,7 +1196,7 @@ export function QuestEditPanel({
           </div>
         </CardHeader>
 
-        <CardContent className="pt-6 space-y-4">
+        <CardContent className="pt-6 space-y-6 bg-slate-50/30 dark:bg-slate-900/10">
           {isFetchingTasks ? (
             <div className="flex items-center justify-center py-16 gap-3 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -978,17 +1204,14 @@ export function QuestEditPanel({
             </div>
           ) : (
             <>
-              {tasks.length === 0 && !addingNew && (
-                <div className="text-center py-12 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800">
-                  <Plus className="mx-auto h-10 w-10 text-slate-300 mb-3" />
-                  <p className="text-muted-foreground font-medium">No user tasks yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">Click "Add Task" to create the first one.</p>
-                </div>
-              )}
-
-              <div className="space-y-3">
+              {/* Task Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 items-start">
                 {tasks.map((task, idx) => (
-                  <div key={task.id}>
+                  <div 
+                    key={task.id} 
+                    // Make the card span across the grid if it's currently being edited
+                    className={editingTaskId === task.id ? "col-span-1 md:col-span-2 xl:col-span-3 transition-all duration-300" : "transition-all duration-300"}
+                  >
                     <TaskRow
                       task={task}
                       index={idx}
@@ -1003,8 +1226,10 @@ export function QuestEditPanel({
                       onMove={(dir) => moveTask(idx, dir)}
                       onDeleteRequest={() => setDeleteCandidate(task.id)}
                     />
+                    
+                    {/* Render the Form directly beneath the task card if editing */}
                     {editingTaskId === task.id && (
-                      <div className="mt-2">
+                      <div className="mt-3 animate-in fade-in slide-in-from-top-2">
                         <TaskForm
                           initial={task}
                           onSave={handleEditSave}
@@ -1016,12 +1241,12 @@ export function QuestEditPanel({
                 ))}
               </div>
 
-              {/* New task form */}
+              {/* Add New Task Form */}
               {addingNew && newTaskDraft && (
-                <div>
-                  <div className="flex items-center gap-2 my-3">
+                <div className="animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex items-center gap-2 my-4">
                     <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">New Task</span>
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest px-3">Create New Task</span>
                     <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
                   </div>
                   <TaskForm
@@ -1032,12 +1257,13 @@ export function QuestEditPanel({
                 </div>
               )}
 
+              {/* Add Task Button */}
               {!addingNew && (
                 <Button variant="outline"
-                  className="w-full border-dashed h-11 gap-2 hover:border-primary hover:text-primary transition-colors"
+                  className="w-full border-dashed h-12 gap-2 hover:border-primary hover:bg-primary/5 hover:text-primary transition-colors bg-white dark:bg-slate-950"
                   onClick={startAddingTask}>
                   <Plus className="h-4 w-4" />
-                  Add Task
+                  Add New Task
                 </Button>
               )}
             </>
@@ -1045,13 +1271,13 @@ export function QuestEditPanel({
         </CardContent>
 
         {!isFetchingTasks && (
-          <CardFooter className="border-t border-slate-100 dark:border-slate-800 pt-4 flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">
-              {tasks.length} user task{tasks.length !== 1 ? "s" : ""}
+          <CardFooter className="border-t border-slate-100 dark:border-slate-800 pt-4 flex justify-between items-center bg-white dark:bg-slate-950 rounded-b-xl">
+            <p className="text-sm font-medium text-muted-foreground">
+              Total: {tasks.length} User Tasks
             </p>
-            <Button onClick={handleSaveTasks} disabled={isSavingTasks || (tasks.every((t) => !t._isDirty && !t._isNew) && !addingNew)} className="min-w-[160px]">
+            <Button onClick={handleSaveTasks} disabled={isSavingTasks || (tasks.every((t) => !t._isDirty && !t._isNew) && !addingNew)} className="min-w-[160px] shadow-md">
               {isSavingTasks ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-              Save All Tasks
+              Save Task Layout
             </Button>
           </CardFooter>
         )}
@@ -1063,14 +1289,12 @@ export function QuestEditPanel({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this task?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the task from the list. Click <strong>Save All Tasks</strong> to persist.
-              Users who already completed this task keep their points.
+              This removes the task from the interface. Click <strong>Save Task Layout</strong> to apply this deletion to the database permanently.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={() => deleteCandidate && deleteTask(deleteCandidate)}>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => deleteCandidate && deleteTask(deleteCandidate)}>
               Delete Task
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1098,77 +1322,91 @@ function TaskRow({ task, index, total, isExpanded, isEditing, onToggle, onEdit, 
   const stageColor = STAGE_COLORS[task.stage as Stage] ?? "bg-slate-100 text-slate-600 border-slate-200";
 
   return (
-    <div className={`rounded-xl border transition-all duration-200 ${
-      isEditing ? "border-primary/60 shadow-md shadow-primary/10"
+    <div className={`flex flex-col bg-white dark:bg-slate-950 rounded-xl border transition-all duration-200 overflow-hidden ${
+      isEditing ? "border-primary/60 shadow-md ring-1 ring-primary/20"
       : isExpanded ? "border-primary/30 shadow-sm"
-      : task._isNew ? "border-green-400/50 bg-green-50/30 dark:bg-green-950/10"
-      : task._isDirty ? "border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10"
-      : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+      : task._isNew ? "border-green-400/50 bg-green-50/10 dark:bg-green-950/10"
+      : task._isDirty ? "border-amber-400/50 bg-amber-50/10 dark:bg-amber-950/10"
+      : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm"
     }`}>
-      <div className="flex items-center gap-3 p-4 cursor-pointer select-none" onClick={onToggle}>
-        <div className="flex flex-col items-center gap-0.5 shrink-0">
-          <button onClick={(e) => { e.stopPropagation(); onMove("up"); }} disabled={index === 0}
-            className="text-slate-400 hover:text-slate-600 disabled:opacity-20 p-0.5">
-            <ChevronUp className="h-3.5 w-3.5" />
-          </button>
-          <GripVertical className="h-4 w-4 text-slate-300" />
-          <button onClick={(e) => { e.stopPropagation(); onMove("down"); }} disabled={index === total - 1}
-            className="text-slate-400 hover:text-slate-600 disabled:opacity-20 p-0.5">
-            <ChevronDown className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`font-semibold text-sm truncate ${!task.title ? "text-muted-foreground italic" : ""}`}>
-              {task.title || "Untitled task"}
-            </span>
-            {task._isNew && <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px] h-4 px-1.5">New</Badge>}
-            {task._isDirty && !task._isNew && <Badge variant="outline" className="border-amber-400 text-amber-600 text-[10px] h-4 px-1.5">Edited</Badge>}
-            {isEditing && <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] h-4 px-1.5">Editing</Badge>}
+      
+      <div className="p-4 flex flex-col h-full cursor-pointer select-none" onClick={onToggle}>
+        {/* Card Header (Badges & Actions) */}
+        <div className="flex justify-between items-start mb-3">
+          <div className="flex gap-2 flex-wrap">
+            <Badge variant="outline" className={`text-[10px] h-5 px-2 ${stageColor}`}>
+              {task.stage}
+            </Badge>
+            {task._isNew && <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px] h-5 px-1.5 hover:bg-green-100">New</Badge>}
+            {task._isDirty && !task._isNew && <Badge variant="outline" className="border-amber-400 text-amber-600 text-[10px] h-5 px-1.5">Edited</Badge>}
           </div>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <Badge variant="outline" className={`text-[10px] h-5 px-2 ${stageColor}`}>{task.stage}</Badge>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              {verificationIcon(task.verificationType)}
-              {task.verificationType.replace(/_/g, " ")}
-            </span>
-            <span className="text-xs font-bold text-primary">{task.points} pts</span>
+          
+          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary hover:bg-primary/10" onClick={onEdit} title="Edit task">
+              <Edit2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20" onClick={onDeleteRequest}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-primary hover:bg-primary/10"
-            onClick={onEdit} title="Edit task">
-            <Edit2 className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-            onClick={onDeleteRequest}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onToggle}>
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
+        {/* Card Body (Title & Type) */}
+        <div className="mb-4">
+          <h4 className={`font-semibold text-sm leading-tight ${!task.title ? "text-muted-foreground italic" : "text-foreground"}`}>
+            {task.title || "Untitled task"}
+          </h4>
+          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-2 bg-slate-50 dark:bg-slate-900 w-fit px-2 py-1 rounded-md border dark:border-slate-800">
+            {verificationIcon(task.verificationType)}
+            {task.verificationType.replace(/_/g, " ").toUpperCase()}
+          </p>
+        </div>
+
+        {/* Card Footer (Points & Sorting) */}
+        <div className="mt-auto pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <span className="text-sm font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+            {task.points} PTS
+          </span>
+          
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" disabled={index === 0} onClick={() => onMove("up")}>
+              <ChevronUp className="h-3 w-3" />
+            </Button>
+            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" disabled={index === total - 1} onClick={() => onMove("down")}>
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6 ml-1" onClick={onToggle}>
+              {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Read-only expanded view */}
+      {/* Expanded Read-Only View */}
       {isExpanded && !isEditing && (
-        <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-4 bg-slate-50/50 dark:bg-slate-900/30 rounded-b-xl">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-muted-foreground">
-            {task.description && (
-              <div className="sm:col-span-3 text-foreground/80">{task.description}</div>
-            )}
-            <div><span>Category: </span><span className="font-medium text-foreground">{task.category}</span></div>
-            <div><span>Action: </span><span className="font-medium text-foreground">{task.action}</span></div>
-            {task.targetPlatform && <div><span>Platform: </span><span className="font-medium text-foreground">{task.targetPlatform}</span></div>}
-            {task.url && <div className="sm:col-span-3 break-all"><span>URL: </span><span className="font-mono text-[11px] text-foreground">{task.url}</span></div>}
-            {task.minAmount && <div><span>Min Amount: </span><span className="font-medium text-foreground">{task.minAmount}</span></div>}
-            {task.minTxCount && <div><span>Min TX: </span><span className="font-medium text-foreground">{task.minTxCount}</span></div>}
-            {task.minDays && <div><span>Min Days: </span><span className="font-medium text-foreground">{task.minDays}</span></div>}
+        <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-3 bg-slate-50 dark:bg-slate-900/50">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-muted-foreground">
+            {task.description && <div className="col-span-2 text-foreground/90 italic mb-1">"{task.description}"</div>}
+            
+            <div><span className="font-medium">Category:</span> <span className="text-foreground">{task.category}</span></div>
+            <div><span className="font-medium">Action:</span> <span className="text-foreground">{task.action}</span></div>
+            
+            {task.targetPlatform && <div><span className="font-medium">Platform:</span> <span className="text-foreground">{task.targetPlatform}</span></div>}
+            {task.targetServerId && <div><span className="font-medium">Server ID:</span> <span className="text-foreground">{task.targetServerId}</span></div>}
+            {task.targetHandle && <div className="col-span-2"><span className="font-medium">Target:</span> <span className="text-foreground">{task.targetHandle}</span></div>}
+            
+            {task.url && <div className="col-span-2"><span className="font-medium">URL:</span> <a href={task.url} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline break-all ml-1">{task.url}</a></div>}
+            {task.targetContractAddress && <div className="col-span-2"><span className="font-medium">Contract:</span> <span className="font-mono text-[10px] text-foreground break-all ml-1">{task.targetContractAddress}</span></div>}
+            
+            {task.minAmount && <div><span className="font-medium">Min Amount:</span> <span className="text-foreground">{task.minAmount}</span></div>}
+            {task.minTxCount && <div><span className="font-medium">Min TX:</span> <span className="text-foreground">{task.minTxCount}</span></div>}
+            {task.minDays && <div><span className="font-medium">Min Days:</span> <span className="text-foreground">{task.minDays}</span></div>}
+            
+            {task.startDate && <div><span className="font-medium">Starts:</span> <span className="text-foreground ml-1">{new Date(task.startDate).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</span></div>}
+            {task.endDate && <div><span className="font-medium">Ends:</span> <span className="text-foreground ml-1">{new Date(task.endDate).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</span></div>}
           </div>
-          <Button size="sm" variant="outline" className="mt-4 h-8 text-xs" onClick={onEdit}>
-            <Edit2 className="h-3 w-3 mr-1" /> Edit Task
+          <Button size="sm" variant="outline" className="mt-3 w-full h-8 text-xs bg-white dark:bg-slate-950" onClick={onEdit}>
+            <Edit2 className="h-3 w-3 mr-2" /> Edit Task Details
           </Button>
         </div>
       )}

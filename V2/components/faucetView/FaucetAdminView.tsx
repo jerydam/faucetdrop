@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+
 import {
   Card,
   CardContent,
@@ -32,6 +33,11 @@ import {
   Zap,
   Menu,
   AlertCircle,
+  TrendingUp,
+  Activity,
+  ChevronRight,
+  Plus,
+  X,
 } from "lucide-react";
 import { formatUnits, parseUnits, type BrowserProvider } from "ethers";
 import { toast } from "sonner";
@@ -88,10 +94,8 @@ import { cn } from "@/lib/utils";
 
 type FaucetType = "dropcode" | "droplist" | "custom";
 const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
-
 const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
 
-// --- NEW CONSTANT: Base URLs for platforms ---
 const PLATFORM_BASE_URLS: Record<string, string> = {
   "𝕏": "https://x.com/",
   "telegram": "https://t.me/",
@@ -132,7 +136,6 @@ interface FaucetAdminViewProps {
   address: string | null;
   chainId: number | null;
   provider: any;
-  
   router: any;
   faucetMetadata: {
     description?: string;
@@ -142,29 +145,21 @@ interface FaucetAdminViewProps {
 
 const getActionText = (platform: string): string => {
   switch (platform.toLowerCase()) {
-    case "telegram":
-      return "Join";
-    case "discord":
-      return "Join";
+    case "telegram": return "Join";
+    case "discord": return "Join";
     case "𝕏":
-    case "x":
-      return "Follow";
-    default:
-      return "Follow";
+    case "x": return "Follow";
+    default: return "Follow";
   }
 };
 
 const getPlatformIcon = (platform: string): string => {
   switch (platform.toLowerCase()) {
-    case "telegram":
-      return "";
-    case "discord":
-      return "";
+    case "telegram": return "";
+    case "discord": return "";
     case "𝕏":
-    case "x":
-      return "𝕏";
-    default:
-      return "";
+    case "x": return "𝕏";
+    default: return "";
   }
 };
 
@@ -177,6 +172,63 @@ const getCurrentDateTime = () => {
   const minutes = String(now.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
+
+// ─── Stat Card ──────────────────────────────────────────────────────────────
+const StatCard = ({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  accent = false,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  accent?: boolean;
+}) => (
+  <div
+    className={cn(
+      "relative flex flex-col gap-1 rounded-xl p-4 border transition-all duration-200 hover:shadow-sm",
+      accent ? "border-primary/20 bg-primary/5" : "bg-muted/30 border-border/60"
+    )}
+  >
+    <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </div>
+    <div className="text-xl font-bold tracking-tight truncate">{value}</div>
+    {sub && <div className="text-xs text-muted-foreground truncate">{sub}</div>}
+  </div>
+);
+
+// ─── Section Wrapper ────────────────────────────────────────────────────────
+const Section = ({
+  icon: Icon,
+  title,
+  children,
+  className,
+}: {
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <div className={cn("rounded-xl border bg-card shadow-sm", className)}>
+    <div className="flex items-center gap-2 px-5 py-3.5 border-b bg-muted/20 rounded-t-xl">
+      <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10">
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <h3 className="text-sm font-semibold">{title}</h3>
+    </div>
+    <div className="p-5">{children}</div>
+  </div>
+);
+
+// ─── Spinner ─────────────────────────────────────────────────────────────────
+const Spinner = () => (
+  <div className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+);
 
 const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   faucetAddress,
@@ -200,13 +252,10 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   address,
   chainId,
   provider,
-  
   router,
   faucetMetadata,
 }) => {
-  
-
-  // --- UI States ---
+  // ── UI States ──────────────────────────────────────────────────────────────
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("fund");
   const [showFundPopup, setShowFundPopup] = useState(false);
@@ -217,42 +266,34 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const [showNewCodeDialog, setShowNewCodeDialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
 
-  // --- Data/Form States ---
+  // ── Form States ────────────────────────────────────────────────────────────
   const [fundAmount, setFundAmount] = useState("");
   const [adjustedFundAmount, setAdjustedFundAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [claimAmount, setClaimAmount] = useState(
-    faucetDetails?.claimAmount
-      ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
-      : "0"
+    faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"
   );
   const [startTime, setStartTime] = useState(
     faucetDetails?.startTime
-      ? new Date(Number(faucetDetails.startTime) * 1000)
-          .toISOString()
-          .slice(0, 16)
+      ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16)
       : ""
   );
   const [endTime, setEndTime] = useState(
     faucetDetails?.endTime
-      ? new Date(Number(faucetDetails.endTime) * 1000)
-          .toISOString()
-          .slice(0, 16)
+      ? new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16)
       : ""
   );
   const [startTimeError, setStartTimeError] = useState("");
   const [whitelistAddresses, setWhitelistAddresses] = useState("");
   const [isWhitelistEnabled, setIsWhitelistEnabled] = useState(true);
-  const [newFaucetName, setNewFaucetName] = useState(
-    faucetDetails?.name || ""
-  );
+  const [newFaucetName, setNewFaucetName] = useState(faucetDetails?.name || "");
   const [newAdminAddress, setNewAdminAddress] = useState("");
   const [currentSecretCode, setCurrentSecretCode] = useState("");
   const [newlyGeneratedCode, setNewlyGeneratedCode] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddingAdmin, setIsAddingAdmin] = useState(true);
 
-  // --- Loading States ---
+  // ── Loading States ─────────────────────────────────────────────────────────
   const [isFunding, setIsFunding] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [isUpdatingParameters, setIsUpdatingParameters] = useState(false);
@@ -264,7 +305,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const [isRetrievingSecret, setIsRetrievingSecret] = useState(false);
   const [isGeneratingNewCode, setIsGeneratingNewCode] = useState(false);
 
-  // --- Derived State Helpers ---
+  // ── Derived ────────────────────────────────────────────────────────────────
   const shouldShowWhitelistTab = faucetType === "droplist";
   const shouldShowCustomTab = faucetType === "custom";
   const shouldShowSecretCodeButton = faucetType === "dropcode" && backendMode;
@@ -278,13 +319,10 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       const fee = (parsedAmount * BigInt(3)) / BigInt(100);
       const netAmount = parsedAmount - fee;
       const recommendedInput = (parsedAmount * BigInt(100)) / BigInt(97);
-      const recommendedInputStr = Number(
-        formatUnits(recommendedInput, tokenDecimals)
-      ).toFixed(3);
       return {
         fee: formatUnits(fee, tokenDecimals),
         netAmount: formatUnits(netAmount, tokenDecimals),
-        recommendedInput: recommendedInputStr,
+        recommendedInput: Number(formatUnits(recommendedInput, tokenDecimals)).toFixed(3),
       };
     } catch {
       return { fee: "0", netAmount: "0", recommendedInput: "0" };
@@ -293,25 +331,20 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const { fee, netAmount, recommendedInput } = calculateFee(fundAmount);
 
   const validateStartTime = (value: string): boolean => {
-    if (!value) {
-      setStartTimeError("");
-      return false;
-    }
+    if (!value) { setStartTimeError(""); return false; }
     const now = new Date();
     const selectedTime = new Date(value);
     if (selectedTime <= now) {
-      setStartTimeError("Start time must be ahead of current time ");
+      setStartTimeError("Start time must be ahead of current time");
       return false;
-    } else {
-      setStartTimeError("");
-      return true;
     }
+    setStartTimeError("");
+    return true;
   };
 
   const handleStartTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setStartTime(value);
-    validateStartTime(value);
+    setStartTime(e.target.value);
+    validateStartTime(e.target.value);
   };
 
   const loadTransactionHistory = useCallback(async () => {
@@ -323,507 +356,285 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         selectedNetwork,
         faucetType || undefined
       );
-      const sortedTxs = txs.sort((a, b) => b.timestamp - a.timestamp);
-      setTransactions(sortedTxs);
+      setTransactions(txs.sort((a, b) => b.timestamp - a.timestamp));
     } catch (error: any) {
-      console.error("Error loading Activity Log:", error);
       toast.error("Failed to load Activity Log");
     }
-  }, [
-    provider,
-    faucetAddress,
-    selectedNetwork,
-    faucetType,
-    setTransactions,
-    toast,
-  ]);
+  }, [provider, faucetAddress, selectedNetwork, faucetType, setTransactions]);
 
   useEffect(() => {
-    if (activeTab === "history" && selectedNetwork) {
-      loadTransactionHistory();
-    }
+    if (activeTab === "history" && selectedNetwork) loadTransactionHistory();
   }, [activeTab, selectedNetwork, loadTransactionHistory]);
 
   useEffect(() => {
     if (faucetDetails) {
-      if (faucetType !== "custom" && faucetDetails.claimAmount) {
+      if (faucetType !== "custom" && faucetDetails.claimAmount)
         setClaimAmount(formatUnits(faucetDetails.claimAmount, tokenDecimals));
-      }
-      if (faucetDetails.startTime) {
-        setStartTime(
-          new Date(Number(faucetDetails.startTime) * 1000)
-            .toISOString()
-            .slice(0, 16)
-        );
-      }
-      if (faucetDetails.endTime) {
-        setEndTime(
-          new Date(Number(faucetDetails.endTime) * 1000)
-            .toISOString()
-            .slice(0, 16)
-        );
-      }
-      if (faucetDetails.name) {
-        setNewFaucetName(faucetDetails.name);
-      }
+      if (faucetDetails.startTime)
+        setStartTime(new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16));
+      if (faucetDetails.endTime)
+        setEndTime(new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16));
+      if (faucetDetails.name) setNewFaucetName(faucetDetails.name);
     }
   }, [faucetDetails, faucetType, tokenDecimals]);
 
-  // --- Handlers ---
-
-  // --- UPDATED LOGIC: Add New Social Link with Standby URL ---
-  const addNewSocialLink = (): void => {
+  // ── Social Links ───────────────────────────────────────────────────────────
+  const addNewSocialLink = () => {
     const defaultPlatform = "𝕏";
     setNewSocialLinks([
       ...newSocialLinks,
-      {
-        platform: defaultPlatform,
-        url: PLATFORM_BASE_URLS[defaultPlatform], // Auto-fill base URL
-        handle: "",
-        action: "follow",
-      },
+      { platform: defaultPlatform, url: PLATFORM_BASE_URLS[defaultPlatform], handle: "", action: "follow" },
     ]);
   };
 
-  const removeNewSocialLink = (index: number): void => {
+  const removeNewSocialLink = (index: number) =>
     setNewSocialLinks(newSocialLinks.filter((_, i) => i !== index));
-  };
 
-  // --- UPDATED LOGIC: Update Social Link with Smart Appending ---
-  const updateNewSocialLink = (
-    index: number,
-    field: keyof SocialMediaLink,
-    value: string
-  ): void => {
+  const updateNewSocialLink = (index: number, field: keyof SocialMediaLink, value: string) => {
     const updated = [...newSocialLinks];
-    const currentLink = updated[index];
-
-    // Helper to clean handle (remove @)
+    const link = updated[index];
     const cleanHandle = (h: string) => h.replace(/^@/, "");
 
     if (field === "platform") {
-      // 1. Update Platform
-      currentLink.platform = value;
-
-      // 2. Update URL to new platform base + existing handle
-      const baseUrl = PLATFORM_BASE_URLS[value] || "";
-      currentLink.url = currentLink.handle
-        ? `${baseUrl}${cleanHandle(currentLink.handle)}`
-        : baseUrl;
+      link.platform = value;
+      const base = PLATFORM_BASE_URLS[value] || "";
+      link.url = link.handle ? `${base}${cleanHandle(link.handle)}` : base;
     } else if (field === "handle") {
-      const oldHandleClean = cleanHandle(currentLink.handle);
-      const newHandleClean = cleanHandle(value);
-      const baseUrl = PLATFORM_BASE_URLS[currentLink.platform] || "";
-
-      // 1. Update Handle
-      currentLink.handle = value;
-
-      // 2. Smart URL Update:
-      // Only auto-update URL if user hasn't manually customized it
-      // (matches Base or Base + OldHandle)
-      if (
-        currentLink.url === baseUrl ||
-        currentLink.url === `${baseUrl}${oldHandleClean}`
-      ) {
-        currentLink.url = `${baseUrl}${newHandleClean}`;
-      }
+      const oldClean = cleanHandle(link.handle);
+      const newClean = cleanHandle(value);
+      const base = PLATFORM_BASE_URLS[link.platform] || "";
+      link.handle = value;
+      if (link.url === base || link.url === `${base}${oldClean}`)
+        link.url = `${base}${newClean}`;
     } else {
-      // Direct update for 'url' or 'action' (Manual edits)
-      currentLink[field] = value;
+      (link as any)[field] = value;
     }
-
     setNewSocialLinks(updated);
   };
 
-  const handleUpdateFaucetName = async (): Promise<void> => {
-    if (
-      !address ||
-      !provider ||
-      !newFaucetName.trim() ||
-      !chainId ||
-      !checkNetwork()
-    )
-      return;
+  // ── Handlers ───────────────────────────────────────────────────────────────
+  const handleUpdateFaucetName = async () => {
+    if (!address || !provider || !newFaucetName.trim() || !chainId || !checkNetwork()) return;
     try {
       setIsUpdatingName(true);
       await updateFaucetName(
-        provider as BrowserProvider,
-        faucetAddress,
-        newFaucetName,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
+        provider as BrowserProvider, faucetAddress, newFaucetName,
+        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
       );
       toast.success("Faucet name updated");
       setShowEditNameDialog(false);
       await loadFaucetDetails();
-    } catch (error: any) {
-      console.error("Error updating faucet name:", error);
-      toast.error("Failed to update faucet name");
-    } finally {
-      setIsUpdatingName(false);
-    }
+    } catch { toast.error("Failed to update faucet name"); }
+    finally { setIsUpdatingName(false); }
   };
 
-  const handleDeleteFaucet = async (): Promise<void> => {
+  const handleDeleteFaucet = async () => {
     if (!address || !provider || !chainId || !checkNetwork()) return;
     try {
       setIsDeletingFaucet(true);
-
-      // 1. Perform On-Chain Deletion
       await deleteFaucet(
-        provider as BrowserProvider,
-        faucetAddress,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
+        provider as BrowserProvider, faucetAddress,
+        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
       );
-
-      // 2. Call Backend to clean up Database
       try {
-        const response = await fetch(
-          "https://faucetdrop-backend.onrender.com/delete-faucet-metadata",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              faucetAddress: faucetAddress,
-              userAddress: address,
-              chainId: Number(chainId),
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          console.warn(
-            "Backend deletion failed, but blockchain deletion succeeded."
-          );
-        }
-      } catch (apiError) {
-        console.error("Failed to sync deletion with backend:", apiError);
-      }
-
+        await fetch("https://faucetdrop-backend.onrender.com/delete-faucet-metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),
+        });
+      } catch {}
       toast.success("Faucet deleted successfully");
-
       setShowDeleteDialog(false);
       router.push("/");
-    } catch (error: any) {
-      console.error("Error deleting faucet:", error);
-      toast.error("Failed to delete faucet");
-    } finally {
-      setIsDeletingFaucet(false);
-    }
+    } catch { toast.error("Failed to delete faucet"); }
+    finally { setIsDeletingFaucet(false); }
   };
 
-  const handleFund = async (): Promise<void> => {
+  const handleFund = async () => {
     if (!checkNetwork()) return;
     setAdjustedFundAmount(fundAmount);
     setShowFundPopup(true);
   };
 
-  const confirmFund = async (): Promise<void> => {
+  const confirmFund = async () => {
     if (!address || !provider || !adjustedFundAmount || !chainId) return;
     try {
       setIsFunding(true);
       const amount = parseUnits(adjustedFundAmount, tokenDecimals);
       await fundFaucet(
-        provider as BrowserProvider,
-        faucetAddress,
-        amount,
-        faucetDetails.isEther,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
+        provider as BrowserProvider, faucetAddress, amount, faucetDetails.isEther,
+        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
       );
       toast.success("Faucet funded successfully");
       setFundAmount("");
       setShowFundPopup(false);
       await loadFaucetDetails();
       await loadTransactionHistory();
-    } catch (error: any) {
-      console.error("Error funding faucet:", error);
-      toast.error("Failed to fund faucet");
-    } finally {
-      setIsFunding(false);
-    }
+    } catch { toast.error("Failed to fund faucet"); }
+    finally { setIsFunding(false); }
   };
 
-  const handleWithdraw = async (): Promise<void> => {
-    if (
-      !address ||
-      !provider ||
-      !withdrawAmount ||
-      !chainId ||
-      !checkNetwork()
-    )
-      return;
+  const handleWithdraw = async () => {
+    if (!address || !provider || !withdrawAmount || !chainId || !checkNetwork()) return;
     try {
       setIsWithdrawing(true);
-      const amount = parseUnits(withdrawAmount, tokenDecimals);
       await withdrawTokens(
-        provider as BrowserProvider,
-        faucetAddress,
-        amount,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
+        provider as BrowserProvider, faucetAddress, parseUnits(withdrawAmount, tokenDecimals),
+        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
       );
       toast.success("Tokens withdrawn successfully");
       setWithdrawAmount("");
       await loadFaucetDetails();
       await loadTransactionHistory();
+    } catch { toast.error("Failed to withdraw tokens"); }
+    finally { setIsWithdrawing(false); }
+  };
+
+  const getEstimatedLength = () => {
+    const estimate = customXPostTemplate
+      .replace(/\{amount\}/g, "00.00")
+      .replace(/\{token\}/g, "TOKEN")
+      .replace(/\{network\}/g, "NetworkName")
+      .replace(/\{explorer\}/g, "https://explorer.com/tx/0x...");
+    return FIXED_TWEET_PREFIX.length + 1 + estimate.length;
+  };
+
+  const charCount = getEstimatedLength();
+  const isOverLimit = charCount > 280;
+
+  const handleUpdateClaimParameters = async () => {
+    if (!address || !provider || !chainId || !checkNetwork()) return;
+
+    const hasTaskChanges = newSocialLinks.length > 0;
+    const isTemplateChanged = customXPostTemplate !== faucetDetails.customXPostTemplate;
+    const currentClaimAmountStr = faucetType !== "custom"
+      ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0";
+    const currentStartTimeStr = faucetDetails.startTime
+      ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16) : "";
+    const currentEndTimeStr = faucetDetails.endTime
+      ? new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16) : "";
+    const hasBlockchainChanges =
+      (faucetType !== "custom" && claimAmount !== currentClaimAmountStr) ||
+      startTime !== currentStartTimeStr || endTime !== currentEndTimeStr;
+
+    if (!hasTaskChanges && !hasBlockchainChanges && !isTemplateChanged) {
+      toast.warning("No changes made");
+      return;
+    }
+
+    try {
+      setIsUpdatingParameters(true);
+
+      if (isTemplateChanged) {
+        const response = await fetch("https://faucetdrop-backend.onrender.com/faucet-x-template", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ faucetAddress, template: customXPostTemplate, userAddress: address, chainId: Number(chainId) }),
+        });
+        if (!response.ok) throw new Error("Failed to save X template");
+        if (!hasBlockchainChanges && !hasTaskChanges) toast.success("Share post template updated!");
+      }
+
+      if (hasBlockchainChanges) {
+        const claimAmountBN = faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
+        const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
+        const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
+
+        await setClaimParameters(
+          provider as BrowserProvider, faucetAddress, claimAmountBN, startTimestamp, endTimestamp,
+          BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
+        );
+        toast.success("Blockchain parameters updated");
+
+        await fetch("https://faucetdrop-backend.onrender.com/set-claim-parameters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            faucetAddress, claimAmount: claimAmountBN.toString(),
+            startTime: startTimestamp, endTime: endTimestamp, chainId: Number(chainId),
+          }),
+        });
+
+        if (faucetType === "dropcode") {
+          try {
+            const codeResponse = await fetch("https://faucetdrop-backend.onrender.com/generate-new-drop-code", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),
+            });
+            if (codeResponse.ok) {
+              const result = await codeResponse.json();
+              setNewlyGeneratedCode(result.secretCode);
+              setShowNewCodeDialog(true);
+            } else {
+              toast.error("Parameters updated, but failed to generate new drop code.");
+            }
+          } catch { toast.error("Failed to generate code automatically."); }
+        }
+      }
+
+      if (hasTaskChanges) {
+        const formattedTasks = newSocialLinks
+          .filter((link) => link.url.trim() && link.handle.trim())
+          .map((link) => ({ platform: link.platform, handle: link.handle, url: link.url.trim(), action: link.action }));
+
+        await fetch("https://faucetdrop-backend.onrender.com/add-faucet-tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ faucetAddress, tasks: formattedTasks, userAddress: address, chainId: Number(chainId) }),
+        });
+        if (!hasBlockchainChanges) toast.success("Social tasks updated!");
+      }
+
+      setNewSocialLinks([]);
+      if (!(faucetType === "dropcode" && hasBlockchainChanges)) await loadFaucetDetails();
     } catch (error: any) {
-      console.error("Error withdrawing tokens:", error);
-      toast.error("Failed to withdraw tokens");
+      toast.error("Failed to save changes: Nothing to update");
     } finally {
-      setIsWithdrawing(false);
+      setIsUpdatingParameters(false);
     }
   };
-const getEstimatedLength = () => {
-  // We use average lengths for placeholders: 
-  // {amount}: 5, {token}: 4, {network}: 10, {explorer}: 30
-  const estimate = customXPostTemplate
-    .replace(/\{amount\}/g, "00.00")
-    .replace(/\{token\}/g, "TOKEN")
-    .replace(/\{network\}/g, "NetworkName")
-    .replace(/\{explorer\}/g, "https://explorer.com/tx/0x...");
-    
-  return FIXED_TWEET_PREFIX.length + 1 + estimate.length;
-};
 
-const charCount = getEstimatedLength();
-const isOverLimit = charCount > 280;
-const handleUpdateClaimParameters = async (): Promise<void> => {
-  if (!address || !provider || !chainId || !checkNetwork()) return;
-
-  // 1. Detect all types of changes
-  const hasTaskChanges = newSocialLinks.length > 0;
-  
-  // Use a fallback to DEFAULT_X_POST_TEMPLATE if faucetDetails doesn't have one yet
-  const isTemplateChanged = customXPostTemplate !== faucetDetails.customXPostTemplate;
-
-  const currentClaimAmountStr = faucetType !== "custom" 
-    ? formatUnits(faucetDetails.claimAmount, tokenDecimals) 
-    : "0";
-
-  const currentStartTimeStr = faucetDetails.startTime
-    ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16)
-    : "";
-
-  const currentEndTimeStr = faucetDetails.endTime
-    ? new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16)
-    : "";
-
-  const hasBlockchainChanges = 
-    (faucetType !== "custom" && claimAmount !== currentClaimAmountStr) ||
-    startTime !== currentStartTimeStr ||
-    endTime !== currentEndTimeStr;
-
-  // 2. Early exit if absolutely nothing changed
-  if (!hasTaskChanges && !hasBlockchainChanges && !isTemplateChanged) {
-    toast.warning("No changes made");
-    return;
-  }
-
-  try {
-    setIsUpdatingParameters(true);
-
-    // ====================== PATH A: SHARE POST TEMPLATE (Backend) ======================
-    if (isTemplateChanged) {
-      const response = await fetch("https://faucetdrop-backend.onrender.com/faucet-x-template", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          faucetAddress,
-          template: customXPostTemplate,
-          userAddress: address,
-          chainId: Number(chainId),
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to save X template");
-      if (!hasBlockchainChanges && !hasTaskChanges) {
-        toast.success("Share post template updated!");
-      }
-    }
-
-    // ====================== PATH B: BLOCKCHAIN PARAMETERS ======================
-if (hasBlockchainChanges) {
-  const claimAmountBN = faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
-  const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
-  const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
-
-  await setClaimParameters(
-    provider as BrowserProvider,
-    faucetAddress,
-    claimAmountBN,
-    startTimestamp,
-    endTimestamp,
-    BigInt(chainId),
-    BigInt(Number(selectedNetwork.chainId)),
-    faucetType || undefined
-  );
-
-  toast.success("Blockchain parameters updated");
-
-  // Sync parameters to backend
-  await fetch("https://faucetdrop-backend.onrender.com/set-claim-parameters", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      faucetAddress,
-      claimAmount: claimAmountBN.toString(),
-      startTime: startTimestamp,
-      endTime: endTimestamp,
-      chainId: Number(chainId),
-    }),
-  });
-
-  // --- THE FIX: Generate DropCode and trigger the popup ---
-  if (faucetType === "dropcode") {
-    try {
-      const codeResponse = await fetch("https://faucetdrop-backend.onrender.com/generate-new-drop-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          faucetAddress,
-          userAddress: address,
-          chainId: Number(chainId),
-        }),
-      });
-      
-      if (codeResponse.ok) {
-        const result = await codeResponse.json();
-        setNewlyGeneratedCode(result.secretCode); // Store the code
-        setShowNewCodeDialog(true); // Open the popup!
-      } else {
-        toast.error("Parameters updated, but failed to generate new drop code.");
-      }
-    } catch (err) {
-      console.error("Code generation error:", err);
-      toast.error("Failed to generate code automatically.");
-    }
-  }
-}
-
-    // ====================== PATH C: SOCIAL TASKS ======================
-    if (hasTaskChanges) {
-      const formattedTasks = newSocialLinks
-        .filter((link) => link.url.trim() && link.handle.trim())
-        .map((link) => ({
-          platform: link.platform,
-          handle: link.handle,
-          url: link.url.trim(),
-          action: link.action,
-        }));
-
-      await fetch("https://faucetdrop-backend.onrender.com/add-faucet-tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          faucetAddress,
-          tasks: formattedTasks,
-          userAddress: address,
-          chainId: Number(chainId),
-        }),
-      });
-      
-      if (!hasBlockchainChanges) toast.success("Social tasks updated!");
-    }
-
-    // Reset and Refresh
-    setNewSocialLinks([]);
-    if (!(faucetType === "dropcode" && hasBlockchainChanges)) {
-      await loadFaucetDetails();
-    }
-
-  } catch (error: any) {
-    console.error("Update error:", error);
-    toast.error("Failed to save changes: Nothing to update");
-  } finally {
-    setIsUpdatingParameters(false);
-  }
-};
-
-  const handleUpdateWhitelist = async (): Promise<void> => {
-    if (
-      !address ||
-      !provider ||
-      !whitelistAddresses.trim() ||
-      !chainId ||
-      !checkNetwork()
-    )
-      return;
+  const handleUpdateWhitelist = async () => {
+    if (!address || !provider || !whitelistAddresses.trim() || !chainId || !checkNetwork()) return;
     try {
       setIsUpdatingWhitelist(true);
-      const addresses = whitelistAddresses
-        .split(/[\n,]/)
-        .map((addr) => addr.trim())
-        .filter((addr) => addr.length > 0);
-      if (addresses.length === 0) return;
+      const addresses = whitelistAddresses.split(/[\n,]/).map((a) => a.trim()).filter(Boolean);
+      if (!addresses.length) return;
       await setWhitelistBatch(
-        provider as BrowserProvider,
-        faucetAddress,
-        addresses,
-        isWhitelistEnabled,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
+        provider as BrowserProvider, faucetAddress, addresses, isWhitelistEnabled,
+        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
       );
       toast.success("Drop-list updated successfully");
       setWhitelistAddresses("");
       await loadFaucetDetails();
       await loadTransactionHistory();
-    } catch (error: any) {
-      console.error("Error updating Drop-list:", error);
-      toast.error("Failed to update Drop-list");
-    } finally {
-      setIsUpdatingWhitelist(false);
-    }
+    } catch { toast.error("Failed to update Drop-list"); }
+    finally { setIsUpdatingWhitelist(false); }
   };
 
-  const handleResetAllClaims = async (): Promise<void> => {
+  const handleResetAllClaims = async () => {
     if (!address || !provider || !chainId || !checkNetwork()) return;
     try {
       setIsResettingClaims(true);
       await resetAllClaims(
-        provider as BrowserProvider,
-        faucetAddress,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
+        provider as BrowserProvider, faucetAddress,
+        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
       );
       toast.success("All claims reset successfully");
       await loadFaucetDetails();
       await loadTransactionHistory();
-    } catch (error: any) {
-      console.error("Error resetting all claims:", error);
-      toast.error("Failed to reset all claims");
-    } finally {
-      setIsResettingClaims(false);
-    }
+    } catch { toast.error("Failed to reset all claims"); }
+    finally { setIsResettingClaims(false); }
   };
 
-  const checkAdminStatus = (inputAddress: string): void => {
-    if (!inputAddress.trim()) {
-      setIsAddingAdmin(true);
-      return;
-    }
-    const isAdmin = adminList.some(
-      (admin) => admin.toLowerCase() === inputAddress.toLowerCase()
-    );
-    setIsAddingAdmin(!isAdmin);
+  const checkAdminStatus = (inputAddress: string) => {
+    if (!inputAddress.trim()) { setIsAddingAdmin(true); return; }
+    setIsAddingAdmin(!adminList.some((a) => a.toLowerCase() === inputAddress.toLowerCase()));
   };
 
-  const handleManageAdmin = async (): Promise<void> => {
-    if (
-      !address ||
-      !provider ||
-      !newAdminAddress.trim() ||
-      !chainId ||
-      !checkNetwork()
-    )
-      return;
+  const handleManageAdmin = async () => {
+    if (!address || !provider || !newAdminAddress.trim() || !chainId || !checkNetwork()) return;
     if (
       newAdminAddress.toLowerCase() === faucetDetails?.owner.toLowerCase() ||
       newAdminAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()
@@ -835,1054 +646,832 @@ if (hasBlockchainChanges) {
       setIsManagingAdmin(true);
       if (isAddingAdmin) {
         await addAdmin(
-          provider as BrowserProvider,
-          faucetAddress,
-          newAdminAddress,
-          BigInt(chainId),
-          BigInt(Number(selectedNetwork.chainId)),
-          faucetType || undefined
+          provider as BrowserProvider, faucetAddress, newAdminAddress,
+          BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
         );
-        toast.success(`Address ${newAdminAddress} has been added as an admin`);
+        toast.success(`${newAdminAddress} added as admin`);
       } else {
         removeAdmin(
-          provider as BrowserProvider,
-          faucetAddress,
-          newAdminAddress,
-          BigInt(chainId),
-          BigInt(Number(selectedNetwork.chainId)),
-          faucetType || undefined
+          provider as BrowserProvider, faucetAddress, newAdminAddress,
+          BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
         );
-        toast.success(`Address ${newAdminAddress} has been removed from admins`);
+        toast.success(`${newAdminAddress} removed from admins`);
       }
       setNewAdminAddress("");
       setShowAddAdminDialog(false);
       await loadFaucetDetails();
-    } catch (error: any) {
-      console.error("Error managing admin:", error);
-      toast.error("Failed to manage admin");
-    } finally {
-      setIsManagingAdmin(false);
-    }
+    } catch { toast.error("Failed to manage admin"); }
+    finally { setIsManagingAdmin(false); }
   };
 
-  const handleRetrieveSecretCode = async (): Promise<void> => {
-    if (faucetType !== "dropcode" || !faucetAddress || !address || !chainId)
-      return;
-
+  const handleRetrieveSecretCode = async () => {
+    if (faucetType !== "dropcode" || !faucetAddress || !address || !chainId) return;
     try {
       setIsRetrievingSecret(true);
-
       const data = await getSecretCodeForAdmin(address, faucetAddress, chainId);
-
-      if (!data.secretCode) throw new Error("No code returned from server");
-
+      if (!data.secretCode) throw new Error("No code returned");
       setCurrentSecretCode(data.secretCode);
       setShowCurrentSecretDialog(true);
-
-      toast.success("Drop code retrieved successfully");
-    } catch (error: any) {
-      console.error("Retrieval error:", error);
-      toast.error("Failed to retrieve the drop code. Please try again.");
-    } finally {
-      setIsRetrievingSecret(false);
-    }
+      toast.success("Drop code retrieved");
+    } catch { toast.error("Failed to retrieve drop code."); }
+    finally { setIsRetrievingSecret(false); }
   };
 
-  const handleGenerateNewDropCode = async (): Promise<void> => {
+  const handleGenerateNewDropCode = async () => {
     if (!faucetType || !faucetAddress || !address || !chainId) return;
-    if (!isOwnerOrAdmin) {
-      toast.error("Only the owner or admins can generate a new drop code");
-      return;
-    }
+    if (!isOwnerOrAdmin) { toast.error("Only owner or admins can generate a new drop code"); return; }
     try {
       setIsGeneratingNewCode(true);
-      const response = await fetch(
-        "https://faucetdrop-backend.onrender.com/generate-new-drop-code",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            faucetAddress,
-            userAddress: address,
-            chainId: Number(chainId),
-          }),
-        }
-      );
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Failed to generate new drop code");
-      }
-      const result = await response.json();
-      const newCode = result.secretCode;
-      setNewlyGeneratedCode(newCode);
+      const response = await fetch("https://faucetdrop-backend.onrender.com/generate-new-drop-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),
+      });
+      if (!response.ok) { const e = await response.json(); throw new Error(e.detail); }
+      const { secretCode } = await response.json();
+      setNewlyGeneratedCode(secretCode);
       setShowNewCodeDialog(true);
-      toast.success("New Drop code generated successfully");
-    } catch (error: any) {
-      console.error(" Failed to generate new drop code:", error);
-      toast.error("Failed to generate new drop code");
-    } finally {
-      setIsGeneratingNewCode(false);
-    }
+      toast.success("New drop code generated");
+    } catch { toast.error("Failed to generate new drop code"); }
+    finally { setIsGeneratingNewCode(false); }
   };
-  const handleCopyLink = async (type: "web" | "farcaster"): Promise<void> => {
+
+  const handleCopyLink = async (type: "web" | "farcaster") => {
     try {
-      let url = "";
-
-      if (type === "web") {
-        url = window.location.origin + "/faucet/" + faucetAddress;
-      } else {
-        url = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
-      }
-
+      const url = type === "web"
+        ? window.location.origin + "/faucet/" + faucetAddress
+        : `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
       await navigator.clipboard.writeText(url);
-
-      toast.success("Faucet link has been copied to your clipboard.");
-    } catch (error) {
-      toast.error("Failed to copy the link. Please try again.");
-    }
+      toast.success("Link copied to clipboard");
+    } catch { toast.error("Failed to copy link"); }
   };
-  const handleCopySecretCode = async (code: string): Promise<void> => {
-  try {
-    await navigator.clipboard.writeText(code);
-    toast.success("Drop code copied!");
-    setShowNewCodeDialog(false);           // ← auto close after copy
-  } catch (err) {
-    toast.error("Failed to copy");
-  }
-};
+
+  const handleCopySecretCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success("Drop code copied!");
+      setShowNewCodeDialog(false);
+    } catch { toast.error("Failed to copy"); }
+  };
 
   const totalPages = Math.ceil(transactions.length / 10);
   const startIndex = (currentPage - 1) * 10;
   const currentTransactions = transactions.slice(startIndex, startIndex + 10);
-  const handlePageChange = (page: number): void => {
+  const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) setCurrentPage(page);
   };
 
-  const getTokenName = (isEther: boolean): string => {
-    if (!isEther) return tokenSymbol;
-    return selectedNetwork?.name
-      ? selectedNetwork.nativeCurrency.symbol
-      : "ETH";
-  };
-
-  // --- Preview Logic ---
-  const handlePreview = () => {
-    setShowPreviewDialog(true);
-  };
+  const getTokenName = (isEther: boolean) =>
+    !isEther ? tokenSymbol : selectedNetwork?.nativeCurrency?.symbol || "ETH";
 
   const combinedPreviewTasks = [
-    ...dynamicTasks.map((task) => ({ ...task, status: "Current" })),
-    ...newSocialLinks
-      .filter((link) => link.handle.trim())
-      .map((task) => ({ ...task, status: "New" })),
+    ...dynamicTasks.map((t) => ({ ...t, status: "Current" })),
+    ...newSocialLinks.filter((l) => l.handle.trim()).map((t) => ({ ...t, status: "New" })),
   ];
 
   const simulatedFaucetDetails = {
     ...faucetDetails,
     name: newFaucetName || faucetDetails.name,
-    claimAmount:
-      faucetType === "custom"
-        ? BigInt(0)
-        : parseUnits(claimAmount || "0", tokenDecimals),
+    claimAmount: faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount || "0", tokenDecimals),
     isClaimActive:
-      new Date(endTime).getTime() > Date.now() &&
-      new Date(startTime).getTime() <= Date.now(),
+      new Date(endTime).getTime() > Date.now() && new Date(startTime).getTime() <= Date.now(),
     faucetMetadata: {
-      description:
-        faucetMetadata?.description ||
-        faucetDetails?.faucetMetadata?.description ||
-        `Preview of ${newFaucetName} Faucet`,
-      imageUrl:
-        faucetMetadata?.imageUrl ||
-        faucetDetails?.faucetMetadata?.imageUrl ||
-        "/default.jpeg",
+      description: faucetMetadata?.description || faucetDetails?.faucetMetadata?.description || `Preview of ${newFaucetName} Faucet`,
+      imageUrl: faucetMetadata?.imageUrl || faucetDetails?.faucetMetadata?.imageUrl || "/default.jpeg",
     },
   };
 
-  const renderCountdown = (timestamp: number, prefix: string): string => {
+  const renderCountdown = (timestamp: number, prefix: string) => {
     if (timestamp === 0) return "N/A";
     const diff = timestamp * 1000 - Date.now();
     if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
     return `${days}d ${hours}h ${minutes}m ${seconds}s`;
   };
 
   const adminTabs = [
     { value: "fund", label: "Fund", icon: Upload },
     { value: "parameters", label: "Parameters", icon: Coins },
-    ...(shouldShowWhitelistTab
-      ? [{ value: "whitelist", label: "Drop-list", icon: Users }]
-      : []),
-    ...(shouldShowCustomTab
-      ? [{ value: "custom", label: "Custom", icon: FileUp }]
-      : []),
+    ...(shouldShowWhitelistTab ? [{ value: "whitelist", label: "Drop-list", icon: Users }] : []),
+    ...(shouldShowCustomTab ? [{ value: "custom", label: "Custom", icon: FileUp }] : []),
     { value: "admin-power", label: "Admin Power", icon: RotateCcw },
     { value: "history", label: "Activity Log", icon: History },
   ];
 
+  const colCount = adminTabs.length;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <Card className="w-full mx-auto">
-      <CardHeader className="px-4 sm:px-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="space-y-1">
-            <CardTitle className="text-lg sm:text-xl">Admin Controls</CardTitle>
-            <CardDescription className="text-xs sm:text-sm">
-              Manage your {faucetType || "unknown"} faucet settings and monitor
-              activity here.
+    <Card className="w-full mx-auto overflow-hidden">
+      {/* ── Header ── */}
+      <CardHeader className="px-5 sm:px-6 pb-4 border-b bg-muted/10">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg sm:text-xl font-semibold">Admin Controls</CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Manage your{" "}
+              <span className="font-medium capitalize text-foreground/70">{faucetType || "unknown"}</span>{" "}
+              faucet — settings, parameters, and activity.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-  {/* QR Code Share Button */}
-  <Button 
-    variant="outline" 
-    size="sm" 
-    className="text-xs"
-    onClick={() => setShowQRDialog(true)}
-  >
-    <Share2 className="h-3 w-3 mr-1" /> Share
-  </Button>
-  
-  <Button
-    onClick={handlePreview}
-    variant="secondary"
-    size="sm"
-    className="text-xs"
-  >
-    <Eye className="h-3 w-3 mr-1" /> View User Preview
-  </Button>
-</div>
+
+          {/* Header Actions */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setShowQRDialog(true)}
+            >
+              <Share2 className="h-3.5 w-3.5" /> Share
+            </Button>
+            <Button
+              onClick={() => setShowPreviewDialog(true)}
+              variant="secondary"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+            >
+              <Eye className="h-3.5 w-3.5" /> Preview
+            </Button>
+          </div>
         </div>
+
+        {/* Owner-only destructive actions */}
         {isOwner && (
-          <div className="flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-dashed mt-3">
+            <span className="text-xs text-muted-foreground mr-1">Owner actions:</span>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowEditNameDialog(true)}
-              className="text-xs"
+              className="h-7 text-xs gap-1"
             >
-              <Edit className="h-3 w-3 mr-1" /> Edit Name
+              <Edit className="h-3 w-3" /> Edit Name
             </Button>
             <Button
               variant="destructive"
               size="sm"
               onClick={() => setShowDeleteDialog(true)}
-              className="text-xs"
+              className="h-7 text-xs gap-1"
             >
-              <Trash2 className="h-3 w-3 mr-1" /> Delete Faucet
+              <Trash2 className="h-3 w-3" /> Delete Faucet
             </Button>
-             
           </div>
         )}
       </CardHeader>
-      <CardContent className="px-4 sm:px-6 pb-4 space-y-4">
-  {/* Stats Grid - Responsive */}
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 border p-3 sm:p-4 rounded-lg bg-muted/20">
-    <div className="flex flex-col space-y-1">
-      <span className="text-xs font-medium text-muted-foreground flex items-center">
-        <Zap className="h-3 w-3 mr-1" /> Current Balance
-      </span>
-      <span className="text-base sm:text-lg font-bold truncate">
-        {faucetDetails.balance
-          ? formatUnits(faucetDetails.balance, tokenDecimals)
-          : "0"}{" "}
-        <span className="text-sm sm:text-base">{tokenSymbol}</span>
-      </span>
-    </div>
-    
-    <div className="flex flex-col space-y-1">
-      <span className="text-xs font-medium text-muted-foreground flex items-center">
-        <Coins className="h-3 w-3 mr-1" /> Current Drip
-      </span>
-      <span className="text-base sm:text-lg font-bold truncate">
-        {faucetType === "custom"
-          ? "Custom"
-          : faucetDetails.claimAmount
-          ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
-          : "0"}{" "}
-        {faucetType !== "custom" && (
-          <span className="text-sm sm:text-base">{tokenSymbol}</span>
-        )}
-      </span>
-    </div>
-    
-    <div className="flex flex-col space-y-1">
-      <span className="text-xs font-medium text-muted-foreground flex items-center">
-        <Clock className="h-3 w-3 mr-1" /> Live Status
-      </span>
-      <span className="text-base sm:text-lg font-bold">
-        {faucetDetails.isClaimActive ? (
-          <Badge variant="default" className="bg-green-500 text-xs sm:text-sm">
-            Active
-          </Badge>
-        ) : (
-          <Badge variant="destructive" className="text-xs sm:text-sm">
-            Inactive
-          </Badge>
-        )}
-      </span>
-    </div>
-    
-    <div className="flex flex-col space-y-1">
-      <span className="text-xs font-medium text-muted-foreground flex items-center">
-        <Clock className="h-3 w-3 mr-1" /> Ends In
-      </span>
-      <span className="text-sm sm:text-base font-bold truncate">
-        {faucetDetails.isClaimActive && Number(faucetDetails.endTime) > 0
-          ? renderCountdown(Number(faucetDetails.endTime), "End")
-          : "N/A"}
-      </span>
-    </div>
-  </div>
-  
-  {/* Token Balance Component - Full Width */}
-  <div className="w-full">
-    <TokenBalance
-      tokenAddress={faucetDetails.token}
-      tokenSymbol={tokenSymbol}
-      tokenDecimals={tokenDecimals}
-      isNativeToken={faucetDetails.isEther}
-      networkChainId={selectedNetwork?.chainId}
-    />
-  </div>
-</CardContent>
-      <CardContent className="px-4 sm:px-6">
-        <Tabs
-          defaultValue="fund"
-          value={activeTab}
-          onValueChange={setActiveTab}
-        >
+
+      {/* ── Stats ── */}
+      <CardContent className="px-5 sm:px-6 py-4 border-b">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard
+            icon={Zap}
+            label="Current Balance"
+            value={
+              <>
+                {faucetDetails.balance ? formatUnits(faucetDetails.balance, tokenDecimals) : "0"}{" "}
+                <span className="text-base font-medium text-muted-foreground">{tokenSymbol}</span>
+              </>
+            }
+            accent
+          />
+          <StatCard
+            icon={Coins}
+            label="Drip Amount"
+            value={
+              faucetType === "custom" ? (
+                <span className="text-muted-foreground text-base">Custom</span>
+              ) : (
+                <>
+                  {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"}{" "}
+                  <span className="text-base font-medium text-muted-foreground">{tokenSymbol}</span>
+                </>
+              )
+            }
+          />
+          <StatCard
+            icon={Activity}
+            label="Live Status"
+            value={
+              faucetDetails.isClaimActive ? (
+                <Badge className="bg-green-500 hover:bg-green-500 text-white text-xs font-semibold px-2">
+                  ● Active
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="text-xs font-semibold px-2">
+                  ● Inactive
+                </Badge>
+              )
+            }
+          />
+          <StatCard
+            icon={Clock}
+            label="Ends In"
+            value={
+              <span className="text-sm font-mono">
+                {faucetDetails.isClaimActive && Number(faucetDetails.endTime) > 0
+                  ? renderCountdown(Number(faucetDetails.endTime), "End")
+                  : "—"}
+              </span>
+            }
+          />
+        </div>
+
+        {/* Token Balance row */}
+        <div className="mt-3">
+          <TokenBalance
+            tokenAddress={faucetDetails.token}
+            tokenSymbol={tokenSymbol}
+            tokenDecimals={tokenDecimals}
+            isNativeToken={faucetDetails.isEther}
+            networkChainId={selectedNetwork?.chainId}
+          />
+        </div>
+      </CardContent>
+
+      {/* ── Tabs ── */}
+      <CardContent className="px-5 sm:px-6 pt-5 pb-6">
+        <Tabs defaultValue="fund" value={activeTab} onValueChange={setActiveTab}>
+          {/* Mobile dropdown */}
           <div className="md:hidden mb-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-full justify-between">
-                  {adminTabs.find((tab) => tab.value === activeTab)?.label ||
-                    "Menu"}{" "}
-                  <Menu className="h-4 w-4" />
+                <Button variant="outline" className="w-full justify-between h-10 text-sm">
+                  <span className="flex items-center gap-2">
+                    {(() => {
+                      const tab = adminTabs.find((t) => t.value === activeTab);
+                      return tab ? (
+                        <>
+                          <tab.icon className="h-4 w-4" />
+                          {tab.label}
+                        </>
+                      ) : "Menu";
+                    })()}
+                  </span>
+                  <Menu className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-60">
+              <DropdownMenuContent className="w-56">
                 {adminTabs.map((tab) => (
                   <DropdownMenuItem
                     key={tab.value}
                     onClick={() => setActiveTab(tab.value)}
+                    className={cn("gap-2", activeTab === tab.value && "bg-muted font-medium")}
                   >
-                    <tab.icon className="h-4 w-4 mr-2" /> {tab.label}
+                    <tab.icon className="h-4 w-4" /> {tab.label}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          {/* Desktop tab list */}
           <TabsList
-            className={`hidden md:grid gap-2 w-full ${
-              shouldShowWhitelistTab && shouldShowCustomTab
-                ? "grid-cols-6"
-                : shouldShowWhitelistTab || shouldShowCustomTab
-                ? "grid-cols-5"
-                : "grid-cols-4"
-            }`}
+            className={cn(
+              "hidden md:grid gap-1 w-full h-auto p-1 rounded-xl",
+              `grid-cols-${colCount}`
+            )}
           >
             {adminTabs.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="text-xs sm:text-sm"
+                className="flex items-center gap-1.5 text-xs py-2 rounded-lg data-[state=active]:shadow-sm"
               >
-                <tab.icon className="h-4 w-4 mr-2" />
-                {tab.label}
+                <tab.icon className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">{tab.label}</span>
+                <span className="lg:hidden">{tab.label.split(" ")[0]}</span>
               </TabsTrigger>
             ))}
           </TabsList>
 
-          <TabsContent value="fund" className="space-y-6 mt-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <Card className="p-4 border shadow-sm">
-                <CardTitle className="text-base font-semibold mb-3 flex items-center">
-                  <Upload className="h-4 w-4 mr-2" /> Fund Faucet
-                </CardTitle>
+          {/* ── Fund Tab ── */}
+          <TabsContent value="fund" className="space-y-4 mt-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Section icon={Upload} title="Fund Faucet">
                 <div className="space-y-3">
-                  <Label htmlFor="fund-amount" className="text-xs sm:text-sm">
-                    Amount to Deposit
-                  </Label>
+                  <Label className="text-xs text-muted-foreground">Amount to deposit</Label>
                   <div className="flex gap-2">
                     <Input
-                      id="fund-amount"
                       placeholder="0.0"
                       value={fundAmount}
                       onChange={(e) => setFundAmount(e.target.value)}
-                      className="text-xs sm:text-sm"
+                      className="text-sm"
                     />
-                    <Button
-                      onClick={handleFund}
-                      disabled={isFunding || !fundAmount}
-                      className="text-xs sm:text-sm"
-                    >
-                      {isFunding ? (
-                        <span className="flex items-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                          Funding...
-                        </span>
-                      ) : (
-                        `Fund ${tokenSymbol}`
-                      )}
+                    <Button onClick={handleFund} disabled={isFunding || !fundAmount} className="shrink-0">
+                      {isFunding ? <Spinner /> : <Upload className="h-4 w-4" />}
+                      <span className="ml-1.5 text-xs">Fund</span>
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Includes a 3% platform fee. Net amount:{" "}
-                    {calculateFee(fundAmount).netAmount} {tokenSymbol}
-                  </p>
+                  {fundAmount && (
+                    <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1 border border-dashed">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Platform fee (3%)</span>
+                        <span className="font-mono">{fee} {tokenSymbol}</span>
+                      </div>
+                      <div className="flex justify-between font-medium">
+                        <span className="text-muted-foreground">Net to faucet</span>
+                        <span className="font-mono">{netAmount} {tokenSymbol}</span>
+                      </div>
+                      <p className="text-blue-500 pt-1">
+                        Tip: deposit {recommendedInput} {tokenSymbol} to net exactly {fundAmount}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </Card>
-              <Card className="p-4 border shadow-sm">
-                <CardTitle className="text-base font-semibold mb-3 flex items-center">
-                  <Download className="h-4 w-4 mr-2" /> Withdraw Tokens
-                </CardTitle>
+              </Section>
+
+              <Section icon={Download} title="Withdraw Tokens">
                 <div className="space-y-3">
-                  <Label
-                    htmlFor="withdraw-amount"
-                    className="text-xs sm:text-sm"
-                  >
-                    Amount to Withdraw
-                  </Label>
+                  <Label className="text-xs text-muted-foreground">Amount to withdraw</Label>
                   <div className="flex gap-2">
                     <Input
-                      id="withdraw-amount"
                       placeholder="0.0"
                       value={withdrawAmount}
                       onChange={(e) => setWithdrawAmount(e.target.value)}
-                      className="text-xs sm:text-sm"
+                      className="text-sm"
                     />
                     <Button
                       onClick={handleWithdraw}
                       disabled={isWithdrawing || !withdrawAmount}
                       variant="outline"
-                      className="text-xs sm:text-sm"
+                      className="shrink-0"
                     >
-                      {isWithdrawing ? (
-                        <span className="flex items-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                          Withdrawing...
-                        </span>
-                      ) : (
-                        `Withdraw ${tokenSymbol}`
-                      )}
+                      {isWithdrawing ? <Spinner /> : <Download className="h-4 w-4" />}
+                      <span className="ml-1.5 text-xs">Withdraw</span>
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-xs text-muted-foreground">
                     Withdraw available {tokenSymbol} from the faucet balance.
                   </p>
                 </div>
-              </Card>
+              </Section>
             </div>
           </TabsContent>
 
-          <TabsContent value="parameters" className="space-y-6 mt-6">
-            <Card className="p-4 border shadow-sm space-y-4">
-              <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                <Coins className="h-4 w-4 mr-2" /> Drip & Timing Parameters
-              </CardTitle>
+          {/* ── Parameters Tab ── */}
+          <TabsContent value="parameters" className="space-y-4 mt-5">
+            {/* Drip & Timing */}
+            <Section icon={Coins} title="Drip & Timing Parameters">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {faucetType !== "custom" && (
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="claim-amount"
-                      className="text-xs sm:text-sm"
-                    >
-                      Drip Amount ({tokenSymbol})
-                    </Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Drip Amount ({tokenSymbol})</Label>
                     <Input
-                      id="claim-amount"
                       placeholder="0.0"
                       value={claimAmount}
                       onChange={(e) => setClaimAmount(e.target.value)}
-                      className="text-xs sm:text-sm"
+                      className="text-sm"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Amount each user can drip per claim.
-                    </p>
+                    <p className="text-xs text-muted-foreground">Per-user amount per claim.</p>
                   </div>
                 )}
-                {faucetType !== "custom" ? <div></div> : <></>}
-                <div className="space-y-2">
-                  <Label htmlFor="start-time" className="text-xs sm:text-sm">
-                    Start Time
-                  </Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Start Time</Label>
                   <Input
-                    id="start-time"
                     type="datetime-local"
                     value={startTime}
                     min={getCurrentDateTime()}
                     onChange={handleStartTimeChange}
-                    className={`text-xs sm:text-sm ${
-                      startTimeError ? "border-red-500" : ""
-                    }`}
+                    className={cn("text-sm", startTimeError && "border-destructive")}
                   />
                   {startTimeError && (
-                    <p className="text-red-600 text-xs mt-1">
-                      {startTimeError}
+                    <p className="text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> {startTimeError}
                     </p>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="end-time" className="text-xs sm:text-sm">
-                    End Time
-                  </Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">End Time</Label>
                   <Input
-                    id="end-time"
                     type="datetime-local"
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
-                    className="text-xs sm:text-sm"
+                    className="text-sm"
                   />
                 </div>
               </div>
-            </Card>
-            <Card className="p-4 border shadow-sm space-y-4">
-              <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                <Link className="h-4 w-4 mr-2" /> Required Social Tasks
-              </CardTitle>
-              <div className="flex items-center justify-between">
-                <div>
+            </Section>
+
+            {/* Social Tasks */}
+            <Section icon={Link} title="Required Social Tasks">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
-                    Add links users must{" "}
-                    {dynamicTasks.length > 0 ? "complete/verify" : "complete"}{" "}
-                    before claiming.
+                    Users must complete these before claiming.
                   </p>
+                  <Button type="button" variant="outline" size="sm" onClick={addNewSocialLink} className="h-7 text-xs gap-1">
+                    <Plus className="h-3 w-3" /> Add Task
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addNewSocialLink}
-                  className="text-xs"
-                >
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  Add Task
-                </Button>
-              </div>
-              {dynamicTasks.length > 0 && (
-                <div className="space-y-2 border-t pt-3">
-                  <Label className="text-xs font-medium text-muted-foreground">
-                    Currently Saved Tasks ({dynamicTasks.length})
-                  </Label>
-                  <div className="space-y-1">
-                    {dynamicTasks.map((task, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-2 bg-muted rounded text-xs"
-                      >
+
+                {/* Existing tasks */}
+                {dynamicTasks.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Saved ({dynamicTasks.length})
+                    </Label>
+                    {dynamicTasks.map((task, i) => (
+                      <div key={i} className="flex items-center justify-between px-3 py-2 bg-muted/40 rounded-lg text-xs border border-border/50">
                         <span className="truncate">
-                          {getPlatformIcon(task.platform)}{" "}
-                          {getActionText(task.platform)} {task.handle}
+                          {getPlatformIcon(task.platform)} {getActionText(task.platform)} {task.handle}
                         </span>
-                        <Badge variant="outline" className="text-xs">
-                          {task.platform}
-                        </Badge>
+                        <Badge variant="secondary" className="text-[10px] ml-2 shrink-0">{task.platform}</Badge>
                       </div>
                     ))}
                   </div>
+                )}
+
+                {/* New tasks */}
+                {newSocialLinks.length > 0 && (
+                  <div className="space-y-3">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      New Tasks ({newSocialLinks.length})
+                    </Label>
+                    {newSocialLinks.map((link, index) => (
+                      <div key={index} className="border rounded-xl p-4 space-y-3 bg-muted/20">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold">Task {index + 1}</span>
+                          <Button
+                            type="button" variant="ghost" size="sm"
+                            onClick={() => removeNewSocialLink(index)}
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Platform</Label>
+                            <Select value={link.platform} onValueChange={(v) => updateNewSocialLink(index, "platform", v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="𝕏">Twitter / 𝕏</SelectItem>
+                                <SelectItem value="telegram">Telegram</SelectItem>
+                                <SelectItem value="discord">Discord</SelectItem>
+                                <SelectItem value="youtube">YouTube</SelectItem>
+                                <SelectItem value="instagram">Instagram</SelectItem>
+                                <SelectItem value="tiktok">TikTok</SelectItem>
+                                <SelectItem value="facebook">Facebook</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Action</Label>
+                            <Select value={link.action} onValueChange={(v) => updateNewSocialLink(index, "action", v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="follow">Follow</SelectItem>
+                                <SelectItem value="subscribe">Subscribe</SelectItem>
+                                <SelectItem value="join">Join</SelectItem>
+                                <SelectItem value="like">Like</SelectItem>
+                                <SelectItem value="retweet">Retweet</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Handle / Username</Label>
+                          <Input
+                            placeholder="@username"
+                            value={link.handle}
+                            onChange={(e) => updateNewSocialLink(index, "handle", e.target.value)}
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">URL</Label>
+                          <Input
+                            placeholder="https://..."
+                            value={link.url}
+                            onChange={(e) => updateNewSocialLink(index, "url", e.target.value)}
+                            className="h-8 text-xs font-mono text-muted-foreground"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            {/* Share Post */}
+            <Section icon={Share2} title="Custom Share Post">
+              <div className="space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Customize the message users share after claiming. Overrides the default system message.
+                  </p>
+                  <Badge
+                    variant={isOverLimit ? "destructive" : "secondary"}
+                    className="text-[10px] shrink-0 tabular-nums"
+                  >
+                    {charCount} / 280
+                  </Badge>
                 </div>
-              )}
-              {newSocialLinks.length > 0 && (
-                <div className="space-y-3">
-                  <Label className="text-xs font-medium">New Tasks</Label>
-                  {newSocialLinks.map((link, index) => (
-                    <div key={index} className="border rounded-lg p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-medium">
-                          Task {index + 1}
-                        </Label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeNewSocialLink(index)}
-                          className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Platform</Label>
-                          <Select
-                            value={link.platform}
-                            onValueChange={(value) =>
-                              updateNewSocialLink(index, "platform", value)
-                            }
-                          >
-                            <SelectTrigger className="text-xs">
-                              <SelectValue placeholder="Select platform" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="𝕏">Twitter/𝕏</SelectItem>
-                              <SelectItem value="telegram">Telegram</SelectItem>
-                              <SelectItem value="discord">Discord</SelectItem>
-                              <SelectItem value="youtube">YouTube</SelectItem>
-                              <SelectItem value="instagram">Instagram</SelectItem>
-                              <SelectItem value="tiktok">TikTok</SelectItem>
-                              <SelectItem value="facebook">Facebook</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Action</Label>
-                          <Select
-                            value={link.action}
-                            onValueChange={(value) =>
-                              updateNewSocialLink(index, "action", value)
-                            }
-                          >
-                            <SelectTrigger className="text-xs">
-                              <SelectValue placeholder="Select action" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="follow">Follow</SelectItem>
-                              <SelectItem value="subscribe">Subscribe</SelectItem>
-                              <SelectItem value="join">Join</SelectItem>
-                              <SelectItem value="like">Like</SelectItem>
-                              <SelectItem value="retweet">Retweet</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">URL</Label>
-                        <Input
-                          placeholder="https://x.com/username"
-                          value={link.url}
-                          onChange={(e) =>
-                            updateNewSocialLink(index, "url", e.target.value)
-                          }
-                          className="text-xs font-mono text-muted-foreground"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Handle/Username</Label>
-                        <Input
-                          placeholder="@username"
-                          value={link.handle}
-                          onChange={(e) =>
-                            updateNewSocialLink(index, "handle", e.target.value)
-                          }
-                          className="text-xs"
-                        />
-                      </div>
-                    </div>
+                <div className="flex flex-wrap gap-1">
+                  {["{hashtag}", "{handle}", "{amount}", "{token}", "{network}", "{explorer}"].map((p) => (
+                    <code key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50 font-mono">
+                      {p}
+                    </code>
                   ))}
                 </div>
-              )}
-            </Card>
-            <Card className="p-4 border shadow-sm space-y-4">
-              <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                <div className="flex items-center">
-                <Share2 className="h-4 w-4 mr-2" /> Custom Share Post
+                <Textarea
+                  placeholder='e.g. Thanks for the tokens! {@handle} {#hashtag}'
+                  value={customXPostTemplate}
+                  onChange={(e) => setCustomXPostTemplate(e.target.value)}
+                  rows={4}
+                  className={cn(
+                    "text-sm font-mono resize-none transition-colors",
+                    isOverLimit && "border-destructive focus-visible:ring-destructive"
+                  )}
+                />
+                {isOverLimit && (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Post may be truncated on 𝕏 (over 280 chars)
+                  </p>
+                )}
               </div>
-              {/* Character Counter Badge */}
-              <Badge variant={isOverLimit ? "destructive" : "secondary"} className="text-[10px]">
-                {charCount} / 280
-              </Badge>
-              </CardTitle>
-              <div className="space-y-2">
-                
-                  <p className="text-xs text-muted-foreground">
-                    Customize the message users share. Any edit here overrides the default system message.
-                  </p> 
-                  
-                <p className="text-xs font-mono text-blue-500 mt-1">
-                              Placeholders: {"{hashtag}"},{"{handle}"},{"{amount}"}, {"{token}"}, {"{network}"},{" "}
-                              {"{explorer}"}
-                            </p>
-                            
-              </div>
-              <Textarea
-    placeholder="e.g. Thanks for the tokens! {@handle} {#hashtag}"
-    value={customXPostTemplate}
-    onChange={(e) => setCustomXPostTemplate(e.target.value)}
-    rows={4}
-    className={cn(
-      "text-xs font-mono transition-colors",
-      isOverLimit ? "border-destructive focus-visible:ring-destructive" : ""
-    )}
-  />
-
-  {isOverLimit && (
-    <p className="text-[10px] text-destructive flex items-center gap-1">
-      <AlertCircle className="h-3 w-3" /> 
-      Warning: Your post might be too long for X and could be truncated.
-    </p>
-  )}
-            </Card>
+            </Section>
 
             <Button
               onClick={handleUpdateClaimParameters}
-              className="text-xs sm:text-sm w-full"
+              className="w-full"
               disabled={isUpdatingParameters}
             >
               {isUpdatingParameters ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  Updating Parameters...
-                </span>
+                <span className="flex items-center gap-2"><Spinner /> Saving changes…</span>
               ) : (
-                "Save & Update Parameters"
+                <span className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4" /> Save & Update Parameters
+                </span>
               )}
             </Button>
           </TabsContent>
 
+          {/* ── Whitelist Tab ── */}
           {shouldShowWhitelistTab && (
-            <TabsContent value="whitelist" className="space-y-4 mt-4">
-              <Card className="p-4 border shadow-sm space-y-4">
-                <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                  <Users className="h-4 w-4 mr-2" /> Manage Drop-list
-                </CardTitle>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs sm:text-sm font-medium">
-                      {isWhitelistEnabled
-                        ? "Batch Add Addresses"
-                        : "Batch Remove Addresses"}
-                    </Label>
-                    <Switch
-                      checked={isWhitelistEnabled}
-                      onCheckedChange={setIsWhitelistEnabled}
+            <TabsContent value="whitelist" className="space-y-4 mt-5">
+              <Section icon={Users} title="Manage Drop-list">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-dashed">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {isWhitelistEnabled ? "Add Addresses" : "Remove Addresses"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Toggle to switch between adding and removing
+                      </p>
+                    </div>
+                    <Switch checked={isWhitelistEnabled} onCheckedChange={setIsWhitelistEnabled} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Addresses (one per line or comma-separated)</Label>
+                    <Textarea
+                      value={whitelistAddresses}
+                      onChange={(e) => setWhitelistAddresses(e.target.value)}
+                      rows={6}
+                      placeholder={"0xABC...\n0xDEF...\n0x123..."}
+                      className="text-sm font-mono"
                     />
                   </div>
-                  <Label
-                    htmlFor="whitelist-addresses"
-                    className="text-xs sm:text-sm text-muted-foreground"
-                  >
-                    Addresses (one per line or comma-separated)
-                  </Label>
-                  <Textarea
-                    id="whitelist-addresses"
-                    value={whitelistAddresses}
-                    onChange={(e) => setWhitelistAddresses(e.target.value)}
-                    rows={5}
-                    className="text-xs sm:text-sm"
-                  />
+                  <Button onClick={handleUpdateWhitelist} className="w-full" disabled={isUpdatingWhitelist}>
+                    {isUpdatingWhitelist ? (
+                      <span className="flex items-center gap-2"><Spinner /> Updating…</span>
+                    ) : "Update Drop-list"}
+                  </Button>
                 </div>
-                <Button
-                  onClick={handleUpdateWhitelist}
-                  className="text-xs sm:text-sm w-full"
-                  disabled={isUpdatingWhitelist}
-                >
-                  {isUpdatingWhitelist ? (
-                    <span className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                      Updating...
-                    </span>
-                  ) : (
-                    "Update Drop-list"
-                  )}
-                </Button>
-              </Card>
+              </Section>
             </TabsContent>
           )}
 
+          {/* ── Custom Tab ── */}
           {shouldShowCustomTab && (
-            <TabsContent value="custom" className="space-y-4 mt-4">
-              <Card className="p-4 border shadow-sm space-y-4">
-                <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                  <FileUp className="h-4 w-4 mr-2" /> Upload Custom Claim
-                  Amounts
-                </CardTitle>
+            <TabsContent value="custom" className="space-y-4 mt-5">
+              <Section icon={FileUp} title="Upload Custom Claim Amounts">
                 <CustomClaimUploader
                   tokenSymbol={tokenSymbol}
                   tokenDecimals={tokenDecimals}
                   onDataParsed={async (addresses, amounts) => {
-                    if (
-                      !address ||
-                      !provider ||
-                      !chainId ||
-                      !checkNetwork()
-                    )
-                      return;
+                    if (!address || !provider || !chainId || !checkNetwork()) return;
                     try {
-                      console.log(
-                        `Simulating setting custom amounts for ${addresses.length} addresses`
-                      );
                       await setCustomClaimAmountsBatch(
-                        provider as BrowserProvider,
-                        faucetAddress,
-                        addresses,
-                        amounts,
-                        BigInt(chainId),
-                        BigInt(Number(selectedNetwork.chainId)),
-                        faucetType || undefined
+                        provider as BrowserProvider, faucetAddress, addresses, amounts,
+                        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
                       );
-                      toast.success(
-                        "Custom claim amounts have been set successfully"
-                      );
+                      toast.success("Custom claim amounts set successfully");
                       await loadFaucetDetails();
                       await loadTransactionHistory();
-                    } catch (error: any) {
-                      toast.error(
-                        "Failed to set custom claim amounts. Please try again."
-                      );
-                      console.error(
-                        "Error setting custom claim amounts:",
-                        error
-                      );
-                    }
+                    } catch { toast.error("Failed to set custom claim amounts."); }
                   }}
                   onCancel={() => {}}
                 />
-              </Card>
+              </Section>
             </TabsContent>
           )}
 
-          <TabsContent value="admin-power" className="space-y-6 mt-6">
-            {/* --- Secret Code Controls --- */}
+          {/* ── Admin Power Tab ── */}
+          <TabsContent value="admin-power" className="space-y-4 mt-5">
+            {/* Secret Code */}
             {shouldShowSecretCodeButton && (
-              <Card className="p-4 border shadow-sm space-y-4">
-                <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                  <Key className="h-4 w-4 mr-2" /> Drop Code Management
-                </CardTitle>
-                <div className="flex flex-col sm:flex-row gap-3 w-full">
-                  <Button
-                    onClick={handleRetrieveSecretCode}
-                    variant="outline"
-                    className="text-xs sm:text-sm w-full"
-                    disabled={isRetrievingSecret}
-                  >
-                    {isRetrievingSecret ? (
-                      <span className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                        Retrieving...
-                      </span>
-                    ) : (
-                      <>
-                        <Key className="h-4 w-4 mr-1" /> Get Current Code
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={handleGenerateNewDropCode}
-                    variant="outline"
-                    className="text-xs sm:text-sm w-full"
-                    disabled={isGeneratingNewCode}
-                  >
-                    {isGeneratingNewCode ? (
-                      <span className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                        Generating...
-                      </span>
-                    ) : (
-                      <>
-                        <RotateCcw className="h-4 w-4 mr-1" /> Generate New Code
-                      </>
-                    )}
-                  </Button>
+              <Section icon={Key} title="Drop Code Management">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Button
+                      onClick={handleRetrieveSecretCode}
+                      variant="outline"
+                      className="h-10 text-sm gap-2"
+                      disabled={isRetrievingSecret}
+                    >
+                      {isRetrievingSecret ? <Spinner /> : <Key className="h-4 w-4" />}
+                      Get Current Code
+                    </Button>
+                    <Button
+                      onClick={handleGenerateNewDropCode}
+                      variant="outline"
+                      className="h-10 text-sm gap-2"
+                      disabled={isGeneratingNewCode}
+                    >
+                      {isGeneratingNewCode ? <Spinner /> : <RotateCcw className="h-4 w-4" />}
+                      Generate New Code
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-lg px-3 py-2 flex items-start gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
+                    Generating a new code immediately invalidates the previous one.
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  "Generate New Code" will invalidate the previous code
-                  immediately.
-                </p>
-              </Card>
+              </Section>
             )}
 
-            <Card className="p-4 border shadow-sm space-y-4">
-              <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                <Users className="h-4 w-4 mr-2" /> Admin List
-              </CardTitle>
-              <div className="space-y-2">
-                <Label className="text-xs sm:text-sm">Active Admins</Label>
+            {/* Admin List */}
+            <Section icon={Users} title="Admin List">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   {adminList
-                    .filter(
-                      (admin) =>
-                        admin.toLowerCase() !==
-                        FACTORY_OWNER_ADDRESS.toLowerCase()
-                    )
+                    .filter((admin) => admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase())
                     .map((admin) => (
-                      <div
-                        key={admin}
-                        className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
-                      >
-                        <span className="font-mono break-all text-xs sm:text-sm">
-                          {admin}
-                        </span>
-                        <div className="flex gap-2">
-                          {admin.toLowerCase() ===
-                            faucetDetails?.owner.toLowerCase() && (
-                            <Badge variant="secondary" className="text-xs">
-                              Owner
-                            </Badge>
-                          )}
-                          {admin.toLowerCase() !==
-                            faucetDetails?.owner.toLowerCase() && (
-                            <Badge variant="outline" className="text-xs">
-                              Admin
-                            </Badge>
-                          )}
-                        </div>
+                      <div key={admin} className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/40 border border-border/50">
+                        <span className="font-mono text-xs truncate">{admin}</span>
+                        <Badge
+                          variant={admin.toLowerCase() === faucetDetails?.owner.toLowerCase() ? "secondary" : "outline"}
+                          className="text-[10px] ml-2 shrink-0"
+                        >
+                          {admin.toLowerCase() === faucetDetails?.owner.toLowerCase() ? "Owner" : "Admin"}
+                        </Badge>
                       </div>
                     ))}
                 </div>
-              </div>
-              {isOwner && (
-                <div className="space-y-2 pt-4 border-t">
-                  <Label
-                    htmlFor="new-admin"
-                    className="text-xs sm:text-sm font-medium"
-                  >
-                    {isAddingAdmin ? "Add New Admin" : "Remove Admin"}
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="new-admin"
-                      placeholder="0x..."
-                      value={newAdminAddress}
-                      onChange={(e) => {
-                        setNewAdminAddress(e.target.value);
-                        checkAdminStatus(e.target.value);
-                      }}
-                      className="text-xs sm:text-sm font-mono"
-                    />
-                    <Button
-                      onClick={() => setShowAddAdminDialog(true)}
-                      disabled={isManagingAdmin || !newAdminAddress.trim()}
-                      className="text-xs sm:text-sm"
-                    >
-                      {isManagingAdmin ? (
-                        <span className="flex items-center">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                          {isAddingAdmin ? "Adding..." : "Removing..."}
-                        </span>
-                      ) : isAddingAdmin ? (
-                        "Add Admin"
-                      ) : (
-                        "Remove Admin"
-                      )}
-                    </Button>
+
+                {isOwner && (
+                  <div className="space-y-2 pt-3 border-t">
+                    <Label className="text-xs font-medium">
+                      {isAddingAdmin ? "Add New Admin" : "Remove Admin"}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="0x..."
+                        value={newAdminAddress}
+                        onChange={(e) => { setNewAdminAddress(e.target.value); checkAdminStatus(e.target.value); }}
+                        className="text-sm font-mono"
+                      />
+                      <Button
+                        onClick={() => setShowAddAdminDialog(true)}
+                        disabled={isManagingAdmin || !newAdminAddress.trim()}
+                        variant={isAddingAdmin ? "default" : "destructive"}
+                        className="shrink-0 text-xs"
+                      >
+                        {isManagingAdmin ? <Spinner /> : isAddingAdmin ? "Add" : "Remove"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Owner address cannot be modified here.</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Note: Owner  address cannot be
-                    modified here.
-                  </p>
-                </div>
-              )}
-            </Card>
-            <Card className="p-4 border shadow-sm space-y-4">
-              <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                <RotateCcw className="h-4 w-4 mr-2" /> Reset Claims
-              </CardTitle>
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Wipe the claim history for all users, allowing everyone to
-                  claim tokens again.
+                )}
+              </div>
+            </Section>
+
+            {/* Reset Claims */}
+            <Section icon={RotateCcw} title="Reset Claims">
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Wipe the claim history for all users, allowing everyone to claim tokens again.
                 </p>
                 <Button
                   onClick={handleResetAllClaims}
                   variant="destructive"
-                  className="text-xs sm:text-sm"
+                  className="gap-2"
                   disabled={isResettingClaims}
                 >
                   {isResettingClaims ? (
-                    <span className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                      Resetting...
-                    </span>
+                    <span className="flex items-center gap-2"><Spinner /> Resetting…</span>
                   ) : (
-                    <>
-                      <RotateCcw className="h-4 w-4 mr-1" /> Reset All Claims
-                    </>
+                    <><RotateCcw className="h-4 w-4" /> Reset All Claims</>
                   )}
                 </Button>
               </div>
-            </Card>
+            </Section>
           </TabsContent>
 
-          <TabsContent value="history" className="space-y-4 mt-4">
-            <Card className="p-4 border shadow-sm space-y-4">
-              <CardTitle className="text-base font-semibold border-b pb-2 flex items-center">
-                <History className="h-4 w-4 mr-2" /> Activity Log (Last 100
-                Events)
-              </CardTitle>
-              <Label className="text-xs sm:text-sm">
-                Recent Faucet Transactions (All Admins)
-              </Label>
+          {/* ── History Tab ── */}
+          <TabsContent value="history" className="space-y-4 mt-5">
+            <Section icon={History} title="Activity Log — Last 100 Events">
               {transactions.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs sm:text-sm">
-                          Type
-                        </TableHead>
-                        <TableHead className="text-xs sm:text-sm">
-                          Initiator
-                        </TableHead>
-                        <TableHead className="text-xs sm:text-sm">
-                          Amount
-                        </TableHead>
-                        <TableHead className="text-xs sm:text-sm">
-                          Token
-                        </TableHead>
-                        <TableHead className="text-xs sm:text-sm">
-                          Date
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {currentTransactions.map((tx, index) => (
-                        <TableRow key={`${tx.timestamp}-${index}`}>
-                          <TableCell className="text-xs sm:text-sm capitalize">
-                            {tx.transactionType}
-                          </TableCell>
-                          <TableCell className="text-xs sm:text-sm font-mono truncate max-w-[150px]">
-                            {tx.initiator.slice(0, 6)}...
-                            {tx.initiator.slice(-4)}
-                          </TableCell>
-                          <TableCell className="text-xs sm:text-sm">
-                            {formatUnits(tx.amount, tokenDecimals)}
-                          </TableCell>
-                          <TableCell className="text-xs sm:text-sm">
-                            {getTokenName(tx.isEther)}
-                          </TableCell>
-                          <TableCell className="text-xs sm:text-sm">
-                            {new Date(tx.timestamp * 1000).toLocaleString()}
-                          </TableCell>
+                <>
+                  <div className="overflow-x-auto rounded-lg border border-border/60">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableHead className="text-xs font-semibold">Type</TableHead>
+                          <TableHead className="text-xs font-semibold">Initiator</TableHead>
+                          <TableHead className="text-xs font-semibold">Amount</TableHead>
+                          <TableHead className="text-xs font-semibold">Token</TableHead>
+                          <TableHead className="text-xs font-semibold">Date</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {currentTransactions.map((tx, index) => (
+                          <TableRow key={`${tx.timestamp}-${index}`} className="hover:bg-muted/20 transition-colors">
+                            <TableCell className="text-xs capitalize">
+                              <Badge variant="outline" className="text-[10px] font-medium">{tx.transactionType}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs font-mono text-muted-foreground">
+                              {tx.initiator.slice(0, 6)}…{tx.initiator.slice(-4)}
+                            </TableCell>
+                            <TableCell className="text-xs font-mono">{formatUnits(tx.amount, tokenDecimals)}</TableCell>
+                            <TableCell className="text-xs">{getTokenName(tx.isEther)}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {new Date(tx.timestamp * 1000).toLocaleString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-xs text-muted-foreground">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="outline" size="sm"
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage === 1}
+                          className="h-7 text-xs"
+                        >
+                          Prev
+                        </Button>
+                        <Button
+                          variant="outline" size="sm"
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                          className="h-7 text-xs"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                  No transactions found
-                </p>
+                <div className="text-center py-8">
+                  <History className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No transactions found</p>
+                </div>
               )}
-            </Card>
+            </Section>
           </TabsContent>
         </Tabs>
       </CardContent>
 
-      {/* --- Dialogs --- */}
+      {/* ══════════════════════ DIALOGS ══════════════════════ */}
 
+      {/* Preview Dialog */}
       <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
-        <DialogContent className="w-11/12 max-w-[95vw] sm:max-w-xl max-h-[95vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-xl max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl flex items-center text-blue-600">
-              <Eye className="h-5 w-5 mr-2" /> User View Preview
+            <DialogTitle className="flex items-center gap-2 text-blue-600">
+              <Eye className="h-5 w-5" /> User View Preview
             </DialogTitle>
-            <DialogDescription className="text-sm">
-              This preview uses the latest saved and unsaved parameter values.
+            <DialogDescription>
+              Preview uses the latest saved and unsaved parameter values.
             </DialogDescription>
             {combinedPreviewTasks.length > 0 && (
-              <div className="mt-3 p-3 bg-muted rounded-lg space-y-1">
-                <p className="text-xs font-semibold flex items-center">
-                  <CheckCircle className="h-4 w-4 mr-1 text-green-600" /> Total
-                  Tasks Configured: {combinedPreviewTasks.length}
+              <div className="mt-3 p-3 bg-muted rounded-lg space-y-1.5 text-left">
+                <p className="text-xs font-semibold flex items-center gap-1">
+                  <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                  {combinedPreviewTasks.length} task{combinedPreviewTasks.length !== 1 ? "s" : ""} configured
                 </p>
-                <ul className="text-xs text-muted-foreground list-disc pl-5">
-                  {combinedPreviewTasks.map((task, index) => (
-                    <li key={index}>
-                      {task.platform}: {getActionText(task.platform)}{" "}
-                      {task.handle} ({task.status})
+                <ul className="text-xs text-muted-foreground space-y-0.5 pl-5 list-disc">
+                  {combinedPreviewTasks.map((task, i) => (
+                    <li key={i}>
+                      {task.platform}: {getActionText(task.platform)} {task.handle}
+                      <Badge variant="outline" className="text-[9px] ml-1">{task.status}</Badge>
                     </li>
                   ))}
                 </ul>
@@ -1900,12 +1489,12 @@ if (hasBlockchainChanges) {
               address={null}
               isConnected={false}
               hasClaimed={false}
-              userIsWhitelisted={faucetType === "droplist" ? true : false}
-              hasCustomAmount={faucetType === "custom" ? true : false}
+              userIsWhitelisted={faucetType === "droplist"}
+              hasCustomAmount={faucetType === "custom"}
               userCustomClaimAmount={parseUnits("100", tokenDecimals)}
               dynamicTasks={combinedPreviewTasks}
               allAccountsVerified={false}
-              secretCode={""}
+              secretCode=""
               setSecretCode={() => {}}
               usernames={{}}
               setUsernames={() => {}}
@@ -1914,13 +1503,8 @@ if (hasBlockchainChanges) {
               isVerifying={false}
               faucetMetadata={simulatedFaucetDetails.faucetMetadata}
               customXPostTemplate={customXPostTemplate}
-              handleBackendClaim={() => {
-                toast.warning("Preview Mode: Claim disabled.");
-                return Promise.resolve();
-              }}
-              handleFollowAll={() =>
-                toast.warning("Preview Mode: Follow disabled.")
-              }
+              handleBackendClaim={() => { toast.warning("Preview Mode: Claim disabled."); return Promise.resolve(); }}
+              handleFollowAll={() => toast.warning("Preview Mode: Follow disabled.")}
               generateXPostContent={(a) => `Preview: ${a} ${tokenSymbol}`}
               txHash={null}
               showFollowDialog={false}
@@ -1933,306 +1517,188 @@ if (hasBlockchainChanges) {
             />
           </div>
           <DialogFooter>
-            <Button onClick={() => setShowPreviewDialog(false)}>
-              Close Preview
-            </Button>
+            <Button onClick={() => setShowPreviewDialog(false)}>Close Preview</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Fund Confirmation Dialog */}
       <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
-        <DialogContent className="w-11/12 max-w-md">
+        <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">
-              Confirm Funding
-            </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Review the funding details before proceeding.
-            </DialogDescription>
+            <DialogTitle>Confirm Funding</DialogTitle>
+            <DialogDescription>Review the funding details before proceeding.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label
-                htmlFor="adjusted-fund-amount"
-                className="text-xs sm:text-sm"
-              >
-                Amount to Fund
-              </Label>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Amount to Fund</Label>
               <Input
-                id="adjusted-fund-amount"
                 value={adjustedFundAmount}
                 onChange={(e) => setAdjustedFundAmount(e.target.value)}
-                className="text-xs sm:text-sm"
+                className="text-sm"
               />
             </div>
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>
-                Platform fee (3%): {fee} {tokenSymbol}
-              </p>
-              <p>
-                Net amount to faucet: {netAmount} {tokenSymbol}
-              </p>
-              <p className="text-blue-600">
-                Tip: To fund exactly {fundAmount} {tokenSymbol}, enter{" "}
-                {recommendedInput} {tokenSymbol}
+            <div className="rounded-lg bg-muted/40 border border-dashed p-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Platform fee (3%)</span>
+                <span className="font-mono">{fee} {tokenSymbol}</span>
+              </div>
+              <div className="flex justify-between font-medium">
+                <span className="text-muted-foreground">Net to faucet</span>
+                <span className="font-mono">{netAmount} {tokenSymbol}</span>
+              </div>
+              <p className="text-blue-500 pt-1">
+                To net exactly {fundAmount} {tokenSymbol}, deposit {recommendedInput} {tokenSymbol}
               </p>
             </div>
           </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowFundPopup(false)}
-              className="text-xs sm:text-sm"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={confirmFund}
-              className="text-xs sm:text-sm"
-              disabled={isFunding}
-            >
-              {isFunding ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  Confirming...
-                </span>
-              ) : (
-                "Confirm Fund"
-              )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowFundPopup(false)}>Cancel</Button>
+            <Button onClick={confirmFund} disabled={isFunding}>
+              {isFunding ? <span className="flex items-center gap-2"><Spinner /> Confirming…</span> : "Confirm Fund"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Edit Name Dialog */}
       <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
-        <DialogContent className="w-11/12 max-w-md">
+        <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">
-              Edit Faucet Name
-            </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Enter a new name for your faucet.
-            </DialogDescription>
+            <DialogTitle>Edit Faucet Name</DialogTitle>
+            <DialogDescription>Enter a new display name for your faucet.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="new-faucet-name" className="text-xs sm:text-sm">
-                New Faucet Name
-              </Label>
-              <Input
-                id="new-faucet-name"
-                value={newFaucetName}
-                onChange={(e) => setNewFaucetName(e.target.value)}
-                placeholder="Enter new faucet name"
-                className="text-xs sm:text-sm"
-              />
-            </div>
+          <div className="space-y-1.5 py-2">
+            <Label className="text-xs">New Name</Label>
+            <Input
+              value={newFaucetName}
+              onChange={(e) => setNewFaucetName(e.target.value)}
+              placeholder="My Awesome Faucet"
+              className="text-sm"
+            />
           </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowEditNameDialog(false);
-                if (faucetDetails?.name) {
-                  setNewFaucetName(faucetDetails.name);
-                }
-              }}
-              className="text-xs sm:text-sm"
-            >
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setShowEditNameDialog(false); if (faucetDetails?.name) setNewFaucetName(faucetDetails.name); }}>
               Cancel
             </Button>
-            <Button
-              onClick={handleUpdateFaucetName}
-              className="text-xs sm:text-sm"
-              disabled={isUpdatingName || !newFaucetName.trim()}
-            >
-              {isUpdatingName ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  Updating...
-                </span>
-              ) : (
-                "Update Name"
-              )}
+            <Button onClick={handleUpdateFaucetName} disabled={isUpdatingName || !newFaucetName.trim()}>
+              {isUpdatingName ? <span className="flex items-center gap-2"><Spinner /> Updating…</span> : "Update Name"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Delete Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="w-11/12 max-w-md">
+        <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">
-              Delete Faucet
-            </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Are you sure you want to delete this faucet? This action cannot be
-              undone.
+            <DialogTitle className="text-destructive">Delete Faucet</DialogTitle>
+            <DialogDescription>
+              This action is <strong>irreversible</strong>. The faucet and all associated data will be permanently removed.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteDialog(false)}
-              className="text-xs sm:text-sm"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteFaucet}
-              className="text-xs sm:text-sm"
-              disabled={isDeletingFaucet}
-            >
-              {isDeletingFaucet ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  Deleting...
-                </span>
-              ) : (
-                "Delete Faucet"
-              )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteFaucet} disabled={isDeletingFaucet}>
+              {isDeletingFaucet ? <span className="flex items-center gap-2"><Spinner /> Deleting…</span> : "Yes, Delete Faucet"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Add/Remove Admin Dialog */}
       <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
-        <DialogContent className="w-11/12 max-w-md">
+        <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">
-              {isAddingAdmin ? "Add Admin" : "Remove Admin"}
-            </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              {isAddingAdmin
-                ? "Enter the address to grant admin privileges."
-                : "Enter the address to revoke admin privileges."}
+            <DialogTitle>{isAddingAdmin ? "Add Admin" : "Remove Admin"}</DialogTitle>
+            <DialogDescription>
+              {isAddingAdmin ? "Grant admin privileges to this address." : "Revoke admin privileges from this address."}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="admin-address" className="text-xs sm:text-sm">
-                Admin Address
-              </Label>
-              <Input
-                id="admin-address"
-                value={newAdminAddress}
-                onChange={(e) => {
-                  setNewAdminAddress(e.target.value);
-                  checkAdminStatus(e.target.value);
-                }}
-                placeholder="0x..."
-                className="text-xs sm:text-sm font-mono"
-              />
-            </div>
+          <div className="space-y-1.5 py-2">
+            <Label className="text-xs">Admin Address</Label>
+            <Input
+              value={newAdminAddress}
+              onChange={(e) => { setNewAdminAddress(e.target.value); checkAdminStatus(e.target.value); }}
+              placeholder="0x..."
+              className="text-sm font-mono"
+            />
           </div>
-          <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowAddAdminDialog(false)}
-              className="text-xs sm:text-sm"
-            >
-              Cancel
-            </Button>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowAddAdminDialog(false)}>Cancel</Button>
             <Button
               onClick={handleManageAdmin}
-              className="text-xs sm:text-sm"
               disabled={isManagingAdmin || !newAdminAddress.trim()}
+              variant={isAddingAdmin ? "default" : "destructive"}
             >
-              {isManagingAdmin ? (
-                <span className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                  {isAddingAdmin ? "Adding..." : "Removing..."}
-                </span>
-              ) : isAddingAdmin ? (
-                "Add Admin"
-              ) : (
-                "Remove Admin"
-              )}
+              {isManagingAdmin
+                ? <span className="flex items-center gap-2"><Spinner /> {isAddingAdmin ? "Adding…" : "Removing…"}</span>
+                : isAddingAdmin ? "Add Admin" : "Remove Admin"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={showCurrentSecretDialog}
-        onOpenChange={setShowCurrentSecretDialog}
-      >
-        <DialogContent className="w-11/12 max-w-md">
+      {/* Current Secret Code Dialog */}
+      <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
+        <DialogContent className="w-[95vw] max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">
-              Current Drop Code
-            </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              This is the current drop code for your faucet.
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2"><Key className="h-4 w-4" /> Current Drop Code</DialogTitle>
+            <DialogDescription>Share this code with your users to enable claiming.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="text-center">
-              <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded">
-                {currentSecretCode}
-              </div>
+          <div className="py-4 flex justify-center">
+            <div className="text-2xl font-mono font-bold tracking-widest bg-muted rounded-xl px-8 py-5 border select-all">
+              {currentSecretCode}
             </div>
           </div>
           <DialogFooter>
-            <Button
-              onClick={() => handleCopySecretCode(currentSecretCode)}
-              className="text-xs sm:text-sm w-full"
-            >
-              <Copy className="h-4 w-4 mr-1" /> Copy Code
+            <Button onClick={() => handleCopySecretCode(currentSecretCode)} className="w-full gap-2">
+              <Copy className="h-4 w-4" /> Copy Code
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* New Code Dialog */}
       <Dialog
-  open={showNewCodeDialog}
-  onOpenChange={(open) => {
-    setShowNewCodeDialog(open);
-    if (!open) {
-      // User just closed / cancelled the new code dialog
-      loadFaucetDetails();           // ← refresh now
-      // Optional: also reload transaction history if you're on that tab
-      // if (activeTab === "history") loadTransactionHistory();
-    }
-  }}
->
-  <DialogContent className="w-11/12 max-w-md">
-    <DialogHeader>
-      <DialogTitle className="text-lg sm:text-xl">
-        New Drop Code Generated
-      </DialogTitle>
-      <DialogDescription className="text-xs sm:text-sm">
-        Your new drop code has been generated and stored. The previous code is no longer valid.
-      </DialogDescription>
-    </DialogHeader>
-    <div className="space-y-4 py-4">
-      <div className="text-center">
-        <div className="text-xl sm:text-2xl font-mono font-bold bg-gray-100 dark:bg-gray-800 p-4 rounded break-all">
-          {newlyGeneratedCode}
-        </div>
-      </div>
-    </div>
-    <DialogFooter>
-      <Button
-        onClick={() => handleCopySecretCode(newlyGeneratedCode)}
-        className="text-xs sm:text-sm w-full"
+        open={showNewCodeDialog}
+        onOpenChange={(open) => {
+          setShowNewCodeDialog(open);
+          if (!open) loadFaucetDetails();
+        }}
       >
-        <Copy className="h-4 w-4 mr-1" /> Copy Code
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-         {/* QR Code Share Dialog - Mobile Optimized */}
-    <QRCodeShareDialog
-  open={showQRDialog}
-  onOpenChange={setShowQRDialog}
-  faucetAddress={faucetAddress}
-  faucetDetails={faucetDetails}
-  faucetMetadata={faucetMetadata}
-  selectedNetwork={selectedNetwork} // Pass current network object
-  tokenSymbol={tokenSymbol}         // Pass current token symbol string
-/>
+        <DialogContent className="w-[95vw] max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-600" /> New Drop Code Generated
+            </DialogTitle>
+            <DialogDescription>
+              Previous code is now invalid. Share this new code with your users.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 flex justify-center">
+            <div className="text-2xl font-mono font-bold tracking-widest bg-muted rounded-xl px-8 py-5 border select-all break-all text-center">
+              {newlyGeneratedCode}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => handleCopySecretCode(newlyGeneratedCode)} className="w-full gap-2">
+              <Copy className="h-4 w-4" /> Copy & Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* QR Code Share Dialog */}
+      <QRCodeShareDialog
+        open={showQRDialog}
+        onOpenChange={setShowQRDialog}
+        faucetAddress={faucetAddress}
+        faucetDetails={faucetDetails}
+        faucetMetadata={faucetMetadata}
+        selectedNetwork={selectedNetwork}
+        tokenSymbol={tokenSymbol}
+      />
     </Card>
   );
 };

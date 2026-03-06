@@ -14,7 +14,7 @@ const NETWORK_COLORS: Record<string, string> = {
   Arbitrum:  '#28A0F0',
   Base:      '#0052FF',
   BNB:       '#F3BA2F',
-  Avalanche: '#E84142',
+ 
 };
 
 const CustomTooltip = ({ active, payload, label }: any) => {

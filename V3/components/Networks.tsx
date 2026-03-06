@@ -203,7 +203,6 @@ export default function Networks() {
     { src: "/networks/arb.png", alt: "Arbitrum" },
     { src: "/networks/self.png", alt: "Self" },
     { src: "/networks/BNB.svg", alt: "BNB" },
-    { src: "/networks/avalanche.svg", alt: "Avalanche" }
   ];
 
   useEffect(() => {

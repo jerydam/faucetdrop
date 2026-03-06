@@ -234,42 +234,6 @@ export const networks: Network[] = [
     },
     isTestnet: false,
   },
-  {
-    name: "Avalanche",
-    symbol: "AVAX",
-    chainId: 43114,
-    rpcUrl: [                                                               
-      "https://avax-mainnet.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
-      "https://api.avax.network/ext/bc/C/rpc",
-      "https://avalanche-mainnet.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
-      "https://rpc.ankr.com/avalanche",
-      "https://1rpc.io/avax",
-      "https://avalanche-c-chain.publicnode.com",
-      "https://avalanche.drpc.org"
-    ],
-    blockExplorerUrls: "https://snowtrace.io",
-    explorerUrl: "https://snowtrace.io",
-    color: "#E84142",
-    logoUrl: "/avax.svg",
-    iconUrl: "/avax.svg",
-    factoryAddresses: [
-      "0x...", // ← replace with your actual deployed factories
-    ],
-    factories: {
-      droplist: "0x...",
-      dropcode: "0x...",
-      custom: "0x...",
-      quest: "0x...",
-      quiz: ""
-    },
-    tokenAddress: ZeroAddress,
-    nativeCurrency: {
-      name: "Avalanche",
-      symbol: "AVAX",
-      decimals: 18,
-    },
-    isTestnet: false,
-  },
 ]
 
 // =============================================
@@ -422,7 +386,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
       setNetworkState(null)
       toast({
         title: "Unsupported Network",
-        description: `Chain ID ${currentChainId} is not supported. Please switch to Celo, Lisk, Arbitrum, Base, BNB or Avalanche.`,
+        description: `Chain ID ${currentChainId} is not supported. Please switch to Celo, Lisk, Arbitrum, Base, BNB .`,
         variant: "destructive",
       })
     }

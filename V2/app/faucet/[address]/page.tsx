@@ -33,7 +33,6 @@ import {
   getFaucetByAddress,
   type FaucetDetailRow,
   buildFaucetSlug,
-  isAddress,
 } from "@/lib/faucet-slug"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -64,10 +63,6 @@ const isTemplateCustomized = (template: string): boolean => {
     return !template.includes("{@handle}") || !template.includes("{#hashtag}")
 }
 
-/**
- * Convert the flat Supabase row into the shape the rest of the UI expects.
- * This keeps all downstream components working without changes.
- */
 function rowToFaucetDetails(row: FaucetDetailRow) {
     return {
         name: row.faucet_name,
@@ -83,17 +78,16 @@ function rowToFaucetDetails(row: FaucetDetailRow) {
         isClaimActive: row.is_claim_active,
         isPaused: row.is_paused,
         backendMode: row.use_backend,
-        hasClaimed: false,          // always re-check on-chain per user
+        hasClaimed: false, 
         description: row.description,
         imageUrl: row.image_url || DEFAULT_FAUCET_IMAGE,
         factoryType: row.factory_type,
-        // keep raw row attached so admin view can compare template vs saved
-        customXPostTemplate: "",    // fetched separately below
+        customXPostTemplate: "", 
         _supabaseRow: row,
     }
 }
 
-// ── Remote helpers (unchanged from original) ──────────────────────────────────
+// ── Remote helpers ───────────────────────────────────────────────────────────
 
 async function checkIsAdmin(
     provider: any,
@@ -140,7 +134,7 @@ async function getUserCustomClaimAmount(
 
 async function loadSocialMediaLinks(faucetAddress: string): Promise<SocialMediaLink[]> {
     try {
-        const res = await fetch(`https://faucetdrop-backend.onrender.com/faucet-tasks/${faucetAddress}`)
+        const res = await fetch(`http://127.0.0.1:8000/faucet-tasks/${faucetAddress}`)
         if (!res.ok) return []
         const result = await res.json()
         if (!Array.isArray(result.tasks)) return []
@@ -157,7 +151,7 @@ async function loadSocialMediaLinks(faucetAddress: string): Promise<SocialMediaL
 
 async function loadCustomXPostTemplate(faucetAddress: string): Promise<string> {
     try {
-        const res = await fetch(`https://faucetdrop-backend.onrender.com/faucet-x-template/${faucetAddress}`)
+        const res = await fetch(`http://127.0.0.1:8000/faucet-x-template/${faucetAddress}`)
         if (!res.ok) return DEFAULT_X_POST_TEMPLATE
         const result = await res.json()
         return result.template || DEFAULT_X_POST_TEMPLATE
@@ -168,7 +162,7 @@ async function loadCustomXPostTemplate(faucetAddress: string): Promise<string> {
 
 async function saveAdminPopupPreference(userAddr: string, faucetAddr: string, dontShow: boolean) {
     try {
-        const res = await fetch("https://faucetdrop-backend.onrender.com/admin-popup-preference", {
+        const res = await fetch("http://127.0.0.1:8000/admin-popup-preference", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userAddress: userAddr, faucetAddress: faucetAddr, dontShowAgain: dontShow }),
@@ -180,13 +174,11 @@ async function saveAdminPopupPreference(userAddr: string, faucetAddr: string, do
 async function getAdminPopupPreference(userAddr: string, faucetAddr: string): Promise<boolean> {
     try {
         const res = await fetch(
-            `https://faucetdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+            `http://127.0.0.1:8000/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
         )
         return res.ok ? (await res.json()).dontShowAgain ?? false : false
     } catch { return false }
 }
-
-// ── Check hasClaimed on-chain (light call) ────────────────────────────────────
 
 async function checkHasClaimed(
     provider: JsonRpcProvider,
@@ -213,8 +205,6 @@ async function checkHasClaimed(
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function FaucetDetails() {
-    // The [address] param now accepts EITHER a slug ("my-faucet--42220")
-    // OR a raw 0x address (backward compat).
     const { address: rawParam } = useParams<{ address: string }>()
     const searchParams  = useSearchParams()
     const networkId     = searchParams.get("networkId")
@@ -274,7 +264,24 @@ export default function FaucetDetails() {
     const isSecretCodeValid = secretCode.length === 6 && /^[A-Z0-9]{6}$/.test(secretCode)
     const allAccountsVerified =
         dynamicTasks.length === 0 ? true : dynamicTasks.every((t) => verificationStates[getTaskKey(t)])
-    const hasCustomXPostTemplate = isTemplateCustomized(customXPostTemplate)
+
+    // --- FORCE SYNC HELPER ---
+    const triggerForceSync = async (addressToSync: string) => {
+        try {
+            console.log(`Triggering force sync for ${addressToSync}...`);
+            const res = await fetch(`http://127.0.0.1:8001/force-sync-faucet/${addressToSync}`, {
+                method: "POST",
+            });
+            const data = await res.json();
+            if (!data.success) {
+                console.warn("Force sync issue:", data.error);
+            } else {
+                console.log("Force sync successful!");
+            }
+        } catch (err) {
+            console.error("Network error during force sync:", err);
+        }
+    };
 
     const checkNetwork = useCallback(
         (skipToast = false): boolean => {
@@ -292,70 +299,6 @@ export default function FaucetDetails() {
         [chainId, networkId, faucetRow]
     )
 
-    
-
- // Inside your FaucetDetails Component
-
-const resolveAndLoad = useCallback(async () => {
-    if (!rawParam) { setLoading(false); return; }
-
-    setLoading(true);
-    try {
-        // 1. Resolve slug (e.g., "social-drop-ab1234") -> Supabase Row
-        // Even if rawParam is a 0x address, resolveFaucetParam handles the lookup
-        const row = await resolveFaucetParam(rawParam);
-
-        if (row) {
-            // 2. Canonical Slug Redirect
-            // Ensure the URL always shows the slug, not the 0x address
-            const canonicalSlug = row.slug || buildFaucetSlug(row.faucet_name, row.faucet_address);
-            if (rawParam !== canonicalSlug) {
-                router.replace(`/faucet/${canonicalSlug}${networkId ? `?networkId=${networkId}` : ''}`);
-            }
-
-            // 3. Set Internal State
-            // We use the 0x address for CONTRACTS, but the UI is driven by the SLUG data
-            setFaucetRow(row);
-            setFaucetAddress(row.faucet_address); 
-            setFaucetType(row.factory_type as FaucetType);
-            
-            // Map the DB row to the UI details
-            const details = rowToFaucetDetails(row);
-            
-            // 4. Fetch additional metadata using the 0x address (Backend needs 0x)
-            const [template, tasks] = await Promise.all([
-                loadCustomXPostTemplate(row.faucet_address),
-                loadSocialMediaLinks(row.faucet_address),
-            ]);
-
-            // In resolveAndLoad, after setFaucetDetails(...)
-            setFaucetDetails({ ...details, customXPostTemplate: template });
-            setTokenSymbol(row.token_symbol);     
-            setCustomXPostTemplate(template || DEFAULT_X_POST_TEMPLATE);
-            setTokenDecimals(row.token_decimals);    // ← ADD THIS
-            setBackendMode(row.use_backend);         // ← ADD THIS (also missing)
-            setFaucetMetadata({                      // ← ADD THIS (also missing)
-                description: row.description || getDefaultFaucetDescription(row.network_name, row.owner_address),
-                imageUrl: row.image_url || DEFAULT_FAUCET_IMAGE,
-            });
-            setDynamicTasks(tasks);
-
-            // 5. User-specific Blockchain Checks
-            const net = networks.find((n) => n.chainId === row.chain_id) ?? null;
-            setSelectedNetwork(net);
-            await loadUserSpecificData(row, row.factory_type as FaucetType, net);
-
-        } else {
-            toast.error("Faucet slug not found.");
-            router.push("/faucet");
-        }
-    } catch (err) {
-        console.error("Slug resolution failed:", err);
-        toast.error("Error connecting to database.");
-    } finally {
-        setLoading(false);
-    }
-}, [rawParam, networkId, networks, address, router]);
     const loadUserSpecificData = useCallback(async (
         row: FaucetDetailRow,
         type: FaucetType,
@@ -367,11 +310,9 @@ const resolveAndLoad = useCallback(async () => {
             const safeRpc = Array.isArray(net.rpcUrl) ? net.rpcUrl[0] : net.rpcUrl
             const p = new JsonRpcProvider(safeRpc)
 
-            // hasClaimed — must be checked per user
             const claimed = await checkHasClaimed(p, row.faucet_address, address, type)
             setHasClaimed(claimed)
 
-            // Whitelist / custom amount — also per user
             if (type === "droplist") {
                 const wl = await isWhitelisted(p, row.faucet_address, address, type)
                 setUserIsWhitelisted(wl)
@@ -382,7 +323,6 @@ const resolveAndLoad = useCallback(async () => {
                 setHasCustomAmount(ci.hasCustom)
             }
 
-            // Admin check
             const isAdmin = await checkIsAdmin(p, row.faucet_address, address, type)
             setUserIsAdmin(isAdmin)
 
@@ -391,7 +331,6 @@ const resolveAndLoad = useCallback(async () => {
                 if (!dontShow) setShowAdminPopup(true)
             }
 
-            // Admin list
             const admins = await getAllAdmins(p, row.faucet_address, type)
             const all = [...admins]
             if (row.owner_address && !all.some((a) => a.toLowerCase() === row.owner_address.toLowerCase()))
@@ -405,27 +344,108 @@ const resolveAndLoad = useCallback(async () => {
         }
     }, [address])
 
-    // ── Fallback: full chain load (mirrors original loadFaucetDetails) ────
+    
+    const resolveAndLoad = useCallback(async () => {
+      if (!rawParam) { setLoading(false); return }
 
+      setLoading(true)
+      try {
+        let row: FaucetDetailRow | null = null
+        const MAX_ATTEMPTS = 5
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 800 * attempt))
+          row = await resolveFaucetParam(rawParam, networkId ? Number(networkId) : undefined)
+          if (row) break
+        }
 
-    // ── Refresh (re-fetch Supabase row + user data, skip redirect) ────────
+        if (row) {
+          const canonicalSlug = row.slug || buildFaucetSlug(row.faucet_name, row.faucet_address)
+          if (rawParam !== canonicalSlug) {
+            router.replace(`/faucet/${canonicalSlug}${networkId ? `?networkId=${networkId}` : ""}`)
+          }
+
+          setFaucetRow(row)
+          setFaucetAddress(row.faucet_address)
+
+          // DropCode Normalization Fix
+          const rawType = (row.factory_type || "").toLowerCase()
+          const isDropCode = rawType === "dropcode" || (rawType === "open" && row.use_backend === true)
+          const normalizedType: FaucetType = isDropCode ? "dropcode" : rawType === "droplist" ? "droplist" : "custom"
+          const actualBackendMode = isDropCode ? true : (row.use_backend ?? false)
+
+          setFaucetType(normalizedType)
+          setBackendMode(actualBackendMode) 
+
+          const details = rowToFaucetDetails(row)
+          details.backendMode = actualBackendMode
+
+          const [template, tasks] = await Promise.all([
+            loadCustomXPostTemplate(row.faucet_address),
+            loadSocialMediaLinks(row.faucet_address),
+          ])
+
+          setFaucetDetails({ ...details, customXPostTemplate: template })
+          setTokenSymbol(row.token_symbol)
+          setTokenDecimals(row.token_decimals)
+          setCustomXPostTemplate(template || DEFAULT_X_POST_TEMPLATE)
+          setFaucetMetadata({
+            description: row.description || getDefaultFaucetDescription(row.network_name, row.owner_address),
+            imageUrl: row.image_url || "/default.jpeg",
+          })
+          setDynamicTasks(tasks)
+
+          const net = networks.find((n) => n.chainId === row!.chain_id) ?? null
+          setSelectedNetwork(net)
+          await loadUserSpecificData(row, normalizedType, net)
+
+          // Background Force Sync on page load (so user gets freshest data)
+          triggerForceSync(row.faucet_address);
+
+        } else {
+          toast.error("Faucet not found.")
+          router.push("/faucet")
+        }
+      } catch (err) {
+        console.error("resolveAndLoad failed:", err)
+        toast.error("Error loading faucet details.")
+      } finally {
+        setLoading(false)
+      }
+    }, [rawParam, networkId, networks, address, router, loadUserSpecificData]) 
+
 
     const refreshFaucetDetails = useCallback(async () => {
         if (!faucetAddress || !selectedNetwork) return
         try {
+            // 1. FORCE BACKEND SYNC FIRST BEFORE FETCHING
+            await triggerForceSync(faucetAddress);
+
+            // 2. FETCH FRESH DATA
             const row = await getFaucetByAddress(faucetAddress, selectedNetwork.chainId)
+            
             if (row) {
                 setFaucetRow(row)
+
+                // DropCode Normalization Fix
+                const rawType = (row.factory_type || "").toLowerCase()
+                const isDropCode = rawType === "dropcode" || (rawType === "open" && row.use_backend === true)
+                const actualBackendMode = isDropCode ? true : (row.use_backend ?? false)
+                const normalizedType: FaucetType = isDropCode ? "dropcode" : rawType === "droplist" ? "droplist" : "custom"
+
                 const details = rowToFaucetDetails(row)
+                details.backendMode = actualBackendMode
+
                 const template = await loadCustomXPostTemplate(faucetAddress)
                 setCustomXPostTemplate(template)
                 setFaucetDetails({ ...details, customXPostTemplate: template })
                 setTokenSymbol(row.token_symbol)
                 setTokenDecimals(row.token_decimals)
-                setBackendMode(row.use_backend)
+                setBackendMode(actualBackendMode)
+                setFaucetType(normalizedType)
+
                 setFaucetMetadata({
                     description: row.description || getDefaultFaucetDescription(row.network_name, row.owner_address),
-                    imageUrl: row.image_url || DEFAULT_FAUCET_IMAGE,
+                    imageUrl: row.image_url || "/default.jpeg",
                 })
                 if (row.claim_amount)
                     setClaimAmount(formatUnits(BigInt(row.claim_amount), row.token_decimals))
@@ -433,7 +453,8 @@ const resolveAndLoad = useCallback(async () => {
                     setStartTime(new Date(row.start_time * 1000).toISOString().slice(0, 16))
                 if (row.end_time)
                     setEndTime(new Date(row.end_time * 1000).toISOString().slice(0, 16))
-                await loadUserSpecificData(row, row.factory_type as FaucetType, selectedNetwork)
+                
+                await loadUserSpecificData(row, normalizedType, selectedNetwork)
             }
         } catch (err) {
             console.warn("refreshFaucetDetails error:", err)
@@ -611,7 +632,6 @@ const resolveAndLoad = useCallback(async () => {
                             address={address}
                             chainId={chainId}
                             provider={provider}
-                        
                             router={router}
                             faucetMetadata={faucetMetadata}
                         />
@@ -651,7 +671,6 @@ const resolveAndLoad = useCallback(async () => {
                             showClaimPopup={showClaimPopup}
                             setShowClaimPopup={setShowClaimPopup}
                             handleVerifyAllTasks={handleVerifyAllTasks}
-                            
                         />
                     )}
                 </div>

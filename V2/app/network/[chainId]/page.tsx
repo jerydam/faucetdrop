@@ -93,7 +93,7 @@ const getNativeTokenSymbol = (networkName: string): string => {
     case "Base":
     case "Ethereum": return "ETH";
     case "BNB": return "BNB";
-    case "Avalanche": return "AVAX";
+   
     default: return "ETH";
   }
 };

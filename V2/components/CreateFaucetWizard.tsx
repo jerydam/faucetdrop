@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { getFaucetByAddress, buildFaucetSlug } from "@/lib/faucet-slug"
 import {
   AlertCircle,
   Loader2,
@@ -682,7 +683,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     formData.append('file', file)
 
     try {
-      const response = await fetch('https://faucetdrop-backend.onrender.com/upload-image', {
+      const response = await fetch('http://127.0.0.1:8000/upload-image', {
         method: 'POST',
         body: formData,
       })
@@ -740,7 +741,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`💾 Saving faucet metadata for ${faucetAddress}`)
         
-      const response = await fetch('https://faucetdrop-backend.onrender.com/faucet-metadata', {
+      const response = await fetch('http://127.0.0.1:8000/faucet-metadata', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -888,7 +889,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`📝 Registering faucet ${name} (${faucetAddress}) in backend...`)
 
-      const response = await fetch('https://faucetdrop-backend.onrender.com/register-faucet', {
+      const response = await fetch('http://127.0.0.1:8000/register-faucet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1153,183 +1154,187 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     }
   }
 
-  // Faucet creation
-  const handleFaucetCreation = async () => {
-    if (!wizardState.formData.faucetName.trim()) {
-      setCreationError("Please enter a faucet name")
-      return
-    }
-    if (!nameValidation.isNameAvailable) {
-      setCreationError("Please choose a valid faucet name")
-      return
-    }
-    const finalTokenAddress = getFinalTokenAddress()
-    if (!finalTokenAddress) {
-      setCreationError("Please select a token or enter a custom token address")
-      return
-    }
-    if (wizardState.formData.showCustomTokenInput && !customTokenValidation.isValid) {
-      setCreationError("Please enter a valid custom token address")
-      return
-    }
-      
-    if (!effectiveChainId || !currentNetwork) {
-      setCreationError("Please connect your wallet to a supported network")
-      return
-    }
-
-    if (!address) {
-      setCreationError("Unable to get wallet address")
-      return
-    }
-
-      
-    const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
-    if (!factoryAddress) {
-      setCreationError(`${wizardState.selectedFaucetType} faucets are not available on this network`)
-      return
-    }
-    setCreationError(null)
-    if (!isConnected) {
-      try {
-        await connect()
-      } catch (error) {
-        console.error("Failed to connect wallet:", error)
-        setCreationError("Failed to connect wallet. Please try again.")
-        return
-      }
-    }
-    if (!provider) {
-      setCreationError("Wallet not connected")
-      return
-    }
-
-    setIsFaucetCreating(true)
+  // ── ADD this helper above handleFaucetCreation ──────────────────────────────
+const getSlugForNewFaucet = async (
+  faucetAddr: string,
+  chainId: number,
+  faucetName: string,
+  maxAttempts = 5
+): Promise<string> => {
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, 600 * (i + 1))) // 600ms, 1.2s, 1.8s …
     try {
-      let shouldUseBackend = false
-      let isCustomFaucet = false
-      console.log("🏭 Creating faucet with selected type:", wizardState.selectedFaucetType)
-      console.log("🏭 Mapped factory type:", mappedFactoryType)
-      console.log("🏭 Factory address:", factoryAddress)
-      console.log("🏭 Final token address:", finalTokenAddress)
-      switch (wizardState.selectedFaucetType) {
-        case FAUCET_TYPES.OPEN:
-          shouldUseBackend = wizardState.formData.requiresDropCode
-          isCustomFaucet = false
-          console.log("✅ Creating OPEN faucet (DropCode) - Backend:", shouldUseBackend)
-          break
-        case FAUCET_TYPES.GATED:
-          shouldUseBackend = false
-          isCustomFaucet = false
-          console.log("✅ Creating GATED faucet (DropList) - No backend needed")
-          break
-        case FAUCET_TYPES.CUSTOM:
-          shouldUseBackend = false
-          isCustomFaucet = true
-          console.log("✅ Creating CUSTOM faucet - Custom flag enabled")
-          break
-        default:
-          throw new Error(`Invalid faucet type selected: ${wizardState.selectedFaucetType}`)
-      }
-      console.log("🔧 Final creation parameters:", {
-        factoryAddress,
-        factoryType: mappedFactoryType,
-        faucetName: wizardState.formData.faucetName,
-        tokenAddress: finalTokenAddress,
-        chainId: effectiveChainId.toString(),
-        shouldUseBackend,
-        isCustomFaucet,
-        selectedFaucetType: wizardState.selectedFaucetType,
-        requiresDropCode: wizardState.formData.requiresDropCode,
-        userAddress: address,
-        isCustomToken: wizardState.formData.showCustomTokenInput,
-      })
-      const createdFaucetAddress = await createFaucet(
-        provider,
-        factoryAddress,
-        wizardState.formData.faucetName,
-        finalTokenAddress,
-        BigInt(effectiveChainId),
-        BigInt(effectiveChainId),
-        shouldUseBackend,
-        isCustomFaucet
-      )
-
-      if (!createdFaucetAddress) {
-        throw new Error("Failed to get created faucet address")
-      }
-       
-      console.log("🎉 Faucet created successfully at:", createdFaucetAddress)
-      console.log("🎉 Expected type:", mappedFactoryType)
-
-      // --- Register Faucet in Backend ---
-      await registerFaucetInBackend(
-        createdFaucetAddress,
-        address, // The current user's wallet address
-        effectiveChainId,
-        mappedFactoryType, // 'dropcode', 'droplist', or 'custom'
-        wizardState.formData.faucetName
-      )
-
-      // ✅ ALWAYS save metadata with defaults if not provided
-      const networkName = currentNetwork?.name || "Unknown Network"
-      const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
-      const finalDescription = faucetDescription.trim() || 
-        `This is a faucet on ${networkName} by ${ownerShort}`
-      
-      const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
-
-      console.log("💾 Saving metadata with:", {
-        description: finalDescription,
-        imageUrl: finalImageUrl,
-        hasCustomDescription: !!faucetDescription.trim(),
-        hasCustomImage: !!faucetImageUrl.trim()
-      })
-        // Always save metadata (with defaults if needed)
-      await saveFaucetMetadata(
-        createdFaucetAddress,
-        finalDescription,
-        finalImageUrl,
-        address,
-        effectiveChainId
-      )
-
-      const selectedToken = getSelectedTokenConfiguration()
-      toast.success(`Faucet "${wizardState.formData.faucetName}" created successfully! Dispensing ${selectedToken ? selectedToken.symbol : 'tokens'}.`)
-
-      // -------------------------------------------------------------
-      // IMPORTANT: TRIGGER THE DASHBOARD REFRESH HERE
-      // -------------------------------------------------------------
-      if (onSuccess) {
-          console.log("🔄 Triggering dashboard refresh...");
-          // Small delay to ensure DB write consistency before refetch
-          setTimeout(() => {
-              onSuccess();
-          }, 500);
-      }
-
-      if (closeModal) {
-          closeModal();
-      } else {
-          // Keep existing redirect logic if not in modal
-          setTimeout(() => {
-            window.location.href = `/faucet/${createdFaucetAddress}?networkId=${effectiveChainId}`
-          }, 2000)
-      }
-
-    } catch (error: any) {
-      console.error("❌ Error creating faucet:", error)
-      let errorMessage = error.message || "Failed to create faucet"
-      toast.error("Failed to create faucet", {
-        description: errorMessage,
-      })
-      setCreationError(errorMessage)
-    } finally {
-      setIsFaucetCreating(false)
+      const row = await getFaucetByAddress(faucetAddr, chainId)
+      if (row?.slug) return row.slug
+    } catch {
+      // swallow and retry
     }
   }
+  // Fallback: build it client-side — FaucetDetails handles 0x-address lookups too
+  return buildFaucetSlug(faucetName, faucetAddr)
+}
+  // Faucet creation
+const handleFaucetCreation = async () => {
+  if (!wizardState.formData.faucetName.trim()) {
+    setCreationError("Please enter a faucet name")
+    return
+  }
+  if (!nameValidation.isNameAvailable) {
+    setCreationError("Please choose a valid faucet name")
+    return
+  }
 
+  const finalTokenAddress = getFinalTokenAddress()
+  if (!finalTokenAddress) {
+    setCreationError("Please select a token or enter a custom token address")
+    return
+  }
+  if (wizardState.formData.showCustomTokenInput && !customTokenValidation.isValid) {
+    setCreationError("Please enter a valid custom token address")
+    return
+  }
+
+  if (!effectiveChainId || !currentNetwork) {
+    setCreationError("Please connect your wallet to a supported network")
+    return
+  }
+  if (!address) {
+    setCreationError("Unable to get wallet address")
+    return
+  }
+
+  const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
+  const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
+  if (!factoryAddress) {
+    setCreationError(`${wizardState.selectedFaucetType} faucets are not available on this network`)
+    return
+  }
+
+  setCreationError(null)
+
+  if (!isConnected) {
+    try {
+      await connect()
+    } catch (error) {
+      console.error("Failed to connect wallet:", error)
+      setCreationError("Failed to connect wallet. Please try again.")
+      return
+    }
+  }
+  if (!provider) {
+    setCreationError("Wallet not connected")
+    return
+  }
+
+  setIsFaucetCreating(true)
+
+  try {
+    let shouldUseBackend = false
+    let isCustomFaucet = false
+
+    console.log("🏭 Creating faucet with selected type:", wizardState.selectedFaucetType)
+    console.log("🏭 Mapped factory type:", mappedFactoryType)
+    console.log("🏭 Factory address:", factoryAddress)
+    console.log("🏭 Final token address:", finalTokenAddress)
+
+    switch (wizardState.selectedFaucetType) {
+      case FAUCET_TYPES.OPEN:
+        shouldUseBackend = wizardState.formData.requiresDropCode
+        isCustomFaucet = false
+        break
+      case FAUCET_TYPES.GATED:
+        shouldUseBackend = false
+        isCustomFaucet = false
+        break
+      case FAUCET_TYPES.CUSTOM:
+        shouldUseBackend = false
+        isCustomFaucet = true
+        break
+      default:
+        throw new Error(`Invalid faucet type selected: ${wizardState.selectedFaucetType}`)
+    }
+
+    const createdFaucetAddress = await createFaucet(
+      provider,
+      factoryAddress,
+      wizardState.formData.faucetName,
+      finalTokenAddress,
+      BigInt(effectiveChainId),
+      BigInt(effectiveChainId),
+      shouldUseBackend,
+      isCustomFaucet
+    )
+
+    if (!createdFaucetAddress) {
+      throw new Error("Failed to get created faucet address")
+    }
+
+    console.log("🎉 Faucet created successfully at:", createdFaucetAddress)
+
+    // Register in backend + save metadata
+    await registerFaucetInBackend(
+      createdFaucetAddress,
+      address,
+      effectiveChainId,
+      mappedFactoryType,
+      wizardState.formData.faucetName
+    )
+
+    const networkName = currentNetwork?.name || "Unknown Network"
+    const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
+    const finalDescription = faucetDescription.trim() || 
+      `This is a faucet on ${networkName} by ${ownerShort}`
+    const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
+
+    await saveFaucetMetadata(
+      createdFaucetAddress,
+      finalDescription,
+      finalImageUrl,
+      address,
+      effectiveChainId
+    )
+
+    // === INSTANT SYNC + GET SLUG ===
+    let finalSlug = createdFaucetAddress // fallback
+    try {
+      const syncRes = await fetch(`http://127.0.0.1:8001/sync-faucet/${createdFaucetAddress}`, {
+        method: "POST",
+      })
+      if (syncRes.ok) {
+        const data = await syncRes.json()
+        if (data.slug) {
+          finalSlug = data.slug
+          console.log("✅ Sync returned clean slug:", finalSlug)
+        }
+      }
+    } catch (syncErr) {
+      console.warn("Sync call failed (non-blocking):", syncErr)
+    }
+
+    const selectedToken = getSelectedTokenConfiguration()
+    toast.success(`Faucet "${wizardState.formData.faucetName}" created successfully!`)
+
+    if (onSuccess) {
+      console.log("🔄 Triggering dashboard refresh...")
+      setTimeout(() => onSuccess(), 500)
+    }
+
+    if (closeModal) {
+      closeModal()
+    } else {
+      // REDIRECT USING SLUG (clean URL!)
+      window.location.href = `/faucet/${finalSlug}?networkId=${effectiveChainId}&new=true`
+    }
+
+  } catch (error: any) {
+    console.error("❌ Error creating faucet:", error)
+    const errorMessage = error.message || "Failed to create faucet"
+    toast.error("Failed to create faucet", { description: errorMessage })
+    setCreationError(errorMessage)
+  } finally {
+    setIsFaucetCreating(false)
+  }
+}
   const getWizardStepTitle = (step: number): string => {
     switch (step) {
       case 1: return "Choose Faucet Type"

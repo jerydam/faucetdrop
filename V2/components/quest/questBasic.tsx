@@ -19,7 +19,7 @@ import { ZeroAddress, isAddress as ethersIsAddress } from 'ethers'
 import { type Network } from "@/lib/faucet"
 
 // ==== CONFIG ====
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
+const API_BASE_URL = "http://127.0.0.1:8000"
 const MIN_POOL_USD_VALUE = 50; // $50 Minimum
 
 const networks: Network[] = [
@@ -88,7 +88,6 @@ const COINGECKO_IDS: Record<string, string> = {
     "BNB": "bnb",
     "BUSD": "binance-usd",
     "AGR": "agora-coin",
-    "AVAX": "avalanche-2",
 }
 
 export interface TokenConfiguration {
@@ -646,7 +645,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="equal">Equal</SelectItem>
-                                        {/* <SelectItem value="quadratic">Quadratic</SelectItem> */}
+                                        <SelectItem value="quadratic">Quadratic</SelectItem>
                                         <SelectItem value="custom_tiers">Custom Tiers</SelectItem>
                                     </SelectContent>
                                 </Select>

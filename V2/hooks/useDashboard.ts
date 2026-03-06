@@ -8,7 +8,7 @@ const supabase = createClient(
 );
 
 // Backend URL — only used for the manual refresh trigger
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'https://faucetdrops-indexer.onrender.com';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:8001';
 
 export interface DashboardData {
   total_claims: number;
@@ -55,7 +55,6 @@ const NETWORK_COLORS: Record<string, string> = {
   Arbitrum:  '#28A0F0',
   Base:      '#0052FF',
   BNB:       '#F3BA2F',
-  Avalanche: '#E84142',
 };
 
 const NETWORK_CHAIN_IDS: Record<string, number> = {
@@ -64,7 +63,6 @@ const NETWORK_CHAIN_IDS: Record<string, number> = {
   Arbitrum:  42161,
   Base:      8453,
   BNB:       56,
-  Avalanche: 43114,
 };
 
 async function fetchDashboardFromSupabase(): Promise<DashboardData> {

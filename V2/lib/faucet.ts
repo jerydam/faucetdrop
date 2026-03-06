@@ -1,5 +1,5 @@
 import {Interface, type BrowserProvider, Contract, JsonRpcProvider,type Provider, ZeroAddress,type ContractTransactionResponse, isAddress, FallbackProvider, getAddress } from "ethers"
-import { FAUCET_ABI_DROPCODE, FAUCET_ABI_CUSTOM, FAUCET_ABI_DROPLIST, ERC20_ABI, CHECKIN_ABI, FACTORY_ABI_DROPCODE, FACTORY_ABI_DROPLIST,QUEST_FACTORY_ABI, FACTORY_ABI_CUSTOM, STORAGE_ABI} from "./abis"
+import { FAUCET_ABI_DROPCODE, FAUCET_ABI_CUSTOM, FAUCET_ABI_DROPLIST, ERC20_ABI, QUIZ_FACTORY_ABI, CHECKIN_ABI, FACTORY_ABI_DROPCODE, FACTORY_ABI_DROPLIST,QUEST_FACTORY_ABI, FACTORY_ABI_CUSTOM, STORAGE_ABI} from "./abis"
 import { appendDivviReferralData, getDivviStatus, reportTransactionToDivvi, isSupportedNetwork } from "./divvi-integration"
 
 // Fetch faucets for a specific network using getAllFaucets and getFaucetDetails
@@ -287,8 +287,8 @@ export interface NameValidationResult {
 }
 
 // Load backend address from .env
-const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
-
+export const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
+export const BACKUP_BACKEND_ADDRESS = "0x3207D4728c32391405C7122E59CCb115A4af31eA" 
 // Storage contract address
 const STORAGE_CONTRACT_ADDRESS = "0xc26c4Ea50fd3b63B6564A5963fdE4a3A474d4024"
 
@@ -328,7 +328,7 @@ if (!isAddress(BACKEND_ADDRESS)) {
 }
 
 const VALID_BACKEND_ADDRESS = getAddress(BACKEND_ADDRESS)
-
+const AVAILABLE_BACKEND_ADDRESS = getAddress(BACKUP_BACKEND_ADDRESS) 
 const faucetDetailsCache: Map<string, any> = new Map()
 
 // LocalStorage keys
@@ -654,7 +654,7 @@ export async function createCustomFaucet(
         const signer = await provider.getSigner();
         // NOTE: VALID_BACKEND_ADDRESS must be defined/imported in faucet.ts
         const backendAddress = VALID_BACKEND_ADDRESS; 
-        
+        const backendaddressess = BACKUP_BACKEND_ADDRESS; // Placeholder if you want to modify how backend address is determined
         // Factory Contract using the Signer for a write transaction
         const factoryContract = new Contract(factoryAddress, config.abi, signer);
 
@@ -1547,7 +1547,7 @@ export async function getFaucetDetails(
 }
 export const getUserFaucets = async (userAddress: string) => {
   try {
-    const response = await fetch(`https://faucetdrop-backend.onrender.com/user-faucets/${userAddress}`);
+    const response = await fetch(`http://127.0.0.1:8000/user-faucets/${userAddress}`);
     
     if (!response.ok) {
         if(response.status === 404) return []; 
@@ -1565,7 +1565,7 @@ export const getUserFaucets = async (userAddress: string) => {
 async function getDeletedFaucets(chainId: number): Promise<Set<string>> {
     try {
         // Adjust endpoint if necessary (e.g. /deleted-faucets or similar)
-        const response = await fetch(`https://faucetdrop-backend.onrender.com/deleted-faucets?chainId=${chainId}`);
+        const response = await fetch(`http://127.0.0.1:8000/deleted-faucets?chainId=${chainId}`);
         
         if (!response.ok) {
             console.warn("Failed to fetch deleted faucets list");
@@ -2094,7 +2094,7 @@ export async function retrieveSecretCode(faucetAddress: string): Promise<string>
     }
 
     // Fallback to backend if not found in localStorage
-    const response = await fetch("https://faucetdrop-backend.onrender.com/retrieve-secret-code", {
+    const response = await fetch("http://127.0.0.1:8000/retrieve-secret-code", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -2157,7 +2157,7 @@ function decodeRevertError(data: string): string {
 
 async function deleteFaucetMetadata(faucetAddress: string, userAddress: string, chainId: number): Promise<void> {
     try {
-        const response = await fetch("https://faucetdrop-backend.onrender.com/delete-faucet-metadata", { // Replace with your actual backend URL
+        const response = await fetch("http://127.0.0.1:8000/delete-faucet-metadata", { // Replace with your actual backend URL
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2177,18 +2177,23 @@ async function deleteFaucetMetadata(faucetAddress: string, userAddress: string, 
         console.error(`Error communicating with backend for metadata deletion:`, error);
     }
 }
-export async function createQuestReward(
+
+export async function createQuizReward(
   provider: BrowserProvider,
   factoryAddress: string,
   name: string,
   tokenAddress: string,
-  questEndTime: number,
-  claimWindowHours: number,
-  backendAddress: string
+  claimWindowDuration: number, // seconds — e.g. 172800 for 48h, saved in your backend at quiz creation
 ): Promise<string> {
+  const backendA = VALID_BACKEND_ADDRESS;
+  const backendB = BACKUP_BACKEND_ADDRESS;
+
   // --- 1. Validation ---
-  if (!isAddress(factoryAddress) || !isAddress(tokenAddress) || !isAddress(backendAddress)) {
-    throw new Error("Invalid factory, token, or backend address");
+  if (!isAddress(factoryAddress) || !isAddress(tokenAddress)) {
+    throw new Error("Invalid factory or token address");
+  }
+  if (!isAddress(backendA) || !isAddress(backendB)) {
+    throw new Error("Invalid backend address configuration");
   }
   if (!provider) {
     throw new Error("Provider is not available");
@@ -2198,30 +2203,29 @@ export async function createQuestReward(
     const signer = await provider.getSigner();
     const signerAddress = await signer.getAddress();
 
-    // Use the same ABI you already import elsewhere
-    const factory = new Contract(factoryAddress, QUEST_FACTORY_ABI, signer);
+    const factory = new Contract(factoryAddress, QUIZ_FACTORY_ABI, signer);
 
-    console.log("🚀 Deploying QuestReward via low-level tx:", {
+    console.log("🚀 Deploying QuizReward via low-level tx:", {
       name,
       tokenAddress,
-      backendAddress,
-      questEndTime,
-      claimWindowHours,
+      backendA,
+      backendB,
+      claimWindowDuration,
       signerAddress,
     });
 
-    // --- 2. Encode data (low-level) ---
-    const data = factory.interface.encodeFunctionData("createQuestReward", [
+    // --- 2. Encode data ---
+    const data = factory.interface.encodeFunctionData("createQuizReward", [
       name,
       tokenAddress,
-      backendAddress,
-      questEndTime,
-      claimWindowHours,
+      backendA,
+      backendB,
+      claimWindowDuration,
     ]);
 
-    const dataWithReferral = appendDivviReferralData(data); // keeps your Divvi tracking
+    const dataWithReferral = appendDivviReferralData(data);
 
-    // --- 3. Send transaction (same pattern as createCustomFaucet / createFaucet) ---
+    // --- 3. Send transaction ---
     const tx = await signer.sendTransaction({
       to: factoryAddress,
       data: dataWithReferral,
@@ -2231,9 +2235,109 @@ export async function createQuestReward(
     const receipt = await tx.wait();
     if (!receipt) throw new Error("Transaction receipt is null");
 
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(await provider.getNetwork().then(n => n.chainId)));
+    await reportTransactionToDivvi(
+      tx.hash as `0x${string}`,
+      Number(await provider.getNetwork().then(n => n.chainId))
+    );
 
-    // --- 4. Parse event (same as before) ---
+    // --- 4. Parse event ---
+    let deployedAddress = "";
+    const factoryInterface = new Interface(QUIZ_FACTORY_ABI);
+
+    for (const log of receipt.logs) {
+      try {
+        const parsedLog = factoryInterface.parseLog(log as any);
+        if (parsedLog?.name === "QuizRewardCreated") {
+          deployedAddress = parsedLog.args[0]; // quizReward address (first arg in event)
+          break;
+        }
+      } catch (e) {
+        // ignore unrelated logs
+      }
+    }
+
+    if (!deployedAddress) {
+      throw new Error("Quiz reward deployed but QuizRewardCreated event not found");
+    }
+
+    console.log("✅ QuizReward created at:", deployedAddress);
+    return deployedAddress;
+
+  } catch (error: any) {
+    console.error("❌ Quiz reward creation failed:", error);
+    if (error.data && typeof error.data === "string") {
+      throw new Error(decodeRevertError(error.data));
+    }
+    throw new Error(error.reason || error.message || "Failed to create quiz reward");
+  }
+}
+
+export async function createQuestReward(
+  provider: BrowserProvider,
+  factoryAddress: string,
+  name: string,
+  tokenAddress: string,
+  questEndTime: number,
+  claimWindowHours: number,
+): Promise<string> {
+  const backendA = VALID_BACKEND_ADDRESS;
+  const backendB = BACKUP_BACKEND_ADDRESS;
+
+  // --- 1. Validation ---
+  if (!isAddress(factoryAddress) || !isAddress(tokenAddress)) {
+    throw new Error("Invalid factory or token address");
+  }
+  if (!isAddress(backendA) || !isAddress(backendB)) {
+    throw new Error("Invalid backend address configuration");
+  }
+  if (!provider) {
+    throw new Error("Provider is not available");
+  }
+
+  try {
+    const signer = await provider.getSigner();
+    const signerAddress = await signer.getAddress();
+
+    const factory = new Contract(factoryAddress, QUEST_FACTORY_ABI, signer);
+
+    console.log("🚀 Deploying QuestReward via low-level tx:", {
+      name,
+      tokenAddress,
+      backendA,
+      backendB,
+      questEndTime,
+      claimWindowHours,
+      signerAddress,
+    });
+
+    // --- 2. Encode data ---
+    const data = factory.interface.encodeFunctionData("createQuestReward", [
+      name,
+      tokenAddress,
+      backendA,
+      backendB,
+      questEndTime,
+      claimWindowHours,
+    ]);
+
+    const dataWithReferral = appendDivviReferralData(data);
+
+    // --- 3. Send transaction ---
+    const tx = await signer.sendTransaction({
+      to: factoryAddress,
+      data: dataWithReferral,
+    });
+
+    console.log("Transaction sent:", tx.hash);
+    const receipt = await tx.wait();
+    if (!receipt) throw new Error("Transaction receipt is null");
+
+    await reportTransactionToDivvi(
+      tx.hash as `0x${string}`,
+      Number(await provider.getNetwork().then(n => n.chainId))
+    );
+
+    // --- 4. Parse event ---
     let deployedAddress = "";
     const factoryInterface = new Interface(QUEST_FACTORY_ABI);
 
@@ -2241,7 +2345,7 @@ export async function createQuestReward(
       try {
         const parsedLog = factoryInterface.parseLog(log as any);
         if (parsedLog?.name === "QuestRewardCreated") {
-          deployedAddress = parsedLog.args[0]; // or parsedLog.args.questAddress if your event is named differently
+          deployedAddress = parsedLog.args[0];
           break;
         }
       } catch (e) {
@@ -2264,6 +2368,7 @@ export async function createQuestReward(
     throw new Error(error.reason || error.message || "Failed to create quest reward");
   }
 }
+
 export async function createFaucet(
   provider: BrowserProvider,
   factoryAddress: string,

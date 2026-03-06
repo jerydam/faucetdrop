@@ -482,7 +482,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       // 2. Call Backend to clean up Database
       try {
         const response = await fetch(
-          "https://faucetdrop-backend.onrender.com/delete-faucet-metadata",
+          "http://127.0.0.1:8000/delete-faucet-metadata",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -630,7 +630,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
 
     // ====================== PATH A: SHARE POST TEMPLATE (Backend) ======================
     if (isTemplateChanged) {
-      const response = await fetch("https://faucetdrop-backend.onrender.com/faucet-x-template", {
+      const response = await fetch("http://127.0.0.1:8000/faucet-x-template", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -648,42 +648,63 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
     }
 
     // ====================== PATH B: BLOCKCHAIN PARAMETERS ======================
-    if (hasBlockchainChanges) {
-      const claimAmountBN = faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
-      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
-      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
+if (hasBlockchainChanges) {
+  const claimAmountBN = faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
+  const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
+  const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
-      await setClaimParameters(
-        provider as BrowserProvider,
-        faucetAddress,
-        claimAmountBN,
-        startTimestamp,
-        endTimestamp,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
-      );
+  await setClaimParameters(
+    provider as BrowserProvider,
+    faucetAddress,
+    claimAmountBN,
+    startTimestamp,
+    endTimestamp,
+    BigInt(chainId),
+    BigInt(Number(selectedNetwork.chainId)),
+    faucetType || undefined
+  );
 
-      toast.success("Blockchain parameters updated");
+  toast.success("Blockchain parameters updated");
 
-      // Handle DropCode generation if type is dropcode
-      if (faucetType === "dropcode") {
-        // ... (Your existing dropcode generation fetch here)
-      }
+  // Sync parameters to backend
+  await fetch("http://127.0.0.1:8000/set-claim-parameters", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      faucetAddress,
+      claimAmount: claimAmountBN.toString(),
+      startTime: startTimestamp,
+      endTime: endTimestamp,
+      chainId: Number(chainId),
+    }),
+  });
 
-      // Sync parameters to backend
-      await fetch("https://faucetdrop-backend.onrender.com/set-claim-parameters", {
+  // --- THE FIX: Generate DropCode and trigger the popup ---
+  if (faucetType === "dropcode") {
+    try {
+      const codeResponse = await fetch("http://127.0.0.1:8000/generate-new-drop-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           faucetAddress,
-          claimAmount: claimAmountBN.toString(),
-          startTime: startTimestamp,
-          endTime: endTimestamp,
+          userAddress: address,
           chainId: Number(chainId),
         }),
       });
+      
+      if (codeResponse.ok) {
+        const result = await codeResponse.json();
+        setNewlyGeneratedCode(result.secretCode); // Store the code
+        setShowNewCodeDialog(true); // Open the popup!
+      } else {
+        toast.error("Parameters updated, but failed to generate new drop code.");
+      }
+    } catch (err) {
+      console.error("Code generation error:", err);
+      toast.error("Failed to generate code automatically.");
     }
+  }
+}
 
     // ====================== PATH C: SOCIAL TASKS ======================
     if (hasTaskChanges) {
@@ -696,7 +717,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
           action: link.action,
         }));
 
-      await fetch("https://faucetdrop-backend.onrender.com/add-faucet-tasks", {
+      await fetch("http://127.0.0.1:8000/add-faucet-tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -876,7 +897,7 @@ const handleUpdateClaimParameters = async (): Promise<void> => {
     try {
       setIsGeneratingNewCode(true);
       const response = await fetch(
-        "https://faucetdrop-backend.onrender.com/generate-new-drop-code",
+        "http://127.0.0.1:8000/generate-new-drop-code",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

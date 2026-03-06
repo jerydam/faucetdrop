@@ -2,7 +2,7 @@
 "use client"
 
 import { type Chain } from 'viem'
-import { arbitrum, base, lisk, celo, avalanche, bsc } from 'viem/chains'
+import { arbitrum, base, lisk, celo, bsc } from 'viem/chains'
 
 export const supportedChains: [Chain, ...Chain[]] = [
   arbitrum,
@@ -10,7 +10,6 @@ export const supportedChains: [Chain, ...Chain[]] = [
   celo,
   lisk,
   bsc,
-  avalanche,
 ]
 
 // Privy configuration - supports BOTH embedded and external wallets

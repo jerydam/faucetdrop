@@ -14,7 +14,7 @@ const BLOCK_EXPLORERS: Record<string, string> = {
   Arbitrum:  "https://arbiscan.io/address/",
   Base:      "https://basescan.org/address/",
   BNB:       "https://bscscan.com/address/",
-  Avalanche: "https://snowtrace.io/address/",
+
 };
 
 export function UserClaimsChart() {

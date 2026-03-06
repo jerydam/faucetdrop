@@ -889,7 +889,7 @@ try {
       let secretCodeFromBackend = ""
       
       if (backendMode) {
-        const response = await fetch("https://faucetdrop-backend.onrender.com/set-claim-parameters", {
+        const response = await fetch("http://127.0.0.1:8000/set-claim-parameters", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

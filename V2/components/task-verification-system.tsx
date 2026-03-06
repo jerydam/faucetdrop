@@ -4,8 +4,8 @@
 
 import { toast } from "sonner";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
-const VERIFIER_API_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
+const VERIFIER_API_URL = "http://127.0.0.1:8000";
 
 // ============================================
 // TYPE DEFINITIONS

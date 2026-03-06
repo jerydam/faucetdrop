@@ -134,7 +134,7 @@ async function getUserCustomClaimAmount(
 
 async function loadSocialMediaLinks(faucetAddress: string): Promise<SocialMediaLink[]> {
     try {
-        const res = await fetch(`https://faucetdrop-backend.onrender.com/faucet-tasks/${faucetAddress}`)
+        const res = await fetch(`http://127.0.0.1:8000/faucet-tasks/${faucetAddress}`)
         if (!res.ok) return []
         const result = await res.json()
         if (!Array.isArray(result.tasks)) return []
@@ -151,7 +151,7 @@ async function loadSocialMediaLinks(faucetAddress: string): Promise<SocialMediaL
 
 async function loadCustomXPostTemplate(faucetAddress: string): Promise<string> {
     try {
-        const res = await fetch(`https://faucetdrop-backend.onrender.com/faucet-x-template/${faucetAddress}`)
+        const res = await fetch(`http://127.0.0.1:8000/faucet-x-template/${faucetAddress}`)
         if (!res.ok) return DEFAULT_X_POST_TEMPLATE
         const result = await res.json()
         return result.template || DEFAULT_X_POST_TEMPLATE
@@ -162,7 +162,7 @@ async function loadCustomXPostTemplate(faucetAddress: string): Promise<string> {
 
 async function saveAdminPopupPreference(userAddr: string, faucetAddr: string, dontShow: boolean) {
     try {
-        const res = await fetch("https://faucetdrop-backend.onrender.com/admin-popup-preference", {
+        const res = await fetch("http://127.0.0.1:8000/admin-popup-preference", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userAddress: userAddr, faucetAddress: faucetAddr, dontShowAgain: dontShow }),
@@ -174,7 +174,7 @@ async function saveAdminPopupPreference(userAddr: string, faucetAddr: string, do
 async function getAdminPopupPreference(userAddr: string, faucetAddr: string): Promise<boolean> {
     try {
         const res = await fetch(
-            `https://faucetdrop-backend.onrender.com/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+            `http://127.0.0.1:8000/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
         )
         return res.ok ? (await res.json()).dontShowAgain ?? false : false
     } catch { return false }
@@ -269,7 +269,7 @@ export default function FaucetDetails() {
     const triggerForceSync = async (addressToSync: string) => {
         try {
             console.log(`Triggering force sync for ${addressToSync}...`);
-            const res = await fetch(`https://faucetdrops-indexer.onrender.com/force-sync-faucet/${addressToSync}`, {
+            const res = await fetch(`http://127.0.0.1:8001/force-sync-faucet/${addressToSync}`, {
                 method: "POST",
             });
             const data = await res.json();

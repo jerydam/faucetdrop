@@ -170,43 +170,7 @@ export default function QuestPage() {
                   <ul className="space-y-3">
                     <li className="flex items-start">
                       <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Visit Project Homepage</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Follow on X (Twitter)</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Quote Quest on X</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Like & Retweet on X</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Join Discord Server</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Join Telegram Group</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Watch Intro Video</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Refer Friends</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Daily Check-in</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Share Quest on X</span>
+                      <span className="text-gray-300">All Social Media Task involved</span>
                     </li>
                   </ul>
                 </div>
@@ -215,11 +179,7 @@ export default function QuestPage() {
                   <ul className="space-y-3">
                     <li className="flex items-start">
                       <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Creative content submissions</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Custom project-specific tasks</span>
+                      <span className="text-gray-300">Creative content and Costom project task</span>
                     </li>
                   </ul>
                 </div>
@@ -228,11 +188,7 @@ export default function QuestPage() {
                   <ul className="space-y-3">
                     <li className="flex items-start">
                       <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Onchain trading activities</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-blue-400 mr-2">•</span>
-                      <span className="text-gray-300">Project-specific DeFi tasks</span>
+                      <span className="text-gray-300">Project-specific DeFi tasks and Onchain trading activities</span>
                     </li>
                   </ul>
                 </div>
@@ -244,7 +200,7 @@ export default function QuestPage() {
                   <p className="text-gray-300 mb-4">User submits a URL or proof link</p>
                 </div>
                 <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
-                  <h4 className="text-lg font-semibold text-white mb-4">Automated API Check</h4>
+                  <h4 className="text-lg font-semibold text-white mb-4">Automated Verification</h4>
                   <p className="text-gray-300 mb-4">Verified instantly</p>
                 </div>
                 <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">

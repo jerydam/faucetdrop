@@ -187,7 +187,11 @@ export default function QuestDetailsPage() {
   const [questData, setQuestData] = useState<any | null>(null);
   const [faucetAddress, setFaucetAddress] = useState<string | undefined>(undefined);
   const [isRefreshingUser, setIsRefreshingUser] = useState(false);
-
+  const [claimState, setClaimState] = useState({
+    isChecking: false,
+    isWinnerOnChain: false,
+    hasClaimed: false,
+  });
   const refreshParticipantData = async () => {
     setIsRefreshingUser(true);
     try {
@@ -235,6 +239,19 @@ export default function QuestDetailsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isFunding, setIsFunding] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
+  const tokenSymbol = questData?.tokenSymbol || "Tokens";
+  const rewardPoolAmount = parseFloat(questData?.rewardPool || "0");
+  const platformFeePercentage = 0.05;
+  const requiredFee = rewardPoolAmount * platformFeePercentage;
+  const totalRequired = rewardPoolAmount + requiredFee;
+  const now = new Date();
+  const endDate = new Date(questData?.endDate || Date.now());
+  const isQuestEnded = now > endDate;
+
+  const claimWindowHours = questData?.claimWindowHours || 24; 
+  const claimWindowEnd = new Date(endDate.getTime() + (claimWindowHours * 60 * 60 * 1000));
+  const isClaimWindowClosed = now > claimWindowEnd;
+ 
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -270,6 +287,7 @@ export default function QuestDetailsPage() {
   const activeStages = userProgress.activeStages?.length > 0
     ? userProgress.activeStages
     : ALL_STAGES;
+    
   useEffect(() => {
   if (!faucetAddress || !userWalletAddress || !hasUsername) return;
   const checkParticipant = async () => {
@@ -285,6 +303,7 @@ export default function QuestDetailsPage() {
   };
   checkParticipant();
 }, [faucetAddress, userWalletAddress, hasUsername]);
+
   useEffect(() => {
     const slug = params.slug as string;
     if (!slug) return;
@@ -352,23 +371,35 @@ export default function QuestDetailsPage() {
     fetchUserSpecifics();
   }, [faucetAddress, userWalletAddress, hasUsername, isCreator]);
 
-  const tokenSymbol = questData?.tokenSymbol || "Tokens";
-  const rewardPoolAmount = parseFloat(questData?.rewardPool || "0");
-  const platformFeePercentage = 0.05;
-  const requiredFee = rewardPoolAmount * platformFeePercentage;
-  const totalRequired = rewardPoolAmount + requiredFee;
-  const now = new Date();
-  const endDate = new Date(questData?.endDate || Date.now());
-  const isQuestEnded = now > endDate;
+  // ── ON-CHAIN CLAIM STATUS CHECK ──
+  useEffect(() => {
+    const checkClaimStatus = async () => {
+      if (!faucetAddress || !userWalletAddress || !walletProvider || !isQuestEnded) return;
+      
+      try {
+        setClaimState(prev => ({ ...prev, isChecking: true }));
+        const ethersProvider = new BrowserProvider(walletProvider as any);
+        const contract = new Contract(faucetAddress, QUEST_ABI, ethersProvider);
 
-  const claimWindowHours = questData?.claimWindowHours || 24; 
-  const claimWindowEnd = new Date(endDate.getTime() + (claimWindowHours * 60 * 60 * 1000));
-  const isClaimWindowClosed = now > claimWindowEnd;
-  const isValidFundingAmount = useMemo(() => {
-    const input = parseFloat(fundAmount || "0");
-    return Math.abs(input - totalRequired) < 0.0001;
-  }, [fundAmount, totalRequired]);
+        // Read directly from your smart contract
+        const hasClaimed = await contract.hasClaimed(userWalletAddress);
+        const amountWei = await contract.getCustomClaimAmount(userWalletAddress);
+        
+        setClaimState({
+          isChecking: false,
+          isWinnerOnChain: amountWei > 0n, // ethers v6 uses BigInt
+          hasClaimed: hasClaimed,
+        });
+      } catch (error) {
+        console.error("Error fetching on-chain claim status:", error);
+        setClaimState(prev => ({ ...prev, isChecking: false }));
+      }
+    };
 
+    checkClaimStatus();
+  }, [faucetAddress, userWalletAddress, walletProvider, isQuestEnded]);
+
+  
   const claimStatus = useMemo(() => {
     if (!questData || !questData.endDate) return { isActive: false, message: "Not started" };
     const endDate = new Date(questData.endDate);
@@ -947,7 +978,10 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
     }
   };
 
-
+ const isValidFundingAmount = useMemo(() => {
+    const input = parseFloat(fundAmount || "0");
+    return Math.abs(input - totalRequired) < 0.0001;
+  }, [fundAmount, totalRequired]);
   // --- PARTICIPANT: CLAIM REWARD (VIA BACKEND) ---
   const handleClaimReward = async () => {
     if (!activeWallet) return toast.error("Wallet not connected");
@@ -1669,43 +1703,57 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                             <TableCell className="text-right text-muted-foreground font-mono">{entry.completedTasks}</TableCell>
                             <TableCell className="text-right font-bold text-primary text-lg">{entry.points}</TableCell>
                             {claimStatus.isActive && (
-                              <TableCell className="text-right">
-                                {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
-                                  entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
-                                    
-                                    // If quest hasn't ended yet
-                                    !isQuestEnded ? (
-                                        <Badge variant="outline" className="text-amber-500 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
-                                          Awaiting End
-                                        </Badge>
-                                    ) : 
-                                    // If window is completely closed
-                                    isClaimWindowClosed ? (
-                                        <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20">
-                                          Expired
-                                        </Badge>
-                                    ) : 
-                                    // If quest ended AND window is open
-                                    (
-                                        <Button 
-                                          size="sm" 
-                                          onClick={handleClaimReward} 
-                                          disabled={isClaiming} 
-                                          className="bg-green-600 hover:bg-green-700 text-white shadow-sm font-bold"
-                                        >
-                                          {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                                          Claim Reward
-                                        </Button>
-                                    )
-                                    
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
-                                      Not Eligible
-                                    </span>
+                            <TableCell className="text-right">
+                              {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
+                                entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
+                                  
+                                  // 1. If quest hasn't ended yet
+                                  !isQuestEnded ? (
+                                    <Badge variant="outline" className="text-amber-500 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+                                      Awaiting End
+                                    </Badge>
+                                  ) : 
+                                  // 2. Checking the blockchain
+                                  claimState.isChecking ? (
+                                    <div className="flex justify-end"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                                  ) : 
+                                  // 3. User has already claimed
+                                  claimState.hasClaimed ? (
+                                    <Badge className="bg-green-500 text-white border-0">Claimed ✅</Badge>
+                                  ) : 
+                                  // 4. Backend hasn't whitelisted them yet (waiting for the 60-second cron job)
+                                  !claimState.isWinnerOnChain && !isClaimWindowClosed ? (
+                                    <Badge variant="outline" className="text-blue-500 border-blue-500 bg-blue-50 dark:bg-blue-950/20 animate-pulse">
+                                      Processing Rewards...
+                                    </Badge>
+                                  ) : 
+                                  // 5. Window is closed and they missed it
+                                  isClaimWindowClosed ? (
+                                    <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20">
+                                      Expired
+                                    </Badge>
+                                  ) : 
+                                  // 6. Finally, they are whitelisted and ready to claim!
+                                  (
+                                    <Button 
+                                      size="sm" 
+                                      onClick={handleClaimReward} 
+                                      disabled={isClaiming} 
+                                      className="bg-green-600 hover:bg-green-700 text-white shadow-sm font-bold"
+                                    >
+                                      {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                                      Claim Reward
+                                    </Button>
                                   )
-                                )}
-                              </TableCell>
-                            )}
+
+                                ) : (
+                                  <span className="text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                                    Not Eligible
+                                  </span>
+                                )
+                              )}
+                            </TableCell>
+                          )}  
                           </TableRow>
                         ))
                       )}

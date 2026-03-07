@@ -27,7 +27,7 @@ export const privyConfig = {
     // All login methods available
     loginMethods: ['email', 'wallet', 'google', 'twitter', 'discord', 'telegram', 'farcaster', ] as const,
     embeddedWallets: {
-      createOnLogin: 'all-users' as const,
+    createOnLogin: 'users-without-wallets' as const,
       requireUserPasswordOnCreate: false,
       noPromptOnSignature: false,
     },

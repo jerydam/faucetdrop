@@ -734,67 +734,134 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
   };
 
   const handleSubmitTask = async () => {
-    if (!selectedTask || !userWalletAddress) return;
-    setSubmittingTaskId(selectedTask.id);
+  if (!selectedTask || !userWalletAddress) return;
+  setSubmittingTaskId(selectedTask.id);
 
-    const cancelSubmission = async (submissionId: string) => {
-      try {
-        await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/${submissionId}`, { method: "DELETE" });
-      } catch {}
-      await loadUserProgress();
-    };
-
+  const cancelSubmission = async (submissionId: string) => {
     try {
-      const formData = new FormData();
-      formData.append("walletAddress", userWalletAddress);
-      formData.append("taskId", selectedTask.id);
-      
-      // 🚨 FIX 2: Smart Fallback for Unsupported Auto-Verify Platforms
-      // If it's auto_social but NOT Twitter/Discord/Telegram, force it to behave like manual_link_image
-      let actualSubmissionType = selectedTask.verificationType;
-      const isUnsupportedAuto = actualSubmissionType === "auto_social" && !['Twitter', 'Discord', 'Telegram'].includes(selectedTask.targetPlatform || '');
-      
-      if (isUnsupportedAuto) {
-        actualSubmissionType = "manual_link_image";
-      }
-      
-      formData.append("submissionType", actualSubmissionType);
+      await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/${submissionId}`, { method: "DELETE" });
+    } catch {}
+    await loadUserProgress();
+  };
 
-      // Safely grab the link if the task requires one
-      let finalProofUrl = "";
-      const requiresLinkInput = 
-        ['manual_link', 'manual_link_image', 'system_x_share', 'auto_tx'].includes(actualSubmissionType) ||
-        (selectedTask.category === 'trading' && !['onchain', 'none', 'manual_upload'].includes(actualSubmissionType)) ||
-        (actualSubmissionType === 'auto_social' && ['quote', 'comment'].includes(selectedTask.action));
+  try {
+    const formData = new FormData();
+    formData.append("walletAddress", userWalletAddress);
+    formData.append("taskId", selectedTask.id);
 
-      if (requiresLinkInput) {
-        finalProofUrl = submissionData.proofUrl.trim();
-      }
+    let actualSubmissionType = selectedTask.verificationType;
+    const isUnsupportedAuto =
+      actualSubmissionType === "auto_social" &&
+      !["Twitter", "Discord", "Telegram"].includes(selectedTask.targetPlatform || "");
 
-      formData.append("submittedData", finalProofUrl);
-      formData.append("notes", submissionData.notes.trim());
+    if (isUnsupportedAuto) {
+      actualSubmissionType = "manual_link_image";
+    }
 
-      // 🚨 FIX 1: ACTUALLY APPEND THE IMAGE FILE TO THE REQUEST!
-      if (submissionData.file) {
-        formData.append("file", submissionData.file);
-      }
+    formData.append("submissionType", actualSubmissionType);
 
-      const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions`, { 
-        method: "POST", 
-        body: formData 
-      });
-      const result = await response.json();
-      if (!result.success) throw new Error(result.message || "Failed to submit task");
+    let finalProofUrl = "";
+    const requiresLinkInput =
+      ["manual_link", "manual_link_image", "system_x_share", "auto_tx"].includes(actualSubmissionType) ||
+      (selectedTask.category === "trading" && !["onchain", "none", "manual_upload"].includes(actualSubmissionType)) ||
+      (actualSubmissionType === "auto_social" && ["quote", "comment"].includes(selectedTask.action));
 
-      const submissionId = result.submissionId;
+    if (requiresLinkInput) {
+      finalProofUrl = submissionData.proofUrl.trim();
+    }
 
-      if (selectedTask.verificationType === "auto_social" && selectedTask.targetPlatform === "Telegram") {
+    formData.append("submittedData", finalProofUrl);
+    formData.append("notes", submissionData.notes.trim());
+
+    if (submissionData.file) {
+      formData.append("file", submissionData.file);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions`, {
+      method: "POST",
+      body: formData,
+    });
+    const result = await response.json();
+    if (!result.success) throw new Error(result.message || "Failed to submit task");
+
+    const submissionId = result.submissionId;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TELEGRAM
+    // ─────────────────────────────────────────────────────────────────────────
+    if (selectedTask.verificationType === "auto_social" && selectedTask.targetPlatform === "Telegram") {
+
+      // ── NEW BRANCH: message count verification ────────────────────────────
+      if (selectedTask.action === "message_count") {
+        // chat_id is stored in task.url (the numeric group ID e.g. "-1001234567890")
+        // required_count is stored in task.minTxCount
+        const chatId = selectedTask.url?.trim();
+        const requiredCount = Number(selectedTask.minTxCount ?? 1);
+
+        if (!chatId) {
+          await cancelSubmission(submissionId);
+          toast.error("❌ Task is missing a Telegram chat ID. Contact the quest creator.");
+          return;
+        }
+
+        const verifyRes = await fetch(`${API_BASE_URL}/api/quests/verify/telegram-message-count`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            submission_id:  submissionId,
+            faucet_address: faucetAddress,
+            wallet_address: userWalletAddress,
+            chat_id:        chatId,
+            required_count: requiredCount,
+          }),
+        });
+        const verifyJson = await verifyRes.json();
+
+        if (verifyJson.verified) {
+          toast.success(
+            `✅ Verified! You sent ${verifyJson.current_count}/${verifyJson.required_count} messages. Points awarded.`
+          );
+          await refreshAllStats();
+          setShowSubmitModal(false);
+          setSubmissionData({ proofUrl: "", notes: "", file: null });
+        } else {
+          await cancelSubmission(submissionId);
+
+          if (verifyJson.reason === "profile_not_found") {
+            toast.error("❌ No profile found for this wallet.");
+          } else if (verifyJson.reason === "telegram_not_linked") {
+            toast.error("⚠️ Connect your Telegram in Profile Settings first.", {
+              action: {
+                label: "Open Profile",
+                onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+              },
+            });
+          } else if (verifyJson.reason === "not_in_group") {
+            toast.error("❌ You are not a member of this group. Join first then try again.");
+          } else if (verifyJson.reason === "insufficient_messages") {
+            toast.error(
+              `❌ Not enough messages yet — ${verifyJson.current_count ?? 0}/${verifyJson.required_count} sent. Keep chatting and try again!`
+            );
+          } else {
+            toast.error("❌ " + (verifyJson.message || "Verification failed. Please try again."));
+          }
+        }
+
+      // ── EXISTING BRANCH: join / membership verification ───────────────────
+      } else {
         const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-telegram`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ submissionId, faucetAddress, walletAddress: userWalletAddress, taskUrl: selectedTask.url, taskAction: selectedTask.action }),
+          body: JSON.stringify({
+            submissionId,
+            faucetAddress,
+            walletAddress: userWalletAddress,
+            taskUrl: selectedTask.url,
+            taskAction: selectedTask.action,
+          }),
         });
         const verifyJson = await verifyRes.json();
+
         if (verifyJson.verified) {
           toast.success("✅ Telegram membership verified! Points awarded.");
           await refreshAllStats();
@@ -803,7 +870,12 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
         } else {
           await cancelSubmission(submissionId);
           if (verifyJson.reason === "telegram_not_linked") {
-            toast.error("⚠️ Connect your Telegram in Profile Settings first.", { action: { label: "Open Profile", onClick: () => router.push(`/dashboard/${userWalletAddress}`) } });
+            toast.error("⚠️ Connect your Telegram in Profile Settings first.", {
+              action: {
+                label: "Open Profile",
+                onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+              },
+            });
           } else if (verifyJson.reason === "not_member") {
             toast.error("❌ You are not a member of this channel yet. Join first then try again.");
           } else if (verifyJson.reason === "bot_not_admin") {
@@ -812,107 +884,154 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
             toast.error("❌ " + (verifyJson.message || "Verification failed. Please try again."));
           }
         }
-      } else if (selectedTask.verificationType === "auto_social" && selectedTask.targetPlatform === "Discord") {
-        const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-discord`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ submissionId, faucetAddress, walletAddress: userWalletAddress, taskId: selectedTask.id, taskUrl: selectedTask.url, taskAction: selectedTask.action }),
-        });
-        const verifyJson = await verifyRes.json();
-        if (verifyJson.verified) {
-          toast.success(verifyJson.message || "✅ Discord task verified! Points awarded.");
-          await refreshAllStats();
-          setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
-        } else {
-          await cancelSubmission(submissionId);
-          if (verifyJson.reason === "discord_not_linked") {
-            toast.error("⚠️ Connect your Discord in Profile Settings first.", { action: { label: "Open Profile", onClick: () => router.push(`/dashboard/${userWalletAddress}`) } });
-          } else if (verifyJson.reason === "missing_role") {
-            toast.error(verifyJson.message || "❌ You do not have the required role yet.");
-          } else if (verifyJson.reason === "not_member") {
-            toast.error("❌ You have not joined this Discord server yet.");
-          } else if (verifyJson.reason === "bot_not_in_server") {
-            toast.error("❌ The FaucetDrops Bot is not in this server. Contact the creator.");
-          } else {
-            toast.error("❌ " + (verifyJson.message || "Verification failed. Please try again."));
-          }
-        }
-      } else if (selectedTask.verificationType === "system_x_share") {
-        const verifyRes = await fetch(`${API_BASE_URL}/api/tasks/verify-x-share`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ submissionId, walletAddress: userWalletAddress, taskId: selectedTask.id, proofUrl: finalProofUrl, requiredTag: "@FaucetDrops" }),
-        });
-        const verifyJson = await verifyRes.json();
-        if (verifyJson.verified) {
-          toast.success(verifyJson.message || "✅ Share verified! Points added.");
-          await refreshAllStats();
-          setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
-        } else {
-          await cancelSubmission(submissionId);
-          toast.error("❌ " + (verifyJson.message || "Verification failed. Ensure you included @FaucetDrops and try again."));
-        }
-      } else if (selectedTask.verificationType === "auto_social" && selectedTask.targetPlatform === "Twitter") {
-        let endpoint = "";
-        let payload: any = { walletAddress: userWalletAddress, taskId: selectedTask.id, submissionId };
-        if (selectedTask.action === "quote") {
-          endpoint = "/api/tasks/verify-x-quote";
-          payload.proofUrl = finalProofUrl;
-        } else {
-          endpoint = "/api/tasks/verify-x";
-          payload.submittedHandle = userProfile?.twitter_handle || userProfile?.username || "";
-        }
-        const verifyRes = await fetch(`${API_BASE_URL}${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-        const verifyJson = await verifyRes.json();
-        if (verifyJson.verified) {
-          toast.success(verifyJson.message || "✅ Task verified! Points added.");
-          await refreshAllStats();
-          setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
-        } else {
-          await cancelSubmission(submissionId);
-          toast.error("❌ " + (verifyJson.message || "Verification failed. Please complete the action and try again."));
-        }
-      } else if (selectedTask.verificationType === "auto_social") {
-        const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ submissionId, faucetAddress, walletAddress: userWalletAddress, handle: userProfile?.twitter_handle || userProfile?.username || "", proofUrl: finalProofUrl, taskType: selectedTask.action }),
-        });
-        const verifyJson = await verifyRes.json();
-        if (verifyJson.verified) {
-          toast.success("✅ Task verified! Points added.");
-          await refreshAllStats();
-          setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
-        } else {
-          await cancelSubmission(submissionId);
-          toast.error("❌ " + (verifyJson.message || "Verification failed. Complete the action then try again."));
-        }
-      } else if (selectedTask.verificationType === "none") {
-        toast.success("✅ Task completed! Points added.");
-        await refreshAllStats();
-        setShowSubmitModal(false);
-        setSubmissionData({ proofUrl: "", notes: "", file: null });
-      } else if (selectedTask.verificationType === "onchain") {
-        toast.success("✅ Wallet verified on-chain! Points added.");
+      }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DISCORD  (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (selectedTask.verificationType === "auto_social" && selectedTask.targetPlatform === "Discord") {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-discord`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          faucetAddress,
+          walletAddress: userWalletAddress,
+          taskId: selectedTask.id,
+          taskUrl: selectedTask.url,
+          taskAction: selectedTask.action,
+        }),
+      });
+      const verifyJson = await verifyRes.json();
+      if (verifyJson.verified) {
+        toast.success(verifyJson.message || "✅ Discord task verified! Points awarded.");
         await refreshAllStats();
         setShowSubmitModal(false);
         setSubmissionData({ proofUrl: "", notes: "", file: null });
       } else {
-        toast.info("📋 Task submitted for manual review.");
+        await cancelSubmission(submissionId);
+        if (verifyJson.reason === "discord_not_linked") {
+          toast.error("⚠️ Connect your Discord in Profile Settings first.", {
+            action: { label: "Open Profile", onClick: () => router.push(`/dashboard/${userWalletAddress}`) },
+          });
+        } else if (verifyJson.reason === "missing_role") {
+          toast.error(verifyJson.message || "❌ You do not have the required role yet.");
+        } else if (verifyJson.reason === "not_member") {
+          toast.error("❌ You have not joined this Discord server yet.");
+        } else if (verifyJson.reason === "bot_not_in_server") {
+          toast.error("❌ The FaucetDrops Bot is not in this server. Contact the creator.");
+        } else {
+          toast.error("❌ " + (verifyJson.message || "Verification failed. Please try again."));
+        }
+      }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TWITTER X SHARE  (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (selectedTask.verificationType === "system_x_share") {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/tasks/verify-x-share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          walletAddress: userWalletAddress,
+          taskId: selectedTask.id,
+          proofUrl: finalProofUrl,
+          requiredTag: "@FaucetDrops",
+        }),
+      });
+      const verifyJson = await verifyRes.json();
+      if (verifyJson.verified) {
+        toast.success(verifyJson.message || "✅ Share verified! Points added.");
         await refreshAllStats();
         setShowSubmitModal(false);
         setSubmissionData({ proofUrl: "", notes: "", file: null });
+      } else {
+        await cancelSubmission(submissionId);
+        toast.error("❌ " + (verifyJson.message || "Verification failed. Ensure you included @FaucetDrops and try again."));
       }
-    } catch (error: any) {
-      toast.error(error.message || "An error occurred. Please try again.");
-    } finally {
-      setSubmittingTaskId(null);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TWITTER  (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (selectedTask.verificationType === "auto_social" && selectedTask.targetPlatform === "Twitter") {
+      let endpoint = "";
+      let payload: any = { walletAddress: userWalletAddress, taskId: selectedTask.id, submissionId };
+      if (selectedTask.action === "quote") {
+        endpoint = "/api/tasks/verify-x-quote";
+        payload.proofUrl = finalProofUrl;
+      } else {
+        endpoint = "/api/tasks/verify-x";
+        payload.submittedHandle = userProfile?.twitter_handle || userProfile?.username || "";
+      }
+      const verifyRes = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const verifyJson = await verifyRes.json();
+      if (verifyJson.verified) {
+        toast.success(verifyJson.message || "✅ Task verified! Points added.");
+        await refreshAllStats();
+        setShowSubmitModal(false);
+        setSubmissionData({ proofUrl: "", notes: "", file: null });
+      } else {
+        await cancelSubmission(submissionId);
+        toast.error("❌ " + (verifyJson.message || "Verification failed. Please complete the action and try again."));
+      }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // OTHER AUTO_SOCIAL  (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (selectedTask.verificationType === "auto_social") {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/bot/verify-social`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId,
+          faucetAddress,
+          walletAddress: userWalletAddress,
+          handle: userProfile?.twitter_handle || userProfile?.username || "",
+          proofUrl: finalProofUrl,
+          taskType: selectedTask.action,
+        }),
+      });
+      const verifyJson = await verifyRes.json();
+      if (verifyJson.verified) {
+        toast.success("✅ Task verified! Points added.");
+        await refreshAllStats();
+        setShowSubmitModal(false);
+        setSubmissionData({ proofUrl: "", notes: "", file: null });
+      } else {
+        await cancelSubmission(submissionId);
+        toast.error("❌ " + (verifyJson.message || "Verification failed. Complete the action then try again."));
+      }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // NONE / ONCHAIN / MANUAL  (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
+    } else if (selectedTask.verificationType === "none") {
+      toast.success("✅ Task completed! Points added.");
+      await refreshAllStats();
+      setShowSubmitModal(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
+    } else if (selectedTask.verificationType === "onchain") {
+      toast.success("✅ Wallet verified on-chain! Points added.");
+      await refreshAllStats();
+      setShowSubmitModal(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
+    } else {
+      toast.info("📋 Task submitted for manual review.");
+      await refreshAllStats();
+      setShowSubmitModal(false);
+      setSubmissionData({ proofUrl: "", notes: "", file: null });
     }
-  };
+  } catch (error: any) {
+    toast.error(error.message || "An error occurred. Please try again.");
+  } finally {
+    setSubmittingTaskId(null);
+  }
+};
 
   const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected") => {
     // FIX: Track both ID and Action

@@ -21,7 +21,7 @@ import { BrowserProvider, Contract, formatUnits } from "ethers";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 // ── Safe WS URL ──
 function getWsBaseUrl(): string {

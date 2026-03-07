@@ -7,26 +7,18 @@ import {
     ZeroAddress,
 } from "ethers";
 import { ERC20_ABI, QUIZ_FACTORY_ABI, QUIZ_ABI } from "./abis";
-import {BACKEND_ADDRESS,BACKUP_BACKEND_ADDRESS} from './faucet'
+import { BACKEND_ADDRESS, BACKUP_BACKEND_ADDRESS } from './faucet';
 
-// ── Divvi helpers (replace with your actual imports) ─────────────────────────
+// ✅ Import the helper from your useNetwork file (adjust the path to match your project structure)
+import { getNetworkByChainId } from "@/hooks/use-network"; 
+
+// ── Divvi helpers ────────────────────────────────────────────────────────────
 const appendDivviReferralData = (data: string): string => data;
 const reportTransactionToDivvi = async (_hash: string, _chainId: number) => { };
 
-
-export const FACTORY_ADDRESSES: Record<number, string> = {
-    42220: process.env.NEXT_PUBLIC_FACTORY_CELO ?? "",
-    1135: process.env.NEXT_PUBLIC_FACTORY_LISK ?? "",
-    42161: process.env.NEXT_PUBLIC_FACTORY_ARB ?? "",
-    8453: process.env.NEXT_PUBLIC_FACTORY_BASE ?? "",
-    56: process.env.NEXT_PUBLIC_FACTORY_BNB ?? "",
-};
-
 export const DEFAULT_CLAIM_WINDOW = 172800; // 48 hours
 
-
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 export interface DeployResult {
     contractAddress: string;
     txHash: string;
@@ -45,16 +37,20 @@ export interface QuizRewardConfig {
     claimWindowDuration?: number;
 }
 
-// ── 1. Deploy QuizReward (no fund) ────────────────────────────────────────────
+// ── 1. Deploy QuizReward (no fund) ───────────────────────────────────────────
 export async function deployQuizReward(
     provider: BrowserProvider,
     chainId: number,
     config: Pick<QuizRewardConfig, "name" | "tokenAddress" | "isNativeToken" | "claimWindowDuration">
 ): Promise<DeployResult> {
-    const factoryAddress = FACTORY_ADDRESSES[chainId];
+    // ✅ Dynamically fetch the factory address using your global network configurations
+    const targetNetwork = getNetworkByChainId(chainId);
+    const factoryAddress = targetNetwork?.factories?.quiz;
+
     if (!factoryAddress || !isAddress(factoryAddress)) {
-        throw new Error(`No factory deployed on chain ${chainId}`);
+        throw new Error(`No Quiz factory deployed on chain ${chainId}`);
     }
+    
     if (!isAddress(BACKEND_ADDRESS) || !isAddress(BACKUP_BACKEND_ADDRESS)) {
         throw new Error("Backend wallet addresses not configured (check NEXT_PUBLIC_BACKEND_WALLET_A/B)");
     }
@@ -96,7 +92,7 @@ export async function deployQuizReward(
     return { contractAddress, txHash: tx.hash };
 }
 
-// ── 2. Fund an existing QuizReward contract ───────────────────────────────────
+// ── 2. Fund an existing QuizReward contract ──────────────────────────────────
 export async function fundQuizReward(
     provider: BrowserProvider,
     chainId: number,

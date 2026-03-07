@@ -15,22 +15,21 @@ import {
   Plus, Trash2, Sparkles, Loader2, CheckCircle2, ChevronUp, ChevronDown,
   Clock, Users, Trophy, Zap, Edit3, Eye, ArrowLeft, Copy, BookOpen,
   Lightbulb, Check, Coins, Gift, Info, Crown, Award, Medal,
-  Equal, Percent, AlertCircle, Upload, ImageIcon, X as XIcon, Link,
+  Equal, Percent, AlertCircle, Upload, ImageIcon, X as XIcon, Link, Timer,
+  ChevronRight, ChevronLeft, Star, Flame, Target, Rocket, PartyPopper
 } from "lucide-react";
 import {
   deployQuizReward,
-  FACTORY_ADDRESSES,
   type QuizRewardConfig,
 } from "@/lib/quiz";
 import { BrowserProvider } from "ethers";
-
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWallets } from "@privy-io/react-auth";
+import { getNetworkByChainId } from "@/hooks/use-network";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
-// ── Types ──────────────────────────────────────────────────────
 interface QuizOption { id: "A" | "B" | "C" | "D"; text: string }
 interface QuizQuestion {
   id: string; question: string; options: QuizOption[];
@@ -41,11 +40,20 @@ interface RewardConfig {
   poolAmount: string; tokenAddress: string; tokenSymbol: string;
   tokenDecimals: number; tokenLogoUrl: string; totalWinners: number;
   distributionType: DistributionType; customTiers: Record<number, string>;
+  claimWindowDuration: number;
 }
 
-const MIN_POOL_USD_VALUE = 50;
+
 const MAX_FILE_SIZE_MB = 5;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"];
+
+const CLAIM_WINDOW_OPTIONS = [
+  { label: "7 Hours", value: 7 * 3600 },
+  { label: "24 Hours", value: 24 * 3600 },
+  { label: "48 Hours", value: 48 * 3600 },
+  { label: "7 Days", value: 7 * 24 * 3600 },
+  { label: "30 Days", value: 30 * 24 * 3600 },
+];
 
 interface TokenConfiguration {
   address: string; name: string; symbol: string; decimals: number;
@@ -86,9 +94,13 @@ const COINGECKO_IDS: Record<string, string> = {
 const CHAIN_NAMES: Record<number, string> = {
   42220: "Celo", 1135: "Lisk", 42161: "Arbitrum", 8453: "Base", 56: "BNB Chain",
 };
-const OPTION_COLORS: Record<string, string> = {
-  A: "bg-red-500 hover:bg-red-600", B: "bg-blue-500 hover:bg-blue-600",
-  C: "bg-yellow-500 hover:bg-yellow-600", D: "bg-green-500 hover:bg-green-600",
+
+// Kahoot-inspired option colors — bright and fun
+const OPTION_COLORS: Record<string, { bg: string; hover: string; ring: string; light: string }> = {
+  A: { bg: "bg-[#e21b3c]", hover: "hover:bg-[#c4172f]", ring: "ring-[#e21b3c]", light: "bg-[#fde8ec]" },
+  B: { bg: "bg-[#1368ce]", hover: "hover:bg-[#0e57ad]", ring: "ring-[#1368ce]", light: "bg-[#e8f0fb]" },
+  C: { bg: "bg-[#d89e00]", hover: "hover:bg-[#b88400]", ring: "ring-[#d89e00]", light: "bg-[#fdf6e3]" },
+  D: { bg: "bg-[#26890c]", hover: "hover:bg-[#1e6e09]", ring: "ring-[#26890c]", light: "bg-[#e8f5e3]" },
 };
 const OPTION_SHAPES: Record<string, string> = { A: "▲", B: "◆", C: "●", D: "■" };
 const RANK_ICONS = [Crown, Medal, Award, Trophy, Trophy, Trophy, Trophy, Trophy, Trophy, Trophy];
@@ -96,6 +108,19 @@ const RANK_COLORS = [
   "text-yellow-500", "text-slate-400", "text-amber-600",
   "text-indigo-400", "text-indigo-400", "text-indigo-400",
   "text-indigo-400", "text-indigo-400", "text-indigo-400", "text-indigo-400",
+];
+
+// Wizard steps — Questions step is only for manual mode
+const WIZARD_STEPS_MANUAL = [
+  { id: "details", label: "Setup", emoji: "🎯", desc: "Name your quiz" },
+  { id: "questions", label: "Questions", emoji: "🧠", desc: "Build the challenge" },
+  { id: "rewards", label: "Rewards", emoji: "💰", desc: "Set the prize pool" },
+  { id: "launch", label: "Launch", emoji: "🚀", desc: "Go live!" },
+];
+const WIZARD_STEPS_AI = [
+  { id: "details", label: "Setup", emoji: "🎯", desc: "Name your quiz" },
+  { id: "rewards", label: "Rewards", emoji: "💰", desc: "Set the prize pool" },
+  { id: "launch", label: "Launch", emoji: "🚀", desc: "Go live!" },
 ];
 
 const blankQuestion = (): QuizQuestion => ({
@@ -130,224 +155,314 @@ function customTierTotal(config: RewardConfig): number {
   ).reduce((a, b) => a + b, 0);
 }
 
-// ── Image Uploader Component ───────────────────────────────────
-type CoverInputMode = "upload" | "url";
+// ── Step Progress Bar ──────────────────────────────────────────
+function WizardProgress({
+  currentStep, setStep, steps
+}: {
+  currentStep: number;
+  setStep: (n: number) => void;
+  steps: typeof WIZARD_STEPS_MANUAL;
+}) {
+  return (
+    <div className="relative flex items-center justify-between w-full max-w-lg mx-auto px-2 mb-8">
+      {/* connector line */}
+      <div className="absolute top-5 left-8 right-8 h-1 bg-border rounded-full z-0" />
+      <div
+        className="absolute top-5 left-8 h-1 rounded-full z-0 transition-all duration-500 bg-primary"
+        style={{ width: `calc(${(currentStep / (steps.length - 1)) * 100}% - 0px)` }}
+      />
 
-interface ImageUploaderProps {
-  value: string;
-  onChange: (url: string) => void;
-  isUploading: boolean;
-  setIsUploading: (v: boolean) => void;
+      {steps.map((step, idx) => {
+        const isDone = idx < currentStep;
+        const isActive = idx === currentStep;
+        return (
+          <button
+            key={step.id}
+            onClick={() => idx < currentStep && setStep(idx)}
+            disabled={idx > currentStep}
+            className="relative z-10 flex flex-col items-center gap-1.5 group"
+          >
+            <div className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold border-[3px] transition-all duration-300 shadow-sm",
+              isDone
+                ? "bg-primary border-primary text-primary-foreground scale-95"
+                : isActive
+                ? "bg-card border-primary text-primary scale-110 shadow-lg"
+                : "bg-card border-border text-muted-foreground"
+            )}>
+              {isDone ? <Check className="h-4 w-4" /> : step.emoji}
+            </div>
+            <span className={cn(
+              "text-[10px] font-bold hidden sm:block transition-colors",
+              isActive ? "text-primary" : isDone ? "text-muted-foreground" : "text-muted-foreground/40"
+            )}>
+              {step.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
+// ── Fun Question Card ──────────────────────────────────────────
+function QuestionCard({
+  question, index, isActive, total,
+  onEdit, onDelete, onMoveUp, onMoveDown
+}: {
+  question: QuizQuestion; index: number; isActive: boolean; total: number;
+  onEdit: () => void; onDelete: () => void; onMoveUp: () => void; onMoveDown: () => void;
+}) {
+  const isComplete = question.question.trim() && question.options.every(o => o.text.trim());
+
+  return (
+    <button
+      onClick={onEdit}
+      className={cn(
+        "w-full text-left rounded-2xl border-2 p-3 transition-all duration-200 group relative overflow-hidden",
+        isActive
+          ? "border-primary bg-primary/5 shadow-sm"
+          : "border-border bg-card hover:border-primary/30 hover:shadow-sm"
+      )}
+    >
+      {isActive && (
+        <div className="absolute inset-0 bg-primary/5 pointer-events-none" />
+      )}
+      <div className="flex items-center gap-3">
+        <div className={cn(
+          "w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 transition-all",
+          isComplete
+            ? "bg-emerald-500 text-white"
+            : isActive
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground"
+        )}>
+          {isComplete && !isActive ? "✓" : index + 1}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={cn(
+            "text-xs font-bold truncate",
+            isActive ? "text-primary" : "text-foreground"
+          )}>
+            {question.question || <span className="italic opacity-50">Untitled question</span>}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{question.timeLimit}s · 4 options</p>
+        </div>
+        {isActive && (
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={(e) => { e.stopPropagation(); onMoveUp(); }} disabled={index === 0}
+              className="w-6 h-6 rounded-lg bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors">
+              <ChevronUp className="h-3 w-3" />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onMoveDown(); }} disabled={index === total - 1}
+              className="w-6 h-6 rounded-lg bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-primary disabled:opacity-30 transition-colors">
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="w-6 h-6 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center justify-center text-destructive hover:bg-destructive/20 transition-colors">
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+// ── Floating emoji burst (CSS-only decoration) ─────────────────
+function FloatyEmojis() {
+  const emojis = ["🎯", "🧠", "💡", "⚡", "🏆", "🎲", "🌟", "🔥"];
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {emojis.map((e, i) => (
+        <span
+          key={i}
+          className="absolute text-2xl opacity-[0.06] dark:opacity-[0.04] select-none"
+          style={{
+            top: `${10 + i * 11}%`,
+            left: `${5 + i * 12}%`,
+            transform: `rotate(${i * 15 - 30}deg)`,
+            fontSize: `${1.2 + (i % 3) * 0.4}rem`,
+          }}
+        >
+          {e}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Answer Option Button ───────────────────────────────────────
+function AnswerOptionButton({
+  opt, isCorrect, text, onChange, onMarkCorrect
+}: {
+  opt: QuizOption; isCorrect: boolean; text: string;
+  onChange: (v: string) => void; onMarkCorrect: () => void;
+}) {
+  const colors = OPTION_COLORS[opt.id];
+  return (
+    <div className={cn(
+      "rounded-2xl border-2 transition-all duration-200 overflow-hidden",
+      isCorrect
+        ? `${colors.ring} ring-2 ring-offset-2 ring-offset-background border-transparent`
+        : "border-border"
+    )}>
+      <div className={cn(
+        "flex items-center gap-0 group",
+        isCorrect ? colors.light + " dark:bg-muted" : "bg-card"
+      )}>
+        {/* Color tab + shape */}
+        <button
+          onClick={onMarkCorrect}
+          className={cn(
+            "flex items-center justify-center w-14 h-12 text-white text-lg font-black shrink-0 transition-all duration-200 relative",
+            colors.bg, colors.hover
+          )}
+          title="Mark as correct answer"
+        >
+          {isCorrect ? (
+            <Check className="h-5 w-5 drop-shadow" />
+          ) : (
+            <span className="drop-shadow">{OPTION_SHAPES[opt.id]}</span>
+          )}
+          {isCorrect && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+              <Check className="h-2.5 w-2.5 text-white" />
+            </div>
+          )}
+        </button>
+
+        <input
+          value={text}
+          onChange={e => onChange(e.target.value)}
+          placeholder={`Option ${opt.id} — type your answer`}
+          className="flex-1 h-12 px-3 text-sm font-medium bg-transparent border-0 outline-none text-foreground placeholder:text-muted-foreground"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Image Uploader ─────────────────────────────────────────────
+type CoverInputMode = "upload" | "url";
+interface ImageUploaderProps {
+  value: string; onChange: (url: string) => void;
+  isUploading: boolean; setIsUploading: (v: boolean) => void;
+}
 function ImageUploader({ value, onChange, isUploading, setIsUploading }: ImageUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [mode, setMode] = useState<CoverInputMode>("upload");
   const [urlInput, setUrlInput] = useState(value.startsWith("http") ? value : "");
 
-  // FIX: Upload to server instead of base64 to avoid large payloads being rejected
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
-
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      toast.error("Unsupported file type. Use JPG, PNG, GIF, WebP or SVG.");
-      return;
-    }
-    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      toast.error(`File too large. Max size is ${MAX_FILE_SIZE_MB}MB.`);
-      return;
-    }
-
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) { toast.error("Unsupported file type."); return; }
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) { toast.error(`Max size is ${MAX_FILE_SIZE_MB}MB.`); return; }
     setIsUploading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${API_BASE_URL}/api/upload-image`, {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch(`${API_BASE_URL}/api/upload-image`, { method: "POST", body: formData });
       const data = await res.json();
-      if (data.url) {
-        onChange(data.url);
-        toast.success("Image uploaded!");
-      } else {
-        throw new Error(data.detail || "Upload failed");
-      }
+      if (data.url) { onChange(data.url); toast.success("🎨 Cover image uploaded!"); }
+      else throw new Error(data.detail || "Upload failed");
     } catch (err: any) {
       toast.error(err?.message || "Failed to upload image");
-    } finally {
-      setIsUploading(false);
-    }
+    } finally { setIsUploading(false); }
   }, [onChange, setIsUploading]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleFiles(e.dataTransfer.files);
+    e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files);
   }, [handleFiles]);
-
-  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
-  const onDragLeave = () => setIsDragging(false);
 
   const handleUrlApply = () => {
     const trimmed = urlInput.trim();
     if (!trimmed) { onChange(""); return; }
     if (!/^https?:\/\//i.test(trimmed)) { toast.error("URL must start with http:// or https://"); return; }
-    onChange(trimmed);
-    toast.success("Cover image URL set");
+    onChange(trimmed); toast.success("Cover image set!");
   };
 
-  const clear = () => {
-    onChange("");
-    setUrlInput("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
+  const clear = () => { onChange(""); setUrlInput(""); if (fileInputRef.current) fileInputRef.current.value = ""; };
 
   return (
     <div className="space-y-3">
-      {/* Mode toggle */}
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setMode("upload")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
-            mode === "upload"
-              ? "bg-indigo-600 text-white border-indigo-600"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500"
-          )}
-        >
-          <Upload className="h-3.5 w-3.5" /> Upload File
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("url")}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
-            mode === "url"
-              ? "bg-indigo-600 text-white border-indigo-600"
-              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-500"
-          )}
-        >
-          <Link className="h-3.5 w-3.5" /> Paste URL
-        </button>
+        {(["upload", "url"] as const).map(m => (
+          <button key={m} type="button" onClick={() => setMode(m)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all",
+              mode === m
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "bg-card text-muted-foreground border-border hover:border-primary/50"
+            )}>
+            {m === "upload" ? <><Upload className="h-3.5 w-3.5" /> Upload</> : <><Link className="h-3.5 w-3.5" /> URL</>}
+          </button>
+        ))}
       </div>
 
-      {/* Preview */}
-      {value && (
-        <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 h-36 sm:h-44">
-          <img
-            src={value}
-            alt="Cover preview"
-            className="w-full h-full object-cover"
-            onError={() => { toast.error("Could not load image"); onChange(""); }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-          <div className="absolute top-2 right-2 flex gap-2">
-            <button
-              type="button"
-              onClick={clear}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-bold shadow-lg transition-all"
-            >
-              <XIcon className="h-3 w-3" /> Remove
-            </button>
-          </div>
-          <div className="absolute bottom-2 left-3">
-            <span className="text-white text-xs font-bold drop-shadow">Cover Image</span>
+      {value ? (
+        <div className="relative rounded-2xl overflow-hidden border-2 border-border h-40 shadow-sm">
+          <img src={value} alt="Cover" className="w-full h-full object-cover" onError={() => { toast.error("Could not load image"); onChange(""); }} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          <button onClick={clear}
+            className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-bold shadow-lg transition-all flex items-center gap-1">
+            <XIcon className="h-3 w-3" /> Remove
+          </button>
+          <div className="absolute bottom-2 left-3 flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-white text-xs font-bold drop-shadow">Cover set ✓</span>
           </div>
           {isUploading && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-white" />
             </div>
           )}
         </div>
-      )}
-
-      {/* Upload mode */}
-      {mode === "upload" && !value && (
+      ) : mode === "upload" ? (
         <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED_IMAGE_TYPES.join(",")}
-            className="hidden"
-            onChange={e => handleFiles(e.target.files)}
-          />
+          <input ref={fileInputRef} type="file" accept={ACCEPTED_IMAGE_TYPES.join(",")} className="hidden"
+            onChange={e => handleFiles(e.target.files)} />
           <div
             onClick={() => !isUploading && fileInputRef.current?.click()}
             onDrop={onDrop}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
+            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
             className={cn(
-              "relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed cursor-pointer transition-all h-36 sm:h-44 select-none",
+              "relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed cursor-pointer transition-all h-40 select-none group",
               isDragging
-                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 scale-[1.01]"
-                : "border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20",
+                ? "border-primary bg-primary/5 scale-[1.01]"
+                : "border-border bg-muted/30 hover:border-primary/50 hover:bg-primary/5",
               isUploading && "pointer-events-none opacity-60"
-            )}
-          >
+            )}>
             {isUploading ? (
-              <div className="flex flex-col items-center gap-2">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Uploading…</p>
-              </div>
+              <><Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-xs text-muted-foreground font-medium">Uploading…</p></>
             ) : (
               <>
-                <div className={cn(
-                  "w-12 h-12 rounded-2xl flex items-center justify-center transition-colors",
-                  isDragging ? "bg-indigo-100 dark:bg-indigo-900/50" : "bg-slate-100 dark:bg-slate-700"
-                )}>
-                  {isDragging
-                    ? <Upload className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-                    : <ImageIcon className="h-6 w-6 text-slate-400 dark:text-slate-500" />
-                  }
+                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-3xl transition-all",
+                  isDragging ? "bg-primary/10 scale-110" : "bg-card group-hover:scale-110 shadow-sm border border-border")}>
+                  {isDragging ? "🖼️" : "📸"}
                 </div>
-                <div className="text-center px-4">
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                    {isDragging ? "Drop it here!" : "Drag & drop or click to upload"}
+                <div className="text-center">
+                  <p className="text-sm font-bold text-foreground">
+                    {isDragging ? "Drop it!" : "Add a cover image"}
                   </p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                    JPG, PNG, GIF, WebP, SVG — max {MAX_FILE_SIZE_MB}MB
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Drag & drop · JPG, PNG, GIF, WebP · max {MAX_FILE_SIZE_MB}MB</p>
                 </div>
               </>
             )}
           </div>
         </>
-      )}
-
-      {/* URL mode */}
-      {mode === "url" && !value && (
+      ) : (
         <div className="flex gap-2">
-          <Input
-            value={urlInput}
-            onChange={e => setUrlInput(e.target.value)}
+          <Input value={urlInput} onChange={e => setUrlInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleUrlApply()}
             placeholder="https://example.com/image.jpg"
-            className="flex-1 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-          <Button
-            type="button"
-            onClick={handleUrlApply}
-            disabled={!urlInput.trim()}
-            className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white"
-          >
-            Apply
-          </Button>
+            className="flex-1 h-11 rounded-xl" />
+          <Button onClick={handleUrlApply} disabled={!urlInput.trim()} className="shrink-0 rounded-xl">Apply</Button>
         </div>
-      )}
-
-      {/* Replace button */}
-      {value && mode === "upload" && (
-        <button
-          type="button"
-          onClick={clear}
-          className="text-xs text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-medium"
-        >
-          ↩ Replace with different image
-        </button>
       )}
     </div>
   );
@@ -357,29 +472,34 @@ function ImageUploader({ value, onChange, isUploading, setIsUploading }: ImageUp
 function RewardPreview({ config }: { config: RewardConfig }) {
   const rows = useMemo(() => calcDistribution(config), [config]);
   if (rows.length === 0) return null;
+  const podiumEmoji = ["🥇", "🥈", "🥉"];
   return (
     <div className="space-y-2">
-      <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold tracking-widest">Distribution Preview</p>
+      <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Prize Breakdown</p>
       <div className="space-y-1.5">
         {rows.map(row => {
-          const Icon = RANK_ICONS[row.rank - 1] ?? Trophy;
-          const color = RANK_COLORS[row.rank - 1] ?? "text-indigo-400";
+          const emoji = podiumEmoji[row.rank - 1] ?? "🏅";
           return (
-            <div key={row.rank} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 rounded-xl px-3 py-2 border border-slate-100 dark:border-slate-800">
-              <Icon className={cn("h-4 w-4 shrink-0", color)} />
-              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 w-12">#{row.rank}</span>
-              <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div key={row.rank} className={cn(
+              "flex items-center gap-3 rounded-xl px-3 py-2.5 border",
+              row.rank === 1 ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800" :
+              row.rank === 2 ? "bg-muted/30 border-border" :
+              row.rank === 3 ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800" :
+              "bg-muted/20 border-border"
+            )}>
+              <span className="text-lg">{emoji}</span>
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                 <div
-                  className={cn("h-full rounded-full transition-all",
-                    row.rank === 1 ? "bg-yellow-500" : row.rank === 2 ? "bg-slate-400" : row.rank === 3 ? "bg-amber-600" : "bg-indigo-500"
+                  className={cn("h-full rounded-full",
+                    row.rank === 1 ? "bg-yellow-500" : row.rank === 2 ? "bg-muted-foreground/50" : row.rank === 3 ? "bg-amber-500" : "bg-primary"
                   )}
                   style={{ width: `${row.pct}%` }}
                 />
               </div>
-              <span className="text-xs font-black text-slate-900 dark:text-white text-right w-28 tabular-nums">
-                {row.amount.toFixed(4)} <span className="font-medium text-slate-400 dark:text-slate-500">{config.tokenSymbol || "TKN"}</span>
+              <span className="text-xs font-black text-foreground tabular-nums">
+                {row.amount.toFixed(4)} <span className="text-muted-foreground font-medium">{config.tokenSymbol || "TKN"}</span>
               </span>
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 w-10 text-right">{row.pct.toFixed(1)}%</span>
+              <span className="text-[10px] text-muted-foreground w-9 text-right">{row.pct.toFixed(1)}%</span>
             </div>
           );
         })}
@@ -388,304 +508,70 @@ function RewardPreview({ config }: { config: RewardConfig }) {
   );
 }
 
-// ── Shared Reward Block ────────────────────────────────────────
-function RewardBlock({ reward, setR, setReward, availableTokens, chainId, chainName, tokenPrice, isFetchingPrice, poolUsdValue, isBelowMinimum }: any) {
-  return (
-    <CardContent className="space-y-5 border-t pt-5">
-      {chainId > 0 ? (
-        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Connected to</span>
-          <span className="text-xs font-black text-slate-900 dark:text-white">{chainName}</span>
-          <Badge variant="outline" className="text-[10px] h-4 px-1.5 ml-auto">Chain {chainId}</Badge>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
-          <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-          <span className="text-xs text-amber-700 dark:text-amber-300">Connect your wallet to select a token</span>
-        </div>
-      )}
-
-      {availableTokens.length > 0 && (
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-700 dark:text-slate-300">Reward Token <span className="text-red-500">*</span></Label>
-          <div className="grid grid-cols-2 gap-2">
-            {availableTokens.map((token: TokenConfiguration) => (
-              <button key={token.address} type="button"
-                onClick={() => setReward((prev: RewardConfig) => ({ ...prev, tokenAddress: token.address, tokenSymbol: token.symbol, tokenDecimals: token.decimals, tokenLogoUrl: token.logoUrl }))}
-                className={cn(
-                  "flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-left transition-all",
-                  reward.tokenAddress === token.address
-                    ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-500/10"
-                    : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900"
-                )}
-              >
-                <img src={token.logoUrl} alt={token.symbol}
-                  className="w-7 h-7 rounded-full object-cover shrink-0 bg-slate-100 dark:bg-slate-800"
-                  onError={e => { (e.target as HTMLImageElement).src = "/fallback-token.png"; }}
-                />
-                <div className="min-w-0">
-                  <div className="text-xs font-black text-slate-900 dark:text-white leading-none">{token.symbol}</div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{token.name}</div>
-                </div>
-                {reward.tokenAddress === token.address && <Check className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-500 ml-auto shrink-0" />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        <Label className="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-          <Coins className="h-3.5 w-3.5" /> Pool Amount <span className="text-red-500">*</span>
-          <span className="ml-auto text-[10px] text-slate-400 dark:text-slate-500 font-normal">Min ${MIN_POOL_USD_VALUE} USD</span>
-        </Label>
-        <div className="relative">
-          <Input type="number" min="0" step="any" value={reward.poolAmount}
-            onChange={e => setR({ poolAmount: e.target.value })} placeholder="0.00"
-            className={cn("h-11 font-mono pr-24 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white",
-              isBelowMinimum && "border-red-500 focus-visible:ring-red-500")} />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-            {isFetchingPrice && <Loader2 className="h-3 w-3 animate-spin text-slate-400" />}
-            {reward.tokenLogoUrl && <img src={reward.tokenLogoUrl} alt="" className="w-5 h-5 rounded-full object-cover" />}
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{reward.tokenSymbol}</span>
-          </div>
-        </div>
-        {poolUsdValue !== null && (
-          <div className={cn("flex items-center gap-2 text-xs rounded-lg px-3 py-2",
-            isBelowMinimum ? "bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400" : "bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400")}>
-            {isBelowMinimum ? <AlertCircle className="h-3.5 w-3.5 shrink-0" /> : <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />}
-            <span className="font-bold">≈ ${poolUsdValue.toFixed(2)} USD</span>
-            {isBelowMinimum && <span className="opacity-80">— minimum is ${MIN_POOL_USD_VALUE}.</span>}
-          </div>
-        )}
-        {tokenPrice === null && reward.tokenSymbol && !isFetchingPrice && (
-          <p className="text-[10px] text-slate-400 dark:text-slate-500">Could not fetch price. Minimum pool check skipped.</p>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-1.5"><Users className="h-3.5 w-3.5" /> Number of Winners</Label>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 font-black"
-            onClick={() => setR({ totalWinners: Math.max(1, reward.totalWinners - 1) })}>-</Button>
-          <div className="flex-1 text-center text-2xl font-black text-indigo-600 dark:text-indigo-400 tabular-nums">{reward.totalWinners}</div>
-          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 font-black"
-            onClick={() => setR({ totalWinners: Math.min(10, reward.totalWinners + 1) })}>+</Button>
-        </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {[1, 2, 3, 5, 10].map(n => (
-            <Button key={n} variant={reward.totalWinners === n ? "default" : "outline"} size="sm"
-              className="h-7 px-3 text-xs font-bold" onClick={() => setR({ totalWinners: n })}>Top {n}</Button>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-xs text-slate-700 dark:text-slate-300">Distribution Type</Label>
-        <div className="grid grid-cols-2 gap-2">
-          {([
-            { type: "equal" as const, icon: Equal, label: "Equal Split", desc: "Everyone wins the same" },
-            { type: "custom" as const, icon: Percent, label: "Custom Tiers", desc: "Set each winner's % manually" },
-          ] as const).map(({ type, icon: Icon, label, desc }) => (
-            <button key={type} onClick={() => setR({ distributionType: type })}
-              className={cn("flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all text-xs",
-                reward.distributionType === type
-                  ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-                  : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900")}>
-              <Icon className="h-5 w-5" />
-              <span className="font-bold">{label}</span>
-              <span className="opacity-70 text-[10px] leading-tight">{desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {reward.distributionType === "custom" && (
-        <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs text-slate-700 dark:text-slate-300">Set % per winner rank</Label>
-            {(() => {
-              const total = customTierTotal(reward);
-              return (
-                <span className={cn("text-xs font-black tabular-nums",
-                  total > 100 ? "text-red-500" : total < 100 ? "text-amber-500" : "text-green-500")}>
-                  {total.toFixed(1)}% {total > 100 ? "⚠ over" : total < 100 ? `(${(100 - total).toFixed(1)}% left)` : "✓"}
-                </span>
-              );
-            })()}
-          </div>
-          <div className="space-y-2">
-            {Array.from({ length: reward.totalWinners }, (_, i) => {
-              const rank = i + 1;
-              const Icon = RANK_ICONS[i] ?? Trophy;
-              const color = RANK_COLORS[i] ?? "text-indigo-400";
-              return (
-                <div key={rank} className="flex items-center gap-3">
-                  <Icon className={cn("h-4 w-4 shrink-0", color)} />
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 w-12">#{rank}</span>
-                  <div className="flex-1 relative">
-                    <Input type="number" min="0" max="100" step="0.1"
-                      value={reward.customTiers[rank] ?? ""}
-                      onChange={e => setReward((prev: RewardConfig) => ({ ...prev, customTiers: { ...prev.customTiers, [rank]: e.target.value } }))}
-                      placeholder={`${(100 / reward.totalWinners).toFixed(1)}`}
-                      className="h-9 pr-8 font-mono text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>
-                  </div>
-                  <span className="text-xs text-slate-400 dark:text-slate-500 w-24 text-right tabular-nums">
-                    {reward.poolAmount ? `${((parseFloat(reward.poolAmount) || 0) * (parseFloat(reward.customTiers[rank] ?? "0") || 0) / 100).toFixed(4)} ${reward.tokenSymbol}` : "—"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => {
-            const equal = (100 / reward.totalWinners).toFixed(1);
-            const reset: Record<number, string> = {};
-            for (let i = 1; i <= reward.totalWinners; i++) reset[i] = equal;
-            setReward((prev: RewardConfig) => ({ ...prev, customTiers: reset }));
-          }}>Reset to Equal</Button>
-        </div>
-      )}
-
-      <RewardPreview config={reward} />
-
-      <div className="flex items-start gap-2.5 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
-        <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-        <p className="text-xs text-blue-700 dark:text-blue-300">
-          Rewards are processed automatically when the quiz ends. Ensure the reward pool is funded before starting.
-        </p>
-      </div>
-    </CardContent>
-  );
-}
+// ── Deploy Progress ────────────────────────────────────────────
 type DeployStep = "idle" | "deploying" | "saving" | "done" | "error";
 
-interface DeployProgressProps {
-  step: DeployStep;
-  contractAddress?: string;
-  error?: string;
-}
-export function DeployProgress({ step, contractAddress, error }: DeployProgressProps) {
+export function DeployProgress({ step, contractAddress, error }: {
+  step: DeployStep; contractAddress?: string; error?: string;
+}) {
   if (step === "idle") return null;
-
   const steps = [
-    {
-      key: "deploying" as DeployStep,
-      label: "Deploy Contract",
-      desc: "Creating your QuizReward contract on-chain",
-    },
-    {
-      key: "saving" as DeployStep,
-      label: "Save Quiz",
-      desc: "Storing quiz + contract info on the backend",
-    },
-    {
-      key: "done" as DeployStep,
-      label: "Done!",
-      desc: "Head to the lobby to fund & start",
-    },
+    { key: "deploying" as DeployStep, label: "Deploy Contract", emoji: "⛓️", desc: "Deploying QuizReward contract on-chain" },
+    { key: "saving" as DeployStep, label: "Save Quiz", emoji: "💾", desc: "Storing quiz + contract on backend" },
+    { key: "done" as DeployStep, label: "All Done!", emoji: "🎉", desc: "Head to lobby to fund & start" },
   ];
-
   const order: DeployStep[] = ["deploying", "saving", "done"];
   const currentIdx = order.indexOf(step);
 
   return (
-    <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-950/30 p-5 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      {/* Header */}
+    <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-5 space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <div className="flex items-center gap-2">
-        {step === "error" ? (
-          // AlertCircle from lucide-react
-          <span className="text-red-500 text-base">✗</span>
-        ) : step === "done" ? (
-          <span className="text-green-500 text-base">✓</span>
-        ) : (
-          // Spinning indicator via CSS
-          <span
-            className="inline-block w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"
-          />
-        )}
-        <p className="font-black text-sm text-slate-900 dark:text-white">
-          {step === "error"
-            ? "Transaction Failed"
-            : step === "done"
-            ? "Quiz Created Successfully!"
-            : "Creating Your Quiz…"}
+        {step === "error" ? <span className="text-xl">❌</span>
+          : step === "done" ? <span className="text-xl">🎊</span>
+          : <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+        <p className="font-black text-sm text-foreground">
+          {step === "error" ? "Something went wrong" : step === "done" ? "Quiz Created!" : "Creating your quiz…"}
         </p>
       </div>
-
-      {/* Step list */}
       {step !== "error" && (
         <div className="space-y-2.5">
-          {steps.map(({ key, label, desc }, i) => {
+          {steps.map(({ key, label, desc, emoji }, i) => {
             const stepIdx = order.indexOf(key);
             const isDone = step === "done" || stepIdx < currentIdx;
             const isActive = stepIdx === currentIdx && step !== "done";
-            const isPending = stepIdx > currentIdx && step !== "done";
-
             return (
-              <div key={key} className="flex items-start gap-3">
-                <div
-                  className={[
-                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 mt-0.5 transition-all",
-                    isDone
-                      ? "bg-green-500 text-white"
-                      : isActive
-                      ? "bg-indigo-500 text-white"
-                      : "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400",
-                  ].join(" ")}
-                >
-                  {isDone ? "✓" : i + 1}
+              <div key={key} className="flex items-center gap-3">
+                <div className={cn(
+                  "w-7 h-7 rounded-xl flex items-center justify-center text-sm font-black shrink-0 transition-all",
+                  isDone ? "bg-emerald-500 text-white" : isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                )}>
+                  {isDone ? "✓" : isActive ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : emoji}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={[
-                      "text-xs font-bold",
-                      isDone
-                        ? "text-green-700 dark:text-green-400"
-                        : isActive
-                        ? "text-indigo-700 dark:text-indigo-300"
-                        : "text-slate-400 dark:text-slate-500",
-                    ].join(" ")}
-                  >
-                    {label}
-                  </p>
-                  {isActive && (
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      {desc}
-                    </p>
-                  )}
+                <div>
+                  <p className={cn("text-xs font-bold",
+                    isDone ? "text-emerald-600 dark:text-emerald-400" : isActive ? "text-primary" : "text-muted-foreground"
+                  )}>{label}</p>
+                  {isActive && <p className="text-[10px] text-muted-foreground">{desc}</p>}
                 </div>
               </div>
             );
           })}
         </div>
       )}
-
-      {/* Error message */}
       {step === "error" && error && (
-        <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-lg p-3">
-          <p className="text-xs text-red-700 dark:text-red-400 font-medium break-words">
-            {error}
-          </p>
+        <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3">
+          <p className="text-xs text-destructive font-medium break-words">{error}</p>
         </div>
       )}
-
-      {/* Success: show contract address */}
       {step === "done" && contractAddress && (
-        <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-lg px-3 py-2 space-y-0.5">
-          <p className="text-[10px] text-green-600 dark:text-green-400 font-bold uppercase tracking-wide">
-            Reward contract deployed
-          </p>
-          <p className="text-[10px] font-mono text-green-700 dark:text-green-300 break-all">
-            {contractAddress}
-          </p>
+        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-xl px-3 py-2">
+          <p className="text-[10px] text-emerald-600 font-black uppercase tracking-wide">Contract Deployed ✓</p>
+          <p className="text-[10px] font-mono text-emerald-700 dark:text-emerald-300 break-all">{contractAddress}</p>
         </div>
       )}
     </div>
   );
 }
-export {};
 
 // ══════════════════════════════════════════════════════════════
 //  Main Page
@@ -699,22 +585,17 @@ export default function CreateQuizPage() {
   const availableTokens = ALL_TOKENS_BY_CHAIN[chainId] ?? [];
   const chainName = CHAIN_NAMES[chainId] ?? "Unknown Network";
 
+  const targetNetwork = getNetworkByChainId(chainId);
+  const isSupportedNetwork = !!targetNetwork?.factories?.quiz;
+
+  // Wizard step: 0=details, 1=questions, 2=rewards, 3=launch
+  const [wizardStep, setWizardStep] = useState(0);
+
   type DeployStep = "idle" | "deploying" | "saving" | "done" | "error";
   const [deployStep, setDeployStep] = useState<DeployStep>("idle");
   const [deployError, setDeployError] = useState("");
   const [rewardContractAddress, setRewardContractAddress] = useState("");
-  
-  const getQuizRewardConfig = (): QuizRewardConfig => {
-    const selectedToken = availableTokens.find(t => t.address === reward.tokenAddress);
-    return {
-      name: title.trim() || "Quiz Reward",
-      tokenAddress: reward.tokenAddress,
-      tokenDecimals: reward.tokenDecimals,
-      isNativeToken: selectedToken?.isNative ?? false,
-      poolAmount: reward.poolAmount,
-      claimWindowDuration: 172800, // 48h — winners have 48h to claim after quiz ends
-    };
-  };
+
   // Meta
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -724,38 +605,14 @@ export default function CreateQuizPage() {
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   });
-
-  // Cover image
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [isUploadingCover, setIsUploadingCover] = useState(false);
-
-  // FIX: Fetch creator username from profile instead of hardcoding ""
   const [creatorUsername, setCreatorUsername] = useState("");
-  React.useEffect(() => {
-    if (!userWalletAddress) return;
-    fetch(`${API_BASE_URL}/api/profile/${userWalletAddress}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.username) setCreatorUsername(d.username);
-      })
-      .catch(() => {});
-  }, [userWalletAddress]);
 
   // Questions
   const [questions, setQuestions] = useState<QuizQuestion[]>([blankQuestion()]);
   const [activeQIdx, setActiveQIdx] = useState(0);
-  const [previewMode, setPreviewMode] = useState(false);
-
-  // Reward
-  const [reward, setReward] = useState<RewardConfig>({
-    poolAmount: "", tokenAddress: "", tokenSymbol: "", tokenDecimals: 18,
-    tokenLogoUrl: "", totalWinners: 3, distributionType: "equal", customTiers: {},
-  });
-  const [tokenPrice, setTokenPrice] = useState<number | null>(null);
-  const [isFetchingPrice, setIsFetchingPrice] = useState(false);
-  const poolUsdValue = tokenPrice !== null && reward.poolAmount
-    ? (parseFloat(reward.poolAmount) || 0) * tokenPrice : null;
-  const isBelowMinimum = poolUsdValue !== null && poolUsdValue < MIN_POOL_USD_VALUE;
+  const [mode, setMode] = useState<"build" | "ai">("build");
 
   // AI
   const [aiTopic, setAiTopic] = useState("");
@@ -764,9 +621,30 @@ export default function CreateQuizPage() {
   const [aiTimePerQ, setAiTimePerQ] = useState(30);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Submit
+  // Reward
+  const [reward, setReward] = useState<RewardConfig>({
+    poolAmount: "", tokenAddress: "", tokenSymbol: "", tokenDecimals: 18,
+    tokenLogoUrl: "", totalWinners: 3, distributionType: "equal", customTiers: {},
+    claimWindowDuration: 48 * 3600,
+  });
+  const [tokenPrice, setTokenPrice] = useState<number | null>(null);
+  const [isFetchingPrice, setIsFetchingPrice] = useState(false);
+  const poolUsdValue = tokenPrice !== null && reward.poolAmount
+    ? (parseFloat(reward.poolAmount) || 0) * tokenPrice : null;
+  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
+
+  // Derive active steps from mode; reset wizard position when mode changes
+  const activeSteps = mode === "ai" ? WIZARD_STEPS_AI : WIZARD_STEPS_MANUAL;
+  const lastStepIdx = activeSteps.length - 1;
+
+  React.useEffect(() => {
+    if (!userWalletAddress) return;
+    fetch(`${API_BASE_URL}/api/profile/${userWalletAddress}`)
+      .then(r => r.json()).then(d => { if (d.username) setCreatorUsername(d.username); }).catch(() => {});
+  }, [userWalletAddress]);
 
   React.useEffect(() => {
     if (availableTokens.length > 0 && !reward.tokenAddress) {
@@ -794,9 +672,13 @@ export default function CreateQuizPage() {
     setQuestions(prev => prev.map((q, i) => i === qIdx
       ? { ...q, options: q.options.map(o => o.id === optId ? { ...o, text } : o) } : q));
   };
-  const addQuestion = () => { setQuestions(prev => [...prev, blankQuestion()]); setActiveQIdx(questions.length); };
+  const addQuestion = () => {
+    setQuestions(prev => [...prev, blankQuestion()]);
+    setActiveQIdx(questions.length);
+    toast.success(`Question ${questions.length + 1} added! 🎯`);
+  };
   const removeQuestion = (idx: number) => {
-    if (questions.length === 1) { toast.error("Need at least 1 question"); return; }
+    if (questions.length === 1) { toast.error("Need at least 1 question!"); return; }
     setQuestions(prev => prev.filter((_, i) => i !== idx));
     setActiveQIdx(prev => Math.min(prev, questions.length - 2));
   };
@@ -808,115 +690,34 @@ export default function CreateQuizPage() {
   };
   const activeQ = questions[activeQIdx] ?? questions[0];
 
-  // FIX: buildPayload now uses creatorUsername state (fetched from profile) and real coverImageUrl
+  const getQuizRewardConfig = (): QuizRewardConfig => {
+    const selectedToken = availableTokens.find(t => t.address === reward.tokenAddress);
+    return {
+      name: title.trim() || "Quiz Reward",
+      tokenAddress: reward.tokenAddress,
+      tokenDecimals: reward.tokenDecimals,
+      isNativeToken: selectedToken?.isNative ?? false,
+      poolAmount: reward.poolAmount,
+      claimWindowDuration: reward.claimWindowDuration,
+    };
+  };
+
   const buildPayload = () => ({
-    title,
-    description,
-    questions,
-    timePerQuestion: 30,
-    maxParticipants,
-    startTime: startTime || null,
-    creatorAddress: userWalletAddress,
-    creatorUsername: creatorUsername,       // ← from profile fetch, not hardcoded ""
-    coverImageUrl: coverImageUrl || null,   // ← real Supabase URL from upload endpoint
-    chainId,
+    title, description, questions, timePerQuestion: 30, maxParticipants,
+    startTime: startTime || null, creatorAddress: userWalletAddress,
+    creatorUsername, coverImageUrl: coverImageUrl || null, chainId,
     reward: {
       poolAmount: parseFloat(reward.poolAmount) || 0,
-      tokenAddress: reward.tokenAddress,
-      tokenSymbol: reward.tokenSymbol,
-      tokenDecimals: reward.tokenDecimals,
-      tokenLogoUrl: reward.tokenLogoUrl,
-      chainId,
-      totalWinners: reward.totalWinners,
+      tokenAddress: reward.tokenAddress, tokenSymbol: reward.tokenSymbol,
+      tokenDecimals: reward.tokenDecimals, tokenLogoUrl: reward.tokenLogoUrl,
+      chainId, totalWinners: reward.totalWinners,
       distributionType: reward.distributionType,
       distribution: calcDistribution(reward),
       poolUsdValue: poolUsdValue ?? undefined,
+      claimWindowDuration: reward.claimWindowDuration,
     },
   });
 
-  const handleGenerateAI = async () => {
-    if (!aiTopic.trim()) { toast.error("Enter a topic"); return; }
-    if (!userWalletAddress) { toast.error("Connect your wallet"); return; }
-    if (!FACTORY_ADDRESSES[chainId]) {
-      toast.error("Quiz rewards are not supported on this network yet.");
-      return;
-    }
-
-    setIsGenerating(true);
-    setDeployStep("idle");
-    setDeployError("");
-
-    try {
-      // ── Step 1: Deploy reward contract ──
-      setDeployStep("deploying");
-      const activeWallet = wallets[0];
-      if (!activeWallet) throw new Error("No wallet connected");
-
-      const privyProvider = await activeWallet.getEthereumProvider();
-      const ethersProvider = new BrowserProvider(privyProvider);
-
-      toast.info("Step 1/2: Deploying reward contract…");
-      const { contractAddress, txHash: deployTxHash } = await deployQuizReward(
-        ethersProvider,
-        chainId,
-        getQuizRewardConfig()
-      );
-      setRewardContractAddress(contractAddress);
-
-      // ── Step 2: AI generate + save ──
-      setDeployStep("saving");
-      toast.info("Step 2/2: Generating quiz with AI…");
-
-      const res = await fetch(`${API_BASE_URL}/api/quiz/generate-ai`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: aiTopic,
-          numQuestions: aiNumQ,
-          difficulty: aiDifficulty,
-          timePerQuestion: aiTimePerQ,
-          creatorAddress: userWalletAddress,
-          creatorUsername,
-          coverImageUrl: coverImageUrl || null,
-          title: title || undefined,
-          chainId,
-          reward: {
-            poolAmount: parseFloat(reward.poolAmount) || 0,
-            tokenAddress: reward.tokenAddress,
-            tokenSymbol: reward.tokenSymbol,
-            tokenDecimals: reward.tokenDecimals,
-            tokenLogoUrl: reward.tokenLogoUrl,
-            chainId,
-            totalWinners: reward.totalWinners,
-            distributionType: reward.distributionType,
-            distribution: calcDistribution(reward),
-            poolUsdValue: poolUsdValue ?? undefined,
-            contractAddress,
-            deployTxHash,
-            isOnChain: true,
-            isFunded: false,
-          },
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setDeployStep("done");
-        setCreatedCode(data.code);
-        toast.success(`Quiz created! Code: ${data.code}`);
-        setTimeout(() => router.push(`/quiz/${data.code}`), 1500);
-      } else {
-        throw new Error(data.detail || "Generation failed");
-      }
-    } catch (err: any) {
-      setDeployStep("error");
-      const msg = err?.reason || err?.message || "Failed";
-      setDeployError(msg);
-      toast.error(msg);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
   const validateQuiz = () => {
     if (!title.trim()) return "Quiz title is required";
     for (let i = 0; i < questions.length; i++) {
@@ -926,8 +727,6 @@ export default function CreateQuizPage() {
     }
     if (!reward.poolAmount || parseFloat(reward.poolAmount) <= 0) return "Enter a valid reward pool amount";
     if (!reward.tokenAddress) return "Select a reward token";
-    if (!reward.tokenSymbol.trim()) return "Token symbol is missing";
-    if (isBelowMinimum) return `Pool must be worth at least $${MIN_POOL_USD_VALUE} USD`;
     if (reward.totalWinners < 1) return "Must have at least 1 winner";
     if (reward.distributionType === "custom") {
       const total = customTierTotal(reward);
@@ -936,692 +735,745 @@ export default function CreateQuizPage() {
     return null;
   };
 
+  const handleGenerateAI = async () => {
+    if (!aiTopic.trim()) { toast.error("Enter a topic!"); return; }
+    if (!userWalletAddress) { toast.error("Connect your wallet"); return; }
+    if (!isSupportedNetwork) { toast.error("Unsupported network. Switch chains."); return; }
+    setIsGenerating(true);
+    setDeployStep("deploying");
+    setDeployError("");
+    try {
+      const privyProvider = await wallets[0]?.getEthereumProvider();
+      const ethersProvider = new BrowserProvider(privyProvider);
+      const { contractAddress, txHash: deployTxHash } = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig());
+      setRewardContractAddress(contractAddress);
+      setDeployStep("saving");
+      const res = await fetch(`${API_BASE_URL}/api/quiz/generate-ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: aiTopic, numQuestions: aiNumQ, difficulty: aiDifficulty,
+          timePerQuestion: aiTimePerQ, creatorAddress: userWalletAddress,
+          creatorUsername, coverImageUrl: coverImageUrl || null,
+          title: title || undefined, chainId,
+          reward: { ...buildPayload().reward, contractAddress, deployTxHash, isOnChain: true, isFunded: false },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDeployStep("done"); setCreatedCode(data.code);
+        toast.success(`🎉 Quiz created! Code: ${data.code}`);
+        setTimeout(() => router.push(`/quiz/${data.code}`), 1500);
+      } else throw new Error(data.detail || "Generation failed");
+    } catch (err: any) {
+      setDeployStep("error");
+      const msg = err?.reason || err?.message || "Failed";
+      setDeployError(msg); toast.error(msg);
+    } finally { setIsGenerating(false); }
+  };
+
   const handleSubmit = async () => {
     const err = validateQuiz();
     if (err) { toast.error(err); return; }
     if (!userWalletAddress) { toast.error("Connect your wallet"); return; }
-    if (isUploadingCover) { toast.error("Please wait for image upload to finish"); return; }
-    if (!FACTORY_ADDRESSES[chainId]) {
-      toast.error("Quiz rewards are not supported on this network yet. Switch chains.");
-      return;
-    }
-
+    if (isUploadingCover) { toast.error("Wait for image upload"); return; }
+    if (!isSupportedNetwork) { toast.error("Switch to a supported network"); return; }
     setIsSubmitting(true);
-    setDeployStep("idle");
+    setDeployStep("deploying");
     setDeployError("");
-
     try {
-      // ── Step 1: Deploy reward contract (no fund yet) ──
-      setDeployStep("deploying");
-      const activeWallet = wallets[0];
-      if (!activeWallet) throw new Error("No wallet connected");
-
-      const privyProvider = await activeWallet.getEthereumProvider();
+      const privyProvider = await wallets[0]?.getEthereumProvider();
       const ethersProvider = new BrowserProvider(privyProvider);
-
-      toast.info("Step 1/2: Deploying reward contract…");
-      const { contractAddress, txHash: deployTxHash } = await deployQuizReward(
-        ethersProvider,
-        chainId,
-        getQuizRewardConfig()
-      );
+      const { contractAddress, txHash: deployTxHash } = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig());
       setRewardContractAddress(contractAddress);
-
-      // ── Step 2: Save quiz to backend ──
       setDeployStep("saving");
-      toast.info("Step 2/2: Saving quiz…");
-
       const payload = {
         ...buildPayload(),
-        reward: {
-          ...buildPayload().reward,
-          contractAddress,
-          deployTxHash,
-          isOnChain: true,
-          isFunded: false,        // creator funds later in lobby
-        },
+        reward: { ...buildPayload().reward, contractAddress, deployTxHash, isOnChain: true, isFunded: false },
       };
-
       const res = await fetch(`${API_BASE_URL}/api/quiz/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-
       if (data.success) {
-        setDeployStep("done");
-        setCreatedCode(data.code);
-        toast.success(`Quiz created! Code: ${data.code}`);
+        setDeployStep("done"); setCreatedCode(data.code);
+        toast.success(`🎊 Quiz created! Code: ${data.code}`);
         setTimeout(() => router.push(`/quiz/${data.code}`), 1500);
-      } else {
-        throw new Error(data.detail || "Create failed");
-      }
+      } else throw new Error(data.detail || "Create failed");
     } catch (err: any) {
       setDeployStep("error");
-      const msg = err?.reason || err?.message || "Failed to create quiz";
-      setDeployError(msg);
-      toast.error(msg);
-    } finally {
-      setIsSubmitting(false);
-    }
+      const msg = err?.reason || err?.message || "Failed";
+      setDeployError(msg); toast.error(msg);
+    } finally { setIsSubmitting(false); }
   };
+
+  const completedQuestions = questions.filter(q => q.question.trim() && q.options.every(o => o.text.trim())).length;
 
   // ── Success screen ──
   if (createdCode) {
     return (
-      <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950">
+      <div className="flex flex-col min-h-screen bg-background">
         <Header pageTitle="Quiz Created!" />
         <div className="flex-1 flex items-center justify-center p-6">
-          <Card className="w-full max-w-sm text-center shadow-2xl border-green-200 dark:border-green-900 bg-white dark:bg-slate-900">
-            <CardContent className="pt-10 pb-8 space-y-6">
-              <div className="mx-auto w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <CheckCircle2 className="h-10 w-10 text-green-500" />
-              </div>
+          <div className="w-full max-w-sm space-y-4 text-center">
+            <div className="text-8xl animate-bounce">🎉</div>
+            <div className="bg-card rounded-3xl border-2 border-primary/20 p-8 shadow-2xl space-y-5">
               <div>
-                <h2 className="text-2xl font-black text-slate-900 dark:text-white">Quiz Ready!</h2>
-                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 flex items-center justify-center gap-1">
-                  <Trophy className="h-4 w-4 text-yellow-500" />
-                  {reward.poolAmount} {reward.tokenSymbol} for top {reward.totalWinners}
+                <h2 className="text-2xl font-black text-foreground">Quiz is Live!</h2>
+                <p className="text-muted-foreground text-sm mt-1">
+                  🏆 {reward.poolAmount} {reward.tokenSymbol} for top {reward.totalWinners} winners
                 </p>
               </div>
               {coverImageUrl && (
-                <div className="rounded-xl overflow-hidden h-24 border border-slate-200 dark:border-slate-700">
+                <div className="rounded-2xl overflow-hidden h-24 border-2 border-border">
                   <img src={coverImageUrl} alt="Cover" className="w-full h-full object-cover" />
                 </div>
               )}
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700">
-                <div className="text-5xl font-black tracking-widest text-indigo-600 dark:text-indigo-400">{createdCode}</div>
+              <div className="bg-primary/5 rounded-2xl p-6 border-2 border-primary/20">
+                <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">Quiz Code</p>
+                <div className="text-5xl font-black tracking-[0.15em] text-primary">{createdCode}</div>
               </div>
-              <Button className="w-full bg-indigo-600 hover:bg-indigo-500 text-white"
-                onClick={() => { navigator.clipboard.writeText(createdCode); toast.success("Copied!"); }}>
+              <Button className="w-full h-12 rounded-2xl font-bold text-base"
+                onClick={() => { navigator.clipboard.writeText(createdCode); toast.success("Copied! 📋"); }}>
                 <Copy className="mr-2 h-4 w-4" /> Copy Code
               </Button>
-              <Button variant="outline" className="w-full border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+              <Button variant="outline" className="w-full h-11 rounded-2xl border-2 font-bold"
                 onClick={() => router.push(`/quiz/${createdCode}`)}>
-                Open Quiz Lobby
+                Open Lobby <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── Main render ──
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
-      <Header pageTitle="Create Quiz" />
+  // ── Step 0: Details ──
+  const renderStepDetails = () => (
+    <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
+      <div className="text-center space-y-2 pb-2">
+        <div className="text-5xl">🎯</div>
+        <h2 className="text-xl font-black text-foreground">Name your quiz</h2>
+        <p className="text-sm text-muted-foreground">Give it a killer title that makes people want to play</p>
+      </div>
 
-      <div className="max-w-6xl mx-auto w-full p-4 sm:p-6 pb-24 space-y-6">
-        {/* Page header */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}
-              className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white shrink-0">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white truncate">Create a Quiz</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 hidden sm:block">Build manually or let AI generate it</p>
+      {/* Mode toggle */}
+      <div className="flex gap-2 p-1 bg-muted rounded-2xl">
+        {([
+          { id: "build", label: "Build Manually", icon: "✏️" },
+          { id: "ai", label: "AI Generate", icon: "✨" },
+        ] as const).map(m => (
+          <button key={m.id} onClick={() => { setMode(m.id); setWizardStep(0); }}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all",
+              mode === m.id
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}>
+            <span>{m.icon}</span> {m.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Title */}
+      <div className="space-y-2">
+        <Label className="text-sm font-bold text-foreground">
+          Quiz Title <span className="text-destructive">*</span>
+        </Label>
+        <div className="relative">
+          <Input value={title} onChange={e => setTitle(e.target.value)}
+            placeholder={mode === "ai" ? "Leave blank — AI will create one" : "e.g. Web3 Trivia Challenge 🔥"}
+            className="h-12 text-base rounded-xl border-2 pr-10" />
+          {title && <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-500" />}
+        </div>
+      </div>
+
+      {/* Description */}
+      <div className="space-y-2">
+        <Label className="text-sm font-bold text-foreground">Description</Label>
+        <Textarea value={description} onChange={e => setDescription(e.target.value)}
+          placeholder="What's this quiz about? Get people hyped! 🎲"
+          className="resize-none h-20 rounded-xl border-2" />
+      </div>
+
+      {/* Cover */}
+      <div className="space-y-2">
+        <Label className="text-sm font-bold text-foreground">Cover Image</Label>
+        <ImageUploader value={coverImageUrl} onChange={setCoverImageUrl}
+          isUploading={isUploadingCover} setIsUploading={setIsUploadingCover} />
+      </div>
+
+      {creatorUsername && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+          <span className="text-xs text-emerald-700 dark:text-emerald-300">
+            Creating as <span className="font-black">@{creatorUsername}</span>
+          </span>
+        </div>
+      )}
+
+      {/* Network status */}
+      {chainId > 0 ? (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted/50 border border-border">
+          <div className={cn("w-2 h-2 rounded-full shrink-0", isSupportedNetwork ? "bg-emerald-500" : "bg-amber-500")} />
+          <span className="text-xs text-muted-foreground font-medium">
+            {isSupportedNetwork ? `Connected to ${chainName} ✓` : `${chainName} — not supported yet`}
+          </span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+          <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+          <span className="text-xs text-amber-700 dark:text-amber-300">Connect your wallet to continue</span>
+        </div>
+      )}
+
+      {/* AI-specific fields */}
+      {mode === "ai" && (
+        <div className="space-y-4 border-t border-dashed border-border pt-5">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">✨</span>
+            <h3 className="font-black text-foreground text-sm">AI Settings</h3>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-bold text-foreground">Topic <span className="text-destructive">*</span></Label>
+            <Textarea value={aiTopic} onChange={e => setAiTopic(e.target.value)}
+              placeholder="e.g. 'Ethereum & DeFi basics', 'World geography', 'Crypto history'..."
+              className="resize-none h-20 rounded-xl border-2" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Questions</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {[5, 10, 15, 20].map(n => (
+                  <button key={n} onClick={() => setAiNumQ(n)}
+                    className={cn("px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all",
+                      aiNumQ === n ? "bg-primary border-primary text-primary-foreground shadow-sm" : "bg-card border-border text-muted-foreground hover:border-primary/50")}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Difficulty</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {([
+                  { d: "easy", emoji: "😊", color: "bg-emerald-500 border-emerald-500 text-white" },
+                  { d: "medium", emoji: "🤔", color: "bg-yellow-500 border-yellow-500 text-black" },
+                  { d: "hard", emoji: "🔥", color: "bg-red-500 border-red-500 text-white" },
+                ] as const).map(({ d, emoji, color }) => (
+                  <button key={d} onClick={() => setAiDifficulty(d)}
+                    className={cn("px-2.5 py-1.5 rounded-xl text-xs font-black border-2 transition-all flex items-center gap-1",
+                      aiDifficulty === d ? color + " shadow-sm" : "bg-card border-border text-muted-foreground hover:border-primary/40")}>
+                    {emoji} {d}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setPreviewMode(p => !p)}
-            className="border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 shrink-0">
-            {previewMode ? <Edit3 className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-            {previewMode ? "Edit" : "Preview"}
-          </Button>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Seconds per question</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {[5, 10, 15, 20, 30, 45, 60].map(t => (
+                <button key={t} onClick={() => setAiTimePerQ(t)}
+                  className={cn("px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all",
+                    aiTimePerQ === t ? "bg-primary border-primary text-primary-foreground shadow-sm" : "bg-card border-border text-muted-foreground hover:border-primary/50")}>
+                  {t}s
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Step 1: Questions ──
+  const renderStepQuestions = () => (
+    <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
+      <div className="text-center space-y-2 pb-2">
+        <div className="text-5xl">🧠</div>
+        <h2 className="text-xl font-black text-foreground">Build the challenge</h2>
+        <p className="text-sm text-muted-foreground">
+          {completedQuestions}/{questions.length} questions ready
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        {/* Question list sidebar */}
+        <div className="lg:col-span-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-muted-foreground uppercase tracking-widest">Questions</span>
+            <Badge variant="secondary" className="text-xs">
+              {questions.length} total
+            </Badge>
+          </div>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+            {questions.map((q, idx) => (
+              <QuestionCard
+                key={q.id} question={q} index={idx} isActive={idx === activeQIdx}
+                total={questions.length}
+                onEdit={() => setActiveQIdx(idx)}
+                onDelete={() => removeQuestion(idx)}
+                onMoveUp={() => moveQuestion(idx, "up")}
+                onMoveDown={() => moveQuestion(idx, "down")}
+              />
+            ))}
+          </div>
+          <button onClick={addQuestion}
+            className="w-full flex items-center justify-center gap-2 h-11 rounded-2xl border-2 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5 text-primary font-bold text-sm transition-all group">
+            <Plus className="h-4 w-4 group-hover:scale-110 transition-transform" /> Add question
+          </button>
         </div>
 
-        <Tabs defaultValue="manual" className="w-full">
-          <TabsList className="grid grid-cols-2 w-full max-w-xs mb-6 bg-slate-100 dark:bg-slate-800">
-            <TabsTrigger value="manual" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white">
-              <BookOpen className="mr-2 h-4 w-4" />Manual
-            </TabsTrigger>
-            <TabsTrigger value="ai" className="data-[state=active]:bg-white dark:data-[state=active]:bg-slate-700 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white">
-              <Sparkles className="mr-2 h-4 w-4" />AI Generate
-            </TabsTrigger>
-          </TabsList>
+        {/* Editor */}
+        <div className="lg:col-span-3 space-y-4">
+          <div className="flex items-center gap-2 bg-primary/5 rounded-2xl px-4 py-2.5 border border-primary/20">
+            <span className="w-6 h-6 rounded-lg bg-primary text-primary-foreground text-xs font-black flex items-center justify-center shrink-0">
+              {activeQIdx + 1}
+            </span>
+            <span className="text-xs font-bold text-primary">Editing question {activeQIdx + 1}</span>
+          </div>
 
-          {/* ══ MANUAL TAB ══ */}
-          <TabsContent value="manual" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Question text */}
+          <div className="space-y-2">
+            <Label className="text-sm font-bold text-foreground">Question <span className="text-destructive">*</span></Label>
+            <Textarea
+              value={activeQ.question}
+              onChange={e => updateQuestion(activeQIdx, { question: e.target.value })}
+              placeholder="Ask something interesting… 🤔"
+              className="resize-none h-24 text-base rounded-xl border-2"
+            />
+          </div>
 
-              {/* LEFT col */}
-              <div className="lg:col-span-2 space-y-5">
+          {/* Time limit */}
+          <div className="space-y-2">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" /> Time Limit
+            </Label>
+            <div className="flex flex-wrap gap-1.5">
+              {[10, 15, 20, 30, 45, 60].map(t => (
+                <button key={t} onClick={() => updateQuestion(activeQIdx, { timeLimit: t })}
+                  className={cn("px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all",
+                    activeQ.timeLimit === t
+                      ? "bg-foreground border-foreground text-background shadow-sm"
+                      : "bg-card border-border text-muted-foreground hover:border-foreground/40")}>
+                  {t}s
+                </button>
+              ))}
+            </div>
+          </div>
 
-                {/* Quiz Details card */}
-                <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base text-slate-900 dark:text-white">Quiz Details</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-700 dark:text-slate-300">Title <span className="text-red-500">*</span></Label>
-                      <Input value={title} onChange={e => setTitle(e.target.value)}
-                        placeholder="e.g. Web3 Trivia Challenge"
-                        className="h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-700 dark:text-slate-300">Description</Label>
-                      <Textarea value={description} onChange={e => setDescription(e.target.value)}
-                        placeholder="What is this quiz about?"
-                        className="resize-none h-20 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                    </div>
-
-                    {/* Cover Image */}
-                    <div className="space-y-1.5">
-                      <Label className="text-slate-700 dark:text-slate-300">Cover Image</Label>
-                      <ImageUploader
-                        value={coverImageUrl}
-                        onChange={setCoverImageUrl}
-                        isUploading={isUploadingCover}
-                        setIsUploading={setIsUploadingCover}
-                      />
-                    </div>
-
-                    {/* Creator username indicator */}
-                    {creatorUsername && (
-                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                        <span>Creating as <span className="font-bold text-slate-700 dark:text-slate-300">@{creatorUsername}</span></span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Question editor / preview */}
-                {!previewMode ? (
-                  <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base text-slate-900 dark:text-white">
-                          Question {activeQIdx + 1} of {questions.length}
-                        </CardTitle>
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                            onClick={() => moveQuestion(activeQIdx, "up")} disabled={activeQIdx === 0}><ChevronUp className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:text-slate-900 dark:hover:text-white"
-                            onClick={() => moveQuestion(activeQIdx, "down")} disabled={activeQIdx === questions.length - 1}><ChevronDown className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                            onClick={() => removeQuestion(activeQIdx)}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-5">
-                      <div className="space-y-1.5">
-                        <Label className="text-slate-700 dark:text-slate-300">Question Text <span className="text-red-500">*</span></Label>
-                        <Textarea value={activeQ.question}
-                          onChange={e => updateQuestion(activeQIdx, { question: e.target.value })}
-                          placeholder="Type your question here..."
-                          className="resize-none h-24 text-base bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                      </div>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-                        <Label className="whitespace-nowrap text-slate-700 dark:text-slate-300">Time Limit</Label>
-                        <div className="flex gap-2 flex-wrap">
-                          {[10, 15, 20, 30, 45, 60].map(t => (
-                            <Button key={t} variant={activeQ.timeLimit === t ? "default" : "outline"} size="sm"
-                              className="h-8 px-3 text-xs font-bold"
-                              onClick={() => updateQuestion(activeQIdx, { timeLimit: t })}>{t}s</Button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <Label className="text-slate-700 dark:text-slate-300">Answer Options <span className="text-red-500">*</span></Label>
-                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Click the coloured button to mark the correct answer</p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {activeQ.options.map(opt => (
-                            <div key={opt.id} className="flex items-center gap-2">
-                              <button
-                                onClick={() => updateQuestion(activeQIdx, { correctId: opt.id as any })}
-                                className={cn(
-                                  "w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-white font-black text-lg transition-all border-2 border-transparent",
-                                  OPTION_COLORS[opt.id],
-                                  activeQ.correctId === opt.id && "ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 ring-white scale-110"
-                                )}
-                              >
-                                {activeQ.correctId === opt.id ? <Check className="h-5 w-5" /> : OPTION_SHAPES[opt.id]}
-                              </button>
-                              <Input value={opt.text} onChange={e => updateOption(activeQIdx, opt.id, e.target.value)}
-                                placeholder={`Option ${opt.id}`}
-                                className={cn(
-                                  "flex-1 h-10 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500",
-                                  activeQ.correctId === opt.id && "border-green-500 ring-1 ring-green-500"
-                                )} />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card className="border-slate-200 dark:border-slate-800 bg-gradient-to-br from-slate-800 to-slate-900 overflow-hidden">
-                    <CardContent className="p-6 space-y-5">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="secondary" className="bg-white/10 text-white border-0">Q{activeQIdx + 1}/{questions.length}</Badge>
-                        <Badge className="bg-indigo-600/80 border-0 text-white"><Clock className="mr-1 h-3 w-3" /> {activeQ.timeLimit}s</Badge>
-                      </div>
-                      <h2 className="text-xl font-bold text-center py-4 text-white">
-                        {activeQ.question || "Your question appears here"}
-                      </h2>
-                      <div className="grid grid-cols-2 gap-3">
-                        {activeQ.options.map(opt => (
-                          <div key={opt.id} className={cn(
-                            "rounded-xl p-4 flex items-center gap-3 text-white font-bold border-2 border-transparent",
-                            OPTION_COLORS[opt.id],
-                            activeQ.correctId === opt.id && "ring-2 ring-white"
-                          )}>
-                            <span className="text-xl">{OPTION_SHAPES[opt.id]}</span>
-                            <span className="text-sm">{opt.text || `Option ${opt.id}`}</span>
-                            {activeQ.correctId === opt.id && <Check className="ml-auto h-4 w-4" />}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                <Button variant="outline"
-                  className="w-full h-12 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 bg-transparent text-slate-500 dark:text-slate-400"
-                  onClick={addQuestion}>
-                  <Plus className="mr-2 h-5 w-5" /> Add Question
-                </Button>
-
-                {/* Reward card */}
-                <Card className="border-2 border-yellow-300 dark:border-yellow-500/30 bg-white dark:bg-slate-900">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-500">
-                          <Trophy className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base text-slate-900 dark:text-white">Reward System</CardTitle>
-                          <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Distribute tokens to top performers</CardDescription>
-                        </div>
-                      </div>
-                      <Badge className="bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-500/40 text-xs font-bold">Required</Badge>
-                    </div>
-                  </CardHeader>
-                  <RewardBlock reward={reward} setR={setR} setReward={setReward}
-                    availableTokens={availableTokens} chainId={chainId} chainName={chainName}
-                    tokenPrice={tokenPrice} isFetchingPrice={isFetchingPrice}
-                    poolUsdValue={poolUsdValue} isBelowMinimum={isBelowMinimum} />
-                </Card>
-              </div>
-
-              {/* RIGHT col */}
-              <div className="space-y-5">
-                {/* Question list */}
-                <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm text-slate-900 dark:text-white flex items-center justify-between">
-                      Questions <Badge variant="outline" className="border-slate-200 dark:border-slate-700">{questions.length}</Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                    {questions.map((q, idx) => {
-                      const isComplete = q.question.trim() && q.options.every(o => o.text.trim());
-                      return (
-                        <button key={q.id} onClick={() => setActiveQIdx(idx)}
-                          className={cn(
-                            "w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center gap-3",
-                            idx === activeQIdx
-                              ? "bg-indigo-600 text-white"
-                              : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-                          )}>
-                          <span className={cn(
-                            "w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0",
-                            isComplete ? "bg-green-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
-                          )}>
-                            {isComplete ? "✓" : idx + 1}
-                          </span>
-                          <span className="truncate flex-1">{q.question || <span className="italic opacity-60">Untitled</span>}</span>
-                          <span className="text-[10px] opacity-60 shrink-0">{q.timeLimit}s</span>
-                        </button>
-                        
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-
-                {/* Settings */}
-                <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                  <CardHeader className="pb-3"><CardTitle className="text-sm text-slate-900 dark:text-white">Settings</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-1.5"><Users className="h-3.5 w-3.5" /> Max Participants</Label>
-                      <Input type="number" min={0} value={maxParticipants === 0 ? "" : maxParticipants}
-                        onChange={e => setMaxParticipants(Number(e.target.value) || 0)} placeholder="Unlimited"
-                        className="h-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500">0 = unlimited</p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-700 dark:text-slate-300 flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" /> Scheduled Start</Label>
-                      <Input type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)}
-                        className="h-9 text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white" />
-                    </div>
-                    <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-1">
-                      {[
-                        ["Total Questions", questions.length, ""],
-                        ["Complete", `${questions.filter(q => q.question.trim() && q.options.every(o => o.text.trim())).length}/${questions.length}`, "text-green-600 dark:text-green-400"],
-                        ["Reward Pool", `${reward.poolAmount || "—"} ${reward.tokenSymbol}`, "text-yellow-600 dark:text-yellow-500"],
-                        ["Cover Image", coverImageUrl ? "✓ Set" : "Not set", coverImageUrl ? "text-green-600 dark:text-green-400" : "text-slate-400"],
-                        ["Creator", creatorUsername ? `@${creatorUsername}` : "Not set", creatorUsername ? "text-green-600 dark:text-green-400" : "text-slate-400"],
-                      ].map(([label, value, cls]) => (
-                        <div key={label as string} className="flex justify-between text-xs">
-                          <span className="text-slate-400 dark:text-slate-500">{label}</span>
-                          <span className={cn("font-bold text-slate-900 dark:text-white", cls as string)}>{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <DeployProgress
-                  step={deployStep}
-                  contractAddress={rewardContractAddress}
-                  error={deployError}
+          {/* Answer options */}
+          <div className="space-y-2">
+            <div>
+              <Label className="text-sm font-bold text-foreground">Answers <span className="text-destructive">*</span></Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Click the colored button on the left to mark the ✓ correct answer
+              </p>
+            </div>
+            <div className="space-y-2">
+              {activeQ.options.map(opt => (
+                <AnswerOptionButton
+                  key={opt.id} opt={opt}
+                  isCorrect={activeQ.correctId === opt.id}
+                  text={opt.text}
+                  onChange={text => updateOption(activeQIdx, opt.id, text)}
+                  onMarkCorrect={() => updateQuestion(activeQIdx, { correctId: opt.id as any })}
                 />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
-                <Button
-                  className="w-full h-12 font-bold text-base bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-60"
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || isUploadingCover || !FACTORY_ADDRESSES[chainId]}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      {deployStep === "deploying" ? "Deploying contract…" : "Saving quiz…"}
-                    </>
-                  ) : isUploadingCover ? (
-                    <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Uploading image…</>
-                  ) : !FACTORY_ADDRESSES[chainId] ? (
-                    "Switch to a Supported Network"
-                  ) : (
-                    <><Gift className="mr-2 h-5 w-5" /> Create Quiz with Rewards</>
-                  )}
-                </Button>
+  // ── Step 2: Rewards ──
+  const renderStepRewards = () => (
+    <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300 max-w-xl mx-auto">
+      <div className="text-center space-y-2 pb-2">
+        <div className="text-5xl">💰</div>
+        <h2 className="text-xl font-black text-foreground">Set the prize pool</h2>
+        <p className="text-sm text-muted-foreground">The bigger the pot, the more players you attract</p>
+      </div>
+
+      {/* Chain badge */}
+      {chainId > 0 ? (
+        <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-muted/50 border border-border">
+          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="text-xs font-bold text-foreground">{chainName}</span>
+          <Badge variant="outline" className="text-[10px] h-4 px-1.5">Chain {chainId}</Badge>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+          <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+          <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">Connect wallet to select a token</span>
+        </div>
+      )}
+
+      {/* Token picker */}
+      {availableTokens.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-xs font-black text-muted-foreground uppercase tracking-wider">Reward Token</Label>
+          <div className="grid grid-cols-2 gap-2">
+            {availableTokens.map(token => (
+              <button key={token.address}
+                onClick={() => setReward(prev => ({ ...prev, tokenAddress: token.address, tokenSymbol: token.symbol, tokenDecimals: token.decimals, tokenLogoUrl: token.logoUrl }))}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-2.5 rounded-2xl border-2 text-left transition-all",
+                  reward.tokenAddress === token.address
+                    ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-500/10 shadow-sm"
+                    : "border-border hover:border-primary/40 bg-card"
+                )}>
+                <img src={token.logoUrl} alt={token.symbol}
+                  className="w-8 h-8 rounded-full object-cover shrink-0 bg-muted"
+                  onError={e => { (e.target as HTMLImageElement).src = "/fallback-token.png"; }} />
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-foreground">{token.symbol}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">{token.name}</div>
+                </div>
+                {reward.tokenAddress === token.address && <Check className="h-4 w-4 text-yellow-600 ml-auto shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pool amount */}
+      <div className="space-y-2">
+        <Label className="text-xs font-black text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <Coins className="h-3.5 w-3.5" /> Pool Amount
+        </Label>
+        <div className="relative">
+          <Input type="number" min="0" step="any" value={reward.poolAmount}
+            onChange={e => setR({ poolAmount: e.target.value })} placeholder="0.00"
+            className={cn("h-12 text-lg font-mono rounded-xl pr-24 border-2")} />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            {isFetchingPrice && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            {reward.tokenLogoUrl && <img src={reward.tokenLogoUrl} alt="" className="w-5 h-5 rounded-full" />}
+            <span className="text-xs font-black text-muted-foreground">{reward.tokenSymbol}</span>
+          </div>
+        </div>
+        {poolUsdValue !== null && (
+          <div className={cn("flex items-center gap-2 text-xs rounded-xl px-3 py-2",
+            "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400")}>
+            <span className="font-black">≈ ${poolUsdValue.toFixed(2)} USD</span>
+          </div>
+        )}
+      </div>
+
+      {/* Winners */}
+      <div className="space-y-3">
+        <Label className="text-xs font-black text-muted-foreground uppercase tracking-wider">Winners</Label>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setR({ totalWinners: Math.max(1, reward.totalWinners - 1) })}
+            className="w-10 h-10 rounded-xl border-2 border-border bg-card text-foreground font-black text-lg hover:border-primary transition-all">−</button>
+          <div className="flex-1 text-center">
+            <span className="text-4xl font-black text-primary">{reward.totalWinners}</span>
+            <p className="text-xs text-muted-foreground mt-0.5">winners</p>
+          </div>
+          <button
+            onClick={() => setR({ totalWinners: Math.min(10, reward.totalWinners + 1) })}
+            className="w-10 h-10 rounded-xl border-2 border-border bg-card text-foreground font-black text-lg hover:border-primary transition-all">+</button>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {[1, 2, 3, 5, 10].map(n => (
+            <button key={n} onClick={() => setR({ totalWinners: n })}
+              className={cn("px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all",
+                reward.totalWinners === n ? "bg-primary border-primary text-primary-foreground" : "bg-card border-border text-muted-foreground hover:border-primary/50")}>
+              Top {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Distribution */}
+      <div className="space-y-2">
+        <Label className="text-xs font-black text-muted-foreground uppercase tracking-wider">Distribution</Label>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { type: "equal" as const, emoji: "⚖️", label: "Equal Split", desc: "Same prize for all" },
+            { type: "custom" as const, emoji: "🎯", label: "Custom", desc: "Set each % manually" },
+          ]).map(({ type, emoji, label, desc }) => (
+            <button key={type} onClick={() => setR({ distributionType: type })}
+              className={cn("flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 text-center transition-all",
+                reward.distributionType === type
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-card hover:border-primary/40")}>
+              <span className="text-2xl">{emoji}</span>
+              <span className="text-xs font-black text-foreground">{label}</span>
+              <span className="text-[10px] text-muted-foreground">{desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {reward.distributionType === "custom" && (
+        <div className="space-y-3 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-muted-foreground">% per rank</span>
+            {(() => {
+              const total = customTierTotal(reward);
+              return (
+                <span className={cn("text-xs font-black tabular-nums",
+                  total > 100 ? "text-destructive" : total < 100 ? "text-amber-500" : "text-emerald-500")}>
+                  {total.toFixed(1)}% {total > 100 ? "⚠ over!" : total < 100 ? `(${(100 - total).toFixed(1)}% left)` : "✓ perfect"}
+                </span>
+              );
+            })()}
+          </div>
+          <div className="space-y-2">
+            {Array.from({ length: reward.totalWinners }, (_, i) => {
+              const rank = i + 1;
+              const podiumEmoji = ["🥇", "🥈", "🥉"][i] ?? "🏅";
+              return (
+                <div key={rank} className="flex items-center gap-3">
+                  <span className="text-lg shrink-0">{podiumEmoji}</span>
+                  <span className="text-xs font-bold text-muted-foreground w-8">#{rank}</span>
+                  <div className="flex-1 relative">
+                    <Input type="number" min="0" max="100" step="0.1"
+                      value={reward.customTiers[rank] ?? ""}
+                      onChange={e => setReward(prev => ({ ...prev, customTiers: { ...prev.customTiers, [rank]: e.target.value } }))}
+                      placeholder={`${(100 / reward.totalWinners).toFixed(1)}`}
+                      className="h-9 pr-7 font-mono text-sm rounded-xl border-2" />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground w-20 text-right tabular-nums text-[11px]">
+                    {reward.poolAmount ? `${((parseFloat(reward.poolAmount) || 0) * (parseFloat(reward.customTiers[rank] ?? "0") || 0) / 100).toFixed(3)} ${reward.tokenSymbol}` : "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => {
+              const equal = (100 / reward.totalWinners).toFixed(1);
+              const reset: Record<number, string> = {};
+              for (let i = 1; i <= reward.totalWinners; i++) reset[i] = equal;
+              setReward(prev => ({ ...prev, customTiers: reset }));
+            }}
+            className="w-full h-9 text-xs font-bold text-muted-foreground border-2 border-dashed border-border rounded-xl hover:border-primary/50 transition-colors">
+            Reset to equal
+          </button>
+        </div>
+      )}
+
+      {/* Claim window */}
+      <div className="space-y-2 border-t border-border pt-5">
+        <Label className="text-xs font-black text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <Timer className="h-3.5 w-3.5" /> Claim Window
+        </Label>
+        <div className="flex gap-1.5 flex-wrap">
+          {CLAIM_WINDOW_OPTIONS.map(opt => (
+            <button key={opt.value} onClick={() => setR({ claimWindowDuration: opt.value })}
+              className={cn("px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all",
+                reward.claimWindowDuration === opt.value ? "bg-primary border-primary text-primary-foreground" : "bg-card border-border text-muted-foreground hover:border-primary/50")}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-muted-foreground leading-tight">
+          How long winners have to claim on-chain after the quiz ends.
+        </p>
+      </div>
+
+      <RewardPreview config={reward} />
+    </div>
+  );
+
+  // ── Step 3: Launch ──
+  const renderStepLaunch = () => (
+    <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300 max-w-xl mx-auto">
+      <div className="text-center space-y-2 pb-2">
+        <div className="text-5xl">🚀</div>
+        <h2 className="text-xl font-black text-foreground">Ready to launch?</h2>
+        <p className="text-sm text-muted-foreground">Review your quiz and hit the button</p>
+      </div>
+
+      {/* Summary card */}
+      <div className="rounded-3xl border-2 border-border bg-card overflow-hidden">
+        {coverImageUrl && (
+          <div className="h-32 relative">
+            <img src={coverImageUrl} alt="" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+            <div className="absolute bottom-3 left-4">
+              <p className="text-white font-black text-lg leading-tight drop-shadow">{title || "Untitled Quiz"}</p>
+            </div>
+          </div>
+        )}
+        <div className="p-5 space-y-4">
+          {!coverImageUrl && (
+            <h3 className="text-lg font-black text-foreground">{title || "Untitled Quiz"}</h3>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { emoji: "🧠", label: "Questions", value: `${completedQuestions}/${questions.length}`, ok: completedQuestions === questions.length },
+              { emoji: "💰", label: "Prize Pool", value: `${reward.poolAmount || "0"} ${reward.tokenSymbol}`, ok: !!reward.poolAmount && parseFloat(reward.poolAmount) > 0  },
+              { emoji: "🏆", label: "Winners", value: `Top ${reward.totalWinners}`, ok: reward.totalWinners > 0 },
+              { emoji: "⏳", label: "Claim", value: CLAIM_WINDOW_OPTIONS.find(o => o.value === reward.claimWindowDuration)?.label ?? "—", ok: true },
+            ].map(item => (
+              <div key={item.label}
+                className={cn("flex items-center gap-2.5 rounded-2xl px-3 py-2.5 border-2",
+                  item.ok ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800" : "bg-destructive/10 border-destructive/30")}>
+                <span className="text-xl shrink-0">{item.emoji}</span>
+                <div>
+                  <p className="text-[10px] font-bold text-muted-foreground">{item.label}</p>
+                  <p className={cn("text-xs font-black", item.ok ? "text-foreground" : "text-destructive")}>{item.value}</p>
+                </div>
+                {item.ok ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 ml-auto shrink-0" />
+                ) : (
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive ml-auto shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Optional schedule */}
+          <div className="space-y-2 border-t border-border pt-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Max Players</Label>
+                <Input type="number" min={0} value={maxParticipants === 0 ? "" : maxParticipants}
+                  onChange={e => setMaxParticipants(Number(e.target.value) || 0)} placeholder="Unlimited"
+                  className="h-9 text-xs rounded-xl border-2" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Schedule</Label>
+                <Input type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)}
+                  className="h-9 text-xs rounded-xl border-2" />
               </div>
             </div>
-          </TabsContent>
+          </div>
+        </div>
+      </div>
 
-          {/* ══ AI TAB ══ */}
-          <TabsContent value="ai">
-            <div className="max-w-xl mx-auto space-y-6">
-              <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base text-slate-900 dark:text-white">Quiz Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-slate-700 dark:text-slate-300">Title</Label>
-                    <Input value={title} onChange={e => setTitle(e.target.value)}
-                      placeholder="Custom title (or AI will create one)"
-                      className="h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-slate-700 dark:text-slate-300">Cover Image</Label>
-                    <ImageUploader
-                      value={coverImageUrl}
-                      onChange={setCoverImageUrl}
-                      isUploading={isUploadingCover}
-                      setIsUploading={setIsUploadingCover}
-                    />
-                  </div>
-                  {creatorUsername && (
-                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                      <span>Creating as <span className="font-bold text-slate-700 dark:text-slate-300">@{creatorUsername}</span></span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+      <DeployProgress step={deployStep} contractAddress={rewardContractAddress} error={deployError} />
 
-              <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base text-slate-900 dark:text-white flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-purple-500" /> AI Configuration
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                  <div className="space-y-1.5">
-                    <Label className="text-slate-700 dark:text-slate-300">Topic <span className="text-red-500">*</span></Label>
-                    <Textarea value={aiTopic} onChange={e => setAiTopic(e.target.value)}
-                      placeholder="e.g. 'Ethereum and DeFi basics', 'World capitals'..."
-                      className="resize-none h-24 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500" />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-700 dark:text-slate-300">Questions</Label>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {[5, 10, 15, 20].map(n => (
-                          <Button key={n} variant={aiNumQ === n ? "default" : "outline"} size="sm"
-                            className="h-8 px-3 text-xs font-bold" onClick={() => setAiNumQ(n)}>{n}</Button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-700 dark:text-slate-300">Difficulty</Label>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {(["easy", "medium", "hard"] as const).map(d => (
-                          <Button key={d} variant={aiDifficulty === d ? "default" : "outline"} size="sm"
-                            className={cn("h-8 px-3 text-xs font-bold capitalize",
-                              aiDifficulty === d && d === "easy" && "bg-green-500 hover:bg-green-600 text-white",
-                              aiDifficulty === d && d === "medium" && "bg-yellow-500 hover:bg-yellow-600 text-black",
-                              aiDifficulty === d && d === "hard" && "bg-red-500 hover:bg-red-600 text-white"
-                            )}
-                            onClick={() => setAiDifficulty(d)}>{d}</Button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-700 dark:text-slate-300">Seconds per Question</Label>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {[10, 15, 20, 30, 45, 60].map(t => (
-                        <Button key={t} variant={aiTimePerQ === t ? "default" : "outline"} size="sm"
-                          className="h-8 px-3 text-xs font-bold" onClick={() => setAiTimePerQ(t)}>{t}s</Button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900 rounded-lg p-4">
-                    <Lightbulb className="h-4 w-4 text-purple-500 mt-0.5 shrink-0" />
-                    <div className="text-xs text-purple-800 dark:text-purple-300">
-                      <p className="font-semibold">Powered by FaucetDrops AI Engine</p>
-                      <p className="mt-0.5">Generates {aiNumQ} unique {aiDifficulty} questions instantly.</p>
-                    </div>
-                  </div>
-                  <DeployProgress
-                    step={deployStep}
-                    contractAddress={rewardContractAddress}
-                    error={deployError}
-                  />
+      {/* Launch button */}
+      <button
+        onClick={mode === "ai" ? handleGenerateAI : handleSubmit}
+        disabled={isSubmitting || isGenerating || isUploadingCover || !isSupportedNetwork}
+        className={cn(
+          "w-full h-16 rounded-2xl font-black text-lg transition-all duration-200 relative overflow-hidden",
+          "disabled:opacity-60 disabled:cursor-not-allowed",
+          isSupportedNetwork
+            ? "bg-primary text-primary-foreground hover:opacity-90 shadow-lg hover:scale-[1.01] active:scale-[0.99]"
+            : "bg-muted text-muted-foreground"
+        )}
+      >
+        <span className="relative z-10 flex items-center justify-center gap-2">
+          {isSubmitting || isGenerating ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              {deployStep === "deploying" ? "Deploying contract…" : mode === "ai" ? "Generating questions…" : "Saving quiz…"}
+            </>
+          ) : isUploadingCover ? (
+            <><Loader2 className="h-5 w-5 animate-spin" /> Uploading image…</>
+          ) : !isSupportedNetwork ? (
+            "⚠️ Switch to a Supported Network"
+          ) : mode === "ai" ? (
+            <><Sparkles className="h-5 w-5" /> Generate & Launch Quiz</>
+          ) : (
+            <><Rocket className="h-5 w-5" /> Launch Quiz 🚀</>
+          )}
+        </span>
+      </button>
 
-                  <Button
-                    className="w-full h-12 font-bold text-base bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 disabled:opacity-60"
-                    onClick={handleGenerateAI}
-                    disabled={isGenerating || isUploadingCover || !FACTORY_ADDRESSES[chainId]}
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        {deployStep === "deploying" ? "Deploying contract…" : "Generating questions…"}
-                      </>
-                    ) : !FACTORY_ADDRESSES[chainId] ? (
-                      "Switch to a Supported Network"
-                    ) : (
-                      <><Sparkles className="mr-2 h-5 w-5" /> Generate {aiNumQ} Questions</>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
+      <p className="text-center text-xs text-muted-foreground">
+        🔒 Rewards are locked in a smart contract. Fund it in the lobby after launching.
+      </p>
+    </div>
+  );
 
-              {/* Reward card in AI tab */}
-              <Card className="border-2 border-yellow-300 dark:border-yellow-500/30 bg-white dark:bg-slate-900">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-500">
-                        <Trophy className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base text-slate-900 dark:text-white">Add Rewards</CardTitle>
-                        <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Distribute tokens to top performers</CardDescription>
-                      </div>
-                    </div>
-                    <Badge className="bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-500/40 text-xs font-bold">Required</Badge>
-                  </div>
-                </CardHeader>
-                <RewardBlock reward={reward} setR={setR} setReward={setReward}
-                  availableTokens={availableTokens} chainId={chainId} chainName={chainName}
-                  tokenPrice={tokenPrice} isFetchingPrice={isFetchingPrice}
-                  poolUsdValue={poolUsdValue} isBelowMinimum={isBelowMinimum} />
-              </Card>
+  // stepContent maps wizard index → renderer, varies by mode
+  const stepContent = mode === "ai"
+    ? [renderStepDetails, renderStepRewards, renderStepLaunch]
+    : [renderStepDetails, renderStepQuestions, renderStepRewards, renderStepLaunch];
+
+  const canAdvance = () => {
+    const stepId = activeSteps[wizardStep]?.id;
+    if (stepId === "details") {
+      if (mode === "ai") return !!userWalletAddress && isSupportedNetwork;
+      return !!title.trim() && !!userWalletAddress && isSupportedNetwork;
+    }
+    if (stepId === "questions") return completedQuestions > 0;
+    if (stepId === "rewards") return !!reward.poolAmount && parseFloat(reward.poolAmount) > 0 && !!reward.tokenAddress;
+    return true;
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <Header pageTitle="Create Quiz" />
+
+      {/* Subtle background decoration */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl opacity-60" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-primary/5 blur-3xl opacity-60" />
+      </div>
+
+      <div className="relative z-10 flex-1 max-w-3xl mx-auto w-full px-4 sm:px-6 pb-24 pt-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.back()}
+            className="w-9 h-9 rounded-xl border-2 border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <h1 className="text-lg font-black text-foreground">Create a Quiz</h1>
+            <p className="text-xs text-muted-foreground">Step {wizardStep + 1} of {activeSteps.length} — {activeSteps[wizardStep]?.desc}</p>
+          </div>
+        </div>
+
+        {/* Step progress */}
+        <WizardProgress currentStep={wizardStep} setStep={setWizardStep} steps={activeSteps} />
+
+        {/* Step content */}
+        <div className="bg-card rounded-3xl border-2 border-border p-5 sm:p-7 shadow-sm relative overflow-hidden">
+          <FloatyEmojis />
+          <div className="relative z-10">
+            {stepContent[wizardStep]?.()}
+          </div>
+        </div>
+
+        {/* Nav buttons */}
+        {wizardStep < lastStepIdx && (
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => setWizardStep(s => Math.max(0, s - 1))}
+              disabled={wizardStep === 0}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl border-2 border-border bg-card text-muted-foreground font-bold text-sm hover:border-primary/50 hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+              <ChevronLeft className="h-4 w-4" /> Back
+            </button>
+
+            <div className="flex items-center gap-1.5">
+              {activeSteps.map((_, i) => (
+                <div key={i}
+                  className={cn("rounded-full transition-all duration-300",
+                    i === wizardStep ? "w-6 h-2 bg-primary" : i < wizardStep ? "w-2 h-2 bg-primary/40" : "w-2 h-2 bg-border")} />
+              ))}
             </div>
-          </TabsContent>
-        </Tabs>
+
+            <button
+              onClick={() => setWizardStep(s => Math.min(lastStepIdx, s + 1))}
+              disabled={!canAdvance()}
+              className={cn(
+                "flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all",
+                canAdvance()
+                  ? "bg-primary text-primary-foreground hover:opacity-90 shadow-sm hover:scale-[1.02]"
+                  : "bg-muted text-muted-foreground cursor-not-allowed"
+              )}>
+              {wizardStep === lastStepIdx - 1 ? "Review" : "Next"} <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
-
-// "use client";
-// import Image from 'next/image';
-// import Link from 'next/link';
-// import { siX, siTelegram, siGmail } from 'simple-icons/icons'
-
-// interface IconProps {
-//   path: string;
-//   title?: string;
-// }
-
-// interface SimpleIconProps {
-//   icon: IconProps;
-//   size?: number | string;
-//   className?: string;
-// }
-
-// export const SimpleIcon: React.FC<SimpleIconProps> = ({
-//   icon,
-//   size = 24,
-//   className = 'text-white'
-// }) => {
-//   return (
-//     <svg
-//       role="img"
-//       viewBox="0 0 24 24"
-//       width={size}
-//       height={size}
-//       className={className}
-//       fill="currentColor"
-//       xmlns="http://www.w3.org/2000/svg"
-//     >
-//       <path d={icon.path} />
-//     </svg>
-//   );
-// };
-
-// export default function ComingSoon() {
-//   const socialLinks = [
-//     { icon: siX, href: 'https://x.com/FaucetDrops', label: 'Twitter' },
-//     { icon: siTelegram, href: 'https://t.me/FaucetDropschat', label: 'Telegram' },
-//     { icon: siGmail, href: 'mailto:drops.faucet@gmail.com', label: 'Email' },
-//   ];
-
-//   return (
-//     <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white dark:bg-black transition-colors duration-300">
-//       <div className="max-w-2xl w-full text-center space-y-8">
-        
-//         {/* Logo Section - Adapts to theme */}
-//         <div className="flex justify-center relative">
-//           {/* Light Mode Logo: Visible by default, hidden in dark mode */}
-//           <Image
-//             src="/lightlogo.png"
-//             alt="FaucetDrops Logo"
-//             width={200}
-//             height={80}
-//             className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain dark:hidden"
-//           />
-          
-//           {/* Dark Mode Logo: Hidden by default, visible in dark mode */}
-//           <Image
-//             src="/darklogo.png"
-//             alt="FaucetDrops Logo"
-//             width={200}
-//             height={80}
-//             className="h-12 w-auto sm:h-16 lg:h-20 rounded-md object-contain hidden dark:block"
-//           />
-//         </div>
-
-//         {/* Heading Section - Theme aware */}
-//         <div className="space-y-4">
-//           <h1 className="text-4xl md:text-5xl font-bold text-black dark:text-white">
-//             Coming Soon
-//           </h1>
-//           <p className="text-xl text-gray-600 dark:text-gray-400">
-//             We&apos;re working on something amazing!
-//           </p>
-//           <p className="text-gray-600 dark:text-gray-400">
-//             This page is under construction. Please check back later for updates.
-//           </p>
-//         </div>
-
-//         {/* Status Badge - Theme aware */}
-//         <div className="pt-4">
-//           <div className="inline-flex items-center px-6 py-3 rounded-md bg-gray-100 dark:bg-white/10 text-black dark:text-white font-medium transition-colors duration-300">
-//             <span className="relative flex h-3 w-3 mr-2">
-//               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 dark:bg-white/75"></span>
-//               <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-600 dark:bg-white"></span>
-//             </span>
-//             Under Development
-//           </div>
-//         </div>
-
-//         {/* Social Media Links */}
-//         <div className="pt-8">
-//           <p className="text-sm text-gray-600 dark:text-gray-400">
-//             In the meantime, you can follow us on social media or contact our team
-//           </p>
-//           <div className="flex justify-center space-x-6 pt-4">
-//             {socialLinks.map((social, index) => (
-//               <Link
-//                 key={index}
-//                 href={social.href}
-//                 target="_blank"
-//                 rel="noopener noreferrer"
-//                 className="p-3 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-all duration-300 transform hover:scale-110"
-//                 aria-label={social.label}
-//                 title={social.label}
-//               >
-//                 <SimpleIcon
-//                   icon={social.icon}
-//                   size={24}
-//                   className="text-black dark:text-white transition-colors duration-300"
-//                 />
-//               </Link>
-//             ))}
-//           </div>
-//         </div>
-
-//         {/* Footer Link - Theme aware */}
-//         <div className="pt-8">
-//           <p className="text-sm text-gray-600 dark:text-gray-400">
-//             In the meantime, you can check out our
-//             <Link 
-//               href="/" 
-//               className="text-black dark:text-white hover:underline font-semibold ml-1 transition-colors duration-300"
-//             >
-//               homepage
-//             </Link>
-//             .
-//           </p>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }

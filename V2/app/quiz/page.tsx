@@ -12,13 +12,12 @@ import { Input } from "@/components/ui/input";
 import {
   Search, Plus, Zap, Trophy, Users, Clock, Loader2, Sparkles,
   Gamepad2, Play, CheckCircle2, Hash, RefreshCw, BookOpen,
-  ChevronRight,
-  Droplets,
+  ChevronRight, Trash2, Droplets, AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 interface QuizCard {
   code: string;
@@ -72,7 +71,7 @@ function GridBg() {
   );
 }
 
-function QuizCardItem({ quiz, onClick }: { quiz: QuizCard; onClick: () => void }) {
+function QuizCardItem({ quiz, onClick, isCreator, onDelete }: { quiz: QuizCard; onClick: () => void; isCreator: boolean; onDelete: (e: React.MouseEvent) => void }) {
   const s = STATUS_CONFIG[quiz.status];
   const isLive = quiz.status === "active";
   const isFull = quiz.maxParticipants > 0 && quiz.playerCount >= quiz.maxParticipants;
@@ -122,13 +121,25 @@ function QuizCardItem({ quiz, onClick }: { quiz: QuizCard; onClick: () => void }
           </span>
         </div>
 
-        {quiz.isAiGenerated && (
-          <div className="absolute top-3 right-3">
+        <div className="absolute top-3 right-3 flex items-center gap-2">
+          {quiz.isAiGenerated && (
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/30 dark:text-purple-300 dark:border-purple-500/40 backdrop-blur">
               <Sparkles className="h-3 w-3" /> AI
             </span>
-          </div>
-        )}
+          )}
+          {isCreator && (
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(e);
+              }}
+              className="p-1.5 rounded-full bg-red-100/90 text-red-600 hover:bg-red-600 hover:text-white dark:bg-red-900/60 dark:text-red-400 dark:hover:bg-red-600 dark:hover:text-white backdrop-blur transition-colors border border-red-200 dark:border-red-800 shadow-sm"
+              title="Delete Quiz"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </div>
+          )}
+        </div>
 
         {quiz.reward && quiz.reward.poolAmount > 0 && (
           <div className="absolute bottom-3 right-3">
@@ -201,6 +212,11 @@ export default function QuizListPage() {
   const [codeInput, setCodeInput] = useState("");
   const [isJumping, setIsJumping] = useState(false);
 
+  // ── Modal State for Deletion ──
+  const [quizToDelete, setQuizToDelete] = useState<QuizCard | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  
   const fetchQuizzes = async (silent = false) => {
     if (!silent) setIsLoading(true); else setIsRefreshing(true);
     try {
@@ -216,6 +232,38 @@ export default function QuizListPage() {
     const t = setInterval(() => fetchQuizzes(true), 15000);
     return () => clearInterval(t);
   }, []);
+
+  // ✅ New delete trigger
+  const initiateDelete = (quiz: QuizCard) => {
+    setQuizToDelete(quiz);
+    setDeleteConfirmText("");
+  };
+
+  // ✅ New deletion confirmation logic
+  const confirmDelete = async () => {
+    if (!quizToDelete) return;
+    if (deleteConfirmText !== quizToDelete.code) return;
+    
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/quiz/${quizToDelete.code}?walletAddress=${userWalletAddress}`, {
+        method: "DELETE"
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Quiz deleted successfully");
+        setQuizzes(prev => prev.filter(q => q.code !== quizToDelete.code));
+        setQuizToDelete(null); // Close modal
+      } else {
+        toast.error(data.detail || "Failed to delete quiz");
+      }
+    } catch (err) {
+      toast.error("Error deleting quiz");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleJumpToCode = async () => {
     const code = codeInput.trim().toUpperCase();
@@ -306,7 +354,6 @@ export default function QuizListPage() {
                     maxLength={8}
                     className="font-mono font-black text-lg tracking-widest bg-white dark:bg-white/5 border-slate-300 dark:border-white/20 text-slate-900 dark:text-white h-12 placeholder:text-slate-300 dark:placeholder:text-white/20 focus-visible:border-indigo-500"
                   />
-                 
                 </div>
               </div>
               {userWalletAddress && (
@@ -314,7 +361,6 @@ export default function QuizListPage() {
                   className="w-full h-11 font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white border-0"
                   onClick={handleJumpToCode}
                   disabled={isJumping || codeInput.length < 4}
-                  
                 >
                   {isJumping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Droplets className="h-4 w-4" />}
                 </Button>
@@ -396,12 +442,72 @@ export default function QuizListPage() {
                 className="animate-in fade-in slide-in-from-bottom-3"
                 style={{ animationDelay: `${i * 40}ms`, animationFillMode: "backwards" }}
               >
-                <QuizCardItem quiz={quiz} onClick={() => router.push(`/quiz/${quiz.code}`)} />
+                <QuizCardItem 
+                  quiz={quiz} 
+                  onClick={() => router.push(`/quiz/${quiz.code}`)} 
+                  isCreator={userWalletAddress?.toLowerCase() === quiz.creatorAddress.toLowerCase()}
+                  onDelete={() => initiateDelete(quiz)}
+                />
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {quizToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+            
+            <div className="flex items-center gap-4 text-red-600 dark:text-red-500 mb-5">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white">Delete Quiz?</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                  This action is permanent and cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-6">
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
+                To confirm, type the quiz code: <strong className="text-slate-900 dark:text-white select-none">{quizToDelete.code}</strong>
+              </p>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value.toUpperCase())}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  toast.warning("Pasting disabled. Please type the code.");
+                }}
+                placeholder="Type code here..."
+                className="h-12 font-mono font-bold text-center tracking-widest uppercase border-red-200 dark:border-red-900/50 focus-visible:ring-red-500 bg-white dark:bg-slate-900"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 h-11 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                onClick={() => setQuizToDelete(null)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50"
+                disabled={deleteConfirmText !== quizToDelete.code || isDeleting}
+                onClick={confirmDelete}
+              >
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete Forever"}
+              </Button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

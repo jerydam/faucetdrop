@@ -74,7 +74,7 @@ export const networks: Network[] = [
       dropcode: "0x8D1306b3970278b3AB64D1CE75377BDdf00f61da",
       custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5",
       quest: "0xdC9b027B6453560ce8C4390E0B609b343a8eBd62",
-      quiz: ""
+      quiz: "0x99225AeEF0feeab06c6d72054330b148ed7E95dd"
     },
     tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
     nativeCurrency: {
@@ -275,7 +275,7 @@ interface NetworkContextType {
   setNetwork: (network: Network) => void
   switchNetwork: (chainId: number) => Promise<void>
   getLatestFactoryAddress: (network?: Network) => string | null
-  getFactoryAddress: (factoryType: 'dropcode' | 'droplist' | 'custom', network?: Network) => string | null
+  getFactoryAddress: (factoryType: 'dropcode' | 'droplist' | 'custom' | 'quest' | 'quiz', network?: Network) => string | null
   isSwitchingNetwork: boolean
   currentChainId: number | null
   isConnecting: boolean
@@ -397,7 +397,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     return selectedNetwork?.factoryAddresses[selectedNetwork.factoryAddresses.length - 1] || null
   }
 
-  const getFactoryAddress = (factoryType: 'dropcode' | 'droplist' | 'custom', targetNetwork?: Network) => {
+  const getFactoryAddress = (factoryType: 'dropcode' | 'droplist' | 'custom' | 'quest' | 'quiz', targetNetwork?: Network) => {
     const selectedNetwork = targetNetwork || network
     if (!selectedNetwork) return null
     return selectedNetwork.factories[factoryType] || null
@@ -514,21 +514,23 @@ export function getNetworkByChainId(chainId: number) {
   return networks.find(network => network.chainId === chainId)
 }
 
-export function isFactoryTypeAvailable(chainId: number, factoryType: 'dropcode' | 'droplist' | 'custom' | 'quest'): boolean {
+export function isFactoryTypeAvailable(chainId: number, factoryType: 'dropcode' | 'droplist' | 'custom' | 'quest' | 'quiz'): boolean {
   const network = getNetworkByChainId(chainId)
   if (!network) return false
   return !!network.factories[factoryType]
 }
 
 // ✅ UPDATED TYPE HERE
-export function getAvailableFactoryTypes(chainId: number): ('dropcode' | 'droplist' | 'custom')[] {
+export function getAvailableFactoryTypes(chainId: number): ('dropcode' | 'droplist' | 'custom' | 'quest' | 'quiz')[] {
   const network = getNetworkByChainId(chainId)
   if (!network) return []
   
-  const availableTypes: ('dropcode' | 'droplist' | 'custom')[] = []
+  const availableTypes: ('dropcode' | 'droplist' | 'custom' | 'quest' | 'quiz')[] = []
   if (network.factories.dropcode) availableTypes.push('dropcode')
   if (network.factories.droplist) availableTypes.push('droplist')
   if (network.factories.custom) availableTypes.push('custom')
+  if (network.factories.quest) availableTypes.push('quest')
+  if (network.factories.quiz) availableTypes.push('quiz') // ✅ Included quiz
   
   return availableTypes
 }

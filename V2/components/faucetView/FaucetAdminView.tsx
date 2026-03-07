@@ -1162,7 +1162,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Customize the message users share after claiming. Overrides the default system message.
+                    Customize the message users share after claiming.
                   </p>
                   <Badge
                     variant={isOverLimit ? "destructive" : "secondary"}
@@ -1171,13 +1171,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                     {charCount} / 280
                   </Badge>
                 </div>
-                <div className="flex flex-wrap gap-1">
-                  {["{hashtag}", "{handle}", "{amount}", "{token}", "{network}", "{explorer}"].map((p) => (
-                    <code key={p} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50 font-mono">
-                      {p}
-                    </code>
-                  ))}
-                </div>
+                
                 <Textarea
                   placeholder='e.g. Thanks for the tokens! {@handle} {#hashtag}'
                   value={customXPostTemplate}

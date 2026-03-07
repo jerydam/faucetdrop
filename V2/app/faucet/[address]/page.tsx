@@ -50,7 +50,7 @@ const DEFAULT_FAUCET_IMAGE = "/default.jpeg"
 const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 
 const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}."
-const DEFAULT_X_POST_TEMPLATE = "Drip created by {@handle} for {#hashtag}, Verify Drop 💧: {explorer}"
+const DEFAULT_X_POST_TEMPLATE = "Drip created by {@yourhandle} for {#the_hashtag}."
 const CONSTANT_X_POST = "I just dripped {amount} {token} from @FaucetDrops on {network}.Verify Drop 💧: {explorer}"
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -502,8 +502,7 @@ export default function FaucetDetails() {
             setSecretCode("")
             await refreshFaucetDetails()
         } catch (err: any) {
-            console.error("Claim error:", err)
-            toast.error("Failed to drop tokens")
+            toast.error(err.message)
         } finally {
             setIsVerifying(false)
         }

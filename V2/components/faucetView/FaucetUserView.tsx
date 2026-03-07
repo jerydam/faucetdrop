@@ -20,6 +20,44 @@ import { toast } from 'sonner';
 import { cn } from "@/lib/utils";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+// Helper to reliably extract exact error messages from Web3/HTTP errors
+const extractErrorMessage = (error: any): string => {
+  // Helper function to clean up backend-service.ts string formatting
+  const cleanString = (str: string) => str.replace(/^.*?\(\d{3}\):\s*/, '').replace(/^Error:\s*/, '');
+
+  if (typeof error === 'string') return cleanString(error);
+  
+  // 1. Matches the custom error object structure from your backend-service.ts logs
+  if (error?.errorData?.detail) {
+    const detail = error.errorData.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) return detail.map((d: any) => d.msg).join(', ');
+  }
+
+  // 2. FastAPI specific error handling inside a standard Axios response
+  if (error?.response?.data?.detail) {
+    const detail = error.response.data.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) return detail.map((d: any) => d.msg).join(', ');
+  }
+
+  // 3. Standard Node/Express and generic API error handling
+  if (error?.response?.data?.message) return error.response.data.message;
+  if (error?.response?.data?.error) return error.response.data.error;
+  
+  // 4. Blockchain specific error handling (Ethers/Viem)
+  if (error?.reason) return error.reason; // Ethers.js revert reason
+  if (error?.shortMessage) return error.shortMessage; // Viem errors
+  
+  // 5. Catch standard JS Errors (like the one thrown by backend-service.ts:1162)
+  if (error?.message) {
+    return cleanString(error.message);
+  }
+  
+  return "Failed to drop token. Please try again.";
+};
+
 const getPlatformIcon = (platform: string): string => {
   switch (platform.toLowerCase()) {
     case 'telegram':  return '📱';
@@ -45,8 +83,8 @@ const handleCopyFaucetLink = async (): Promise<void> => {
   try {
     await navigator.clipboard.writeText(window.location.href);
     toast.success("Faucet link copied to clipboard!");
-  } catch {
-    toast.error("Failed to copy the link. Please try again.");
+  } catch (err: any) {
+    toast.error(extractErrorMessage(err) || "Failed to copy the link. Please try again.");
   }
 };
 
@@ -169,6 +207,21 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
 }) => {
   const [simulationAttempt, setSimulationAttempt] = useState(0);
   const [simulatingState, setSimulatingState] = useState<'idle' | 'verifying' | 'error'>('idle');
+  const [isProcessingClaim, setIsProcessingClaim] = useState(false);
+
+  // ─── Error Handling Wrappers ────────────────────────────────────────────────
+
+  const executeClaim = async () => {
+    setIsProcessingClaim(true);
+    try {
+      await handleBackendClaim();
+    } catch (error: any) {
+      console.error("Claim Error:", error);
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setIsProcessingClaim(false);
+    }
+  };
 
   const startVerificationSimulation = () => {
     setShowFollowDialog(false);
@@ -179,11 +232,19 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
       setTimeout(() => { setSimulatingState('error'); setSimulationAttempt(1); }, 7000);
     } else {
       setTimeout(async () => {
-        await handleVerifyAllTasks();
-        setSimulatingState('idle');
+        try {
+          await handleVerifyAllTasks();
+          setSimulatingState('idle');
+        } catch (error: any) {
+          console.error("Verification Error:", error);
+          setSimulatingState('error');
+          toast.error(extractErrorMessage(error));
+        }
       }, 4000);
     }
   };
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   const canClaim = (() => {
     if (!faucetDetails?.isClaimActive || hasClaimed || !allAccountsVerified) return false;
@@ -233,6 +294,8 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     faucetType === 'dropcode' ? 'DropCode' :
     faucetType === 'droplist' ? 'DropList' :
     faucetType === 'custom'   ? 'Custom'   : '';
+
+  const buttonIsLoading = isVerifying || isProcessingClaim;
 
   return (
     <>
@@ -470,14 +533,14 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
           <Button
             className="w-full gap-2"
             variant={canClaim ? "default" : "outline"}
-            onClick={handleBackendClaim}
-            disabled={!address || !canClaim || isVerifying}
+            onClick={executeClaim}
+            disabled={!address || !canClaim || buttonIsLoading}
           >
-            {isVerifying && <Spinner />}
+            {buttonIsLoading && <Spinner />}
             <Droplets className="h-4 w-4" />
             {!address
               ? "Connect Wallet to Drip"
-              : isVerifying
+              : buttonIsLoading
               ? "Processing…"
               : hasClaimed
               ? "Already Dripped"

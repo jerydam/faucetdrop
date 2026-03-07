@@ -20,7 +20,7 @@ import { type Network } from "@/lib/faucet"
 
 // ==== CONFIG ====
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
-const MIN_POOL_USD_VALUE = 50; // $50 Minimum
+
 
 const networks: Network[] = [
     {
@@ -356,8 +356,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         : parseFloat(newQuest.rewardPool || '0')
         
     const poolUsdValue = poolAmount * tokenPrice
-    const isBelowMin = poolUsdValue > 0 && poolUsdValue < MIN_POOL_USD_VALUE
-    const minTokenAmount = tokenPrice > 0 ? (MIN_POOL_USD_VALUE / tokenPrice).toFixed(4) : "0"
+    
 
     const checkNameAvailabilityAPI = useCallback(async (nameToValidate: string) => {
         if (!nameToValidate.trim()) {
@@ -408,10 +407,9 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     const hasValidTitle = (newQuest.title || "").trim().length >= 3 && !nameError;
     const hasImage = !!newQuest.imageUrl && !newQuest.imageUrl.includes('placehold.co');
     const hasToken = !!selectedToken;
-    const hasValidPool = poolAmount > 0 && !isBelowMin;
     
-    return hasValidTitle && hasImage && hasToken && hasValidPool && isConnected;
-}, [newQuest.title, nameError, newQuest.imageUrl, selectedToken, poolAmount, isBelowMin, isConnected]);
+    return hasValidTitle && hasImage && hasToken && isConnected;
+}, [newQuest.title, nameError, newQuest.imageUrl, selectedToken, poolAmount,isConnected]);
     const handleTierChange = (index: number, field: 'rankStart' | 'rankEnd' | 'amountPerUser', value: number) => {
         const updated = [...newQuest.distributionConfig.tiers]
         updated[index] = { ...updated[index], [field]: value }
@@ -446,12 +444,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     }
 
     const handleSaveDraft = async () => {
-        // --- ADD VALIDATION HERE ---
-        if (isBelowMin) {
-            setError(`Reward pool must be at least $${MIN_POOL_USD_VALUE} USD (approx ${minTokenAmount} ${selectedToken?.symbol})`)
-            return
-        }
-
+        
         if (!address || !isConnected || !selectedToken || (newQuest.title || "").trim().length < 3 || nameError || !newQuest.imageUrl) {
             setError("Complete all required fields")
             return
@@ -507,7 +500,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <Label>Quest Title (Faucet Name)</Label>
+                        <Label>Quest Title</Label>
                         <div className="relative">
                             <Input
                                 value={titleSafe}
@@ -664,7 +657,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                             type="number" 
                                             value={newQuest.rewardPool} 
                                             onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value } as T))} 
-                                            className={isBelowMin ? "border-red-500" : ""}
+                                            
                                         />
                                         {tokenPrice > 0 && (
                                             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground flex items-center gap-1">
@@ -673,12 +666,6 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                             </div>
                                         )}
                                     </div>
-                                    {isBelowMin && (
-                                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                                            <AlertTriangle className="h-3 w-3" />
-                                            Minimum pool value is ${MIN_POOL_USD_VALUE} (~{minTokenAmount} {selectedToken?.symbol})
-                                        </p>
-                                    )}
                                 </div>
                                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded">
                                     <p>Each winner gets: <strong>{getAmountPerWinner()} {selectedToken?.symbol}</strong></p>
@@ -696,7 +683,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                             type="number" 
                                             value={newQuest.rewardPool} 
                                             onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value } as T))} 
-                                            className={isBelowMin ? "border-red-500" : ""}
+                                            
                                         />
                                         {tokenPrice > 0 && (
                                             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground flex items-center gap-1">
@@ -705,12 +692,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                             </div>
                                         )}
                                     </div>
-                                    {isBelowMin && (
-                                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                                            <AlertTriangle className="h-3 w-3" />
-                                            Minimum pool value is ${MIN_POOL_USD_VALUE} (~{minTokenAmount} {selectedToken?.symbol})
-                                        </p>
-                                    )}
+                                    
                                 </div>
                                 <div className="border rounded overflow-hidden">
                                     <div className="grid grid-cols-5 text-xs font-medium bg-gray-100 dark:bg-gray-800 p-3">
@@ -759,18 +741,13 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                         <Button variant="ghost" size="icon" onClick={() => removeTier(i)} className="mb-0.5"><Trash2 className="h-4 w-4" /></Button>
                                     </div>
                                 ))}
-                                <div className={`bg-blue-50 dark:bg-blue-900/20 p-4 rounded ${isBelowMin ? 'border border-red-500' : ''}`}>
+                                <div className={`bg-blue-50 dark:bg-blue-900/20 p-4 rounded`}>
                                     <p>Total Pool: <strong>{calculateTotalFromTiers().toFixed(4)} {selectedToken?.symbol}</strong></p>
                                     {tokenPrice > 0 && <p className="text-xs text-muted-foreground">Value: ${poolUsdValue.toFixed(2)}</p>}
                                     
                                     <p className="text-xs mt-1">Deposit needed (incl. 5% fee): <strong>{(calculateTotalFromTiers() * 1.05).toFixed(4)}</strong></p>
                                     
-                                    {isBelowMin && (
-                                        <p className="text-xs text-red-500 mt-2 font-bold flex items-center gap-1">
-                                            <AlertTriangle className="h-3 w-3"/>
-                                            Total must exceed ${MIN_POOL_USD_VALUE}
-                                        </p>
-                                    )}
+                                    
                                 </div>
                             </div>
                         )}

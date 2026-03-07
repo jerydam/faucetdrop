@@ -68,7 +68,7 @@ const SYSTEM_TASKS: QuestTask[] = [
         id: 'sys_referral',
         title: 'Refer Friends',
         description: 'Share your unique referral link to earn points.',
-        points: 500,
+        points: 200,
         required: false,
         category: 'referral',
         url: '',
@@ -604,9 +604,9 @@ const handleRemoveTask = async (taskId: string) => {
                             </div>
                             
                             <div>
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Draft Saved Successfully!</h3>
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Quest Saved Successfully!</h3>
                                 <p className="text-muted-foreground mt-2 text-sm">
-                                    Your quest basics are saved. Would you like to proceed to configure Tasks & Timing now, or finish later?
+                                    Your quest Details and Token Configuration are now saved. Would you like to proceed to configure Tasks & Timing now, or finish later?
                                 </p>
                             </div>
 

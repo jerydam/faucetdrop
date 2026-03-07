@@ -2281,13 +2281,13 @@ export async function createQuestReward(
   claimWindowHours: number,
 ): Promise<string> {
   const backendA = VALID_BACKEND_ADDRESS;
-  const backendB = BACKUP_BACKEND_ADDRESS;
+  //const backendB = BACKUP_BACKEND_ADDRESS;
 
   // --- 1. Validation ---
   if (!isAddress(factoryAddress) || !isAddress(tokenAddress)) {
     throw new Error("Invalid factory or token address");
   }
-  if (!isAddress(backendA) || !isAddress(backendB)) {
+  if (!isAddress(backendA) ) {
     throw new Error("Invalid backend address configuration");
   }
   if (!provider) {
@@ -2304,7 +2304,6 @@ export async function createQuestReward(
       name,
       tokenAddress,
       backendA,
-      backendB,
       questEndTime,
       claimWindowHours,
       signerAddress,
@@ -2315,7 +2314,6 @@ export async function createQuestReward(
       name,
       tokenAddress,
       backendA,
-      backendB,
       questEndTime,
       claimWindowHours,
     ]);

@@ -121,7 +121,7 @@
       id: 'sys_referral',
       title: 'Refer Friends',
       description: 'Share your unique referral link to earn points.',
-      points: 500,
+      points: 200,
       required: false,
       category: 'referral',
       url: '',
@@ -741,7 +741,7 @@
           if (!provider) throw new Error("Wallet provider is not ready.");
           
           const deployedAddress = await createQuestReward(
-              provider, targetFactory, newQuest.title.trim(), newQuest.tokenAddress || ZeroAddress, questEndTime, hoursInt, BACKEND_WALLET_ADDRESS
+              provider, targetFactory, newQuest.title.trim(), newQuest.tokenAddress || ZeroAddress, questEndTime, hoursInt
           );
 
           const baseSlug = newQuest.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -788,185 +788,8 @@
 
     return (
       <div className="space-y-10 max-w-7xl mx-auto py-8 px-4">
-        
-        {/* 1. Timing Configuration */}
-        <Card className="border-border/50 shadow-sm bg-card">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Clock className="h-5 w-5 text-blue-500" /> Campaign Timing
-            </CardTitle>
-            <CardDescription>Define start/end times and claim duration.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            
-            {/* Start & End Date/Time */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label>Start Date & Time</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    type="date" 
-                    className="bg-background/50" 
-                    value={newQuest.startDate || ""} 
-                    onChange={e => setNewQuest((p:any) => ({...p, startDate: e.target.value}))} 
-                  />
-                  <Input 
-                    type="time" 
-                    className="bg-background/50" 
-                    value={newQuest.startTime || ""} 
-                    onChange={e => setNewQuest((p:any) => ({...p, startTime: e.target.value}))} 
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label>End Date & Time</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    type="date" 
-                    className="bg-background/50" 
-                    value={newQuest.endDate || ""} 
-                    onChange={e => setNewQuest((p:any) => ({...p, endDate: e.target.value}))} 
-                  />
-                  <Input 
-                    type="time" 
-                    className="bg-background/50" 
-                    value={newQuest.endTime || ""} 
-                    onChange={e => setNewQuest((p:any) => ({...p, endTime: e.target.value}))} 
-                  />
-                </div>
-              </div>
-
-              {/* Quest Duration Quick Picks */}
-              <div className="space-y-2 col-span-1 md:col-span-2">
-                <Label className="text-xs text-muted-foreground">Quick Set Quest Duration</Label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { label: '3 Days', days: 3 },
-                    { label: '5 Days', days: 5 },
-                    { label: '7 Days', days: 7 },
-                    { label: '10 Days', days: 10 },
-                    { label: '14 Days', days: 14 },
-                    { label: '21 Days', days: 21 },
-                    { label: '30 Days', days: 30 },
-                  ].map(preset => (
-                    <Badge
-                      key={`duration-${preset.label}`}
-                      variant="outline"
-                      className="cursor-pointer hover:bg-primary/10 transition-colors"
-                      onClick={() => handleDurationSelect(preset.days)}
-                    >
-                      {preset.label}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {timingErrors.length > 0 && (
-              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
-                <AlertTriangle className="h-4 w-4" />
-                <ul>{timingErrors.map((err, i) => <li key={i}>{err}</li>)}</ul>
-              </div>
-            )}
-
-            <div className="space-y-3 pt-2 border-t border-border/50">
-              <Label className="text-muted-foreground">Claim Window After End</Label>
-              <div className="flex gap-3 items-center">
-                <Input
-                  type="number"
-                  className="bg-background/50 w-28"
-                  value={newQuest.claimWindowValue ?? "7"}
-                  onChange={e => setNewQuest((p: any) => ({ ...p, claimWindowValue: e.target.value }))}
-                  min="1"
-                />
-                <Select
-                  value={newQuest.claimWindowUnit || "days"}
-                  onValueChange={v => setNewQuest((p: any) => ({ ...p, claimWindowUnit: v }))}
-                >
-                  <SelectTrigger className="bg-background/50 w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="days">Days</SelectItem>
-                    <SelectItem value="hours">Hours</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              {/* Claim Window Quick Picks */}
-              <div className="flex flex-wrap gap-2 mt-2">
-                {[
-                  { label: '7hrs', v: '7', u: 'hours' },
-                  { label: '24hrs', v: '24', u: 'hours' },
-                  { label: '3 Days', v: '3', u: 'days' },
-                  { label: '5 Days', v: '5', u: 'days' },
-                  { label: '7 Days', v: '7', u: 'days' },
-                  { label: '14 Days', v: '14', u: 'days' },
-                  { label: '21 Days', v: '21', u: 'days' },
-                ].map(preset => (
-                  <Badge
-                    key={`claim-${preset.label}`}
-                    variant="outline"
-                    className="cursor-pointer hover:bg-primary/10 transition-colors"
-                    onClick={() => setNewQuest((p: any) => ({ ...p, claimWindowValue: preset.v, claimWindowUnit: preset.u }))}
-                  >
-                    {preset.label}
-                  </Badge>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">Default: 7 Days • You can change it anytime</p>
-            </div>
-          </CardContent>
-        </Card>
-  {/* 2. Referral Program Configuration */}
-        <Card className="border-border/50 shadow-sm bg-card">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Users className="h-5 w-5 text-blue-500" /> Referral Program Settings
-            </CardTitle>
-            <CardDescription>Configure how users earn points for inviting others.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label>Points per Referral</Label>
-                <Input 
-                  type="number" 
-                  className="bg-background/50" 
-                  value={newQuest.tasks.find((t: QuestTask) => t.id === 'sys_referral')?.points || 50} 
-                  onChange={e => {
-                    setNewQuest((prev: any) => ({
-                      ...prev,
-                      tasks: prev.tasks.map((t: QuestTask) => t.id === 'sys_referral' ? { ...t, points: Number(e.target.value) || 0 } : t)
-                    }))
-                  }} 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Referee Requirement</Label>
-                <Select 
-                  value={newQuest.tasks.find((t: QuestTask) => t.id === 'sys_referral')?.requiredRefereeTaskId || "none"} 
-                  onValueChange={v => {
-                    setNewQuest((prev: any) => ({
-                      ...prev,
-                      tasks: prev.tasks.map((t: QuestTask) => t.id === 'sys_referral' ? { ...t, requiredRefereeTaskId: v } : t)
-                    }))
-                  }}
-                >
-                    <SelectTrigger className="bg-background/50"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="none">Just Join Quest (Default)</SelectItem>
-                        {newQuest.tasks.filter((t: QuestTask) => !t.isSystem).map((t: QuestTask) => (
-                          <SelectItem key={t.id} value={t.id}>Must complete: {t.title}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <p className="text-[10px] text-muted-foreground">The referred user must complete this specific task before the referrer earns points.</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+       
+  
         {/* 2. Tasks Management */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
@@ -1578,7 +1401,185 @@
             </Card>
           </div>
         </div>
+         {/* 2. Referral Program Configuration */}
+        <Card className="border-border/50 shadow-sm bg-card">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-500" /> Referral Program Settings
+            </CardTitle>
+            <CardDescription>Configure how users earn points for inviting others.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Points per Referral</Label>
+                <Input 
+                  disabled
+                  type="number" 
+                  className="bg-background/50" 
+                  value={newQuest.tasks.find((t: QuestTask) => t.id === 'sys_referral')?.points || 200} 
+                  onChange={e => {
+                    setNewQuest((prev: any) => ({
+                      ...prev,
+                      tasks: prev.tasks.map((t: QuestTask) => t.id === 'sys_referral' ? { ...t, points: Number(e.target.value) || 0 } : t)
+                    }))
+                  }} 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Referee Requirement</Label>
+                <Select 
+                  value={newQuest.tasks.find((t: QuestTask) => t.id === 'sys_referral')?.requiredRefereeTaskId || "none"} 
+                  onValueChange={v => {
+                    setNewQuest((prev: any) => ({
+                      ...prev,
+                      tasks: prev.tasks.map((t: QuestTask) => t.id === 'sys_referral' ? { ...t, requiredRefereeTaskId: v } : t)
+                    }))
+                  }}
+                >
+                    <SelectTrigger className="bg-background/50"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">Just Join Quest (Default)</SelectItem>
+                        {newQuest.tasks.filter((t: QuestTask) => !t.isSystem).map((t: QuestTask) => (
+                          <SelectItem key={t.id} value={t.id}>Must complete: {t.title}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">The referred user must complete this specific task before the referrer earns points.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        {/* 1. Timing Configuration */}
+        <Card className="border-border/50 shadow-sm bg-card">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <Clock className="h-5 w-5 text-blue-500" /> Campaign Timing
+            </CardTitle>
+            <CardDescription>Define start/end times and claim duration.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            
+            {/* Start & End Date/Time */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Start Date & Time</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    type="date" 
+                    className="bg-background/50" 
+                    value={newQuest.startDate || ""} 
+                    onChange={e => setNewQuest((p:any) => ({...p, startDate: e.target.value}))} 
+                  />
+                  <Input 
+                    type="time" 
+                    className="bg-background/50" 
+                    value={newQuest.startTime || ""} 
+                    onChange={e => setNewQuest((p:any) => ({...p, startTime: e.target.value}))} 
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>End Date & Time</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    type="date" 
+                    className="bg-background/50" 
+                    value={newQuest.endDate || ""} 
+                    onChange={e => setNewQuest((p:any) => ({...p, endDate: e.target.value}))} 
+                  />
+                  <Input 
+                    type="time" 
+                    className="bg-background/50" 
+                    value={newQuest.endTime || ""} 
+                    onChange={e => setNewQuest((p:any) => ({...p, endTime: e.target.value}))} 
+                  />
+                </div>
+              </div>
 
+              {/* Quest Duration Quick Picks */}
+              <div className="space-y-2 col-span-1 md:col-span-2">
+                <Label className="text-xs text-muted-foreground">Quick Set Quest Duration</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: '3 Days', days: 3 },
+                    { label: '5 Days', days: 5 },
+                    { label: '7 Days', days: 7 },
+                    { label: '10 Days', days: 10 },
+                    { label: '14 Days', days: 14 },
+                    { label: '21 Days', days: 21 },
+                    { label: '30 Days', days: 30 },
+                  ].map(preset => (
+                    <Badge
+                      key={`duration-${preset.label}`}
+                      variant="outline"
+                      className="cursor-pointer hover:bg-primary/10 transition-colors"
+                      onClick={() => handleDurationSelect(preset.days)}
+                    >
+                      {preset.label}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {timingErrors.length > 0 && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+                <AlertTriangle className="h-4 w-4" />
+                <ul>{timingErrors.map((err, i) => <li key={i}>{err}</li>)}</ul>
+              </div>
+            )}
+
+            <div className="space-y-3 pt-2 border-t border-border/50">
+              <Label className="text-muted-foreground">Claim Window After End</Label>
+              <div className="flex gap-3 items-center">
+                <Input
+                  type="number"
+                  className="bg-background/50 w-28"
+                  value={newQuest.claimWindowValue ?? "7"}
+                  onChange={e => setNewQuest((p: any) => ({ ...p, claimWindowValue: e.target.value }))}
+                  min="1"
+                />
+                <Select
+                  value={newQuest.claimWindowUnit || "days"}
+                  onValueChange={v => setNewQuest((p: any) => ({ ...p, claimWindowUnit: v }))}
+                >
+                  <SelectTrigger className="bg-background/50 w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="days">Days</SelectItem>
+                    <SelectItem value="hours">Hours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Claim Window Quick Picks */}
+              <div className="flex flex-wrap gap-2 mt-2">
+                {[
+                  { label: '7hrs', v: '7', u: 'hours' },
+                  { label: '24hrs', v: '24', u: 'hours' },
+                  { label: '3 Days', v: '3', u: 'days' },
+                  { label: '5 Days', v: '5', u: 'days' },
+                  { label: '7 Days', v: '7', u: 'days' },
+                  { label: '14 Days', v: '14', u: 'days' },
+                  { label: '21 Days', v: '21', u: 'days' },
+                ].map(preset => (
+                  <Badge
+                    key={`claim-${preset.label}`}
+                    variant="outline"
+                    className="cursor-pointer hover:bg-primary/10 transition-colors"
+                    onClick={() => setNewQuest((p: any) => ({ ...p, claimWindowValue: preset.v, claimWindowUnit: preset.u }))}
+                  >
+                    {preset.label}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Default: 7 Days • You can change it anytime</p>
+            </div>
+          </CardContent>
+        </Card>
         {/* 3. Finalize Button */}
         <div className="flex justify-center pt-8 border-t border-border/50">
           <Button size="lg" className="w-full sm:w-auto min-w-[200px]" onClick={handleDeployAndFinalize} disabled={!canFinalize}>

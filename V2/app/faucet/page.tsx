@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { FaucetList } from "@/components/faucet-list"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"
 import { Header } from "@/components/header"
@@ -11,10 +11,8 @@ function GalaxyBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    const canvas = canvasRef.current!
+    const ctx = canvas.getContext("2d")!
 
     let animId: number
     let w = 0
@@ -109,12 +107,10 @@ function GalaxyBackground() {
 
       // ── Stars
       stars.forEach(s => {
-        // Twinkle
         s.alpha += s.alphaDir * s.alphaSpeed
         if (s.alpha > 1)   { s.alpha = 1;   s.alphaDir = -1 }
         if (s.alpha < 0.1) { s.alpha = 0.1; s.alphaDir =  1 }
 
-        // Drift
         s.x += s.vx
         s.y += s.vy
         if (s.x < -4) s.x = w + 4
@@ -122,15 +118,12 @@ function GalaxyBackground() {
         if (s.y < -4) s.y = h + 4
         if (s.y > h + 4) s.y = -4
 
-        // Draw
         ctx.save()
         ctx.globalAlpha = s.alpha
 
         if (dark) {
-          // White/blue-white stars in dark mode
           const hue = s.layer === 2 ? "220,230,255" : "200,215,255"
           if (s.r > 1.5) {
-            // Glow for big stars
             const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 3.5)
             glow.addColorStop(0, `rgba(${hue},${s.alpha * 0.6})`)
             glow.addColorStop(1, "transparent")
@@ -141,7 +134,6 @@ function GalaxyBackground() {
           }
           ctx.fillStyle = `rgba(${hue},1)`
         } else {
-          // Dark navy/indigo stars in light mode
           const hue = s.layer === 2 ? "60,80,160" : "80,100,180"
           if (s.r > 1.5) {
             const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 3)
@@ -160,9 +152,6 @@ function GalaxyBackground() {
         ctx.fill()
         ctx.restore()
       })
-
-      // ── Shooting star (occasional)
-      // handled separately via a CSS animation overlay
 
       animId = requestAnimationFrame(draw)
     }
@@ -186,48 +175,171 @@ function GalaxyBackground() {
   )
 }
 
-// ── Shooting Star CSS overlay ─────────────────────────────────────────────────
+// ── Shooting Stars Canvas ─────────────────────────────────────────────────────
 function ShootingStars() {
-  return (
-    <>
-      <style>{`
-        @keyframes shoot {
-          0%   { transform: translateX(0) translateY(0) rotate(-35deg); opacity: 1; }
-          70%  { opacity: 0.8; }
-          100% { transform: translateX(600px) translateY(300px) rotate(-35deg); opacity: 0; }
-        }
-        .shooting-star {
-          position: fixed;
-          pointer-events: none;
-          z-index: 1;
-          width: 120px;
-          height: 1.5px;
-          border-radius: 9999px;
-          animation: shoot linear infinite;
-        }
-        .dark .shooting-star { background: linear-gradient(90deg, rgba(255,255,255,0.9) 0%, transparent 100%); }
-        .shooting-star       { background: linear-gradient(90deg, rgba(60,80,180,0.7) 0%, transparent 100%); }
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
-        .ss1 { top: 12%; left:  8%; animation-duration: 6s;  animation-delay: 0s;   }
-        .ss2 { top: 28%; left: 55%; animation-duration: 9s;  animation-delay: 3.5s; }
-        .ss3 { top:  5%; left: 30%; animation-duration: 7s;  animation-delay: 7s;   }
-        .ss4 { top: 40%; left: 70%; animation-duration: 11s; animation-delay: 1.8s; }
-        .ss5 { top: 18%; left: 80%; animation-duration: 8s;  animation-delay: 5s;   }
-      `}</style>
-      {[1, 2, 3, 4, 5].map(n => (
-        <div key={n} className={`shooting-star ss${n}`} aria-hidden />
-      ))}
-    </>
+  useEffect(() => {
+    const canvas = canvasRef.current!
+    const ctx    = canvas.getContext("2d")!
+
+    let animId: number
+    let w = 0, h = 0
+
+    type Meteor = {
+      x: number; y: number
+      vx: number; vy: number
+      len: number
+      life: number
+      decay: number
+      speed: number
+    }
+
+    const meteors: Meteor[] = []
+
+    function resize() {
+      w = canvas.offsetWidth
+      h = canvas.offsetHeight
+      canvas.width  = w * window.devicePixelRatio
+      canvas.height = h * window.devicePixelRatio
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+    }
+
+    function spawnMeteor() {
+      const angleDeg = 20 + Math.random() * 40
+      const angleRad = (angleDeg * Math.PI) / 180
+      const speed    = 300 + Math.random() * 400
+
+      // Spawn from top edge, left edge, or right edge (upper portion)
+      const edge = Math.random()
+      let sx: number, sy: number
+      let flipX = 1
+
+      if (edge < 0.6) {
+        sx = Math.random() * w
+        sy = 0
+      } else if (edge < 0.8) {
+        sx = 0
+        sy = Math.random() * h * 0.6
+      } else {
+        sx    = w
+        sy    = Math.random() * h * 0.4
+        flipX = -1   // shoot toward left
+      }
+
+      meteors.push({
+        x:     sx,
+        y:     sy,
+        vx:    Math.cos(angleRad) * speed * flipX,
+        vy:    Math.sin(angleRad) * speed,
+        len:   80 + Math.random() * 140,
+        life:  1,
+        decay: 0.6 + Math.random() * 0.8,
+        speed,
+      })
+    }
+
+    let nextSpawn = 1.5
+    let sinceSpawn = 0
+    let last = performance.now()
+
+    function draw(now: number) {
+      const dt = Math.min((now - last) / 1000, 0.05)
+      last = now
+      sinceSpawn += dt
+
+      ctx.clearRect(0, 0, w, h)
+
+      const dark = document.documentElement.classList.contains("dark")
+
+      if (sinceSpawn >= nextSpawn) {
+        spawnMeteor()
+        sinceSpawn = 0
+        nextSpawn  = 1.2 + Math.random() * 2.3
+      }
+
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i]
+        m.x    += m.vx * dt
+        m.y    += m.vy * dt
+        m.life -= m.decay * dt
+
+        if (m.life <= 0 || m.x > w + 200 || m.y > h + 200 || m.x < -200) {
+          meteors.splice(i, 1)
+          continue
+        }
+
+        const norm = m.speed === 0 ? 1 : m.speed
+        const tailX = m.x - (m.vx / norm) * m.len
+        const tailY = m.y - (m.vy / norm) * m.len
+
+        const grad = ctx.createLinearGradient(tailX, tailY, m.x, m.y)
+        const a    = m.life
+
+        if (dark) {
+          grad.addColorStop(0,   `rgba(255,255,255,0)`)
+          grad.addColorStop(0.6, `rgba(200,215,255,${a * 0.4})`)
+          grad.addColorStop(1,   `rgba(255,255,255,${a})`)
+        } else {
+          grad.addColorStop(0,   `rgba(60,80,200,0)`)
+          grad.addColorStop(0.6, `rgba(80,100,220,${a * 0.3})`)
+          grad.addColorStop(1,   `rgba(60,80,200,${a * 0.8})`)
+        }
+
+        ctx.save()
+        ctx.strokeStyle = grad
+        ctx.lineWidth   = 1.5
+        ctx.beginPath()
+        ctx.moveTo(tailX, tailY)
+        ctx.lineTo(m.x, m.y)
+        ctx.stroke()
+
+        // Bright head
+        ctx.beginPath()
+        ctx.arc(m.x, m.y, 1.8, 0, Math.PI * 2)
+        ctx.fillStyle = dark
+          ? `rgba(255,255,255,${a})`
+          : `rgba(80,100,220,${a * 0.9})`
+        ctx.fill()
+        ctx.restore()
+      }
+
+      animId = requestAnimationFrame(draw)
+    }
+
+    resize()
+    window.addEventListener("resize", resize)
+    animId = requestAnimationFrame(draw)
+
+    return () => {
+      cancelAnimationFrame(animId)
+      window.removeEventListener("resize", resize)
+    }
+  }, [])
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="fixed inset-0 w-full h-full pointer-events-none z-1"
+      aria-hidden
+    />
   )
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Faucet() {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   return (
     <main className="relative min-h-screen bg-[#0f0c1e] dark:bg-[#0f0c1e]">
-      {/* Galaxy layers */}
-      <GalaxyBackground />
-      <ShootingStars />
+      {/* Galaxy layers — canvas only renders client-side, avoids hydration mismatch */}
+      {mounted && (
+        <>
+          <GalaxyBackground />
+          <ShootingStars />
+        </>
+      )}
 
       {/* Content */}
       <div className="relative z-10">

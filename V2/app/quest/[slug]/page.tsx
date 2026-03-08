@@ -63,7 +63,7 @@ import { Contract, BrowserProvider, parseEther,ZeroAddress   } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
-const API_BASE_URL = "http://127.0.0.1:8000"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
 // ============= TYPES =============
 export type VerificationType =
@@ -457,7 +457,7 @@ export default function QuestDetailsPage() {
     if (now > claimWindowEnd) return { isActive: false, message: "Claim ended" };
     return { isActive: true, message: "Claim Live" };
   }, [questData, endCountdown]); // <--- ADD END COUNTDOWN HERE
-  
+
   const allParticipants = leaderboard.filter(
     (entry) => entry.walletAddress.toLowerCase() !== questData?.creatorAddress.toLowerCase()
   );
@@ -1285,11 +1285,11 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
   const questStatusGuard = useMemo(() => {
     const now = new Date();
-    const start = questData?.rawStartDate ? new Date(questData.rawStartDate) : null;
+    const start = questData?.startDate ? new Date(questData.startDate) : null;
     if (!questData?.isFunded) return { blocked: true, title: "Quest Unfunded", desc: "The creator has not funded the reward pool yet." };
     if (start && now < start) return { blocked: true, title: "Coming Soon", desc: `This quest starts on ${start.toLocaleDateString()} at ${start.toLocaleTimeString()}.` };
     return { blocked: false };
-  }, [questData]);
+  }, [questData, startCountdown]); // <--- ADD START COUNTDOWN HERE
 
   // ── UPDATED getTaskStatus: uses activeStages + stagesMeta from backend ──
   const getTaskStatus = (task: QuestTask) => {

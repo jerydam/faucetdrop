@@ -12,7 +12,7 @@ import {
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header"; 
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 interface QuestOverview {
     faucetAddress: string;
@@ -156,14 +156,14 @@ function QuestCard({ quest, isOwner, viewMode, onNavigate }: {
                             <div className="p-1 bg-purple-50 text-purple-600 rounded"><Users className="h-4 w-4" /></div>
                             <span><span className="font-bold text-foreground">{quest.totalParticipants ?? 0}</span> Participants</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <div className="p-1 bg-orange-50 text-orange-600 rounded"><Calendar className="h-4 w-4" /></div>
-                            <span>
+                       <div className="flex items-center gap-2">
+                         <div className="p-1 bg-orange-50 text-orange-600 rounded"><Calendar className="h-4 w-4" /></div>
+                            <span className="truncate">
                                 {isUpcoming
-                                    ? `Starts: ${new Date(quest.startDate).toLocaleDateString()}`
-                                    : `Ends: ${new Date(quest.endDate).toLocaleDateString()}`}
+                                    ? `Starts: ${new Date(quest.startDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+                                    : `Ends: ${new Date(quest.endDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`}
                             </span>
-                        </div>
+                       </div>
                     </div>
                 </div>
             </div>

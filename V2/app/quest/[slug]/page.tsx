@@ -63,7 +63,7 @@ import { Contract, BrowserProvider, parseEther,ZeroAddress   } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "http://127.0.0.1:8000"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
 // ============= TYPES =============
 export type VerificationType =
@@ -266,7 +266,7 @@ export default function QuestDetailsPage() {
   const requiredFee = rewardPoolAmount * platformFeePercentage;
   const totalRequired = rewardPoolAmount + requiredFee;
   const now = new Date();
-  const endDate = new Date(questData?.endDate || Date.now());
+  const endDate = new Date(questData?.rawEndDate || Date.now());
   const isQuestEnded = now > endDate;
 
   const claimWindowHours = questData?.claimWindowHours || 24; 
@@ -297,14 +297,14 @@ export default function QuestDetailsPage() {
     isActive: true,
   });
 
-  
+ 
   const isCreator =
     userWalletAddress &&
     questData &&
     questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
 
-  const startCountdown = useCountdown(questData?.startDate || null);
-  const endCountdown = useCountdown(questData?.endDate || null);
+  const startCountdown = useCountdown(questData?.rawStartDate || null);
+  const endCountdown = useCountdown(questData?.rawEndDate || null);
 
   // ── UPDATED: use activeStages from backend instead of hardcoded list ──
   // Fall back to the full list only when progress hasn't loaded yet
@@ -340,14 +340,35 @@ export default function QuestDetailsPage() {
         const json = await response.json();
 
         if (json.success && json.quest) {
-          setQuestData(json.quest);
-          setFaucetAddress(json.quest.faucetAddress);
+          const fetchedQuest = json.quest;
+
+          // 1. Preserve the raw UTC ISO string for accurate countdowns & displays
+          fetchedQuest.rawStartDate = fetchedQuest.startDate;
+          fetchedQuest.rawEndDate = fetchedQuest.endDate;
+
+          // 2. Unpack into LOCAL time for the Edit Form inputs
+          const pad = (n: number) => String(n).padStart(2, '0');
+          
+          if (fetchedQuest.startDate && fetchedQuest.startDate.includes("T")) {
+              const localStart = new Date(fetchedQuest.startDate);
+              fetchedQuest.startDate = `${localStart.getFullYear()}-${pad(localStart.getMonth() + 1)}-${pad(localStart.getDate())}`;
+              fetchedQuest.startTime = `${pad(localStart.getHours())}:${pad(localStart.getMinutes())}`;
+          }
+          
+          if (fetchedQuest.endDate && fetchedQuest.endDate.includes("T")) {
+              const localEnd = new Date(fetchedQuest.endDate);
+              fetchedQuest.endDate = `${localEnd.getFullYear()}-${pad(localEnd.getMonth() + 1)}-${pad(localEnd.getDate())}`;
+              fetchedQuest.endTime = `${pad(localEnd.getHours())}:${pad(localEnd.getMinutes())}`;
+          }
+
+          setQuestData(fetchedQuest);
+          setFaucetAddress(fetchedQuest.faucetAddress);
           setEditForm({
-            title: json.quest.title,
-            description: json.quest.description,
-            rewardPool: json.quest.rewardPool,
-            imageUrl: json.quest.imageUrl || "",
-            isActive: json.quest.isActive,
+            title: fetchedQuest.title,
+            description: fetchedQuest.description,
+            rewardPool: fetchedQuest.rewardPool,
+            imageUrl: fetchedQuest.imageUrl || "",
+            isActive: fetchedQuest.isActive,
           });
         } else {
           toast.error("Quest not found");
@@ -399,6 +420,8 @@ export default function QuestDetailsPage() {
   // ── ON-CHAIN CLAIM STATUS CHECK ──
   useEffect(() => {
     const checkClaimStatus = async () => {
+      if (!questData || !questData.rawEndDate) return { isActive: false, message: "Not started" };
+          const endDate = new Date(questData.rawEndDate);
       if (!faucetAddress || !userWalletAddress || !walletProvider || !isQuestEnded) return;
       
       try {
@@ -433,8 +456,8 @@ export default function QuestDetailsPage() {
     if (now < endDate) return { isActive: false, message: "Quest active" };
     if (now > claimWindowEnd) return { isActive: false, message: "Claim ended" };
     return { isActive: true, message: "Claim Live" };
-  }, [questData]);
-
+  }, [questData, endCountdown]); // <--- ADD END COUNTDOWN HERE
+  
   const allParticipants = leaderboard.filter(
     (entry) => entry.walletAddress.toLowerCase() !== questData?.creatorAddress.toLowerCase()
   );
@@ -649,7 +672,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
       isEnded: now > end,
       isPaused: !questData.isActive,
     };
-  }, [questData]);
+  }, [questData, startCountdown, endCountdown]); // <--- ADD COUNTDOWNS HERE
 
   const displayLeaderboard = useMemo(() => {
     let list = [...leaderboard];
@@ -836,6 +859,16 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
             return;
           }
 
+          // 1. NEW: Trigger the backfill API to update the message count
+          try {
+            await fetch(`${API_BASE_URL}/api/telegram/backfill-updates`, {
+              method: "POST",
+            });
+          } catch (backfillErr) {
+            console.warn("Telegram backfill failed, continuing with existing DB counts:", backfillErr);
+          }
+
+          // 2. Proceed with the actual verification check
           verifyRes = await fetch(
             `${API_BASE_URL}/api/quests/verify/telegram-message-count`,
             {
@@ -990,7 +1023,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
         toast.error(
           "❌ " +
             (verifyJson.message ||
-              "Verification failed. Ensure you included @FaucetDrops and try again.")
+              "Verification failed. Ensure you do the task and try again.")
         );
       }
 
@@ -1252,7 +1285,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
   const questStatusGuard = useMemo(() => {
     const now = new Date();
-    const start = questData?.startDate ? new Date(questData.startDate) : null;
+    const start = questData?.rawStartDate ? new Date(questData.rawStartDate) : null;
     if (!questData?.isFunded) return { blocked: true, title: "Quest Unfunded", desc: "The creator has not funded the reward pool yet." };
     if (start && now < start) return { blocked: true, title: "Coming Soon", desc: `This quest starts on ${start.toLocaleDateString()} at ${start.toLocaleTimeString()}.` };
     return { blocked: false };
@@ -1554,7 +1587,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
               <div>
                 <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm">Quest Not Started Yet</p>
                 <p className="text-xs text-blue-700 dark:text-blue-400">
-                  Starts on {new Date(questData.startDate).toLocaleString()}
+                  Starts on {new Date(questData.startDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                 </p>
               </div>
             </div>
@@ -1573,7 +1606,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
               <div>
                 <p className="font-semibold text-green-900 dark:text-green-200 text-sm">Quest Is Live!</p>
                 <p className="text-xs text-green-700 dark:text-green-400">
-                  Ends on {new Date(questData.endDate).toLocaleString()}
+                  Ends on {new Date(questData.endDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
                 </p>
               </div>
             </div>
@@ -1591,7 +1624,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
             <div>
               <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">Quest Has Ended</p>
               <p className="text-xs text-slate-500">
-                Ended on {new Date(questData.endDate).toLocaleString()}
+                Ended on {new Date(questData.endDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
             </div>
           </div>

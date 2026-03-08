@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { createClient } from "@supabase/supabase-js"
-
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import { 
     Settings, Search, Copy, Wallet, Loader2,
     ScrollText, PencilRuler, Rocket, Trash2
@@ -56,6 +57,17 @@ interface QuestData {
     participantCount?: number;
 }
 
+interface QuizData {
+    code: string;
+    title: string;
+    description: string;
+    coverImageUrl?: string;
+    status: string;
+    creatorAddress: string;
+    playerCount: number;
+    maxParticipants: number;
+    createdAt: string;
+}
 interface UserProfileData {
     wallet_address: string;
     username: string;
@@ -76,7 +88,8 @@ export default function DashboardPage() {
     const { address: connectedAddress, isConnected } = useWallet(); 
     const { networks } = useNetwork();
     const { user: privyUser } = usePrivy(); 
-    
+    const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; quest: QuestData | null }>({ open: false, quest: null })
+    const [deleteConfirmInput, setDeleteConfirmInput] = useState("")
     // This could be "jerydam" OR "0x123..."
     const targetUsernameOrAddress = params.username as string;
     const supabase = createClient(
@@ -84,6 +97,7 @@ export default function DashboardPage() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         )
     // Data State
+    const [userQuizzes, setUserQuizzes] = useState<QuizData[]>([]);
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
     const [publishedQuests, setPublishedQuests] = useState<QuestData[]>([]);
     const [draftQuests, setDraftQuests] = useState<QuestData[]>([]);
@@ -95,7 +109,7 @@ export default function DashboardPage() {
     // Filters & UI State
     const [searchQuery, setSearchQuery] = useState("");
     const [networkFilter, setNetworkFilter] = useState("all");
-    const [activeTab, setActiveTab] = useState("faucets");
+    const [activeTab, setActiveTab] = useState<'faucets' | 'quests' | 'quizzes'>('faucets');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
     const isOwner = useMemo(() => {
@@ -178,30 +192,29 @@ export default function DashboardPage() {
     }, [privyUser, connectedAddress, profile, isOwner, syncEmailToBackend, toast]);
 
     // --- FUNCTION: Delete Draft ---
-    const handleDeleteDraft = async (draftId: string) => {
-        if (!confirm("Are you sure you want to delete this draft?")) return;
-        
-        try {
-            const res = await fetch(`${backendUrl}/api/quests/draft/${draftId}`, {
-                method: 'DELETE'
-            });
-            const data = await res.json();
-            
-            if (data.success) {
-                toast({ title: "Draft deleted successfully" });
-                setDraftQuests(prev => prev.filter(q => q.faucetAddress !== draftId));
-            } else {
-                toast({ title: "Failed to delete draft", variant: "destructive" });
-            }
-        } catch (e) {
-            console.error(e);
-            toast({ title: "Error deleting draft", variant: "destructive" });
+   const handleDeleteDraft = async () => {
+    if (!deleteDialog.quest?.faucetAddress) return
+    try {
+        const res = await fetch(`${backendUrl}/api/quests/draft/${deleteDialog.quest.faucetAddress}`, { method: 'DELETE' })
+        const data = await res.json()
+        if (data.success) {
+            toast({ title: "Draft deleted successfully" })
+            setDraftQuests(prev => prev.filter(q => q.faucetAddress !== deleteDialog.quest!.faucetAddress))
+        } else {
+            toast({ title: "Failed to delete draft", variant: "destructive" })
         }
+    } catch (e) {
+        console.error(e)
+        toast({ title: "Error deleting draft", variant: "destructive" })
+    } finally {
+        setDeleteDialog({ open: false, quest: null })
+        setDeleteConfirmInput("")
     }
+}
 
     // IMPROVED: Fetch data with better address/username handling
    // IMPROVED: Fetch data with better address/username handling
-    const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async () => {
         console.log('[Dashboard] Starting fetchData for:', targetUsernameOrAddress)
         setLoading(true);
         
@@ -213,20 +226,17 @@ export default function DashboardPage() {
             const isAddress = targetUsernameOrAddress.startsWith('0x') && targetUsernameOrAddress.length === 42;
             
             if (isAddress) {
-                // Input is an address - fetch by address
                 console.log('[Dashboard] Fetching profile by address:', targetUsernameOrAddress)
                 const profRes = await fetch(`${backendUrl}/api/users/${targetUsernameOrAddress.toLowerCase()}?t=${Date.now()}`);
                 const profData = await profRes.json();
                 
-                // FIX: Check for nested 'profile' object OR top-level 'username'
                 const fetchedData = profData.profile || (profData.username ? profData : null);
 
                 if (profData.success && fetchedData) {
-                    // Profile exists in DB
                     userProfile = {
                         wallet_address: fetchedData.wallet_address || targetUsernameOrAddress.toLowerCase(),
                         username: fetchedData.username,
-                        email: fetchedData.email, // Include email
+                        email: fetchedData.email,
                         bio: fetchedData.bio,
                         avatar_url: fetchedData.avatar_url || fetchedData.avatarUrl,
                         twitter_handle: fetchedData.twitter_handle || fetchedData.twitterHandle,
@@ -234,9 +244,8 @@ export default function DashboardPage() {
                         telegram_handle: fetchedData.telegram_handle || fetchedData.telegramHandle,
                         farcaster_handle: fetchedData.farcaster_handle || fetchedData.farcasterHandle
                     };
-                    console.log('✅ [Dashboard] Profile found by address:', userProfile?.username) // Added ?
+                    console.log('✅ [Dashboard] Profile found by address:', userProfile?.username)
                 } else {
-                    // No profile yet, but valid address -> Show "New User"
                     userProfile = {
                         wallet_address: targetUsernameOrAddress.toLowerCase(),
                         username: "New User",
@@ -247,7 +256,6 @@ export default function DashboardPage() {
                 userWallet = targetUsernameOrAddress.toLowerCase();
                 
             } else {
-                // Input is a username - fetch by username
                 console.log('[Dashboard] Fetching profile by username:', targetUsernameOrAddress)
                 const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsernameOrAddress}?t=${Date.now()}`);
                 const profData = await profRes.json();
@@ -255,9 +263,8 @@ export default function DashboardPage() {
                 if (profData.success && profData.profile) {
                     userProfile = profData.profile;
                     userWallet = profData.profile.wallet_address;
-                    console.log('✅ [Dashboard] Profile found by username:', userProfile?.username) // Added ?
+                    console.log('✅ [Dashboard] Profile found by username:', userProfile?.username)
                 } else {
-                    // Username not found
                     console.log('❌ [Dashboard] Username not found')
                     setProfile(null);
                     setInitialLoadComplete(true);
@@ -281,12 +288,12 @@ export default function DashboardPage() {
 
                 const slugMap: Record<string, string> = {};
                 for (const row of slugRows ?? []) {
-                slugMap[row.faucet_address] = row.slug;
+                    slugMap[row.faucet_address] = row.slug;
                 }
 
                 const faucetsWithSlugs: FaucetData[] = faucetData.map((f: FaucetData) => ({
-                ...f,
-                slug: slugMap[f.faucetAddress.toLowerCase()] ?? undefined,
+                    ...f,
+                    slug: slugMap[f.faucetAddress.toLowerCase()] ?? undefined,
                 }));
 
                 console.log('[Dashboard] Faucets loaded:', faucetsWithSlugs.length)
@@ -335,6 +342,24 @@ export default function DashboardPage() {
                     } catch (err) {
                         console.log('[Dashboard] No drafts found:', err);
                     }
+                }
+
+                // 👇 STEP 6: Fetch Quizzes
+                console.log('[Dashboard] Fetching quizzes...')
+                try {
+                    const quizRes = await fetch(`${backendUrl}/api/quiz/list?t=${Date.now()}`);
+                    const quizData = await quizRes.json();
+                    
+                    if (quizData.success && quizData.quizzes) {
+                        const myQuizzes = quizData.quizzes.filter(
+                            (q: QuizData) => q.creatorAddress?.toLowerCase() === userWallet!.toLowerCase()
+                        );
+                        setUserQuizzes(myQuizzes);
+                        setQuizCount(myQuizzes.length);
+                        console.log('[Dashboard] Quizzes loaded:', myQuizzes.length)
+                    }
+                } catch (err) {
+                    console.log('[Dashboard] Error fetching quizzes:', err);
                 }
             }
             
@@ -543,6 +568,12 @@ export default function DashboardPage() {
                         >
                             Quests ({publishedQuests.length})
                         </button>
+                        <button 
+                            onClick={() => setActiveTab('quizzes')}
+                            className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-md transition-all ${activeTab === 'quizzes' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            Quizzes ({quizCount})
+                        </button>
                     </div>
 
                     {isOwner && (
@@ -627,7 +658,7 @@ export default function DashboardPage() {
                                 <div className="text-center py-8">No published quests yet.</div>
                             )}
                         </div>
-                        
+                
                         {/* Section: Drafts (Only for Owner) */}
                         {isOwner && (
                             <div>
@@ -646,7 +677,10 @@ export default function DashboardPage() {
                                                 quest={quest} 
                                                 type="draft"
                                                 onClick={() => router.push(`/quest/create-quest?draftId=${quest.faucetAddress}`)}
-                                                onDelete={handleDeleteDraft}
+                                                onDelete={(quest) => {
+                                                    setDeleteDialog({ open: true, quest })
+                                                    setDeleteConfirmInput("")
+                                                }}
                                             />
                                         ))}
                                     </div>
@@ -659,7 +693,67 @@ export default function DashboardPage() {
                         )}
                     </div>
                 )}
+                        {/* TAB: QUIZZES */}
+                {activeTab === 'quizzes' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div>
+                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                🧠 Created Quizzes
+                            </h3>
+                            {userQuizzes.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {userQuizzes.map((quiz) => (
+                                        <QuizCard 
+                                            key={quiz.code} 
+                                            quiz={quiz} 
+                                            onClick={() => router.push(`/quiz/${quiz.code}`)} // Adjust to your actual quiz URL route
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 border border-dashed rounded-lg bg-muted/10 text-muted-foreground">
+                                    No quizzes created yet.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
+            <Dialog open={deleteDialog.open} onOpenChange={(open) => { setDeleteDialog({ open, quest: open ? deleteDialog.quest : null }); setDeleteConfirmInput("") }}>
+    <DialogContent>
+        <DialogHeader>
+            <DialogTitle>Delete Draft</DialogTitle>
+            <DialogDescription>
+                This action cannot be undone. Type the quest name below to confirm deletion.
+            </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+            <p className="text-sm font-medium text-foreground">
+                Quest name: <span className="font-bold text-destructive">{deleteDialog.quest?.title || "Untitled Quest"}</span>
+            </p>
+            <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Type the quest name to confirm</Label>
+                <Input
+                    placeholder={deleteDialog.quest?.title || "Untitled Quest"}
+                    value={deleteConfirmInput}
+                    onChange={e => setDeleteConfirmInput(e.target.value)}
+                />
+            </div>
+        </div>
+        <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteDialog({ open: false, quest: null }); setDeleteConfirmInput("") }}>
+                Cancel
+            </Button>
+            <Button
+                variant="destructive"
+                disabled={deleteConfirmInput !== (deleteDialog.quest?.title || "Untitled Quest")}
+                onClick={() => handleDeleteDraft()}
+            >
+                <Trash2 className="h-4 w-4 mr-2" /> Delete Draft
+            </Button>
+        </DialogFooter>
+    </DialogContent>
+</Dialog>
         </main>
     )
 }
@@ -695,12 +789,54 @@ function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner
         </Card>
     )
 }
-
+// --- NEW QUIZ CARD COMPONENT ---
+function QuizCard({ quiz, onClick }: { quiz: QuizData; onClick: () => void }) {
+    return (
+        <Card className="hover:shadow-md transition-all group cursor-pointer flex flex-col" onClick={onClick}>
+            <div className="relative h-32 w-full bg-muted overflow-hidden rounded-t-lg">
+                {quiz.coverImageUrl ? (
+                    <img src={quiz.coverImageUrl} alt={quiz.title} className="w-full h-full object-cover" />
+                ) : (
+                    <div className="w-full h-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-primary/40 text-4xl font-bold uppercase">{quiz.title?.charAt(0) || "Q"}</span>
+                    </div>
+                )}
+                <Badge 
+                    className="absolute top-2 right-2 capitalize" 
+                    variant={quiz.status === 'active' ? 'default' : quiz.status === 'finished' ? 'secondary' : 'outline'}
+                >
+                    {quiz.status}
+                </Badge>
+            </div>
+            <CardContent className="p-4 flex flex-col flex-grow">
+                <div className="flex justify-between items-start mb-1 gap-2">
+                    <h4 className="font-bold truncate text-base">{quiz.title || "Untitled Quiz"}</h4>
+                    <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
+                        {quiz.code}
+                    </span>
+                </div>
+                <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4">
+                    {quiz.description || "No description provided."}
+                </p>
+                
+                <div className="mt-auto flex justify-between items-center text-xs text-muted-foreground border-t pt-3">
+                    <div className="flex items-center gap-1 font-medium">
+                        <span className="text-primary">Players: {quiz.playerCount}</span>
+                        {quiz.maxParticipants > 0 && <span>/ {quiz.maxParticipants}</span>}
+                    </div>
+                    <span>
+                        {quiz.createdAt ? new Date(quiz.createdAt).toLocaleDateString() : ""}
+                    </span>
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
 interface QuestCardProps {
     quest: QuestData;
     type: 'published' | 'draft';
     onClick: () => void;
-    onDelete?: (id: string) => void;
+   onDelete?: (quest: QuestData) => void;
 }
 
 function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
@@ -741,7 +877,7 @@ function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
                             className="px-2" 
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onDelete(quest.faucetAddress!);
+                                onDelete(quest);
                             }}
                         >
                             <Trash2 className="h-3 w-3 text-red-500" />

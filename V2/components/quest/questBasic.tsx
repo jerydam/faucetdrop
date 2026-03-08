@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { toast } from 'sonner'
 import {
-    Upload, Loader2, Trash2, Check, AlertTriangle, Coins, Settings, Save, Plus, DollarSign, Wallet
+    Upload, Loader2, Trash2, Check, AlertTriangle, Coins, Settings, Save,
+    Plus, Minus, DollarSign, Wallet, Users, Trophy, Medal, Award, Star
 } from "lucide-react"
 
 import { useWallet } from "@/hooks/use-wallet"
@@ -20,7 +21,6 @@ import { type Network } from "@/lib/faucet"
 
 // ==== CONFIG ====
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
-
 
 const networks: Network[] = [
     {
@@ -44,10 +44,9 @@ const networks: Network[] = [
         factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
     },
     {
-    name: "Bnb", symbol: "BNB", chainId: BigInt(56), rpcUrl: "https://binance.llamarpc.com", blockExplorer: "https://bscscan.com", explorerUrl: "https://bscscan.com", color: "#F3BA2F", 
-    logoUrl: "/bnb.png", iconUrl: "/bnb.png", factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"], factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" },    tokenAddress: ZeroAddress, nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },  isTestnet: false,
-}
-
+        name: "Bnb", symbol: "BNB", chainId: BigInt(56), rpcUrl: "https://binance.llamarpc.com", blockExplorer: "https://bscscan.com", explorerUrl: "https://bscscan.com", color: "#F3BA2F",
+        logoUrl: "/bnb.png", iconUrl: "/bnb.png", factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"], factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 }, isTestnet: false,
+    }
 ]
 
 const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
@@ -69,7 +68,7 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
         { address: ZeroAddress, name: "Ethereum", symbol: "ETH", decimals: 18, isNative: true, logoUrl: "/ether.jpeg", description: "Native Ethereum" },
         { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "Native USD Coin" },
     ],
-    56:[
+    56: [
         { address: ZeroAddress, name: "BNB", symbol: "BNB", decimals: 18, isNative: true, logoUrl: "/bnb.png", description: "Native BNB for transaction fees" },
         { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", name: "USD Coin", symbol: "USDC", decimals: 18, logoUrl: "/usdc.jpg", description: "Binance-Peg USD Coin" },
         { address: "0x55d398326f99059fF775485246999027B3197955", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/usdt.jpg", description: "Binance-Peg BSC-USD" },
@@ -77,7 +76,6 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
     ]
 }
 
-// Map tokens to CoinGecko IDs for price fetching
 const COINGECKO_IDS: Record<string, string> = {
     "CELO": "celo",
     "cUSD": "celo-dollar",
@@ -87,9 +85,9 @@ const COINGECKO_IDS: Record<string, string> = {
     "LSK": "lisk",
     "BNB": "bnb",
     "BUSD": "binance-usd",
-    "AGR": "agora-coin",
 }
 
+// ==== TYPES ====
 export interface TokenConfiguration {
     address: string
     name: string
@@ -100,10 +98,16 @@ export interface TokenConfiguration {
     description?: string
 }
 
+// ✅ NEW: one entry per rank position — replaces range-based tiers
+export interface RankReward {
+    rank: number    // 1-based rank position
+    amount: number  // token reward for this exact rank
+}
+
 export interface DistributionConfig {
     model: 'equal' | 'custom_tiers' | 'quadratic'
     totalWinners: number
-    tiers: Array<{ rankStart: number; rankEnd: number; amountPerUser: number }>
+    tiers: RankReward[]  // length === totalWinners when model is custom_tiers
 }
 
 export interface QuestData {
@@ -117,21 +121,69 @@ export interface QuestData {
     tokenAddress?: string
     tokenSymbol?: string
     tasks: any[]
+    // ADD THESE 4 LINES
+    startDate?: string
+    startTime?: string
+    endDate?: string
+    endTime?: string
 }
 
 // ==== UTILS ====
 const isAddress = (addr: string) => {
-    try {
-        return ethersIsAddress(addr);
-    } catch {
-        return false;
-    }
+    try { return ethersIsAddress(addr) } catch { return false }
 }
+
+// ✅ Shared helper used in both draft and finalize payloads
+export const computeRewardPool = (
+    distributionConfig: DistributionConfig,
+    rawRewardPool: string
+): number => {
+    if (distributionConfig.model === 'custom_tiers') {
+        return distributionConfig.tiers.reduce(
+            (sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount),
+            0
+        )
+    }
+    return parseFloat(rawRewardPool || '0')
+}
+
+// Build a synced ranks array for n winners, preserving existing amounts
+const buildRanks = (n: number, existing: RankReward[]): RankReward[] => {
+    const existingMap = new Map(existing.map(r => [r.rank, r.amount]))
+    return Array.from({ length: n }, (_, i) => ({
+        rank: i + 1,
+        amount: existingMap.get(i + 1) ?? 0,
+    }))
+}
+
 const examplePoints = [10000, 8100, 6400, 4900, 3600]
 const weights = examplePoints.map(p => Math.sqrt(p))
 const totalWeight = weights.reduce((a, b) => a + b, 0)
 
-// ==== MOVED OUTSIDE: Image Upload Component ====
+// ==== RANK STYLING HELPERS ====
+const RANK_ICONS: Record<number, React.ReactNode> = {
+    1: <Trophy className="h-4 w-4 text-yellow-400" />,
+    2: <Medal className="h-4 w-4 text-slate-400" />,
+    3: <Award className="h-4 w-4 text-amber-600" />,
+}
+const getRankIcon = (rank: number) =>
+    RANK_ICONS[rank] ?? <Star className="h-3.5 w-3.5 text-muted-foreground/40" />
+
+const getRankLabel = (rank: number) => {
+    if (rank === 1) return "1st Place"
+    if (rank === 2) return "2nd Place"
+    if (rank === 3) return "3rd Place"
+    return `${rank}th Place`
+}
+
+const getRankRowStyle = (rank: number) => {
+    if (rank === 1) return "border-yellow-400/40 bg-yellow-400/5"
+    if (rank === 2) return "border-slate-400/40 bg-slate-400/5"
+    if (rank === 3) return "border-amber-600/40 bg-amber-600/5"
+    return "border-border/50 bg-muted/10"
+}
+
+// ==== IMAGE UPLOAD COMPONENT ====
 const ImageUploadField: React.FC<{
     imageUrl: string
     onImageUrlChange: (url: string) => void
@@ -143,19 +195,15 @@ const ImageUploadField: React.FC<{
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [resolutionError, setResolutionError] = useState<string | null>(null)
-    
+
     const maxWidth = requiredResolution?.width || 1024
     const maxHeight = requiredResolution?.height || 1024
-
-    // Use a helper to check if the current image is just a placeholder
-    const isPlaceholder = !imageUrl || imageUrl.includes('placehold.co');
+    const isPlaceholder = !imageUrl || imageUrl.includes('placehold.co')
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
-        
         setResolutionError(null)
-
         const reader = new FileReader()
         reader.onload = (ev) => {
             const img = new Image()
@@ -174,83 +222,52 @@ const ImageUploadField: React.FC<{
     }
 
     const handleRemove = () => {
-        onImageUrlChange("") // Clear parent state
-        setPreviewUrl(null)   // Clear local preview
+        onImageUrlChange("")
+        setPreviewUrl(null)
         setResolutionError(null)
         if (fileInputRef.current) fileInputRef.current.value = ""
     }
 
-    // Only show the preview section if there's a real image or an error
-    const shouldShowPreview = (!isPlaceholder) || previewUrl || uploadError || resolutionError;
+    const shouldShowPreview = (!isPlaceholder) || previewUrl || uploadError || resolutionError
 
     return (
         <div className="space-y-2">
             <Label>Quest Image/Logo (Max 5MB, Recommended: {maxWidth}x{maxHeight} Square)</Label>
-            
             <div className="flex items-center space-x-3">
-                {/* The Button is now always visible and toggle-able */}
-                <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => fileInputRef.current?.click()} 
-                    disabled={isUploading} 
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
                     className="flex-grow"
                 >
-                    {isUploading ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                        <Upload className="h-4 w-4 mr-2" />
-                    )}
+                    {isUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
                     {isUploading ? "Uploading..." : (!isPlaceholder ? "Change Image" : "Upload Image")}
                 </Button>
-
                 {!isPlaceholder && (
-                    <Button 
-                        type="button" 
-                        variant="destructive" 
-                        size="icon" 
-                        onClick={handleRemove} 
-                        disabled={isUploading}
-                    >
+                    <Button type="button" variant="destructive" size="icon" onClick={handleRemove} disabled={isUploading}>
                         <Trash2 className="h-4 w-4" />
                     </Button>
                 )}
-
-                <Input 
-                    ref={fileInputRef} 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={handleFileChange} 
-                />
+                <Input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
             </div>
-
             {shouldShowPreview && (
                 <div className="flex items-start space-x-3 mt-2 border p-3 rounded-lg bg-slate-50 dark:bg-gray-800 animate-in fade-in zoom-in duration-200">
                     <div className="h-16 w-16 rounded-lg overflow-hidden border bg-gray-100 dark:bg-gray-700 flex-shrink-0">
                         {(previewUrl || !isPlaceholder) ? (
-                            <img 
-                                src={previewUrl || imageUrl} 
-                                alt="Preview" 
-                                className="h-full w-full object-cover" 
-                            />
+                            <img src={previewUrl || imageUrl} alt="Preview" className="h-full w-full object-cover" />
                         ) : (
-                            <div className="h-full w-full flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">
-                                No Image
-                            </div>
+                            <div className="h-full w-full flex items-center justify-center text-[10px] text-muted-foreground text-center p-1">No Image</div>
                         )}
                     </div>
-                    
                     <div className="flex-grow pt-1">
                         {resolutionError || uploadError ? (
                             <p className="text-xs text-red-500 font-medium flex items-center gap-1">
-                                <AlertTriangle className="h-3.5 w-3.5" />
-                                {resolutionError || uploadError}
+                                <AlertTriangle className="h-3.5 w-3.5" />{resolutionError || uploadError}
                             </p>
                         ) : !isPlaceholder ? (
                             <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-                                <Check className="h-3.5 w-3.5" />
-                                Ready for quest
+                                <Check className="h-3.5 w-3.5" />Ready for quest
                             </p>
                         ) : null}
                     </div>
@@ -260,7 +277,7 @@ const ImageUploadField: React.FC<{
     )
 }
 
-// ==== PHASE 1 COMPONENT ====
+// ==== PHASE 1 PROPS ====
 interface Phase1Props<T extends QuestData> {
     newQuest: T
     setNewQuest: React.Dispatch<React.SetStateAction<T>>
@@ -281,6 +298,7 @@ interface Phase1Props<T extends QuestData> {
     setError: React.Dispatch<React.SetStateAction<string | null>>
 }
 
+// ==== PHASE 1 COMPONENT ====
 export default function Phase1QuestDetailsRewards<T extends QuestData>({
     newQuest,
     setNewQuest,
@@ -307,172 +325,208 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     const [isCustomToken, setIsCustomToken] = useState(false)
     const [customTokenAddress, setCustomTokenAddress] = useState('')
     const nameCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-    
-    // --- PRICE CALCULATION STATE ---
+
     const [tokenPrice, setTokenPrice] = useState<number>(0)
     const [isFetchingPrice, setIsFetchingPrice] = useState(false)
 
-    // --- FETCH TOKEN PRICE ---
+    // ── Price fetch ──────────────────────────────────────────────────────────
     const fetchTokenPrice = async (symbol: string) => {
         setIsFetchingPrice(true)
         try {
-            // Find CoinGecko ID or default to ethereum for unknown
-            const coingeckoId = COINGECKO_IDS[symbol] || "ethereum" 
-            
+            const coingeckoId = COINGECKO_IDS[symbol] || "ethereum"
             const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoId}&vs_currencies=usd`)
             const data = await res.json()
-            
-            if (data[coingeckoId] && data[coingeckoId].usd) {
-                setTokenPrice(data[coingeckoId].usd)
-            } else {
-                setTokenPrice(0) // Price not found
-            }
-        } catch (e) {
-            console.error("Error fetching price", e)
+            setTokenPrice(data[coingeckoId]?.usd ?? 0)
+        } catch {
             setTokenPrice(0)
         } finally {
             setIsFetchingPrice(false)
         }
     }
 
-    // Trigger price fetch when token changes
     useEffect(() => {
-        if (selectedToken) {
-            fetchTokenPrice(selectedToken.symbol)
-        }
+        if (selectedToken) fetchTokenPrice(selectedToken.symbol)
     }, [selectedToken])
 
-    const calculateTotalFromTiers = () => {
-        if (!newQuest.distributionConfig.tiers || newQuest.distributionConfig.tiers.length === 0) return 0;
-        return newQuest.distributionConfig.tiers.reduce((acc, tier) => {
-            const count = Math.max(0, tier.rankEnd - tier.rankStart + 1)
-            return acc + count * tier.amountPerUser
-        }, 0)
-    }
-    
-    // Calculate USD Value & Min Amount
-    const poolAmount = newQuest.distributionConfig.model === 'custom_tiers' 
-        ? calculateTotalFromTiers()
-        : parseFloat(newQuest.rewardPool || '0')
-        
+    // ── Derived pool amounts ─────────────────────────────────────────────────
+    // ✅ Always use computeRewardPool so custom_tiers is handled correctly
+    const poolAmount = computeRewardPool(newQuest.distributionConfig, newQuest.rewardPool)
     const poolUsdValue = poolAmount * tokenPrice
-    
 
+    // ── Name check ───────────────────────────────────────────────────────────
     const checkNameAvailabilityAPI = useCallback(async (nameToValidate: string) => {
-        if (!nameToValidate.trim()) {
-            setNameError(null)
-            return
-        }
+        if (!nameToValidate.trim()) { setNameError(null); return }
         setIsCheckingName(true)
         setNameError(null)
         try {
             const response = await fetch(`${API_BASE_URL}/api/check-name?name=${encodeURIComponent(nameToValidate)}`)
             const data = await response.json()
-            if (data.exists) {
-                setNameError(`The name "${nameToValidate}" is already taken.`)
-            } else {
-                setNameError(null)
-            }
+            setNameError(data.exists ? `The name "${nameToValidate}" is already taken.` : null)
         } catch {
-            // setNameError("Could not verify name availability.")
+            // silent
         } finally {
             setIsCheckingName(false)
         }
     }, [setNameError, setIsCheckingName])
 
     const handleTitleChange = useCallback((value: string) => {
-        setNewQuest(prev => ({ ...prev, title: value } as T))
-        if (nameCheckTimeoutRef.current) clearTimeout(nameCheckTimeoutRef.current)
-        if (value.trim().length >= 3) {
-            nameCheckTimeoutRef.current = setTimeout(() => checkNameAvailabilityAPI(value.trim()), 1000)
-        } else {
-            setNameError(null)
-        }
-    }, [checkNameAvailabilityAPI, setNewQuest, setNameError])
+        setNewQuest(prev => ({ ...prev, title: value } as T));
+        // Clear any previous error while the user is actively typing a new name
+        if (nameError) setNameError(null); 
+    }, [setNewQuest, nameError, setNameError]);
 
     const handleTitleBlur = useCallback(() => {
-        if (nameCheckTimeoutRef.current) clearTimeout(nameCheckTimeoutRef.current)
-    }, [])
+        const currentTitle = newQuest.title || "";
+        // Trigger the check immediately when clicking outside the input
+        if (currentTitle.trim().length >= 3) {
+            checkNameAvailabilityAPI(currentTitle.trim());
+        }
+    }, [newQuest.title, checkNameAvailabilityAPI]);
 
-    const titleSafe = newQuest.title || "";
-    const titleLength = titleSafe.trim().length;
+    const titleSafe = newQuest.title || ""
+    const titleLength = titleSafe.trim().length
 
+    // ── equal/quadratic helpers ──────────────────────────────────────────────
     const getAmountPerWinner = () => {
-        const total = parseFloat(newQuest.rewardPool || '0');
-        const winners = newQuest.distributionConfig.totalWinners || 1;
-        if (!total || total <= 0) return '0';
-        return (total / winners).toFixed(6);
+        const total = parseFloat(newQuest.rewardPool || '0')
+        const winners = newQuest.distributionConfig.totalWinners || 1
+        if (!total || total <= 0) return '0'
+        return (total / winners).toFixed(6)
     }
+
+   // ── Phase 1 validity ─────────────────────────────────────────────────────
     const isPhase1Valid = useMemo(() => {
-    const hasValidTitle = (newQuest.title || "").trim().length >= 3 && !nameError;
-    const hasImage = !!newQuest.imageUrl && !newQuest.imageUrl.includes('placehold.co');
-    const hasToken = !!selectedToken;
-    
-    return hasValidTitle && hasImage && hasToken && isConnected;
-}, [newQuest.title, nameError, newQuest.imageUrl, selectedToken, poolAmount,isConnected]);
-    const handleTierChange = (index: number, field: 'rankStart' | 'rankEnd' | 'amountPerUser', value: number) => {
-        const updated = [...newQuest.distributionConfig.tiers]
-        updated[index] = { ...updated[index], [field]: value }
+        const hasValidTitle = (newQuest.title || "").trim().length >= 3 && !nameError
+        const hasImage = !!newQuest.imageUrl && !newQuest.imageUrl.includes('placehold.co')
+        const hasToken = !!selectedToken
         
-        setNewQuest(prev => ({
-            ...prev,
-            distributionConfig: { ...prev.distributionConfig, tiers: updated }
-        } as T))
-    }
+        // 👇 Added !isCheckingName to prevent saving while the blur check is running
+        return hasValidTitle && hasImage && hasToken && isConnected && !isCheckingName 
+    }, [newQuest.title, nameError, newQuest.imageUrl, selectedToken, isConnected, isCheckingName])
 
-    const addTier = () => {
-        const last = newQuest.distributionConfig.tiers[newQuest.distributionConfig.tiers.length - 1]
-        const start = last ? last.rankEnd + 1 : 1
-        
+    // ── Distribution model change ────────────────────────────────────────────
+    // ✅ FIX: Just swap the model. Preserve tiers so user can switch back safely.
+    //         Reset rewardPool to "0" when entering custom_tiers so stale
+    //         equal/quadratic values don't bleed into the payload.
+    const handleModelChange = (v: DistributionConfig['model']) => {
         setNewQuest(prev => ({
             ...prev,
+            rewardPool: v === 'custom_tiers' ? '0' : prev.rewardPool,
             distributionConfig: {
                 ...prev.distributionConfig,
-                tiers: [...prev.distributionConfig.tiers, { rankStart: start, rankEnd: start, amountPerUser: 0 }]
-            }
+                model: v,
+                // Tiers are NOT wiped — preserving them lets the user switch
+                // back to custom_tiers without losing their rank data
+            },
         } as T))
     }
 
-    const removeTier = (index: number) => {
+    // ── custom_tiers: winner count change ────────────────────────────────────
+    // ✅ Builds a correctly-sized tiers array, preserving existing amounts
+    const handleWinnersChange = useCallback((value: number) => {
+        const n = Math.max(1, Math.min(100, value || 1))
+
+        if (newQuest.distributionConfig.model === 'custom_tiers') {
+            // Rebuild rank rows, keeping existing amounts for unchanged ranks
+            const newTiers = buildRanks(n, newQuest.distributionConfig.tiers)
+            const newTotal = newTiers.reduce((sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount), 0)
+            setNewQuest(prev => ({
+                ...prev,
+                rewardPool: newTotal.toString(),
+                distributionConfig: { ...prev.distributionConfig, totalWinners: n, tiers: newTiers },
+            } as T))
+        } else {
+            setNewQuest(prev => ({
+                ...prev,
+                distributionConfig: { ...prev.distributionConfig, totalWinners: n },
+            } as T))
+        }
+    }, [newQuest.distributionConfig, setNewQuest])
+
+    // ── custom_tiers: per-rank amount change ─────────────────────────────────
+    // ✅ Updates the specific rank row and syncs rewardPool in state
+    const handleRankAmountChange = useCallback((rank: number, raw: string) => {
+        const amount = Math.max(0, parseFloat(raw) || 0)
+        const updated = newQuest.distributionConfig.tiers.map(r =>
+            r.rank === rank ? { ...r, amount } : r
+        )
+        // ✅ NaN-safe total sync
+        const newTotal = updated.reduce((sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount), 0)
         setNewQuest(prev => ({
             ...prev,
-            distributionConfig: {
-                ...prev.distributionConfig,
-                tiers: prev.distributionConfig.tiers.filter((_, i) => i !== index)
-            }
+            rewardPool: newTotal.toString(),
+            distributionConfig: { ...prev.distributionConfig, tiers: updated },
         } as T))
-    }
+    }, [newQuest.distributionConfig, setNewQuest])
 
+    // ── Initialise rank rows when entering custom_tiers for the first time ───
+    useEffect(() => {
+        if (
+            newQuest.distributionConfig.model === 'custom_tiers' &&
+            newQuest.distributionConfig.tiers.length !== newQuest.distributionConfig.totalWinners
+        ) {
+            const synced = buildRanks(
+                newQuest.distributionConfig.totalWinners,
+                newQuest.distributionConfig.tiers
+            )
+            const newTotal = synced.reduce((sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount), 0)
+            setNewQuest(prev => ({
+                ...prev,
+                rewardPool: newTotal.toString(),
+                distributionConfig: { ...prev.distributionConfig, tiers: synced },
+            } as T))
+        }
+    }, [newQuest.distributionConfig.model, newQuest.distributionConfig.totalWinners])
+
+    // ── Save draft ───────────────────────────────────────────────────────────
+   // ── Save draft ───────────────────────────────────────────────────────────
     const handleSaveDraft = async () => {
-        
-        if (!address || !isConnected || !selectedToken || (newQuest.title || "").trim().length < 3 || nameError || !newQuest.imageUrl) {
+        if (!address || !isConnected || !selectedToken || titleLength < 3 || nameError || !newQuest.imageUrl) {
             setError("Complete all required fields")
             return
         }
 
-        if(poolAmount <= 0) {
-             setError("Reward pool amount must be greater than zero.")
-             return
+        // ✅ Always compute from source of truth — never trust raw rewardPool for custom_tiers
+        const computedPool = computeRewardPool(newQuest.distributionConfig, newQuest.rewardPool)
+        if (computedPool <= 0) {
+            setError("Reward pool amount must be greater than zero.")
+            return
         }
 
         setIsSavingDraft(true)
         try {
             const draftId = newQuest.faucetAddress || `draft-${crypto.randomUUID()}`
 
-         const payload = {
-            creatorAddress: address,
-            title: newQuest.title.trim(),
-            description: newQuest.description,
-            imageUrl: newQuest.imageUrl,
-            rewardPool: poolAmount.toString(),
-            rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
-            tokenAddress: selectedToken.address,
-            tokenSymbol: selectedToken.symbol,           
-            token_symbol: selectedToken.symbol,
-            distributionConfig: newQuest.distributionConfig,
-            faucetAddress: draftId,
-            tasks: newQuest.tasks
-        };
+            // ADD THIS HELPER: Safely combine date and time into an ISO string if they exist
+            const formatToISO = (dateStr?: string, timeStr?: string) => {
+                if (!dateStr) return undefined;
+                if (dateStr.includes("T")) return dateStr; // Already an ISO string from the DB
+                const time = timeStr || "00:00";
+                try {
+                    return new Date(`${dateStr}T${time}`).toISOString();
+                } catch {
+                    return dateStr;
+                }
+            };
+
+            const payload = {
+                creatorAddress: address,
+                title: newQuest.title.trim(),
+                description: newQuest.description,
+                imageUrl: newQuest.imageUrl,
+                rewardPool: computedPool.toString(),   // ✅ always correct
+                rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
+                tokenAddress: selectedToken.address,
+                tokenSymbol: selectedToken.symbol,
+                token_symbol: selectedToken.symbol,
+                distributionConfig: newQuest.distributionConfig,
+                faucetAddress: draftId,
+                tasks: newQuest.tasks,
+                // ADD THESE TWO LINES SO DATES ARE NOT LOST:
+                startDate: formatToISO(newQuest.startDate, newQuest.startTime),
+                endDate: formatToISO(newQuest.endDate, newQuest.endTime)
+            }
+
             const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -490,12 +544,27 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
             setIsSavingDraft(false)
         }
     }
+    // ── Derived custom_tiers totals for the summary panel ───────────────────
+    const customTiersTotal = useMemo(() =>
+        newQuest.distributionConfig.tiers.reduce((sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount), 0),
+        [newQuest.distributionConfig.tiers]
+    )
+    const highestRankAmount = useMemo(() =>
+        Math.max(...newQuest.distributionConfig.tiers.map(r => r.amount), 0),
+        [newQuest.distributionConfig.tiers]
+    )
+    const hasZeroRanks = newQuest.distributionConfig.tiers.some(r => r.amount <= 0)
 
+    // ── Render ───────────────────────────────────────────────────────────────
     return (
         <div className="space-y-12 max-w-5xl mx-auto py-8">
+
+            {/* ── Step 1: Basic Details ── */}
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2"><Settings className="h-5 w-5" /> Step 1: Basic Quest Details</CardTitle>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                        <Settings className="h-5 w-5" /> Step 1: Basic Quest Details
+                    </CardTitle>
                     <CardDescription>The Title is used as the Faucet name.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -511,7 +580,11 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                 disabled={isCheckingName}
                             />
                             {isCheckingName && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-500" />}
-                            {!isCheckingName && titleLength >= 3 && (nameError ? <AlertTriangle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" /> : <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />)}
+                            {!isCheckingName && titleLength >= 3 && (
+                                nameError
+                                    ? <AlertTriangle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" />
+                                    : <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />
+                            )}
                         </div>
                         {titleLength > 0 && titleLength < 3 && <p className="text-xs text-red-500">At least 3 characters</p>}
                         {nameError && titleLength >= 3 && <p className="text-xs text-red-500">{nameError}</p>}
@@ -539,11 +612,14 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                 </CardContent>
             </Card>
 
+            {/* ── Step 2: Rewards Configuration ── */}
             <Card>
                 <CardHeader>
                     <div className="flex justify-between items-start">
                         <div>
-                            <CardTitle className="text-lg flex items-center gap-2"><Coins className="h-5 w-5" /> Step 2: Rewards Configuration</CardTitle>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <Coins className="h-5 w-5" /> Step 2: Rewards Configuration
+                            </CardTitle>
                             <CardDescription>Choose token and distribution model</CardDescription>
                         </div>
                         {network && (
@@ -554,57 +630,61 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
+
+                    {/* Token selector */}
                     <div className="space-y-2">
                         <Label>Reward Token ({network?.name || 'Unknown Network'})</Label>
-                        <Select value={isCustomToken ? "custom" : selectedToken?.address} onValueChange={(v) => {
-                            if (v === "custom") {
-                                setIsCustomToken(true)
-                                setSelectedToken(null)
-                            } else {
-                                const token = availableTokens.find(t => t.address === v)
-                                if (token) {
-                                    setSelectedToken(token)
-                                    setIsCustomToken(false)
-                                    setCustomTokenAddress('')
-                                    
-                                    setNewQuest(prev => ({
-                                        ...prev,
-                                        rewardTokenType: token.isNative ? 'native' : 'erc20',
-                                        tokenAddress: token.address,
-                                        tokenSymbol: token.symbol
-                                    } as T))
+                        <Select
+                            value={isCustomToken ? "custom" : selectedToken?.address}
+                            onValueChange={(v) => {
+                                if (v === "custom") {
+                                    setIsCustomToken(true)
+                                    setSelectedToken(null)
+                                } else {
+                                    const token = availableTokens.find(t => t.address === v)
+                                    if (token) {
+                                        setSelectedToken(token)
+                                        setIsCustomToken(false)
+                                        setCustomTokenAddress('')
+                                        setNewQuest(prev => ({
+                                            ...prev,
+                                            rewardTokenType: token.isNative ? 'native' : 'erc20',
+                                            tokenAddress: token.address,
+                                            tokenSymbol: token.symbol
+                                        } as T))
+                                    }
                                 }
-                            }
-                        }}>
+                            }}
+                        >
                             <SelectTrigger><SelectValue placeholder="Select token" /></SelectTrigger>
                             <SelectContent>
-                                {availableTokens.map(t => <SelectItem key={t.address} value={t.address}>{t.name} ({t.symbol})</SelectItem>)}
+                                {availableTokens.map(t => (
+                                    <SelectItem key={t.address} value={t.address}>{t.name} ({t.symbol})</SelectItem>
+                                ))}
                                 <SelectItem value="custom">+ Custom Token</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
 
+                    {/* Custom token input */}
                     {isCustomToken && (
                         <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900 border-dashed border-gray-300 dark:border-gray-700">
                             <Label>Custom Token Address</Label>
                             <div className="flex gap-2 mt-2">
-                                <Input value={customTokenAddress} onChange={(e) => setCustomTokenAddress(e.target.value)} placeholder="0x..." />
+                                <Input
+                                    value={customTokenAddress}
+                                    onChange={(e) => setCustomTokenAddress(e.target.value)}
+                                    placeholder="0x..."
+                                />
                                 <Button variant="secondary" onClick={() => {
                                     if (isAddress(customTokenAddress)) {
-                                        // ✅ FIX: Create token with symbol
-                                        const customToken = { 
-                                            address: customTokenAddress, 
-                                            name: 'Custom', 
-                                            symbol: 'TOK',  // You might want to fetch this
-                                            decimals: 18 
-                                        }
-                                        
+                                        const customToken = { address: customTokenAddress, name: 'Custom', symbol: 'TOK', decimals: 18 }
                                         setSelectedToken(customToken)
-                                        setNewQuest(prev => ({ 
-                                            ...prev, 
-                                            rewardTokenType: 'erc20', 
+                                        setNewQuest(prev => ({
+                                            ...prev,
+                                            rewardTokenType: 'erc20',
                                             tokenAddress: customTokenAddress,
-                                            tokenSymbol: 'TOK'   
+                                            tokenSymbol: 'TOK'
                                         } as T))
                                         toast.success("Custom token address set")
                                     } else {
@@ -612,29 +692,30 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                     }
                                 }}>Set Address</Button>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-2">Make sure this is a valid ERC20 token on {network?.name}.</p>
+                            <p className="text-xs text-muted-foreground mt-2">
+                                Make sure this is a valid ERC20 token on {network?.name}.
+                            </p>
                         </div>
                     )}
 
+                    {/* Winners count + Model selector */}
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label>Number of Winners</Label>
-                                <Input type="number" min="1" value={newQuest.distributionConfig.totalWinners} onChange={(e) =>
-                                    
-                                    setNewQuest(prev => ({
-                                        ...prev,
-                                        distributionConfig: { ...prev.distributionConfig, totalWinners: Math.max(1, parseInt(e.target.value) || 1) }
-                                    } as T))} />
+                                <Input
+                                    type="number"
+                                    min="1"
+                                    value={newQuest.distributionConfig.totalWinners}
+                                    onChange={(e) => handleWinnersChange(parseInt(e.target.value) || 1)}
+                                />
                             </div>
                             <div>
                                 <Label>Distribution Model</Label>
-                                <Select value={newQuest.distributionConfig.model} onValueChange={(v: any) =>
-                                    
-                                    setNewQuest(prev => ({
-                                        ...prev,
-                                        distributionConfig: { ...prev.distributionConfig, model: v, tiers: v === 'custom_tiers' ? prev.distributionConfig.tiers : [] }
-                                    } as T))}>
+                                <Select
+                                    value={newQuest.distributionConfig.model}
+                                    onValueChange={(v: any) => handleModelChange(v)}
+                                >
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="equal">Equal</SelectItem>
@@ -645,54 +726,58 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                             </div>
                         </div>
 
+                        {/* ── Equal model ── */}
                         {newQuest.distributionConfig.model === 'equal' && (
                             <>
                                 <div>
                                     <div className="flex justify-between">
                                         <Label>Total Reward Pool ({selectedToken?.symbol})</Label>
-                                        {tokenPrice > 0 && <span className="text-xs text-muted-foreground font-mono">1 {selectedToken?.symbol} ≈ ${tokenPrice.toFixed(2)}</span>}
+                                        {tokenPrice > 0 && (
+                                            <span className="text-xs text-muted-foreground font-mono">
+                                                1 {selectedToken?.symbol} ≈ ${tokenPrice.toFixed(2)}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="relative mt-1">
-                                        <Input 
-                                            type="number" 
-                                            value={newQuest.rewardPool} 
-                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value } as T))} 
-                                            
+                                        <Input
+                                            type="number"
+                                            value={newQuest.rewardPool}
+                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value } as T))}
                                         />
                                         {tokenPrice > 0 && (
                                             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground flex items-center gap-1">
-                                                <DollarSign className="h-3 w-3" />
-                                                {poolUsdValue.toFixed(2)}
+                                                <DollarSign className="h-3 w-3" />{poolUsdValue.toFixed(2)}
                                             </div>
                                         )}
                                     </div>
                                 </div>
                                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded">
                                     <p>Each winner gets: <strong>{getAmountPerWinner()} {selectedToken?.symbol}</strong></p>
-                                    <p className="text-xs mt-2">Deposit needed (incl. 5% fee): <strong>{newQuest.rewardPool ? (parseFloat(newQuest.rewardPool) * 1.05).toFixed(4) : 0} {selectedToken?.symbol}</strong></p>
+                                    <p className="text-xs mt-2">
+                                        Deposit needed (incl. 5% fee):{" "}
+                                        <strong>{newQuest.rewardPool ? (parseFloat(newQuest.rewardPool) * 1.05).toFixed(4) : 0} {selectedToken?.symbol}</strong>
+                                    </p>
                                 </div>
                             </>
                         )}
 
+                        {/* ── Quadratic model ── */}
                         {newQuest.distributionConfig.model === 'quadratic' && (
                             <>
                                 <div>
                                     <Label>Total Reward Pool ({selectedToken?.symbol})</Label>
                                     <div className="relative mt-1">
-                                        <Input 
-                                            type="number" 
-                                            value={newQuest.rewardPool} 
-                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value } as T))} 
-                                            
+                                        <Input
+                                            type="number"
+                                            value={newQuest.rewardPool}
+                                            onChange={(e) => setNewQuest(prev => ({ ...prev, rewardPool: e.target.value } as T))}
                                         />
                                         {tokenPrice > 0 && (
                                             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground flex items-center gap-1">
-                                                <DollarSign className="h-3 w-3" />
-                                                {poolUsdValue.toFixed(2)}
+                                                <DollarSign className="h-3 w-3" />{poolUsdValue.toFixed(2)}
                                             </div>
                                         )}
                                     </div>
-                                    
                                 </div>
                                 <div className="border rounded overflow-hidden">
                                     <div className="grid grid-cols-5 text-xs font-medium bg-gray-100 dark:bg-gray-800 p-3">
@@ -718,48 +803,163 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                             </>
                         )}
 
+                        {/* ── Custom Tiers model ── */}
                         {newQuest.distributionConfig.model === 'custom_tiers' && (
-                            <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <Label>Custom Tiers</Label>
-                                    <Button size="sm" variant="outline" onClick={addTier}><Plus className="h-4 w-4 mr-1" />Add Tier</Button>
-                                </div>
-                                {newQuest.distributionConfig.tiers.map((tier, i) => (
-                                    <div key={i} className="flex gap-2 items-end">
-                                        <div className="flex-1">
-                                            <span className="text-xs text-muted-foreground">Rank From</span>
-                                            <Input type="number" value={tier.rankStart} onChange={(e) => handleTierChange(i, 'rankStart', parseInt(e.target.value) )} />
-                                        </div>
-                                        <div className="flex-1">
-                                            <span className="text-xs text-muted-foreground">Rank To</span>
-                                            <Input type="number" value={tier.rankEnd} onChange={(e) => handleTierChange(i, 'rankEnd', parseInt(e.target.value) )} />
-                                        </div>
-                                        <div className="flex-1">
-                                            <span className="text-xs text-muted-foreground">Amount</span>
-                                            <Input type="number" value={tier.amountPerUser} onChange={(e) => handleTierChange(i, 'amountPerUser', parseFloat(e.target.value) )} />
-                                        </div>
-                                        <Button variant="ghost" size="icon" onClick={() => removeTier(i)} className="mb-0.5"><Trash2 className="h-4 w-4" /></Button>
+                            <div className="space-y-5">
+
+                                {/* Winner count stepper */}
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium flex items-center gap-2">
+                                        <Users className="h-4 w-4 text-primary" />
+                                        Number of Winners
+                                    </Label>
+                                    <div className="flex items-center gap-3">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-9 w-9 shrink-0"
+                                            onClick={() => handleWinnersChange(newQuest.distributionConfig.totalWinners - 1)}
+                                            disabled={newQuest.distributionConfig.totalWinners <= 1}
+                                        >
+                                            <Minus className="h-4 w-4" />
+                                        </Button>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            max={100}
+                                            value={newQuest.distributionConfig.totalWinners}
+                                            onChange={(e) => handleWinnersChange(parseInt(e.target.value))}
+                                            className="w-24 text-center font-mono text-base bg-background"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-9 w-9 shrink-0"
+                                            onClick={() => handleWinnersChange(newQuest.distributionConfig.totalWinners + 1)}
+                                            disabled={newQuest.distributionConfig.totalWinners >= 100}
+                                        >
+                                            <Plus className="h-4 w-4" />
+                                        </Button>
+                                        <span className="text-sm text-muted-foreground">
+                                            winner{newQuest.distributionConfig.totalWinners !== 1 ? "s" : ""}
+                                        </span>
                                     </div>
-                                ))}
-                                <div className={`bg-blue-50 dark:bg-blue-900/20 p-4 rounded`}>
-                                    <p>Total Pool: <strong>{calculateTotalFromTiers().toFixed(4)} {selectedToken?.symbol}</strong></p>
-                                    {tokenPrice > 0 && <p className="text-xs text-muted-foreground">Value: ${poolUsdValue.toFixed(2)}</p>}
-                                    
-                                    <p className="text-xs mt-1">Deposit needed (incl. 5% fee): <strong>{(calculateTotalFromTiers() * 1.05).toFixed(4)}</strong></p>
-                                    
-                                    
+                                </div>
+
+                                {/* Per-rank reward rows */}
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-medium">Reward per Rank</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Assign how much {selectedToken?.symbol || 'TOKEN'} each rank earns. Higher ranks should receive more.
+                                    </p>
+
+                                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 mt-3">
+                                        {newQuest.distributionConfig.tiers.map((rankReward) => {
+                                            const barWidth = highestRankAmount > 0
+                                                ? Math.round((rankReward.amount / highestRankAmount) * 100)
+                                                : 0
+
+                                            return (
+                                                <div
+                                                    key={rankReward.rank}
+                                                    className={`relative flex items-center gap-3 p-3 rounded-lg border transition-colors ${getRankRowStyle(rankReward.rank)}`}
+                                                >
+                                                    {/* Proportional bar fill */}
+                                                    {barWidth > 0 && (
+                                                        <div
+                                                            className="absolute inset-0 rounded-lg opacity-[0.04] bg-primary pointer-events-none"
+                                                            style={{ width: `${barWidth}%` }}
+                                                        />
+                                                    )}
+
+                                                    {/* Icon + rank label */}
+                                                    <div className="flex items-center gap-2 w-28 shrink-0">
+                                                        {getRankIcon(rankReward.rank)}
+                                                        <span className="text-sm font-medium tabular-nums">
+                                                            {getRankLabel(rankReward.rank)}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Amount input */}
+                                                    <div className="flex-1 relative">
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            step="any"
+                                                            placeholder="0.00"
+                                                            value={rankReward.amount === 0 ? "" : rankReward.amount}
+                                                            onChange={(e) => handleRankAmountChange(rankReward.rank, e.target.value)}
+                                                            className={`bg-background/80 font-mono text-sm pr-20 ${rankReward.amount <= 0 ? "border-red-500/50" : ""}`}
+                                                        />
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none font-mono">
+                                                            {selectedToken?.symbol || 'TOKEN'}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* USD value */}
+                                                    {tokenPrice > 0 && rankReward.amount > 0 && (
+                                                        <div className="flex items-center gap-1 text-xs text-muted-foreground w-20 shrink-0 justify-end">
+                                                            <DollarSign className="h-3 w-3" />
+                                                            {(rankReward.amount * tokenPrice).toFixed(2)}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
+                                    {hasZeroRanks && (
+                                        <p className="text-xs text-amber-600 flex items-center gap-1 mt-1">
+                                            <AlertTriangle className="h-3 w-3" /> Some ranks have no reward assigned.
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Summary panel */}
+                                <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-muted-foreground">Total Reward Pool</span>
+                                        <span className="font-semibold font-mono">
+                                            {customTiersTotal.toFixed(4)}{" "}
+                                            <span className="text-muted-foreground text-xs">{selectedToken?.symbol}</span>
+                                        </span>
+                                    </div>
+                                    {tokenPrice > 0 && (
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted-foreground">Estimated USD Value</span>
+                                            <span className="font-mono text-green-600 dark:text-green-400">
+                                                ≈ ${(customTiersTotal * tokenPrice).toFixed(2)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center justify-between text-sm border-t border-border/50 pt-3">
+                                        <span className="text-muted-foreground">
+                                            Deposit needed{" "}
+                                            <Badge variant="outline" className="text-[10px] ml-1">incl. 5% fee</Badge>
+                                        </span>
+                                        <span className="font-semibold font-mono text-primary">
+                                            {(customTiersTotal * 1.05).toFixed(4)}{" "}
+                                            <span className="text-muted-foreground text-xs">{selectedToken?.symbol}</span>
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         )}
                     </div>
+
+                    {/* Save & Continue */}
                     <div className="pt-8 border-t text-center">
-                        <Button 
-                            size="lg" 
-                            onClick={handleSaveDraft} 
-                            disabled={isSavingDraft || !isPhase1Valid} 
+                        <Button
+                            size="lg"
+                            onClick={handleSaveDraft}
+                            disabled={isSavingDraft || !isPhase1Valid}
                             className="w-full sm:w-auto"
                         >
-                            {isSavingDraft ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                            {isSavingDraft
+                                ? <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                : <Save className="mr-2 h-5 w-5" />}
                             Save and Continue
                         </Button>
                     </div>

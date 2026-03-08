@@ -159,7 +159,28 @@ export default function QuestDetailsPage() {
   const searchParams = useSearchParams();
   const refCode = searchParams.get("ref");
   const { address: userWalletAddress, provider: walletProvider } = useWallet();
-
+  // Add this hook inside both files (or extract to a shared hooks file)
+  const useCountdown = (targetDate: string | null) => {
+  const [timeLeft, setTimeLeft] = useState<string>("");
+  
+  useEffect(() => {
+    if (!targetDate) return;
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      const target = new Date(targetDate).getTime();
+      const diff = target - now;
+      if (diff <= 0) { setTimeLeft("00:00:00"); clearInterval(interval); return; }
+      const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((diff % (1000 * 60)) / 1000);
+      setTimeLeft(d > 0 ? `${d}d ${h}h ${m}m ${s}s` : `${h}h ${m}m ${s}s`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate]);
+  
+  return timeLeft;
+};
   const rawSlug = (params.addresss || params.faucetAddress) as string | undefined;
 
   const refreshAllStats = async () => {
@@ -276,10 +297,14 @@ export default function QuestDetailsPage() {
     isActive: true,
   });
 
+  
   const isCreator =
     userWalletAddress &&
     questData &&
     questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
+
+  const startCountdown = useCountdown(questData?.startDate || null);
+  const endCountdown = useCountdown(questData?.endDate || null);
 
   // ── UPDATED: use activeStages from backend instead of hardcoded list ──
   // Fall back to the full list only when progress hasn't loaded yet
@@ -1496,16 +1521,81 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                     </div>
                   </div>
                 </div>
-                {!participantData && !isCreator && (
-                  <Button size="lg" onClick={handleJoin} disabled={isJoining} className="min-w-[200px]">
-                    {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                    {isJoining ? "Joining..." : "Join Quest to Participate"}
-                  </Button>
-                )}
+             
+              {!participantData && !isCreator && (
+                <Button
+                  size="lg"
+                  onClick={handleJoin}
+                  disabled={isJoining || questTiming.notStartedYet || questTiming.isEnded}
+                  className="min-w-[200px]"
+                >
+                  {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+                  {isJoining
+                    ? "Joining..."
+                    : questTiming.notStartedYet
+                      ? `Starts in ${startCountdown}`
+                      : questTiming.isEnded
+                        ? "Quest Ended"
+                        : "Join Quest to Participate"}
+                </Button>
+              )}
               </div>
             </div>
           </div>
         </div>
+
+        {/* ============= COUNTDOWN BANNERS ============= */}
+        {questTiming.notStartedYet && questData?.startDate && (
+          <div className="rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-full text-blue-600 dark:text-blue-400">
+                <CalendarClock className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm">Quest Not Started Yet</p>
+                <p className="text-xs text-blue-700 dark:text-blue-400">
+                  Starts on {new Date(questData.startDate).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <div className="text-2xl font-black text-blue-700 dark:text-blue-300 font-mono tracking-tight">
+              {startCountdown}
+            </div>
+          </div>
+        )}
+
+        {questTiming.isLive && questData?.endDate && (
+          <div className="rounded-xl border border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-full text-green-600 dark:text-green-400">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-green-900 dark:text-green-200 text-sm">Quest Is Live!</p>
+                <p className="text-xs text-green-700 dark:text-green-400">
+                  Ends on {new Date(questData.endDate).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <div className="text-2xl font-black text-green-700 dark:text-green-300 font-mono tracking-tight">
+              {endCountdown}
+            </div>
+          </div>
+        )}
+
+        {questTiming.isEnded && (
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 px-6 py-4 flex items-center gap-3">
+            <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">Quest Has Ended</p>
+              <p className="text-xs text-slate-500">
+                Ended on {new Date(questData.endDate).toLocaleString()}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ============= PROGRESS BAR (UPDATED) ============= */}
         {!isCreator && participantData && (

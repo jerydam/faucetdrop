@@ -18,11 +18,14 @@ import { toast } from "sonner"
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
 
 interface UserProfile {
-  username: string
-  bio: string
-  avatar_url: string
+  wallet_address: string;
+  username: string | null;
+  bio?: string;                              // <--- ADDED
+  avatar_url?: string;
+  twitter_handle?: string;
+  is_quest_subscribed?: boolean;             // <--- ADDED
+  quest_subscription_expires_at?: string;    // <--- ADDED
 }
-
 const GENERATED_SEEDS = [
   "Jerry","John", "Aneka", "Zack", "Molly", "Bear", "Crypto", "Whale", "Pepe",
   "Satoshi", "Vitalik", "Gwei", "HODL", "WAGMI", "Doge", "Shiba", "Solana",
@@ -70,9 +73,11 @@ export function ProfileSettingsModal() {
   const hasPrefilledRef = useRef(false);
 
   const [formData, setFormData] = useState<UserProfile>({
+    wallet_address: address || "",
     username: "",
     bio: "",
     avatar_url: ""
+
   })
 
   const getFallbackAvatar = useCallback(() => {
@@ -105,6 +110,7 @@ export function ProfileSettingsModal() {
       const dbAvatar = data.profile?.avatar_url || "";
 
       setFormData({
+        wallet_address: address || "",
         username: dbUsername || getFallbackUsername(),
         bio: dbBio,
         avatar_url: dbAvatar || getFallbackAvatar()
@@ -173,7 +179,7 @@ export function ProfileSettingsModal() {
 
     setSaving(true)
 
-    const validUsername = await checkUsernameUniqueness(formData.username);
+const validUsername = await checkUsernameUniqueness(formData.username || "");
     if (!validUsername) {
         setSaving(false);
         return toast.error("Please fix errors before saving.");
@@ -413,14 +419,14 @@ export function ProfileSettingsModal() {
                     <Label className="sm:text-right pt-2">Username</Label>
                     <div className="col-span-3">
                         <Input 
-                          value={formData.username} 
-                          onChange={(e) => {
-                            setFormData({ ...formData, username: e.target.value })
-                            setUsernameError(null)
-                          }} 
-                          onBlur={() => checkUsernameUniqueness(formData.username)} 
-                          className={usernameError ? "border-red-500" : ""} 
-                        />
+                            value={formData.username || ""} 
+                            onChange={(e) => {
+                              setFormData({ ...formData, username: e.target.value })
+                              setUsernameError(null)
+                            }} 
+                            onBlur={() => checkUsernameUniqueness(formData.username || "")} 
+                            className={usernameError ? "border-red-500" : ""} 
+                          />
                         {usernameError && <p className="text-xs text-red-500 mt-1">{usernameError}</p>}
                         {usernameError === null && formData.username && <p className="text-xs text-green-600 mt-1 flex items-center"><CheckCircle2 className="h-3 w-3 mr-1"/> Available</p>}
                     </div>

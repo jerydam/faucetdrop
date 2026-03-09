@@ -775,7 +775,8 @@
         const claimValue = parseInt(newQuest.claimWindowValue || "7", 10);
         const hoursInt =
           newQuest.claimWindowUnit === "hours" ? claimValue : claimValue * 24;
-        const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000);
+
+        const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000) + (24 * 60 * 60);
         if (!provider) throw new Error("Wallet provider is not ready.");
 
         const deployedAddress = await createQuestReward(

@@ -142,10 +142,12 @@ interface LeaderboardEntry {
 interface UserProfile {
   wallet_address: string;
   username: string | null;
+  bio?: string;
   avatar_url?: string;
   twitter_handle?: string;
+  is_quest_subscribed?: boolean;             // <--- ADD THIS
+  quest_subscription_expires_at?: string;    // <--- ADD THIS
 }
-
 interface ParticipantData {
   referral_id: string;
   referral_count: number;
@@ -489,18 +491,41 @@ export default function QuestDetailsPage() {
   }, [faucetAddress, userWalletAddress, activeWallet, isQuestEnded]); // Make sure activeWallet is in the dependency array
  
   const claimStatus = useMemo(() => {
-  if (!questData?.rawEndDate) return { isActive: false, message: "Not started" };
-  
-  const endDate = new Date(questData.rawEndDate); // ✅ full ISO string
-  const claimWindowEnd = new Date(
-    endDate.getTime() + (questData.claimWindowHours || 168) * 60 * 60 * 1000
-  );
-  const now = new Date();
-  
-  if (now < endDate) return { isActive: false, message: "Quest active" };
-  if (now > claimWindowEnd) return { isActive: false, message: "Claim ended" };
-  return { isActive: true, message: "Claim Live" };
-}, [questData?.rawEndDate, questData?.claimWindowHours]);
+    if (!questData?.rawEndDate) return { isActive: false, message: "Not started" };
+    
+    const endDate = new Date(questData.rawEndDate); 
+    // Add 24 hours for the Review Period
+    const reviewEndDate = new Date(endDate.getTime() + (24 * 60 * 60 * 1000));
+    const claimWindowEnd = new Date(
+      reviewEndDate.getTime() + (questData.claimWindowHours || 168) * 60 * 60 * 1000
+    );
+    const now = new Date();
+    
+    if (now < endDate) return { isActive: false, message: "Quest active" };
+    if (now >= endDate && now < reviewEndDate) return { isActive: false, message: "Reviewing (24h)" };
+    if (now > claimWindowEnd) return { isActive: false, message: "Claim ended" };
+    return { isActive: true, message: "Claim Live" };
+  }, [questData?.rawEndDate, questData?.claimWindowHours]);
+
+  const questTiming = useMemo(() => {
+    if (!questData?.rawStartDate || !questData?.rawEndDate) {
+      return { isLive: false, notStartedYet: true, isEnded: false, isReviewing: false };
+    }
+    const now = new Date();
+    const start = new Date(questData.rawStartDate);
+    const end = new Date(questData.rawEndDate);     
+    const reviewEnd = new Date(end.getTime() + (24 * 60 * 60 * 1000));
+    
+    return {
+      isLive: now >= start && now <= end && questData.isActive,
+      notStartedYet: now < start,
+      isEnded: now > end,
+      isReviewing: now > end && now <= reviewEnd, // <-- NEW STATE
+      isPaused: !questData.isActive,
+    };
+  }, [questData?.rawStartDate, questData?.rawEndDate, questData?.isActive]);
+
+
   const allParticipants = leaderboard.filter(
     (entry) => entry.walletAddress.toLowerCase() !== questData?.creatorAddress.toLowerCase()
   );
@@ -708,20 +733,6 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
     loadGlobalData();
   }, [faucetAddress]);
 
- const questTiming = useMemo(() => {
-  if (!questData?.rawStartDate || !questData?.rawEndDate) {
-    return { isLive: false, notStartedYet: true, isEnded: false };
-  }
-  const now = new Date();
-  const start = new Date(questData.rawStartDate); // ✅
-  const end = new Date(questData.rawEndDate);     // ✅
-  return {
-    isLive: now >= start && now <= end && questData.isActive,
-    notStartedYet: now < start,
-    isEnded: now > end,
-    isPaused: !questData.isActive,
-  };
-}, [questData?.rawStartDate, questData?.rawEndDate, questData?.isActive]);
 
 const displayLeaderboard = useMemo(() => {
     let list = [...leaderboard];
@@ -1302,6 +1313,96 @@ const displayLeaderboard = useMemo(() => {
     }
   };
 
+  const handleSubscribe = async () => {
+    if (!walletProvider || !userWalletAddress || !activeWallet) { 
+      toast.error("Wallet not connected."); 
+      return; 
+    }
+    
+    setIsFunding(true); // Reusing the funding loading state
+    
+    try {
+      const privyProvider = await activeWallet.getEthereumProvider();
+      const ethersProvider = new BrowserProvider(privyProvider);
+      const signer = await ethersProvider.getSigner();
+      const userAddress = await signer.getAddress();
+      
+      // ⚠️ YOUR COMPANY WALLET RECEIVER
+      const COMPANY_WALLET = "0x97841b00B8Ad031FB30495eCeF2B2DbB6FCaCE30"; 
+      
+      // Identify the current chain
+      const currentChainId = parseInt(activeWallet.chainId.split(':')[1]);
+
+      // Smart routing: Always charge in USDT/USDC regardless of the quest reward token
+      const STABLECOINS: Record<number, { address: string, decimals: number }> = {
+        42220: { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", decimals: 6 }, // Celo USDT
+        1135: { address: "0x05D032ac25d322df992303dCa074EE7392C117b9", decimals: 6 }, // Lisk USDT
+        42161: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 }, // Arb USDT
+        8453: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }, // Base USDC
+        56: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 }, // BNB USDT (18 decimals)
+      };
+
+      const stablecoin = STABLECOINS[currentChainId];
+      if (!stablecoin) throw new Error("Stablecoin payments not configured for this network.");
+
+      // Calculate $100 based on the token's decimals
+      const subscriptionCost = 100;
+      const amountWei = parseEther(subscriptionCost.toString()) / BigInt(10 ** (18 - stablecoin.decimals)); 
+      
+      const ERC20_ABI = [
+        "function transfer(address to, uint256 amount) public returns (bool)",
+        "function balanceOf(address account) public view returns (uint256)"
+      ];
+      
+      const tokenContract = new Contract(stablecoin.address, ERC20_ABI, signer);
+      
+      // 1. Check Balance
+      const balance = await tokenContract.balanceOf(userAddress);
+      if (balance < amountWei) {
+        throw new Error("Insufficient stablecoin balance for $100 subscription.");
+      }
+      
+      // 2. Execute Payment Transfer
+      toast.info("Please confirm the $100 subscription payment...");
+      const tx = await tokenContract.transfer(COMPANY_WALLET, amountWei);
+      
+      toast.info("Processing payment on the blockchain...");
+      await tx.wait();
+      
+      // 3. Notify Backend to Activate Subscription
+      toast.info("Activating your subscription...");
+      const res = await fetch(`${API_BASE_URL}/api/profile/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          wallet_address: userWalletAddress,
+          tx_hash: tx.hash
+        })
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Subscription Activated! You can now manage your quest.");
+        
+        // Update local state instantly to unblock the UI
+        setUserProfile(prev => prev ? {
+          ...prev, 
+          is_quest_subscribed: true, 
+          quest_subscription_expires_at: data.expires_at 
+        } : null);
+        
+      } else {
+        throw new Error("Backend failed to activate subscription.");
+      }
+      
+    } catch (error: any) {
+      console.error(error);
+      const errorMsg = error.reason || error.shortMessage || error.message || "Payment failed";
+      toast.error("Subscription failed: " + errorMsg);
+    } finally {
+      setIsFunding(false);
+    }
+  };
  const isValidFundingAmount = useMemo(() => {
     const input = parseFloat(fundAmount || "0");
     return Math.abs(input - totalRequired) < 0.0001;
@@ -1446,6 +1547,24 @@ const displayLeaderboard = useMemo(() => {
     if (taskStageIndex > userStageIndex) return "locked";
     return "available";
   };
+  const currentStage = userProgress.currentStage || "Beginner";
+const currentStageMeta = userProgress.stagesMeta?.[currentStage];
+const hasNewBackendData = currentStageMeta !== undefined;
+
+  const stagesToRender = hasNewBackendData
+    ? userProgress.activeStages   // only stages with tasks, from backend
+    : ALL_STAGES;                 // fallback: all stages (filter by task count happens below)
+
+  // 👇 PASTE IT RIGHT HERE 👇
+  const hasActiveSubscription = useMemo(() => {
+    if (!userProfile?.is_quest_subscribed) return false;
+    if (!userProfile?.quest_subscription_expires_at) return false;
+    
+    const expiresAt = new Date(userProfile.quest_subscription_expires_at);
+    const now = new Date();
+    
+    return expiresAt > now; 
+  }, [userProfile]);
 
   // ============= RENDER STATES =============
   if (isLoading || isProfileLoading) {
@@ -1509,59 +1628,43 @@ const displayLeaderboard = useMemo(() => {
 
   if (!questData) return (<div className="flex flex-col min-h-screen"><Header pageTitle="Not Found" /><div className="p-10 text-center">Quest not found.</div></div>);
 
-  // 👇 ADD THIS BLOCK TO GATE UNFUNDED QUESTS 👇
-  // if (!isCreator && !questData.isFunded) {
-  //   return (
-  //     <div className="flex flex-col min-h-screen">
-  //       <Header pageTitle={questData.title || "Quest Unfunded"} />
-  //       <div className="flex-1 flex items-center justify-center p-4">
-  //         <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
-  //           <CardHeader className="pb-2 pt-8">
-  //             <div className="mx-auto bg-slate-100 dark:bg-slate-900 p-4 rounded-full mb-4 w-fit ring-1 ring-slate-200 dark:ring-slate-800">
-  //               <Lock className="h-10 w-10 text-slate-600 dark:text-slate-400" />
-  //             </div>
-  //             <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Quest Not Ready</CardTitle>
-  //             <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
-  //               The creator has not funded the reward pool for this quest yet. Please check back later!
-  //             </CardDescription>
-  //           </CardHeader>
-  //           <CardFooter className="pt-4 flex justify-center pb-8">
-  //             <Button variant="outline" onClick={() => router.push('/quest')}>Browse Active Quests</Button>
-  //           </CardFooter>
-  //         </Card>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-  // if (isCreator && !questData.isFunded) {
-  //   return (
-  //     <div className="flex flex-col min-h-screen">
-  //       <Header pageTitle={questData.title || "Quest Unfunded"} />
-  //       <div className="flex-1 flex items-center justify-center p-4">
-  //         <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
-  //           <CardHeader className="pb-2 pt-8">
-  //             <div className="mx-auto bg-slate-100 dark:bg-slate-900 p-4 rounded-full mb-4 w-fit ring-1 ring-slate-200 dark:ring-slate-800">
-  //               <Lock className="h-10 w-10 text-slate-600 dark:text-slate-400" />
-  //             </div>
-  //             <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Quest Not Ready</CardTitle>
-  //             <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
-  //               Please you need to fund Quest before it can be Accessible
-  //             </CardDescription>
-  //           </CardHeader>
-  //           <CardFooter className="pt-4 flex justify-center pb-8">
-  //             <Button variant="outline" onClick={handleFundQuest}>Fund</Button>
-  //           </CardFooter>
-  //         </Card>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-  // ============= PROGRESS BAR CALCULATION (UPDATED) =============
-  const currentStage = userProgress.currentStage || "Beginner";
-  const currentStageMeta = userProgress.stagesMeta?.[currentStage];
+ 
+  // ── BLOCKAGE UI FOR CREATORS ──
+  if (isCreator && !hasActiveSubscription) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header pageTitle={questData.title || "Subscription Required"} />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md shadow-2xl border-blue-200 dark:border-blue-900/50 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-indigo-500" />
+            <CardHeader className="pb-2 pt-8">
+              <div className="mx-auto bg-blue-50 dark:bg-blue-900/20 p-4 rounded-full mb-4 w-fit ring-1 ring-blue-100 dark:ring-blue-800">
+                <ShieldCheck className="h-10 w-10 text-blue-600 dark:text-blue-500" />
+              </div>
+              <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Creator Subscription Required</CardTitle>
+              <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
+                To host live quests and access the admin dashboard, you need an active Creator Subscription.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg flex items-center justify-between">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">30 Days Access</span>
+                <span className="text-xl font-black text-primary">$100 USD</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Payment is processed securely in USDT/USDC.</p>
+            </CardContent>
+            <CardFooter className="pt-2 flex justify-center pb-8">
+              <Button size="lg" onClick={handleSubscribe} disabled={isFunding} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12">
+                {isFunding ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : null}
+                {isFunding ? "Processing Payment..." : "Subscribe Now"}
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      </div>
+    );
+  }  
 
-  // Use new backend fields if available, fall back to old logic
-  const hasNewBackendData = currentStageMeta !== undefined;
 
   const pointsEarnedInCurrentStage = hasNewBackendData
     ? currentStageMeta.userEarned
@@ -1596,12 +1699,7 @@ const displayLeaderboard = useMemo(() => {
     (entry) => entry.walletAddress.toLowerCase() !== questData.creatorAddress.toLowerCase() && entry.points > 0
   );
 
-  // ── Determine which stages to render in the Tasks tab ──
-  // Only render stages that have tasks AND exist in activeStages (if available)
-  const stagesToRender = hasNewBackendData
-    ? userProgress.activeStages   // only stages with tasks, from backend
-    : ALL_STAGES;                 // fallback: all stages (filter by task count happens below)
-
+ 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header pageTitle={questData.title} />
@@ -1769,7 +1867,7 @@ const displayLeaderboard = useMemo(() => {
           </div>
         )}
 
-        {questTiming.isEnded && (
+        {questTiming.isEnded && !questTiming.isReviewing && (
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 px-6 py-4 flex items-center gap-3">
             <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500">
               <CheckCircle2 className="h-5 w-5" />
@@ -1778,6 +1876,20 @@ const displayLeaderboard = useMemo(() => {
               <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">Quest Has Ended</p>
               <p className="text-xs text-slate-500">
                 Ended on {new Date(questData.endDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {questTiming.isReviewing && (
+          <div className="rounded-xl border border-yellow-200 dark:border-yellow-900/50 bg-yellow-50 dark:bg-yellow-900/20 px-6 py-4 flex items-center gap-3">
+            <div className="p-2 bg-yellow-100 dark:bg-yellow-900/40 rounded-full text-yellow-600 dark:text-yellow-400">
+              <Clock className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-yellow-800 dark:text-yellow-200 text-sm">Admin Review Period (24 Hours)</p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                The quest has ended. The creator is currently reviewing pending tasks. Claims will open once verification is complete.
               </p>
             </div>
           </div>
@@ -2117,7 +2229,11 @@ const displayLeaderboard = useMemo(() => {
                 <CardHeader className="px-4 sm:px-6">
                  <CardTitle className="flex justify-between items-center text-lg sm:text-xl">
                     Top Contributors
-                    {(claimState.isExpiredOnChain || isClaimWindowClosed) ? (
+                    {questTiming.isReviewing ? (
+                      <Badge variant="outline" className="text-yellow-600 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 text-xs">
+                        Reviewing Results (24h)
+                      </Badge>
+                    ) : (claimState.isExpiredOnChain || isClaimWindowClosed) ? (
                       <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-xs">
                         Claim Window Closed
                       </Badge>
@@ -2286,7 +2402,9 @@ const displayLeaderboard = useMemo(() => {
                                     <ShieldCheck className="h-5 w-5 text-indigo-500" /> Post-Quest Actions
                                 </CardTitle>
                                 <CardDescription>
-                                    Winners have been automatically processed by the system.
+                                    {questTiming.isReviewing 
+                                        ? "Quest ended. You have a 24-hour window to review pending submissions before winners are automatically finalized." 
+                                        : "Winners have been automatically processed by the system."}
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="pt-4">

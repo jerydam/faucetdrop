@@ -768,8 +768,8 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded">
                                     <p>Each winner gets: <strong>{getAmountPerWinner()} {selectedToken?.symbol}</strong></p>
                                     <p className="text-xs mt-2">
-                                        Deposit needed (incl. 5% fee):{" "}
-                                        <strong>{newQuest.rewardPool ? (parseFloat(newQuest.rewardPool) * 1.05).toFixed(4) : 0} {selectedToken?.symbol}</strong>
+                                        Deposit needed (incl. 1% fee):{" "}
+                                        <strong>{newQuest.rewardPool ? (parseFloat(newQuest.rewardPool) * 1.01).toFixed(4) : 0} {selectedToken?.symbol}</strong>
                                     </p>
                                 </div>
                             </>
@@ -957,10 +957,10 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                                     <div className="flex items-center justify-between text-sm border-t border-border/50 pt-3">
                                         <span className="text-muted-foreground">
                                             Deposit needed{" "}
-                                            <Badge variant="outline" className="text-[10px] ml-1">incl. 5% fee</Badge>
+                                            <Badge variant="outline" className="text-[10px] ml-1">incl. 1% fee</Badge>
                                         </span>
                                         <span className="font-semibold font-mono text-primary">
-                                            {(customTiersTotal * 1.05).toFixed(4)}{" "}
+                                            {(customTiersTotal * 1.01).toFixed(4)}{" "}
                                             <span className="text-muted-foreground text-xs">{selectedToken?.symbol}</span>
                                         </span>
                                     </div>

@@ -215,8 +215,9 @@ export default function QuestDetailsPage() {
     isChecking: false,
     isWinnerOnChain: false,
     hasClaimed: false,
-    canClaimOnChain: false, // <-- Add this
-    isExpiredOnChain: false, // <-- Add this
+    canClaimOnChain: false,
+    isExpiredOnChain: false,
+    fundsWithdrawnOnChain: false, // <-- ADD THIS
   });
   const refreshParticipantData = async () => {
     setIsRefreshingUser(true);
@@ -445,7 +446,7 @@ export default function QuestDetailsPage() {
 
         // 4. Fetch the data directly from the contract
         const status = await contract.getClaimStatus(userWalletAddress);
-        
+        const isWithdrawn = await contract.fundsWithdrawn();
         const claimed = status[0];
         const hasReward = status[1];
         const rewardAmount = status[2]; 
@@ -469,6 +470,7 @@ export default function QuestDetailsPage() {
           hasClaimed: claimed,
           canClaimOnChain: canClaim,
           isExpiredOnChain: !canClaim && timeRemaining === 0n && timeUntilStart === 0n,
+          fundsWithdrawnOnChain: isWithdrawn,
         });
 
       } catch (error) {
@@ -1216,38 +1218,52 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
     }
   };
 
-  const handleFundQuest = async () => {
+ const handleFundQuest = async () => {
     if (!walletProvider || !faucetAddress) { toast.error("Wallet not connected."); return; }
     setIsFunding(true);
+    
     try {
       const provider = walletProvider as BrowserProvider;
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
+      
       const baseAmountWei = parseEther(rewardPoolAmount.toString());
-      const totalAmountWei = baseAmountWei + (baseAmountWei * 7n) / 100n;
+      
+      // 👇 CHANGED HERE: Calculate exactly 1% fee
+      const totalAmountWei = baseAmountWei + (baseAmountWei * 1n) / 100n;
+      
       const tokenAddress = questData.tokenAddress;
       const ERC20_ABI = [
         "function approve(address s, uint256 a) public returns (bool)",
         "function balanceOf(address a) public view returns (uint256)",
         "function allowance(address o, address s) public view returns (uint256)",
       ];
+      
       const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer);
       const balance = await tokenContract.balanceOf(userAddress);
+      
       if (balance < totalAmountWei) throw new Error("Insufficient token balance for prize + fees.");
+      
       const currentAllowance = await tokenContract.allowance(userAddress, faucetAddress);
       if (currentAllowance < totalAmountWei) {
         toast.info("Approving tokens...");
         const appTx = await tokenContract.approve(faucetAddress, totalAmountWei);
         await appTx.wait();
       }
+      
       const questContract = new Contract(faucetAddress, QUEST_ABI, signer);
-      const tx = await questContract.fund(baseAmountWei);
+      
+      // 👇 PASSED totalAmountWei HERE (so the contract receives the pool + 1% fee)
+      const tx = await questContract.fund(totalAmountWei);
+      
       toast.info("Funding transaction sent...");
       await tx.wait();
+      
       await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/set-funded`, { method: 'POST' });
       toast.success("Quest funded and activated!");
       setQuestData((prev: any) => ({ ...prev, isFunded: true }));
       setShowFundModal(false);
+      
     } catch (error: any) {
       console.error(error);
       toast.error(error.reason || error.message || "Funding failed");
@@ -2255,19 +2271,21 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                                         </p>
                                     </div>
                                     <Button 
-                                        onClick={handleAdminWithdraw} 
-                                        /* Disable if withdrawing, checking chain status, or not yet expired on-chain */
-                                        disabled={isWithdrawing || !claimState.isExpiredOnChain || claimState.isChecking}
-                                        variant={claimState.isExpiredOnChain ? "default" : "outline"}
-                                        className="w-full sm:w-auto"
-                                    >
-                                        {isWithdrawing || claimState.isChecking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                        {claimState.isChecking 
-                                          ? "Checking Chain..." 
+                                      onClick={handleAdminWithdraw} 
+                                      /* Disable if withdrawing, checking chain, not expired, OR already withdrawn */
+                                      disabled={isWithdrawing || !claimState.isExpiredOnChain || claimState.isChecking || claimState.fundsWithdrawnOnChain}
+                                      variant={claimState.fundsWithdrawnOnChain ? "outline" : claimState.isExpiredOnChain ? "default" : "outline"}
+                                      className={`w-full sm:w-auto ${claimState.fundsWithdrawnOnChain ? "border-green-500 text-green-600 bg-green-50 dark:bg-green-900/20" : ""}`}
+                                  >
+                                      {isWithdrawing || claimState.isChecking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                      {claimState.isChecking 
+                                        ? "Checking Chain..." 
+                                        : claimState.fundsWithdrawnOnChain
+                                          ? "Funds Withdrawn ✅"  // <-- Show success state
                                           : claimState.isExpiredOnChain 
-                                            ? "Withdraw Funds" 
-                                            : "Locked"}
-                                    </Button>
+                                          ? "Withdraw Funds" 
+                                          : "Locked"}
+                                  </Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -2791,12 +2809,12 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
     <Card className="w-full max-w-md shadow-2xl">
       <CardHeader>
         <CardTitle>Fund Reward Pool</CardTitle>
-        <CardDescription>Deposit tokens to activate this quest.<br />Includes <strong>5% Platform Fee</strong>.</CardDescription>
+        <CardDescription>Deposit tokens to activate this quest.<br />Includes <strong>1% Platform Fee</strong>.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg space-y-2 text-sm">
           <div className="flex justify-between"><span>Reward Pool Goal:</span><span className="font-bold">{rewardPoolAmount}</span></div>
-          <div className="flex justify-between text-muted-foreground"><span>Platform Fee (5%):</span><span>+ {requiredFee.toFixed(4)}</span></div>
+          <div className="flex justify-between text-muted-foreground"><span>Platform Fee (1%):</span><span>+ {requiredFee.toFixed(4)}</span></div>
           <div className="border-t pt-2 mt-2 flex justify-between text-lg font-bold text-primary"><span>Total Required:</span><span>{totalRequired.toFixed(4)}</span></div>
         </div>
         <div className="space-y-2">

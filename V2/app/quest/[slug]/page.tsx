@@ -151,16 +151,7 @@ interface ParticipantData {
   last_checkin_at: string | null;
   points: number;
 }
-
-// ============= COMPONENT =============
-export default function QuestDetailsPage() {
-  const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const refCode = searchParams.get("ref");
-  const { address: userWalletAddress, provider: walletProvider } = useWallet();
-  // Add this hook inside both files (or extract to a shared hooks file)
-  const useCountdown = (targetDate: string | null) => {
+const useCountdown = (targetDate: string | null) => {
   const [timeLeft, setTimeLeft] = useState<string>("");
   
   useEffect(() => {
@@ -181,6 +172,16 @@ export default function QuestDetailsPage() {
   
   return timeLeft;
 };
+
+// ============= COMPONENT =============
+export default function QuestDetailsPage() {
+  const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get("ref");
+  const { address: userWalletAddress, provider: walletProvider } = useWallet();
+  // Add this hook inside both files (or extract to a shared hooks file)
+ 
   const rawSlug = (params.addresss || params.faucetAddress) as string | undefined;
 
   const refreshAllStats = async () => {
@@ -206,6 +207,8 @@ export default function QuestDetailsPage() {
 
   // ============= STATE =============
   const [questData, setQuestData] = useState<any | null>(null);
+  const [rejectingSubId, setRejectingSubId] = useState<string | null>(null);
+  const [rejectionNote, setRejectionNote] = useState("");
   const [faucetAddress, setFaucetAddress] = useState<string | undefined>(undefined);
   const [isRefreshingUser, setIsRefreshingUser] = useState(false);
   const [claimState, setClaimState] = useState({
@@ -303,8 +306,8 @@ export default function QuestDetailsPage() {
     questData &&
     questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
 
-  const startCountdown = useCountdown(questData?.rawStartDate || null);
-  const endCountdown = useCountdown(questData?.rawEndDate || null);
+  const startCountdown = useCountdown(questData?.rawStartDate ?? null);
+  const endCountdown = useCountdown(questData?.rawEndDate ?? null);
 
   // ── UPDATED: use activeStages from backend instead of hardcoded list ──
   // Fall back to the full list only when progress hasn't loaded yet
@@ -448,16 +451,19 @@ export default function QuestDetailsPage() {
   }, [faucetAddress, userWalletAddress, walletProvider, isQuestEnded]);
 
   
-  const claimStatus = useMemo(() => {
-    if (!questData || !questData.endDate) return { isActive: false, message: "Not started" };
-    const endDate = new Date(questData.endDate);
-    const claimWindowEnd = new Date(endDate.getTime() + (questData.claimWindowHours || 168) * 60 * 60 * 1000);
-    const now = new Date();
-    if (now < endDate) return { isActive: false, message: "Quest active" };
-    if (now > claimWindowEnd) return { isActive: false, message: "Claim ended" };
-    return { isActive: true, message: "Claim Live" };
-  }, [questData, endCountdown]); // <--- ADD END COUNTDOWN HERE
-
+ const claimStatus = useMemo(() => {
+  if (!questData?.rawEndDate) return { isActive: false, message: "Not started" };
+  
+  const endDate = new Date(questData.rawEndDate); // ✅ full ISO string
+  const claimWindowEnd = new Date(
+    endDate.getTime() + (questData.claimWindowHours || 168) * 60 * 60 * 1000
+  );
+  const now = new Date();
+  
+  if (now < endDate) return { isActive: false, message: "Quest active" };
+  if (now > claimWindowEnd) return { isActive: false, message: "Claim ended" };
+  return { isActive: true, message: "Claim Live" };
+}, [questData?.rawEndDate, questData?.claimWindowHours]);
   const allParticipants = leaderboard.filter(
     (entry) => entry.walletAddress.toLowerCase() !== questData?.creatorAddress.toLowerCase()
   );
@@ -645,8 +651,14 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
       try {
         const questRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}?t=${Date.now()}`, { cache: "no-store" });
         const questJson = await questRes.json();
-        if (questJson.success) setQuestData(questJson.quest);
-
+        // In loadGlobalData(), preserve raw dates when merging:
+          if (questJson.success) {
+            setQuestData((prev: any) => ({
+              ...questJson.quest,
+              rawStartDate: prev?.rawStartDate ?? questJson.quest.startDate,
+              rawEndDate: prev?.rawEndDate ?? questJson.quest.endDate,
+            }));
+          }
         const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
         const lbJson = await lbRes.json();
         if (lbJson.success) setLeaderboard(lbJson.leaderboard);
@@ -659,20 +671,21 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
     loadGlobalData();
   }, [faucetAddress]);
 
-  const questTiming = useMemo(() => {
-    if (!questData || !questData.startDate || !questData.endDate) {
-      return { isLive: false, notStartedYet: true, isEnded: false };
-    }
-    const now = new Date();
-    const start = new Date(questData.startDate);
-    const end = new Date(questData.endDate);
-    return {
-      isLive: now >= start && now <= end && questData.isActive,
-      notStartedYet: now < start,
-      isEnded: now > end,
-      isPaused: !questData.isActive,
-    };
-  }, [questData, startCountdown, endCountdown]); // <--- ADD COUNTDOWNS HERE
+ const questTiming = useMemo(() => {
+  if (!questData?.rawStartDate || !questData?.rawEndDate) {
+    return { isLive: false, notStartedYet: true, isEnded: false };
+  }
+  const now = new Date();
+  const start = new Date(questData.rawStartDate); // ✅
+  const end = new Date(questData.rawEndDate);     // ✅
+  return {
+    isLive: now >= start && now <= end && questData.isActive,
+    notStartedYet: now < start,
+    isEnded: now > end,
+    isPaused: !questData.isActive,
+  };
+}, [questData?.rawStartDate, questData?.rawEndDate, questData?.isActive]);
+
 
   const displayLeaderboard = useMemo(() => {
     let list = [...leaderboard];
@@ -1044,10 +1057,12 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
       if (selectedTask.action === "quote") {
         endpoint         = "/api/tasks/verify-x-quote";
         payload.proofUrl = finalProofUrl;
+        payload.requiredTag = selectedTask.targetHandle || "";
       } else {
         endpoint                = "/api/tasks/verify-x";
         payload.submittedHandle =
           userProfile?.twitter_handle || userProfile?.username || "";
+          
       }
 
       const verifyRes = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -1136,19 +1151,28 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
   }
 };
 
-  const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected") => {
-    // FIX: Track both ID and Action
+  const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected", notes?: string) => {
     setProcessingSubmission({ id: submissionId, action: status });
     try {
+      // Build payload, injecting notes if they exist
+      const payload: any = { status };
+      if (notes) payload.notes = notes;
+
       const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/${submissionId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(payload),
       });
       const result = await response.json();
+      
       if (result.success) {
         setPendingSubmissions((prev) => prev.filter((s) => s.submissionId !== submissionId));
         toast.success(`Submission ${status}`);
+        
+        // Reset rejection states
+        setRejectingSubId(null);
+        setRejectionNote("");
+        
         await loadUserProgress(); // Refresh global points
       } else {
         toast.error(result.message || "Action failed.");
@@ -1213,13 +1237,13 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
       // Parse the chainId from Privy (e.g., "eip155:42220" -> 42220)
       const currentChainId = parseInt(activeWallet.chainId.split(':')[1]);
 
-      const res = await fetch(`${API_BASE_URL}/claim-no-code`, {
+      const res = await fetch(`${API_BASE_URL}/claim-on-quest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userAddress: activeWallet.address,
           faucetAddress: faucetAddress,
-          chainId: currentChainId, // Now dynamically pulled from Privy
+          chainId: currentChainId,
           shouldWhitelist: false
         })
       });
@@ -1300,14 +1324,18 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
     if (userProgress.completedTasks.includes(currentTaskId)) return "completed";
 
-    const pending = userProgress.submissions?.find((s: any) => {
-      const submissionTaskId = s.taskId || s.task_id;
-      return String(submissionTaskId) === String(currentTaskId) &&
-             ["pending", "auto_verifying"].includes(s.status);
-    });
-    if (pending) return "pending";
+    // --- NEW: Check submission history for pending or rejected states ---
+    const taskSubmissions = userProgress.submissions?.filter((s: any) => String(s.taskId || s.task_id) === String(currentTaskId)) || [];
+    if (taskSubmissions.length > 0) {
+      // Sort to get the most recent submission
+      taskSubmissions.sort((a: any, b: any) => new Date(b.submittedAt || b.submitted_at || 0).getTime() - new Date(a.submittedAt || a.submitted_at || 0).getTime());
+      const latestSub = taskSubmissions[0];
+      
+      if (["pending", "auto_verifying"].includes(latestSub.status)) return "pending";
+      if (latestSub.status === "rejected") return "rejected";
+    }
+    // ---------------------------------------------------------------------
 
-    // ── NEW LOGIC: use activeStages from backend ──
     // If this task's stage is not in activeStages, it doesn't exist for this quest
     const taskStage = task.stage;
     const questActiveStages = userProgress.activeStages || [];
@@ -1403,6 +1431,53 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
   if (!questData) return (<div className="flex flex-col min-h-screen"><Header pageTitle="Not Found" /><div className="p-10 text-center">Quest not found.</div></div>);
 
+  // 👇 ADD THIS BLOCK TO GATE UNFUNDED QUESTS 👇
+  // if (!isCreator && !questData.isFunded) {
+  //   return (
+  //     <div className="flex flex-col min-h-screen">
+  //       <Header pageTitle={questData.title || "Quest Unfunded"} />
+  //       <div className="flex-1 flex items-center justify-center p-4">
+  //         <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
+  //           <CardHeader className="pb-2 pt-8">
+  //             <div className="mx-auto bg-slate-100 dark:bg-slate-900 p-4 rounded-full mb-4 w-fit ring-1 ring-slate-200 dark:ring-slate-800">
+  //               <Lock className="h-10 w-10 text-slate-600 dark:text-slate-400" />
+  //             </div>
+  //             <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Quest Not Ready</CardTitle>
+  //             <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
+  //               The creator has not funded the reward pool for this quest yet. Please check back later!
+  //             </CardDescription>
+  //           </CardHeader>
+  //           <CardFooter className="pt-4 flex justify-center pb-8">
+  //             <Button variant="outline" onClick={() => router.push('/quest')}>Browse Active Quests</Button>
+  //           </CardFooter>
+  //         </Card>
+  //       </div>
+  //     </div>
+  //   );
+  // }
+  if (isCreator && !questData.isFunded) {
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header pageTitle={questData.title || "Quest Unfunded"} />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
+            <CardHeader className="pb-2 pt-8">
+              <div className="mx-auto bg-slate-100 dark:bg-slate-900 p-4 rounded-full mb-4 w-fit ring-1 ring-slate-200 dark:ring-slate-800">
+                <Lock className="h-10 w-10 text-slate-600 dark:text-slate-400" />
+              </div>
+              <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Quest Not Ready</CardTitle>
+              <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
+                Please you need to fund Quest before it can be Accessible
+              </CardDescription>
+            </CardHeader>
+            <CardFooter className="pt-4 flex justify-center pb-8">
+              <Button variant="outline" onClick={handleFundQuest}>Fund</Button>
+            </CardFooter>
+          </Card>
+        </div>
+      </div>
+    );
+  }
   // ============= PROGRESS BAR CALCULATION (UPDATED) =============
   const currentStage = userProgress.currentStage || "Beginner";
   const currentStageMeta = userProgress.stagesMeta?.[currentStage];
@@ -1890,18 +1965,33 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                         const status = getTaskStatus(task);
                         const isLocked = status === "locked";
 
+                        const taskSubmissions = userProgress.submissions?.filter((s: any) => String(s.taskId || s.task_id) === String(task.id)) || [];
+                        taskSubmissions.sort((a: any, b: any) => new Date(b.submittedAt || b.submitted_at || 0).getTime() - new Date(a.submittedAt || a.submitted_at || 0).getTime());
+                        const latestSub = taskSubmissions[0];
+
                         return (
-                          <Card key={task.id} className={`group relative overflow-hidden transition-all duration-300 h-full flex flex-col ${isLocked || !participantData ? "opacity-50" : "hover:shadow-lg hover:-translate-y-1 bg-white dark:bg-slate-950"} ${status === "completed" ? "border-green-500/30 bg-green-50/20" : ""} ${status === "pending" ? "border-orange-500/30 bg-orange-50/20" : ""}`}>
+                          <Card key={task.id} className={`group relative overflow-hidden transition-all duration-300 h-full flex flex-col ${isLocked || !participantData ? "opacity-50" : "hover:shadow-lg hover:-translate-y-1 bg-white dark:bg-slate-950"} ${status === "completed" ? "border-green-500/30 bg-green-50/20" : ""} ${status === "pending" ? "border-orange-500/30 bg-orange-50/20" : ""} ${status === "rejected" ? "border-red-500/50 bg-red-50/30 dark:bg-red-950/20" : ""}`}>
                             <CardContent className="p-5 flex flex-col h-full">
                               <div className="flex justify-between items-start mb-4">
-                                <div className={`p-2 rounded-lg ${isLocked || !participantData ? "bg-slate-200 dark:bg-slate-800" : "bg-primary/10 text-primary"}`}>
-                                  {isLocked || !participantData ? <Lock className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
+                                <div className={`p-2 rounded-lg ${isLocked || !participantData ? "bg-slate-200 dark:bg-slate-800" : status === "rejected" ? "bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400" : "bg-primary/10 text-primary"}`}>
+                                  {isLocked || !participantData ? <Lock className="h-5 w-5" /> : status === "rejected" ? <X className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
                                 </div>
-                                <Badge variant={status === "completed" ? "default" : "secondary"} className={status === "completed" ? "bg-green-600" : ""}>{task.points} PTS</Badge>
+                                <div className="flex flex-col items-end gap-1">
+                                  <Badge variant={status === "completed" ? "default" : "secondary"} className={status === "completed" ? "bg-green-600" : ""}>{task.points} PTS</Badge>
+                                  {status === "rejected" && <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">Rejected</Badge>}
+                                </div>
                               </div>
                               <div className="mb-6 flex-1">
                                 <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">{task.title}</h3>
                                 <p className="text-sm text-muted-foreground line-clamp-3">{task.description}</p>
+                                
+                                {/* Show Rejection Reason if it exists */}
+                                {status === "rejected" && latestSub?.notes && (
+                                  <div className="mt-3 p-2.5 bg-red-100/50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-md text-xs text-red-800 dark:text-red-300">
+                                    <strong className="block mb-0.5 uppercase tracking-wider text-[10px]">Rejection Note:</strong> 
+                                    {latestSub.notes}
+                                  </div>
+                                )}
                               </div>
                               <div className="mt-auto pt-4 border-t flex items-center justify-between">
                                 <div className="text-[10px] font-bold text-muted-foreground flex items-center gap-1 uppercase tracking-wider">
@@ -1912,7 +2002,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                                   {task.verificationType.replace("manual_", "").replace("auto_", "")}
                                 </div>
                                 {status === "completed" ? (
-                                  <Button size="sm" disabled className="bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700 cursor-default hover:bg-slate-100 dark:hover:bg-slate-800">
+                                  <Button size="sm" disabled className="bg-slate-100 text-green-600 font-bold border-green-200 dark:bg-green-950/30 dark:text-green-500 dark:border-green-900 cursor-default hover:bg-slate-100 dark:hover:bg-slate-800">
                                     <CheckCircle2 className="h-4 w-4 mr-1" /> Done
                                   </Button>
                                 ) : status === "pending" ? (
@@ -1921,8 +2011,8 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                                   <span className="text-sm text-muted-foreground">{!participantData ? "Join Required" : "Locked"}</span>
                                 ) : (
                                   !isCreator ? (
-                                    <Button size="sm" onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }} disabled={!participantData || !questTiming.isLive || status !== "available"} className="bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black">
-                                      {questTiming.notStartedYet ? "Starts Soon" : "Open Task"}
+                                    <Button size="sm" onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }} disabled={!participantData || !questTiming.isLive || (status !== "available" && status !== "rejected")} className={status === "rejected" ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"}>
+                                      {questTiming.notStartedYet ? "Starts Soon" : status === "rejected" ? "Try Again" : "Open Task"}
                                     </Button>
                                   ) : (
                                     <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Preview Mode</span>
@@ -1930,9 +2020,10 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                                 )}
                               </div>
                             </CardContent>
-                            {(!isLocked && status === "available" && participantData) && <div className="absolute bottom-0 left-0 w-full h-1 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />}
+                            {(!isLocked && (status === "available" || status === "rejected") && participantData) && <div className="absolute bottom-0 left-0 w-full h-1 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />}
                           </Card>
                         );
+                        
                       })}
                     </div>
                   </div>
@@ -1957,7 +2048,6 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                       <TableRow className="hover:bg-transparent">
                         <TableHead className="w-[80px]">Rank</TableHead>
                         <TableHead>Participant</TableHead>
-                        <TableHead className="text-right">Tasks Done</TableHead>
                         <TableHead className="text-right">Points</TableHead>
                         {claimStatus.isActive && <TableHead className="text-right">Action</TableHead>}
                       </TableRow>
@@ -1987,57 +2077,33 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="text-right text-muted-foreground font-mono">{entry.completedTasks}</TableCell>
                             <TableCell className="text-right font-bold text-primary text-lg">{entry.points}</TableCell>
                             {claimStatus.isActive && (
                             <TableCell className="text-right">
                               {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
                                 entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
-                                  
-                                  // 1. If quest hasn't ended yet
-                                  !isQuestEnded ? (
-                                    <Badge variant="outline" className="text-amber-500 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
-                                      Awaiting End
-                                    </Badge>
-                                  ) : 
-                                  // 2. Checking the blockchain
-                                  claimState.isChecking ? (
-                                    <div className="flex justify-end"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
-                                  ) : 
-                                  // 3. User has already claimed
-                                  claimState.hasClaimed ? (
-                                    <Badge className="bg-green-500 text-white border-0">Claimed ✅</Badge>
-                                  ) : 
-                                  // 4. Backend hasn't whitelisted them yet (waiting for the 60-second cron job)
-                                  !claimState.isWinnerOnChain && !isClaimWindowClosed ? (
-                                    <Badge variant="outline" className="text-blue-500 border-blue-500 bg-blue-50 dark:bg-blue-950/20 animate-pulse">
-                                      Processing Rewards...
-                                    </Badge>
-                                  ) : 
-                                  // 5. Window is closed and they missed it
-                                  isClaimWindowClosed ? (
-                                    <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20">
-                                      Expired
-                                    </Badge>
-                                  ) : 
-                                  // 6. Finally, they are whitelisted and ready to claim!
-                                  (
-                                    <Button 
-                                      size="sm" 
-                                      onClick={handleClaimReward} 
-                                      disabled={isClaiming} 
-                                      className="bg-green-600 hover:bg-green-700 text-white shadow-sm font-bold"
-                                    >
-                                      {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                                      Claim Reward
-                                    </Button>
-                                  )
-
+                                claimState.hasClaimed ? (
+                                  <Badge className="bg-green-500 text-white border-0">Claimed ✅</Badge>
+                                ) : isClaimWindowClosed ? (
+                                  <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20">
+                                    Expired
+                                  </Badge>
                                 ) : (
-                                  <span className="text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
-                                    Not Eligible
-                                  </span>
+                                  <Button
+                                    size="sm"
+                                    onClick={handleClaimReward}
+                                    disabled={isClaiming}
+                                    className="bg-green-600 hover:bg-green-700 text-white shadow-sm font-bold"
+                                  >
+                                    {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                                    Claim Reward
+                                  </Button>
                                 )
+                              ) : (
+                                <span className="text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                                  Not Eligible
+                                </span>
+                              )
                               )}
                             </TableCell>
                           )}  
@@ -2274,29 +2340,58 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                                   </div>
 
                                   {/* Actions */}
-                                  <div className="p-4 bg-slate-50/50 dark:bg-slate-900/50 border-t dark:border-slate-800 flex gap-3">
-                                    <Button 
-                                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10" 
-                                      onClick={() => handleReviewSubmission(sub.submissionId, "approved")}
-                                      disabled={processingSubmission?.id === sub.submissionId}
-                                    >
-                                      {processingSubmission?.id === sub.submissionId && processingSubmission?.action === "approved" 
-                                        ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
-                                        : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                                      Approve
-                                    </Button>
-                                    <Button 
-                                      variant="ghost" 
-                                      className="flex-1 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 font-bold h-10" 
-                                      onClick={() => handleReviewSubmission(sub.submissionId, "rejected")}
-                                      disabled={processingSubmission?.id === sub.submissionId}
-                                    >
-                                      {processingSubmission?.id === sub.submissionId && processingSubmission?.action === "rejected" 
-                                        ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
-                                        : <X className="mr-2 h-4 w-4" />}
-                                      Reject
-                                    </Button>
-                                  </div>
+                                  {rejectingSubId === sub.submissionId ? (
+                                    <div className="flex flex-col gap-3 p-4 bg-slate-50/50 dark:bg-slate-900/50 border-t dark:border-slate-800">
+                                      <Textarea
+                                        placeholder="Why is this being rejected? (The user will see this note)"
+                                        value={rejectionNote}
+                                        onChange={(e) => setRejectionNote(e.target.value)}
+                                        className="resize-none text-sm min-h-[80px] bg-white dark:bg-slate-950 border-red-200 dark:border-red-900/50 focus-visible:ring-red-500"
+                                      />
+                                      <div className="flex gap-3">
+                                        <Button 
+                                          variant="outline" 
+                                          className="flex-1" 
+                                          onClick={() => { setRejectingSubId(null); setRejectionNote(""); }}
+                                          disabled={processingSubmission?.id === sub.submissionId}
+                                        >
+                                          Cancel
+                                        </Button>
+                                        <Button 
+                                          className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold" 
+                                          onClick={() => handleReviewSubmission(sub.submissionId, "rejected", rejectionNote)}
+                                          disabled={processingSubmission?.id === sub.submissionId || !rejectionNote.trim()}
+                                        >
+                                          {processingSubmission?.id === sub.submissionId && processingSubmission?.action === "rejected" 
+                                            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+                                            : <X className="mr-2 h-4 w-4" />}
+                                          Confirm Reject
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 bg-slate-50/50 dark:bg-slate-900/50 border-t dark:border-slate-800 flex gap-3">
+                                      <Button 
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10" 
+                                        onClick={() => handleReviewSubmission(sub.submissionId, "approved")}
+                                        disabled={processingSubmission?.id === sub.submissionId}
+                                      >
+                                        {processingSubmission?.id === sub.submissionId && processingSubmission?.action === "approved" 
+                                          ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
+                                          : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                        Approve
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        className="flex-1 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 font-bold h-10" 
+                                        onClick={() => { setRejectingSubId(sub.submissionId); setRejectionNote(""); }}
+                                        disabled={processingSubmission?.id === sub.submissionId}
+                                      >
+                                        <X className="mr-2 h-4 w-4" />
+                                        Reject
+                                      </Button>
+                                    </div>
+                                  )}  
                                 </Card>
                               );
                             })}

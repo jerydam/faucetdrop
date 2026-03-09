@@ -1579,7 +1579,9 @@
                         <SelectTrigger className="bg-background/50"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="none">Just Join Quest (Default)</SelectItem>
-                            {newQuest.tasks.filter((t: QuestTask) => !t.isSystem).map((t: QuestTask) => (
+                            {newQuest.tasks
+                              .filter((t: QuestTask) => !t.isSystem && t.category === 'social') 
+                              .map((t: QuestTask) => (
                               <SelectItem key={t.id} value={t.id}>Must complete: {t.title}</SelectItem>
                             ))}
                         </SelectContent>

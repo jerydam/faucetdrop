@@ -101,7 +101,7 @@ export interface TokenConfiguration {
 // ✅ NEW: one entry per rank position — replaces range-based tiers
 export interface RankReward {
     rank: number    // 1-based rank position
-    amount: number  // token reward for this exact rank
+    amount: number | string;
 }
 
 export interface DistributionConfig {
@@ -140,19 +140,19 @@ export const computeRewardPool = (
 ): number => {
     if (distributionConfig.model === 'custom_tiers') {
         return distributionConfig.tiers.reduce(
-            (sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount),
+            // Safely parse the string to a float
+            (sum, r) => sum + (parseFloat(String(r.amount)) || 0), 
             0
         )
     }
     return parseFloat(rawRewardPool || '0')
 }
 
-// Build a synced ranks array for n winners, preserving existing amounts
 const buildRanks = (n: number, existing: RankReward[]): RankReward[] => {
     const existingMap = new Map(existing.map(r => [r.rank, r.amount]))
     return Array.from({ length: n }, (_, i) => ({
         rank: i + 1,
-        amount: existingMap.get(i + 1) ?? 0,
+        amount: existingMap.get(i + 1) ?? "", // <--- Default to empty string instead of 0
     }))
 }
 
@@ -399,10 +399,13 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         const hasValidTitle = (newQuest.title || "").trim().length >= 3 && !nameError
         const hasImage = !!newQuest.imageUrl && !newQuest.imageUrl.includes('placehold.co')
         const hasToken = !!selectedToken
+
+        // 👇 NEW: Ensure no ranks are exactly 0 or empty when using custom tiers
+        const isCustomTiersValid = newQuest.distributionConfig.model !== 'custom_tiers' || 
+            !newQuest.distributionConfig.tiers.some(r => (parseFloat(String(r.amount)) || 0) <= 0)
         
-        // 👇 Added !isCheckingName to prevent saving while the blur check is running
-        return hasValidTitle && hasImage && hasToken && isConnected && !isCheckingName 
-    }, [newQuest.title, nameError, newQuest.imageUrl, selectedToken, isConnected, isCheckingName])
+        return hasValidTitle && hasImage && hasToken && isConnected && !isCheckingName && isCustomTiersValid 
+    }, [newQuest.title, nameError, newQuest.imageUrl, selectedToken, isConnected, isCheckingName, newQuest.distributionConfig])
 
     // ── Distribution model change ────────────────────────────────────────────
     // ✅ FIX: Just swap the model. Preserve tiers so user can switch back safely.
@@ -429,7 +432,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         if (newQuest.distributionConfig.model === 'custom_tiers') {
             // Rebuild rank rows, keeping existing amounts for unchanged ranks
             const newTiers = buildRanks(n, newQuest.distributionConfig.tiers)
-            const newTotal = newTiers.reduce((sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount), 0)
+            const newTotal = newTiers.reduce((sum, r) => sum + (parseFloat(String(r.amount)) || 0), 0)
             setNewQuest(prev => ({
                 ...prev,
                 rewardPool: newTotal.toString(),
@@ -444,14 +447,16 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     }, [newQuest.distributionConfig, setNewQuest])
 
     // ── custom_tiers: per-rank amount change ─────────────────────────────────
-    // ✅ Updates the specific rank row and syncs rewardPool in state
+ 
     const handleRankAmountChange = useCallback((rank: number, raw: string) => {
-        const amount = Math.max(0, parseFloat(raw) || 0)
+        // Store the exact raw string (e.g. "0.") so it doesn't get erased
         const updated = newQuest.distributionConfig.tiers.map(r =>
-            r.rank === rank ? { ...r, amount } : r
+            r.rank === rank ? { ...r, amount: raw } : r
         )
-        // ✅ NaN-safe total sync
-        const newTotal = updated.reduce((sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount), 0)
+        
+        // Calculate the total by parsing the strings safely
+        const newTotal = updated.reduce((sum, r) => sum + (parseFloat(String(r.amount)) || 0), 0)
+        
         setNewQuest(prev => ({
             ...prev,
             rewardPool: newTotal.toString(),
@@ -469,7 +474,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                 newQuest.distributionConfig.totalWinners,
                 newQuest.distributionConfig.tiers
             )
-            const newTotal = synced.reduce((sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount), 0)
+            const newTotal = synced.reduce((sum, r) => sum + (parseFloat(String(r.amount)) || 0), 0)
             setNewQuest(prev => ({
                 ...prev,
                 rewardPool: newTotal.toString(),
@@ -491,6 +496,15 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         if (computedPool <= 0) {
             setError("Reward pool amount must be greater than zero.")
             return
+        }
+
+        // 👇 ADD THIS NEW CHECK 👇
+        if (newQuest.distributionConfig.model === 'custom_tiers') {
+            const hasZero = newQuest.distributionConfig.tiers.some(r => (parseFloat(String(r.amount)) || 0) <= 0);
+            if (hasZero) {
+                setError("All ranks must have a reward amount greater than 0.");
+                return;
+            }
         }
 
         setIsSavingDraft(true)
@@ -546,14 +560,14 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     }
     // ── Derived custom_tiers totals for the summary panel ───────────────────
     const customTiersTotal = useMemo(() =>
-        newQuest.distributionConfig.tiers.reduce((sum, r) => sum + (isNaN(r.amount) ? 0 : r.amount), 0),
+        newQuest.distributionConfig.tiers.reduce((sum, r) => sum + (parseFloat(String(r.amount)) || 0), 0),
         [newQuest.distributionConfig.tiers]
     )
     const highestRankAmount = useMemo(() =>
-        Math.max(...newQuest.distributionConfig.tiers.map(r => r.amount), 0),
+        Math.max(...newQuest.distributionConfig.tiers.map(r => parseFloat(String(r.amount)) || 0), 0),
         [newQuest.distributionConfig.tiers]
     )
-    const hasZeroRanks = newQuest.distributionConfig.tiers.some(r => r.amount <= 0)
+    const hasZeroRanks = newQuest.distributionConfig.tiers.some(r => (parseFloat(String(r.amount)) || 0) <= 0)
 
     // ── Render ───────────────────────────────────────────────────────────────
     return (
@@ -857,57 +871,63 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
 
                                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 mt-3">
                                         {newQuest.distributionConfig.tiers.map((rankReward) => {
-                                            const barWidth = highestRankAmount > 0
-                                                ? Math.round((rankReward.amount / highestRankAmount) * 100)
-                                                : 0
+                                        // 👇 1. Create a safe, guaranteed number for our math calculations
+                                        const numericAmount = parseFloat(String(rankReward.amount)) || 0;
 
-                                            return (
-                                                <div
-                                                    key={rankReward.rank}
-                                                    className={`relative flex items-center gap-3 p-3 rounded-lg border transition-colors ${getRankRowStyle(rankReward.rank)}`}
-                                                >
-                                                    {/* Proportional bar fill */}
-                                                    {barWidth > 0 && (
-                                                        <div
-                                                            className="absolute inset-0 rounded-lg opacity-[0.04] bg-primary pointer-events-none"
-                                                            style={{ width: `${barWidth}%` }}
-                                                        />
-                                                    )}
+                                        // 👇 2. Use numericAmount here for division
+                                        const barWidth = highestRankAmount > 0
+                                            ? Math.round((numericAmount / highestRankAmount) * 100)
+                                            : 0
 
-                                                    {/* Icon + rank label */}
-                                                    <div className="flex items-center gap-2 w-28 shrink-0">
-                                                        {getRankIcon(rankReward.rank)}
-                                                        <span className="text-sm font-medium tabular-nums">
-                                                            {getRankLabel(rankReward.rank)}
-                                                        </span>
-                                                    </div>
+                                        return (
+                                            <div
+                                                key={rankReward.rank}
+                                                className={`relative flex items-center gap-3 p-3 rounded-lg border transition-colors ${getRankRowStyle(rankReward.rank)}`}
+                                            >
+                                                {/* Proportional bar fill */}
+                                                {barWidth > 0 && (
+                                                    <div
+                                                        className="absolute inset-0 rounded-lg opacity-[0.04] bg-primary pointer-events-none"
+                                                        style={{ width: `${barWidth}%` }}
+                                                    />
+                                                )}
 
-                                                    {/* Amount input */}
-                                                    <div className="flex-1 relative">
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            step="any"
-                                                            placeholder="0.00"
-                                                            value={rankReward.amount === 0 ? "" : rankReward.amount}
-                                                            onChange={(e) => handleRankAmountChange(rankReward.rank, e.target.value)}
-                                                            className={`bg-background/80 font-mono text-sm pr-20 ${rankReward.amount <= 0 ? "border-red-500/50" : ""}`}
-                                                        />
-                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none font-mono">
-                                                            {selectedToken?.symbol || 'TOKEN'}
-                                                        </span>
-                                                    </div>
-
-                                                    {/* USD value */}
-                                                    {tokenPrice > 0 && rankReward.amount > 0 && (
-                                                        <div className="flex items-center gap-1 text-xs text-muted-foreground w-20 shrink-0 justify-end">
-                                                            <DollarSign className="h-3 w-3" />
-                                                            {(rankReward.amount * tokenPrice).toFixed(2)}
-                                                        </div>
-                                                    )}
+                                                {/* Icon + rank label */}
+                                                <div className="flex items-center gap-2 w-28 shrink-0">
+                                                    {getRankIcon(rankReward.rank)}
+                                                    <span className="text-sm font-medium tabular-nums">
+                                                        {getRankLabel(rankReward.rank)}
+                                                    </span>
                                                 </div>
-                                            )
-                                        })}
+
+                                                {/* Amount input */}
+                                                <div className="flex-1 relative">
+                                                    <Input
+                                                        type="number"
+                                                        min={0}
+                                                        step="any"
+                                                        placeholder="0.00"
+                                                        value={rankReward.amount} // Keep the raw string/number here!
+                                                        onChange={(e) => handleRankAmountChange(rankReward.rank, e.target.value)}
+                                                        // 👇 3. Use numericAmount here for the error border check
+                                                        className={`bg-background/80 font-mono text-sm pr-20 ${numericAmount <= 0 ? "border-red-500/50" : ""}`}
+                                                    />
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none font-mono">
+                                                        {selectedToken?.symbol || 'TOKEN'}
+                                                    </span>
+                                                </div>
+
+                                                {/* USD value */}
+                                                {/* 👇 4. Use numericAmount here for the > 0 check and the multiplication */}
+                                                {tokenPrice > 0 && numericAmount > 0 && (
+                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground w-20 shrink-0 justify-end">
+                                                        <DollarSign className="h-3 w-3" />
+                                                        {(numericAmount * tokenPrice).toFixed(2)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
                                     </div>
 
                                     {hasZeroRanks && (

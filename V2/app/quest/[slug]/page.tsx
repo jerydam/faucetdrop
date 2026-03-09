@@ -212,6 +212,29 @@ export default function QuestDetailsPage() {
 
   // ============= STATE =============
   const [questData, setQuestData] = useState<any | null>(null);
+  const [creatorSubscribed, setCreatorSubscribed] = useState<boolean>(true);
+
+  // ── NEW: FETCH CREATOR'S SUBSCRIPTION STATUS ──
+  useEffect(() => {
+    if (!questData?.creatorAddress) return;
+    const fetchCreatorStatus = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/profile/${questData.creatorAddress}`);
+        const data = await res.json();
+        if (data.success && data.profile) {
+          const expiresAt = data.profile.quest_subscription_expires_at;
+          const isSubbed = data.profile.is_quest_subscribed && expiresAt && new Date(expiresAt) > new Date();
+          setCreatorSubscribed(!!isSubbed);
+        } else {
+          setCreatorSubscribed(false);
+        }
+      } catch (e) {
+        console.error("Failed to check creator subscription", e);
+        setCreatorSubscribed(false);
+      }
+    };
+    fetchCreatorStatus();
+  }, [questData?.creatorAddress]);
   const [rejectingSubId, setRejectingSubId] = useState<string | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
   const [faucetAddress, setFaucetAddress] = useState<string | undefined>(undefined);
@@ -509,7 +532,7 @@ export default function QuestDetailsPage() {
 
   const questTiming = useMemo(() => {
     if (!questData?.rawStartDate || !questData?.rawEndDate) {
-      return { isLive: false, notStartedYet: true, isEnded: false, isReviewing: false };
+      return { isLive: false, notStartedYet: true, isEnded: false, isReviewing: false, isCreatorUnsubscribed: false };
     }
     const now = new Date();
     const start = new Date(questData.rawStartDate);
@@ -517,14 +540,15 @@ export default function QuestDetailsPage() {
     const reviewEnd = new Date(end.getTime() + (24 * 60 * 60 * 1000));
     
     return {
-      isLive: now >= start && now <= end && questData.isActive,
+      // Must be subscribed to be live!
+      isLive: now >= start && now <= end && questData.isActive && creatorSubscribed,
       notStartedYet: now < start,
       isEnded: now > end,
-      isReviewing: now > end && now <= reviewEnd, // <-- NEW STATE
+      isReviewing: now > end && now <= reviewEnd,
       isPaused: !questData.isActive,
+      isCreatorUnsubscribed: !creatorSubscribed, // <-- New Flag
     };
-  }, [questData?.rawStartDate, questData?.rawEndDate, questData?.isActive]);
-
+  }, [questData?.rawStartDate, questData?.rawEndDate, questData?.isActive, creatorSubscribed]);
 
   const allParticipants = leaderboard.filter(
     (entry) => entry.walletAddress.toLowerCase() !== questData?.creatorAddress.toLowerCase()
@@ -1496,6 +1520,7 @@ const displayLeaderboard = useMemo(() => {
 
   // ── UPDATED getTaskStatus: uses activeStages + stagesMeta from backend ──
   const getTaskStatus = (task: QuestTask) => {
+    if (!creatorSubscribed) return "locked";
     if (!participantData) return "locked";
 
     const currentTaskId = task.id || (task as any)._id;
@@ -1806,21 +1831,24 @@ const hasNewBackendData = currentStageMeta !== undefined;
                   </div>
                 </div>
              
-              {!participantData && !isCreator && (
+              
+               {!participantData && !isCreator && (
                 <Button
                   size="lg"
                   onClick={handleJoin}
-                  disabled={isJoining || questTiming.notStartedYet || questTiming.isEnded}
+                  disabled={isJoining || questTiming.notStartedYet || questTiming.isEnded || !creatorSubscribed}
                   className="min-w-[200px]"
                 >
                   {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
                   {isJoining
                     ? "Joining..."
-                    : questTiming.notStartedYet
-                      ? `Starts in ${startCountdown}`
-                      : questTiming.isEnded
-                        ? "Quest Ended"
-                        : "Join Quest to Participate"}
+                    : !creatorSubscribed
+                      ? "Quest Locked"
+                      : questTiming.notStartedYet
+                        ? `Starts in ${startCountdown}`
+                        : questTiming.isEnded
+                          ? "Quest Ended"
+                          : "Join Quest to Participate"}
                 </Button>
               )}
               </div>
@@ -1847,7 +1875,21 @@ const hasNewBackendData = currentStageMeta !== undefined;
             </div>
           </div>
         )}
-
+        {!creatorSubscribed && !isCreator && (
+          <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-full text-red-600 dark:text-red-400">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-red-900 dark:text-red-200 text-sm">Quest Temporarily Locked</p>
+                <p className="text-xs text-red-700 dark:text-red-400">
+                  The creator's subscription has expired or is inactive. Tasks and joining are paused until they renew.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
         {questTiming.isLive && questData?.endDate && (
           <div className="rounded-xl border border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -2098,16 +2140,22 @@ const hasNewBackendData = currentStageMeta !== undefined;
                               <CardContent className="p-5 flex flex-col h-full">
                                 <div className="flex justify-between items-start mb-4">
                                   <div className="p-2 rounded-lg bg-primary/10 text-primary"><CalendarClock className="h-5 w-5" /></div>
-                                  <Badge variant="secondary">+10 PTS</Badge>
+                                  <Badge variant="secondary">+100 PTS</Badge>
                                 </div>
                                 <h3 className="font-bold text-lg mb-2">{task.title}</h3>
                                 <p className="text-sm text-muted-foreground flex-1">{task.description}</p>
                                 <div className="mt-4 pt-4 border-t">
                                   {participantData && !isCreator ? (
                                     checkinStatus.canCheckin ? (
-                                      <Button onClick={handleDailyCheckin} disabled={isCheckingIn || !checkinStatus.canCheckin || !questTiming.isLive} className="w-full">
+                                      <Button 
+                                        onClick={handleDailyCheckin} 
+                                        // Add !creatorSubscribed to disabled conditions
+                                        disabled={isCheckingIn || !checkinStatus.canCheckin || !questTiming.isLive || !creatorSubscribed} 
+                                        className="w-full"
+                                      >
                                         {isCheckingIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                        {questTiming.notStartedYet ? "Check-in Locked" : "Check In Now +10 pts"}
+                                        {/* Update Text */}
+                                        {!creatorSubscribed ? "Quest Locked" : questTiming.notStartedYet ? "Check-in Locked" : "Check In Now +100 pts"}
                                       </Button>
                                     ) : (
                                       <div className="text-center space-y-2">

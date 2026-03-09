@@ -296,7 +296,7 @@ export default function QuestDetailsPage() {
   const [isClaiming, setIsClaiming] = useState(false);
   const tokenSymbol = questData?.tokenSymbol || "Tokens";
   const rewardPoolAmount = parseFloat(questData?.rewardPool || "0");
-  const platformFeePercentage = 0.05;
+  const platformFeePercentage = 0.01;
   const requiredFee = rewardPoolAmount * platformFeePercentage;
   const totalRequired = rewardPoolAmount + requiredFee;
   const now = new Date();

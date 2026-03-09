@@ -136,6 +136,7 @@ interface LeaderboardEntry {
   avatarUrl?: string | null;
   points: number;
   completedTasks: number;
+  updatedAt?: string; // <--- ADD THIS
 }
 
 interface UserProfile {
@@ -150,6 +151,8 @@ interface ParticipantData {
   referral_count: number;
   last_checkin_at: string | null;
   points: number;
+  updated_at?: string; // <--- ADD THIS
+  joined_at?: string;  // <--- ADD THIS
 }
 const useCountdown = (targetDate: string | null) => {
   const [timeLeft, setTimeLeft] = useState<string>("");
@@ -720,11 +723,22 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
   };
 }, [questData?.rawStartDate, questData?.rawEndDate, questData?.isActive]);
 
-
-  const displayLeaderboard = useMemo(() => {
+const displayLeaderboard = useMemo(() => {
     let list = [...leaderboard];
+    
     if (userWalletAddress && participantData && !isCreator) {
       const myWalletLower = userWalletAddress.toLowerCase();
+      
+      // FIX: Find if the user is already in the backend's leaderboard list
+      const existingEntry = list.find(e => e.walletAddress.toLowerCase() === myWalletLower);
+      
+      // FIX: Use the backend's known time for this user, OR participantData, before falling back to NOW.
+      // This prevents the current user from constantly losing tie-breakers on re-renders.
+      const actualUpdateTime = existingEntry?.updatedAt 
+        || participantData?.updated_at 
+        || participantData?.joined_at 
+        || new Date().toISOString();
+
       const myLatestEntry = {
         rank: 0,
         walletAddress: userWalletAddress,
@@ -732,24 +746,40 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
         avatarUrl: userProfile?.avatar_url || null,
         points: participantData.points || 0,
         completedTasks: userProgress?.completedTasks?.length || 0,
+        updatedAt: actualUpdateTime 
       };
-      const myIndex = list.findIndex(e => e.walletAddress.toLowerCase() === myWalletLower);
-      if (myIndex !== -1) {
-        list[myIndex] = { ...list[myIndex], ...myLatestEntry, rank: list[myIndex].rank || 0 };
+      
+      if (existingEntry) {
+        // Update the existing entry with live local progress
+        Object.assign(existingEntry, myLatestEntry);
       } else {
+        // Only push a new entry if they aren't in the list at all yet
         list.push(myLatestEntry);
       }
     }
+    
     return list
       .filter(entry => {
         const entryWallet = entry.walletAddress.toLowerCase();
         const creatorWallet = questData?.creatorAddress?.toLowerCase();
         return entryWallet !== creatorWallet;
       })
-      .sort((a, b) => b.points - a.points)
+      .sort((a, b) => {
+        // Primary Sort: Points (Descending - highest points first)
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
+        
+        // Secondary Sort (TIE BREAKER): Time achieved (Ascending - oldest time first)
+        // If Player A got 50 points yesterday, and Player B got 50 points today, Player A wins.
+        // Fallback to Date.now() to ensure safe sorting if a date is somehow completely missing
+        const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : Date.now();
+        const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : Date.now();
+        
+        return timeA - timeB; 
+      })
       .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
   }, [leaderboard, participantData, userProgress, userWalletAddress, userProfile, questData, isCreator]);
-
   useEffect(() => {
     if (!faucetAddress || !userWalletAddress || !hasUsername) return;
     const fetchUserSpecifics2 = async () => {
@@ -1503,29 +1533,29 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
   //     </div>
   //   );
   // }
-  if (isCreator && !questData.isFunded) {
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header pageTitle={questData.title || "Quest Unfunded"} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
-            <CardHeader className="pb-2 pt-8">
-              <div className="mx-auto bg-slate-100 dark:bg-slate-900 p-4 rounded-full mb-4 w-fit ring-1 ring-slate-200 dark:ring-slate-800">
-                <Lock className="h-10 w-10 text-slate-600 dark:text-slate-400" />
-              </div>
-              <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Quest Not Ready</CardTitle>
-              <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
-                Please you need to fund Quest before it can be Accessible
-              </CardDescription>
-            </CardHeader>
-            <CardFooter className="pt-4 flex justify-center pb-8">
-              <Button variant="outline" onClick={handleFundQuest}>Fund</Button>
-            </CardFooter>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  // if (isCreator && !questData.isFunded) {
+  //   return (
+  //     <div className="flex flex-col min-h-screen">
+  //       <Header pageTitle={questData.title || "Quest Unfunded"} />
+  //       <div className="flex-1 flex items-center justify-center p-4">
+  //         <Card className="w-full max-w-md shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 relative overflow-hidden text-center">
+  //           <CardHeader className="pb-2 pt-8">
+  //             <div className="mx-auto bg-slate-100 dark:bg-slate-900 p-4 rounded-full mb-4 w-fit ring-1 ring-slate-200 dark:ring-slate-800">
+  //               <Lock className="h-10 w-10 text-slate-600 dark:text-slate-400" />
+  //             </div>
+  //             <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Quest Not Ready</CardTitle>
+  //             <CardDescription className="text-base mt-2 mx-auto leading-relaxed">
+  //               Please you need to fund Quest before it can be Accessible
+  //             </CardDescription>
+  //           </CardHeader>
+  //           <CardFooter className="pt-4 flex justify-center pb-8">
+  //             <Button variant="outline" onClick={handleFundQuest}>Fund</Button>
+  //           </CardFooter>
+  //         </Card>
+  //       </div>
+  //     </div>
+  //   );
+  // }
   // ============= PROGRESS BAR CALCULATION (UPDATED) =============
   const currentStage = userProgress.currentStage || "Beginner";
   const currentStageMeta = userProgress.stagesMeta?.[currentStage];

@@ -775,9 +775,7 @@
         const claimValue = parseInt(newQuest.claimWindowValue || "7", 10);
         const hoursInt =
           newQuest.claimWindowUnit === "hours" ? claimValue : claimValue * 24;
-        const nowInSeconds = Math.floor(Date.now() / 1000);
-        const questEndTime = nowInSeconds + hoursInt * 3600;
-
+        const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000);
         if (!provider) throw new Error("Wallet provider is not ready.");
 
         const deployedAddress = await createQuestReward(
@@ -785,7 +783,7 @@
           targetFactory,
           newQuest.title.trim(),
           newQuest.tokenAddress || ZeroAddress,
-          questEndTime,
+          questEndTimeSeconds,
           hoursInt
         );
 
@@ -805,8 +803,8 @@
           description: newQuest.description,
           imageUrl: newQuest.imageUrl,
           // 3. USE THE FORMATTED ISO STRINGS HERE
-          startDate: finalStartDateISO, 
-          endDate: finalEndDateISO,     
+          startDate: finalStartDateISO,
+          endDate: finalEndDateISO, 
           claimWindowHours: hoursInt,
           tasks: newQuest.tasks,
           stagePassRequirements,

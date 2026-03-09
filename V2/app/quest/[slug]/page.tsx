@@ -215,6 +215,8 @@ export default function QuestDetailsPage() {
     isChecking: false,
     isWinnerOnChain: false,
     hasClaimed: false,
+    canClaimOnChain: false, // <-- Add this
+    isExpiredOnChain: false, // <-- Add this
   });
   const refreshParticipantData = async () => {
     setIsRefreshingUser(true);
@@ -420,38 +422,68 @@ export default function QuestDetailsPage() {
     fetchUserSpecifics();
   }, [faucetAddress, userWalletAddress, hasUsername, isCreator]);
 
-  // ── ON-CHAIN CLAIM STATUS CHECK ──
+// ── ON-CHAIN CLAIM STATUS CHECK ──
   useEffect(() => {
     const checkClaimStatus = async () => {
-      if (!questData || !questData.rawEndDate) return { isActive: false, message: "Not started" };
-          const endDate = new Date(questData.rawEndDate);
-      if (!faucetAddress || !userWalletAddress || !walletProvider || !isQuestEnded) return;
+      // Use activeWallet instead of walletProvider
+      if (!faucetAddress || !userWalletAddress || !activeWallet) return;
       
       try {
         setClaimState(prev => ({ ...prev, isChecking: true }));
-        const ethersProvider = new BrowserProvider(walletProvider as any);
+        
+        // 1. Extract the raw EIP-1193 provider from Privy (Just like you did in handleAdminWithdraw!)
+        const privyProvider = await activeWallet.getEthereumProvider();
+        
+        // 2. Wrap it in ethers.js
+        const ethersProvider = new BrowserProvider(privyProvider);
+        
+        // 3. Connect to your specific smart contract
         const contract = new Contract(faucetAddress, QUEST_ABI, ethersProvider);
 
-        // Read directly from your smart contract
-        const hasClaimed = await contract.hasClaimed(userWalletAddress);
-        const amountWei = await contract.getCustomClaimAmount(userWalletAddress);
+        console.log(`🔍 Fetching on-chain claim status for Wallet: ${userWalletAddress}`);
+        console.log(`📄 Target Contract Address: ${faucetAddress}`);
+
+        // 4. Fetch the data directly from the contract
+        const status = await contract.getClaimStatus(userWalletAddress);
         
+        const claimed = status[0];
+        const hasReward = status[1];
+        const rewardAmount = status[2]; 
+        const canClaim = status[3];
+        const timeUntilStart = status[4];
+        const timeRemaining = status[5];
+
+        console.log("✅ Contract Return Data:", {
+          claimed: claimed,
+          hasRewardAmount: hasReward,
+          rewardAmountWei: rewardAmount.toString(), 
+          canClaim: canClaim,
+          timeUntilStartSeconds: timeUntilStart.toString(),
+          timeRemainingSeconds: timeRemaining.toString()
+        });
+
+        // 5. Update our UI state based on the blockchain's response
         setClaimState({
           isChecking: false,
-          isWinnerOnChain: amountWei > 0n, // ethers v6 uses BigInt
-          hasClaimed: hasClaimed,
+          isWinnerOnChain: hasReward,
+          hasClaimed: claimed,
+          canClaimOnChain: canClaim,
+          isExpiredOnChain: !canClaim && timeRemaining === 0n && timeUntilStart === 0n,
         });
+
       } catch (error) {
-        console.error("Error fetching on-chain claim status:", error);
+        console.error("❌ Error fetching on-chain claim status:", error);
         setClaimState(prev => ({ ...prev, isChecking: false }));
       }
     };
 
-    checkClaimStatus();
-  }, [faucetAddress, userWalletAddress, walletProvider, isQuestEnded]);
-
-  
- const claimStatus = useMemo(() => {
+    // Only run this check if the quest has officially ended
+    if (isQuestEnded) {
+       checkClaimStatus();
+    }
+  }, [faucetAddress, userWalletAddress, activeWallet, isQuestEnded]); // Make sure activeWallet is in the dependency array
+ 
+  const claimStatus = useMemo(() => {
   if (!questData?.rawEndDate) return { isActive: false, message: "Not started" };
   
   const endDate = new Date(questData.rawEndDate); // ✅ full ISO string
@@ -2032,80 +2064,105 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
               </div>
             </TabsContent>
 
+           
             {/* ── LEADERBOARD TAB ── */}
             <TabsContent value="leaderboard">
               <Card className="border-slate-200 dark:border-slate-800">
-                <CardHeader>
-                  <CardTitle className="flex justify-between items-center">
+                <CardHeader className="px-4 sm:px-6">
+                 <CardTitle className="flex justify-between items-center text-lg sm:text-xl">
                     Top Contributors
-                    {claimStatus.isActive && <Badge className="bg-green-600 animate-pulse"><Gift className="h-3 w-3 mr-1" /> Claim Active</Badge>}
+                    {(claimState.isExpiredOnChain || isClaimWindowClosed) ? (
+                      <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-xs">
+                        Claim Window Closed
+                      </Badge>
+                    ) : claimStatus.isActive ? (
+                      <Badge className="bg-green-600 animate-pulse text-xs">
+                        <Gift className="h-3 w-3 mr-1" /> Claim Active
+                      </Badge>
+                    ) : null}
                   </CardTitle>
                   <CardDescription>Ranked by total points earned in this quest</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <Table>
+                
+                {/* Reduced horizontal padding on mobile to maximize space */}
+                <CardContent className="px-2 sm:px-6">
+                  {/* table-fixed ensures the table doesn't expand past 100% width */}
+                  <Table className="table-fixed w-full">
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead className="w-[80px]">Rank</TableHead>
-                        <TableHead>Participant</TableHead>
-                        <TableHead className="text-right">Points</TableHead>
-                        {claimStatus.isActive && <TableHead className="text-right">Action</TableHead>}
+                        {/* Specific responsive widths to prevent column shifting */}
+                        <TableHead className="w-[45px] sm:w-[80px] px-1 sm:px-4 text-center sm:text-left">Rank</TableHead>
+                        <TableHead className="px-2 sm:px-4">Participant</TableHead>
+                        <TableHead className="text-right w-[60px] sm:w-[100px] px-1 sm:px-4">Points</TableHead>
+                        {claimStatus.isActive && <TableHead className="text-right w-[75px] sm:w-[120px] px-1 sm:px-4">Action</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredLeaderboard.length === 0 ? (
-                        <TableRow><TableCell colSpan={claimStatus.isActive ? 5 : 4} className="text-center py-10 text-muted-foreground">No participants yet. Be the first to join!</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={claimStatus.isActive ? 4 : 3} className="text-center py-10 text-muted-foreground">No participants yet. Be the first to join!</TableCell></TableRow>
                       ) : (
                         displayLeaderboard.map((entry) => (
                           <TableRow key={entry.walletAddress} className={entry.walletAddress === userWalletAddress ? "bg-primary/5 hover:bg-primary/10" : ""}>
-                            <TableCell className="font-medium text-lg">
+                            <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
                               {entry.rank === 1 && "🥇"}{entry.rank === 2 && "🥈"}{entry.rank === 3 && "🥉"}{entry.rank > 3 && <span className="text-muted-foreground">#{entry.rank}</span>}
                             </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-9 w-9 border border-slate-200 dark:border-slate-700">
+                            <TableCell className="px-2 sm:px-4 overflow-hidden">
+                              <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
+                                <Avatar className="h-6 w-6 sm:h-9 sm:w-9 border border-slate-200 dark:border-slate-700 shrink-0">
                                   <AvatarImage src={entry.avatarUrl || undefined} alt={entry.username || ""} className="object-cover" />
-                                  <AvatarFallback className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                                  <AvatarFallback className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[10px] sm:text-xs">
                                     {entry.username ? entry.username.substring(0, 2).toUpperCase() : entry.walletAddress.slice(0, 4)}
                                   </AvatarFallback>
                                 </Avatar>
-                                <div className="flex flex-col">
-                                  <span className="font-semibold text-sm flex items-center gap-2">
-                                    {entry.username || entry.walletAddress.slice(0, 6) + "..." + entry.walletAddress.slice(-4)}
-                                    {entry.walletAddress === userWalletAddress && <Badge variant="outline" className="text-[10px] h-4 px-1 py-0 border-primary text-primary">You</Badge>}
+                                {/* min-w-0 is crucial here to allow the truncate class to work inside a flex container */}
+                                <div className="flex flex-col min-w-0">
+                                  <span className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate">
+                                    <span className="truncate">
+                                      {entry.username || entry.walletAddress.slice(0, 6) + "..." + entry.walletAddress.slice(-4)}
+                                    </span>
+                                    {entry.walletAddress === userWalletAddress && <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">You</Badge>}
                                   </span>
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="text-right font-bold text-primary text-lg">{entry.points}</TableCell>
+                            <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4 truncate">
+                              {entry.points}
+                            </TableCell>
                             {claimStatus.isActive && (
-                            <TableCell className="text-right">
-                              {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
-                                entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
+                            <TableCell className="text-right px-1 sm:px-4">
+                            {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
+                              entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
                                 claimState.hasClaimed ? (
-                                  <Badge className="bg-green-500 text-white border-0">Claimed ✅</Badge>
-                                ) : isClaimWindowClosed ? (
-                                  <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20">
+                                  <Badge className="bg-green-500 text-white border-0 text-[10px] sm:text-xs px-1 sm:px-2">Claimed ✅</Badge>
+                                ) : (claimState.isExpiredOnChain || isClaimWindowClosed) ? (
+                                  <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-[10px] sm:text-xs">
                                     Expired
                                   </Badge>
                                 ) : (
                                   <Button
                                     size="sm"
                                     onClick={handleClaimReward}
-                                    disabled={isClaiming}
-                                    className="bg-green-600 hover:bg-green-700 text-white shadow-sm font-bold"
+                                    disabled={isClaiming || claimState.isChecking}
+                                    className="
+                                      h-7 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-sm w-full sm:w-auto 
+                                      font-bold shadow-sm transition-all duration-300 flex items-center justify-center
+                                      bg-primary/10 backdrop-blur-md border border-primary/20 text-primary
+                                      hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25
+                                    "
                                   >
-                                    {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                                    Claim Reward
+                                    {isClaiming || claimState.isChecking ? <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" /> : null}
+                                    <span className="truncate">
+                                      {isClaiming ? "Claiming..." : claimState.isChecking ? "Checking..." : "Claim"}
+                                    </span>
                                   </Button>
                                 )
                               ) : (
-                                <span className="text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+                                <span className="text-[9px] sm:text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-1 sm:px-2 py-1 rounded whitespace-nowrap">
                                   Not Eligible
                                 </span>
                               )
-                              )}
-                            </TableCell>
+                            )}
+                          </TableCell>
                           )}  
                           </TableRow>
                         ))
@@ -2114,7 +2171,6 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                   </Table>
                 </CardContent>
               </Card>
-              
             </TabsContent>
             
              
@@ -2177,39 +2233,45 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                       </Card>
                     </div>
                     {/* ── POST-QUEST MANAGEMENT (Only shows if quest is over) ── */}
-                {isQuestEnded && !isAdminEditing && (
-                    <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-slate-50 dark:bg-slate-900/50">
-                        <CardHeader className="pb-3 border-b dark:border-slate-800">
-                            <CardTitle className="text-lg flex items-center gap-2">
-                                <ShieldCheck className="h-5 w-5 text-indigo-500" /> Post-Quest Actions
-                            </CardTitle>
-                            <CardDescription>
-                                Winners have been automatically processed by the system.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-4">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                                <div>
-                                    <h4 className="font-semibold text-sm">Withdraw Unclaimed Funds</h4>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        {isClaimWindowClosed 
-                                            ? "The claim window has closed. You can safely withdraw the remaining pool." 
-                                            : `Withdrawals are locked. The claim window closes on: ${claimWindowEnd.toLocaleString()}`}
-                                    </p>
+                    {isQuestEnded && !isAdminEditing && (
+                        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-slate-50 dark:bg-slate-900/50">
+                            <CardHeader className="pb-3 border-b dark:border-slate-800">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <ShieldCheck className="h-5 w-5 text-indigo-500" /> Post-Quest Actions
+                                </CardTitle>
+                                <CardDescription>
+                                    Winners have been automatically processed by the system.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="pt-4">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                    <div>
+                                        <h4 className="font-semibold text-sm">Withdraw Unclaimed Funds</h4>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {/* Use the on-chain expiration state here */}
+                                            {claimState.isExpiredOnChain 
+                                                ? "The claim window has closed. You can safely withdraw the remaining pool." 
+                                                : `Withdrawals are locked. The claim window closes on: ${claimWindowEnd.toLocaleString()}`}
+                                        </p>
+                                    </div>
+                                    <Button 
+                                        onClick={handleAdminWithdraw} 
+                                        /* Disable if withdrawing, checking chain status, or not yet expired on-chain */
+                                        disabled={isWithdrawing || !claimState.isExpiredOnChain || claimState.isChecking}
+                                        variant={claimState.isExpiredOnChain ? "default" : "outline"}
+                                        className="w-full sm:w-auto"
+                                    >
+                                        {isWithdrawing || claimState.isChecking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        {claimState.isChecking 
+                                          ? "Checking Chain..." 
+                                          : claimState.isExpiredOnChain 
+                                            ? "Withdraw Funds" 
+                                            : "Locked"}
+                                    </Button>
                                 </div>
-                                <Button 
-                                    onClick={handleAdminWithdraw} 
-                                    disabled={isWithdrawing || !isClaimWindowClosed}
-                                    variant={isClaimWindowClosed ? "default" : "outline"}
-                                    className="w-full sm:w-auto"
-                                >
-                                    {isWithdrawing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                    {isClaimWindowClosed ? "Withdraw Funds" : "Locked"}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
+                            </CardContent>
+                        </Card>
+                    )}
                     {/* ── SUBMISSION REVIEW QUEUE ── */}
                     <Card className="border-slate-200 dark:border-slate-800 shadow-md overflow-hidden">
                       <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
@@ -2221,6 +2283,8 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
                         </div>
                       </CardHeader>
                       <CardContent className="p-6 bg-white dark:bg-slate-950">
+
+
                         {pendingSubmissions.length === 0 ? (
                           <div className="text-center py-20 flex flex-col items-center">
                             <div className="h-20 w-20 bg-green-50 dark:bg-green-900/20 rounded-full flex items-center justify-center mb-4">
@@ -2437,14 +2501,111 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
               </CardHeader>
               
               <CardContent className="pt-6 space-y-6 overflow-y-auto flex-1">
-                {/* Task Instructions */}
                 
+                
+                {/* ── CUSTOM TASK BLOCK ── */}
+              {(() => {
+                const isCustomTask = selectedTask.action !== 'follow' && 
+                  selectedTask.action !== 'join' && 
+                  selectedTask.action !== 'subscribe' &&
+                  selectedTask.action !== 'like & retweet' &&
+                  selectedTask.action !== 'quote' &&
+                  selectedTask.action !== 'comment' &&
+                  selectedTask.action !== 'visit' &&
+                  selectedTask.verificationType === 'manual_link_image' &&
+                  selectedTask.category !== 'social';
+                
+                if (!isCustomTask) return null;
+                
+                return (
+                  <div className="space-y-5">
+                    {/* Step 1: Visit link if provided */}
+                    {selectedTask.url && (
+                      <div className="p-5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-background">Step 1</Badge>
+                          <h4 className="font-semibold text-sm">Perform the Action</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Visit the link below and complete the required task.
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full gap-2 font-bold"
+                          onClick={() => window.open(selectedTask.url, "_blank")}
+                        >
+                          {selectedTask.action.replace(/_/g, ' ').toUpperCase()}
+                          <ExternalLink className="h-4 w-4 opacity-50" />
+                        </Button>
+                      </div>
+                    )}
 
-                {/* 1. ACTION BUTTON (Step 1) - Shows for URLs or X Share tasks */}
+                    {/* Step 2: Submit proof link */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        {selectedTask.url && <Badge variant="outline" className="bg-background">Step 2</Badge>}
+                        <Label className="font-semibold text-sm">Submit Proof Link <span className="text-red-500">*</span></Label>
+                      </div>
+                      <Input
+                        placeholder="https://... (link proving you completed the task)"
+                        value={submissionData.proofUrl}
+                        onChange={(e) => setSubmissionData(prev => ({ ...prev, proofUrl: e.target.value }))}
+                        className="h-11 font-mono text-sm focus-visible:ring-primary"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        e.g. a tweet link, transaction link, profile link, or any URL as proof.
+                      </p>
+                    </div>
+
+                    {/* Step 3: Upload screenshot */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        {selectedTask.url && <Badge variant="outline" className="bg-background">Step 3</Badge>}
+                        <Label className="font-semibold text-sm">Upload Screenshot <span className="text-red-500">*</span></Label>
+                      </div>
+                      <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center relative bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          className="absolute inset-0 opacity-0 cursor-pointer h-full w-full"
+                          onChange={handleFileSelect}
+                        />
+                        <Upload className="h-8 w-8 text-slate-400 mb-2" />
+                        <p className="text-sm font-semibold">Click or drag screenshot here</p>
+                        <p className="text-xs text-muted-foreground mt-1">Max 2MB · PNG, JPG, GIF</p>
+                        {submissionData.file && (
+                          <Badge className="mt-3 bg-green-500 text-white">{submissionData.file.name}</Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Notes */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-medium uppercase text-muted-foreground">Notes (Optional)</Label>
+                      <Textarea
+                        placeholder="Any extra context for the reviewer..."
+                        value={submissionData.notes}
+                        onChange={(e) => setSubmissionData({ ...submissionData, notes: e.target.value })}
+                        className="resize-none dark:bg-slate-950 min-h-[70px] text-sm"
+                      />
+                    </div>
+
+                    <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 rounded-lg text-xs text-blue-700 dark:text-blue-300">
+                      <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-blue-500" />
+                      <span>Your proof link and screenshot will be reviewed manually by the quest admin before points are awarded.</span>
+                    </div>
+                  </div>
+                );
+              })()}
                 {(() => {
+                  const isCustomTask = selectedTask.verificationType === 'manual_link_image' && 
+                    selectedTask.category !== 'social';
                   const isXShareTask = selectedTask.verificationType === 'system_x_share' || selectedTask.action === 'share_quest';
-                  const showStep1 = (selectedTask.url || isXShareTask) && selectedTask.verificationType !== 'onchain';
-                  
+                  const showStep1 = (selectedTask.url || isXShareTask) && 
+                    selectedTask.verificationType !== 'onchain' && 
+                    !isCustomTask; // ← ADD THIS
+
                   if (!showStep1) return null;
 
                   return (
@@ -2502,9 +2663,9 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
 
                 {/* 3. DYNAMIC INPUT: Image Uploads */}
                 {(
-                  ['manual_upload', 'manual_link_image'].includes(selectedTask.verificationType) || 
-                  (selectedTask.verificationType === 'auto_social' && !['Twitter', 'Discord', 'Telegram'].includes(selectedTask.targetPlatform || ''))
-                ) && (
+                    ['manual_upload', 'manual_link_image'].includes(selectedTask.verificationType) || 
+                    (selectedTask.verificationType === 'auto_social' && !['Twitter', 'Discord', 'Telegram'].includes(selectedTask.targetPlatform || ''))
+                  ) && selectedTask.category === 'social' && (
                   <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
                     <div className="flex items-center gap-2">
                       {selectedTask.url && <Badge variant="outline" className="bg-background">Step {selectedTask.verificationType === 'manual_link_image' ? '3' : '2'}</Badge>}

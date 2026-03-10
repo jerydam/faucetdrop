@@ -682,7 +682,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
           setParticipantData(json.participant);
         } else {
           setParticipantData((prev) =>
-            prev ? { ...prev, last_checkin_at: new Date().toISOString(), points: (prev.points || 0) + 100 } : null
+            prev ? { ...prev, last_checkin_at: new Date().toISOString(), points: (prev.points || 0) + 50 } : null
           );
         }
         await loadUserProgress();
@@ -1731,131 +1731,198 @@ const hasNewBackendData = currentStageMeta !== undefined;
 
       <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-8 pb-20 relative">
         {/* ============= HERO SECTION ============= */}
-        <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl min-h-[160px] md:min-h-[300px]">
+       <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl min-h-[160px] md:min-h-[300px]">
+          {/* Background Layer */}
           <div className="absolute inset-0 z-0">
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/90 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t md:bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-900/50 md:to-transparent z-10" />
             {editForm.imageUrl || questData.imageUrl ? (
-              <img 
-                src={editForm.imageUrl || questData.imageUrl} 
-                alt="Background" 
-                className="w-full h-full object-cover opacity-30 blur-sm   origin-center md:origin-top scale-75 md:scale-105" 
+              <img
+                src={editForm.imageUrl || questData.imageUrl}
+                alt="Background"
+                className="w-full h-full object-cover opacity-30 blur-sm origin-center md:origin-top scale-100 md:scale-105"
               />
             ) : null}
           </div>
 
-          <div className="relative z-10 p-4 md:p-10 flex flex-col md:flex-row gap-4 md:gap-8 items-start h-full">
-            <div className="w-24 h-24 sm:w-32 sm:h-32 md:w-64 md:h-64 shrink-0 rounded-lg overflow-hidden border-2 border-slate-700/50 shadow-xl bg-slate-950 flex items-center justify-center group relative">
+          {/* Main Content */}
+          <div className="relative z-20 p-4 md:p-10 flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start h-full">
+            
+            {/* Cover Image */}
+            <div className="w-28 h-28 sm:w-40 sm:h-40 md:w-64 md:h-64 shrink-0 rounded-lg overflow-hidden border-2 border-slate-700/50 shadow-xl bg-slate-950 flex items-center justify-center group relative">
               {isEditing ? (
-                <div className="absolute inset-0 z-20 bg-black/80 flex flex-col items-center justify-center p-4">
-                  <ImageIcon className="h-8 w-8 text-slate-400 mb-2" />
-                  <Input className="bg-black/50 border-slate-600 text-white h-8 text-xs w-full" value={editForm.imageUrl} placeholder="Image URL..." onChange={(e) => setEditForm({ ...editForm, imageUrl: e.target.value })} />
+                <div className="absolute inset-0 z-30 bg-black/80 flex flex-col items-center justify-center p-4">
+                  <ImageIcon className="h-6 w-6 sm:h-8 sm:w-8 text-slate-400 mb-2" />
+                  <Input
+                    className="bg-black/50 border-slate-600 text-white h-8 text-xs w-full text-center"
+                    value={editForm.imageUrl}
+                    placeholder="Image URL..."
+                    onChange={(e) => setEditForm({ ...editForm, imageUrl: e.target.value })}
+                  />
                 </div>
               ) : (
-                <img src={questData.imageUrl} alt="Quest Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                <img
+                  src={questData.imageUrl}
+                  alt="Quest Cover"
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                />
               )}
             </div>
 
-            <div className="flex-1 w-full space-y-6">
-              <div className="flex justify-between items-start">
-                <div className="space-y-2 w-full">
-                  <div className="flex flex-col gap-2">
+            {/* Text & Data Container */}
+            <div className="flex-1 w-full space-y-5 md:space-y-8 flex flex-col items-center md:items-start text-center md:text-left">
+              
+              {/* Top Header: Title, Description & Admin Action */}
+              <div className="flex flex-col md:flex-row justify-between items-center md:items-start gap-4 w-full">
+                <div className="space-y-3 w-full max-w-2xl">
+                  <div className="flex flex-col gap-3">
                     {isEditing ? (
-                      <div className="flex items-center gap-4 w-full">
-                        <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="text-3xl font-bold bg-white/10 border-white/20 text-white h-auto py-2" />
-                        <div className="flex items-center gap-2 bg-black/40 px-3 py-2 rounded-lg border border-white/10">
+                      <div className="flex flex-col md:flex-row items-center gap-4 w-full">
+                        <Input
+                          value={editForm.title}
+                          onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                          className="text-2xl md:text-3xl font-bold bg-white/10 border-white/20 text-white h-auto py-2 text-center md:text-left"
+                        />
+                        <div className="flex items-center justify-center gap-2 bg-black/40 px-3 py-2 rounded-lg border border-white/10 w-full md:w-auto">
                           <Label className="text-white whitespace-nowrap">Active</Label>
-                          <Switch checked={editForm.isActive} onCheckedChange={(c) => setEditForm({ ...editForm, isActive: c })} />
+                          <Switch
+                            checked={editForm.isActive}
+                            onCheckedChange={(c) => setEditForm({ ...editForm, isActive: c })}
+                          />
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">{questData.title}</h1>
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-800 flex items-center gap-1 shadow-sm h-6 px-3"><Sparkles className="h-3 w-3" /> Beta Phase</Badge>
-                        <Badge variant={questData.isActive ? "default" : "destructive"} className="h-6 px-3">{questData.isActive ? "Live" : "Paused"}</Badge>
-                        {questData.isFunded && <Badge className="bg-green-500 hover:bg-green-600 h-6 px-3">Funded</Badge>}
+                      <div className="flex flex-col md:flex-row items-center md:items-start gap-3 flex-wrap justify-center md:justify-start">
+                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight">{questData.title}</h1>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-800 flex items-center gap-1 shadow-sm h-6 px-3">
+                            <Sparkles className="h-3 w-3" /> Beta Phase
+                          </Badge>
+                          <Badge variant={questData.isActive ? "default" : "destructive"} className="h-6 px-3">
+                            {questData.isActive ? "Live" : "Paused"}
+                          </Badge>
+                          {questData.isFunded && (
+                            <Badge className="bg-green-500 hover:bg-green-600 h-6 px-3">Funded</Badge>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
                   {isEditing ? (
-                    <Textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="bg-white/10 border-white/20 text-slate-200 min-h-[100px]" />
+                    <Textarea
+                      value={editForm.description}
+                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      className="bg-white/10 border-white/20 text-slate-200 min-h-[100px] text-center md:text-left"
+                    />
                   ) : (
-                    <p className="text-slate-300 text-lg leading-relaxed max-w-2xl">{questData.description}</p>
+                    <p className="text-slate-300 text-sm md:text-lg leading-relaxed">{questData.description}</p>
                   )}
                 </div>
-                {isCreator && (
-                  <div className="hidden md:block pl-4 space-y-2">
-                    
-                      
-                        {!questData.isFunded && (
-                          <Button size="sm" onClick={() => { setFundAmount(""); setShowFundModal(true); }} className="w-full bg-green-600 hover:bg-green-700 text-white">
-                            <Coins className="mr-2 h-4 w-4" /> Fund Quest
-                          </Button>
-                        )}
-                      
-                    
+
+                {/* Admin Fund Button - Shows on Mobile & Desktop */}
+                {isCreator && !questData.isFunded && (
+                  <div className="w-full md:w-auto shrink-0 mt-2 md:mt-0">
+                    <Button
+                      size="lg"
+                      onClick={() => { setFundAmount(""); setShowFundModal(true); }}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/20"
+                    >
+                      <Coins className="mr-2 h-5 w-5" /> Fund Quest
+                    </Button>
                   </div>
                 )}
               </div>
 
-              <div className="flex flex-col sm:flex-row flex-wrap gap-4 pt-4 items-end">
-                <div className="flex flex-wrap gap-4">
-                  <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-lg px-5 py-3 flex items-center gap-4 min-w-[160px]">
-                    <div className="p-2 bg-yellow-500/20 rounded-full text-yellow-400"><Trophy className="h-6 w-6" /></div>
-                    <div>
-                      <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Reward Pool</div>
+              {/* ── Stats Grid (2 side-by-side on mobile, 3 on desktop) ── */}
+              <div className="w-full flex flex-col gap-4 pt-2">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 w-full">
+                  
+                  {/* Stat 1: Reward Pool */}
+                  <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-lg p-3 md:p-4 flex items-center justify-start gap-3">
+                    <div className="p-2 bg-yellow-500/20 rounded-full text-yellow-400 shrink-0">
+                      <Trophy className="h-4 w-4 md:h-6 md:w-6" />
+                    </div>
+                    <div className="text-left overflow-hidden">
+                      <div className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold tracking-wider truncate">Reward Pool</div>
                       {isEditing ? (
-                        <Input value={editForm.rewardPool} onChange={(e) => setEditForm({ ...editForm, rewardPool: e.target.value })} className="h-6 bg-transparent border-b border-white/30 rounded-none text-white font-bold p-0 focus-visible:ring-0 focus-visible:border-white" />
+                        <Input
+                          value={editForm.rewardPool}
+                          onChange={(e) => setEditForm({ ...editForm, rewardPool: e.target.value })}
+                          className="h-6 bg-transparent border-b border-white/30 rounded-none text-white font-bold p-0 focus-visible:ring-0 focus-visible:border-white text-base md:text-lg w-full"
+                        />
                       ) : (
-                        <div className="text-xl font-bold text-white">{questData.rewardPool} {tokenSymbol}</div>
+                      <div className="text-base md:text-xl font-bold text-white truncate">{questData.rewardPool} {tokenSymbol}</div>
                       )}
                     </div>
                   </div>
-                  <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-lg px-5 py-3 flex items-center gap-4 min-w-[160px]">
-                    <div className="p-2 bg-green-500/20 rounded-full text-green-400"><Users className="h-6 w-6" /></div>
-                    <div>
-                      <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Participants</div>
-                      <div className="text-xl font-bold text-white">{allParticipants.length}</div>
+
+                  {/* Stat 2: Participants */}
+                  <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-lg p-3 md:p-4 flex items-center justify-start gap-3">
+                    <div className="p-2 bg-green-500/20 rounded-full text-green-400 shrink-0">
+                      <Users className="h-4 w-4 md:h-6 md:w-6" />
+                    </div>
+                    <div className="text-left overflow-hidden">
+                      <div className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold tracking-wider truncate">Participants</div>
+                      <div className="text-base md:text-xl font-bold text-white">{allParticipants.length}</div>
                     </div>
                   </div>
-                  <Button variant="outline" size="lg" className="bg-white/5 border-white/10 text-white hover:bg-white/10 h-auto py-3 px-6" onClick={() => { const link = window.location.href.split("?")[0]; navigator.clipboard.writeText(link); toast.success("Quest link copied to clipboard!"); }}>
-                    <Copy className="mr-2 h-5 w-5" /> Copy Quest Link
-                  </Button>
-                  <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-lg px-5 py-3 flex items-center gap-4 min-w-[160px]">
-                    <div className="p-2 bg-blue-500/20 rounded-full text-blue-400"><Shield className="h-6 w-6" /></div>
-                    <div>
-                      <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{isCreator ? "Your Role" : "Your Stage"}</div>
-                      <div className="text-xl font-bold text-white">
+
+                  {/* Stat 3: Role/Stage - Spans 2 columns on mobile to fill the empty space cleanly */}
+                  <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-lg p-3 md:p-4 flex items-center justify-start gap-3 col-span-2 lg:col-span-1">
+                    <div className="p-2 bg-blue-500/20 rounded-full text-blue-400 shrink-0">
+                      <Shield className="h-4 w-4 md:h-6 md:w-6" />
+                    </div>
+                    <div className="text-left overflow-hidden">
+                      <div className="text-[9px] md:text-[10px] text-slate-400 uppercase font-bold tracking-wider truncate">
+                        {isCreator ? "Your Role" : "Your Stage"}
+                      </div>
+                      <div className="text-base md:text-xl font-bold text-white truncate">
                         {isCreator ? "Admin" : participantData ? userProgress.currentStage : "Not Joined"}
                       </div>
                     </div>
                   </div>
                 </div>
-             
-              
-               {!participantData && !isCreator && (
-                <Button
-                  size="lg"
-                  onClick={handleJoin}
-                  disabled={isJoining || questTiming.notStartedYet || questTiming.isEnded || !creatorSubscribed}
-                  className="min-w-[200px]"
-                >
-                  {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                  {isJoining
-                    ? "Joining..."
-                    : !creatorSubscribed
-                      ? "Quest Locked"
-                      : questTiming.notStartedYet
-                        ? `Starts in ${startCountdown}`
-                        : questTiming.isEnded
-                          ? "Quest Ended"
-                          : "Join Quest to Participate"}
-                </Button>
-              )}
+
+                {/* ── Actions Area (Buttons side-by-side sharing 50% width each on mobile) ── */}
+                <div className="flex flex-row gap-2 w-full justify-center md:justify-start [&>button]:flex-1 md:[&>button]:flex-none">
+                  <Button
+                    variant="outline"
+                    className="bg-white/5 border-white/10 text-white hover:bg-white/10 h-11 md:h-12 px-2 md:px-6 text-xs md:text-sm"
+                    onClick={() => {
+                      const link = window.location.href.split("?")[0];
+                      navigator.clipboard.writeText(link);
+                      toast.success("Quest link copied to clipboard!");
+                    }}
+                  >
+                    <Copy className="mr-1.5 md:mr-2 h-4 w-4 md:h-5 md:w-5 shrink-0" />
+                    <span className="truncate">Copy Link</span>
+                  </Button>
+
+                  {!participantData && !isCreator && (
+                    <Button
+                      onClick={handleJoin}
+                      disabled={isJoining || questTiming.notStartedYet || questTiming.isEnded || !creatorSubscribed}
+                      className="h-11 md:h-12 px-2 md:px-6 text-xs md:text-sm"
+                    >
+                      {isJoining ? <Loader2 className="mr-1.5 md:mr-2 h-4 w-4 md:h-5 md:w-5 animate-spin shrink-0" /> : null}
+                      <span className="truncate">
+                        {isJoining
+                          ? "Joining..."
+                          : !creatorSubscribed
+                            ? "Locked"
+                            : questTiming.notStartedYet
+                              ? `Starts in ${startCountdown}`
+                              : questTiming.isEnded
+                                ? "Ended"
+                                : "Join Quest"}
+                      </span>
+                    </Button>
+                  )}
+                </div>
               </div>
+              
             </div>
           </div>
         </div>
-
         {/* ============= COUNTDOWN BANNERS ============= */}
         {questTiming.notStartedYet && questData?.startDate && (
           <div className="rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -1939,76 +2006,88 @@ const hasNewBackendData = currentStageMeta !== undefined;
 
         {/* ============= PROGRESS BAR (UPDATED) ============= */}
         {!isCreator && participantData && (
-          <Card className="border-none bg-slate-50 dark:bg-slate-900/50 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex justify-between items-end mb-3">
-                <div>
-                  <h3 className="font-bold text-lg flex items-center gap-2">
-                    Your Progress
-                    <Badge variant="outline" className="text-primary border-primary bg-primary/5">{currentStage}</Badge>
-                    {/* ── NEW: show "Stage Unlocked" badge when 70% threshold is met ── */}
-                    {isCurrentStageUnlocked && !isLastActiveStage && (
-                      <Badge className="bg-green-500 text-white border-0 flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3" /> Stage Unlocked!
-                      </Badge>
-                    )}
-                    {isCurrentStageUnlocked && isLastActiveStage && (
-                      <Badge className="bg-yellow-500 text-black border-0 flex items-center gap-1">
-                        <Trophy className="h-3 w-3" /> Quest Complete!
-                      </Badge>
-                    )}
-                  </h3>
+  <Card className="border-none bg-slate-50 dark:bg-slate-900/50 shadow-sm overflow-hidden">
+    {/* Slightly reduced padding on mobile (p-4 to sm:p-6) */}
+    <CardContent className="p-4 sm:p-6">
+      
+      {/* Changed to stack vertically on mobile, row on tablet/desktop */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-5 sm:gap-4 mb-4 sm:mb-5">
+        
+        <div className="flex-1 order-2 sm:order-1">
+          {/* Added flex-wrap so badges stack neatly if the screen is super narrow */}
+          <h3 className="font-bold text-lg flex flex-wrap items-center gap-2">
+            Your Progress
+            <Badge variant="outline" className="text-primary border-primary bg-primary/5">
+              {currentStage}
+            </Badge>
+            
+            {isCurrentStageUnlocked && !isLastActiveStage && (
+              <Badge className="bg-green-500 text-white border-0 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" /> Stage Unlocked!
+              </Badge>
+            )}
+            
+            {isCurrentStageUnlocked && isLastActiveStage && (
+              <Badge className="bg-yellow-500 text-black border-0 flex items-center gap-1">
+                <Trophy className="h-3 w-3" /> Quest Complete!
+              </Badge>
+            )}
+          </h3>
 
-                  {/* ── NEW: context-aware status text ── */}
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {isCurrentStageUnlocked && !isLastActiveStage ? (
-                      // Unlocked — bar is frozen, user is now on next stage
-                      <span className="text-green-600 font-medium">
-                        ✓ You unlocked {activeStages[activeStages.indexOf(currentStage) + 1]}! Start completing tasks there to continue.
-                      </span>
-                    ) : isCurrentStageUnlocked && isLastActiveStage ? (
-                      <span className="text-yellow-600 font-medium">
-                        🏆 You have completed all stages of this quest!
-                      </span>
-                    ) : unlockThreshold === 0 ? (
-                      <span className="text-green-600 font-medium">✓ No requirement — next stage available!</span>
-                    ) : (
-                      <>
-                        Earn <strong>{pointsRemaining}</strong> more points in <strong>{currentStage}</strong> to unlock {
-                          activeStages[activeStages.indexOf(currentStage) + 1]
-                            ? <strong>{activeStages[activeStages.indexOf(currentStage) + 1]}</strong>
-                            : "the next stage"
-                        }.{" "}
-                        <span className="text-muted-foreground">
-                          ({pointsEarnedInCurrentStage} / {unlockThreshold} pts — 70% of {stageTotal} total)
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </div>
+          {/* Added leading-relaxed for better readability on mobile */}
+          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+            {isCurrentStageUnlocked && !isLastActiveStage ? (
+              <span className="text-green-600 font-medium">
+                ✓ You unlocked {activeStages[activeStages.indexOf(currentStage) + 1]}! Start completing tasks there to continue.
+              </span>
+            ) : isCurrentStageUnlocked && isLastActiveStage ? (
+              <span className="text-yellow-600 font-medium">
+                🏆 You have completed all stages of this quest!
+              </span>
+            ) : unlockThreshold === 0 ? (
+              <span className="text-green-600 font-medium">✓ No requirement — next stage available!</span>
+            ) : (
+              <>
+                Earn <strong>{pointsRemaining}</strong> more points in <strong>{currentStage}</strong> to unlock {
+                  activeStages[activeStages.indexOf(currentStage) + 1]
+                    ? <strong>{activeStages[activeStages.indexOf(currentStage) + 1]}</strong>
+                    : "the next stage"
+                }.{" "}
+                <span className="inline-block text-muted-foreground mt-0.5">
+                  ({pointsEarnedInCurrentStage} / {unlockThreshold} pts — 70% of {stageTotal} total)
+                </span>
+              </>
+            )}
+          </p>
+        </div>
 
-                <div className="text-right">
-                  <div className="text-3xl font-black text-primary">{totalPoints}</div>
-                  <div className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Total Points</div>
-                </div>
-              </div>
+        {/* Highlighted the points on mobile by giving it a distinct layout, while keeping it minimal on desktop */}
+        <div className="order-1 sm:order-2 bg-white  sm:bg-transparent rounded-lg p-3 sm:p-0 shadow-sm sm:shadow-none border border-slate-100 dark:border-slate-800 sm:border-none flex sm:block items-center justify-between sm:text-right w-full sm:w-auto self-start">
+          <div className="text-xs text-muted-foreground uppercase font-bold tracking-wider order-2 sm:order-none">
+            Total Points
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-primary order-1 sm:order-none leading-none">
+            {totalPoints}
+          </div>
+        </div>
+      </div>
 
-              {/* ── Progress bar: frozen at 100% once unlocked ── */}
-              <Progress
-                value={progressPercent}
-                className={`h-4 rounded-full ${isCurrentStageUnlocked ? "opacity-60" : ""}`}
-              />
+      {/* Made the progress bar slightly thinner on mobile */}
+      <Progress
+        value={progressPercent}
+        className={`h-3 sm:h-4 rounded-full ${isCurrentStageUnlocked ? "opacity-60" : ""}`}
+      />
 
-              {/* ── Threshold label below bar ── */}
-              {hasNewBackendData && !isCurrentStageUnlocked && (
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>{pointsEarnedInCurrentStage} pts earned</span>
-                  <span>{unlockThreshold} pts to unlock next stage (70% of {stageTotal})</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+      {/* Allowed bottom text to stack on mobile if it gets too long */}
+      {hasNewBackendData && !isCurrentStageUnlocked && (
+        <div className="flex flex-col sm:flex-row sm:justify-between text-xs text-muted-foreground mt-3 sm:mt-2 gap-1.5 sm:gap-0">
+          <span className="font-medium">{pointsEarnedInCurrentStage} pts earned</span>
+          <span className="sm:text-right">{unlockThreshold} pts to unlock next stage (70% of {stageTotal})</span>
+        </div>
+      )}
+    </CardContent>
+  </Card>
+)}
 
         {/* ============= TABS ============= */}
         <div className="relative">
@@ -2140,7 +2219,7 @@ const hasNewBackendData = currentStageMeta !== undefined;
                               <CardContent className="p-5 flex flex-col h-full">
                                 <div className="flex justify-between items-start mb-4">
                                   <div className="p-2 rounded-lg bg-primary/10 text-primary"><CalendarClock className="h-5 w-5" /></div>
-                                  <Badge variant="secondary">+100 PTS</Badge>
+                                  <Badge variant="secondary">+50 PTS</Badge>
                                 </div>
                                 <h3 className="font-bold text-lg mb-2">{task.title}</h3>
                                 <p className="text-sm text-muted-foreground flex-1">{task.description}</p>
@@ -2155,7 +2234,7 @@ const hasNewBackendData = currentStageMeta !== undefined;
                                       >
                                         {isCheckingIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                         {/* Update Text */}
-                                        {!creatorSubscribed ? "Quest Locked" : questTiming.notStartedYet ? "Check-in Locked" : "Check In Now +100 pts"}
+                                        {!creatorSubscribed ? "Quest Locked" : questTiming.notStartedYet ? "Check-in Locked" : "Check In Now +50 pts"}
                                       </Button>
                                     ) : (
                                       <div className="text-center space-y-2">
@@ -2181,7 +2260,7 @@ const hasNewBackendData = currentStageMeta !== undefined;
                               <CardContent className="p-5 flex flex-col h-full">
                                 <div className="flex justify-between items-start mb-4">
                                   <div className="p-2 rounded-lg bg-primary/10 text-primary"><Users className="h-5 w-5" /></div>
-                                  <Badge variant="secondary">+10 PTS each</Badge>
+                                  <Badge variant="secondary">+200 PTS each</Badge>
                                 </div>
                                 <h3 className="font-bold text-lg mb-2">{task.title}</h3>
                                 <p className="text-sm text-muted-foreground flex-1">{task.description}</p>
@@ -2193,7 +2272,7 @@ const hasNewBackendData = currentStageMeta !== undefined;
                                       <Button size="sm" onClick={() => { navigator.clipboard.writeText(referralLink); toast.success("Referral link copied to clipboard"); }}><Copy className="h-4 w-4" /></Button>
                                     </div>
                                   </div>
-                                  <p className="text-sm font-medium">You have <span className="text-primary font-bold">{refCount}</span> successful referrals (+<span className="text-primary font-bold">{refCount * 10}</span> points)</p>
+                                  <p className="text-sm font-medium">You have <span className="text-primary font-bold">{refCount}</span> successful referrals (+<span className="text-primary font-bold">{refCount * 200}</span> points)</p>
                                 </div>
                               </CardContent>
                             </Card>
@@ -2240,9 +2319,7 @@ const hasNewBackendData = currentStageMeta !== undefined;
                                   {task.verificationType.replace("manual_", "").replace("auto_", "")}
                                 </div>
                                 {status === "completed" ? (
-                                  <Button size="sm" disabled className="bg-slate-100 text-green-600 font-bold border-green-200 dark:bg-green-950/30 dark:text-green-500 dark:border-green-900 cursor-default hover:bg-slate-100 dark:hover:bg-slate-800">
-                                    <CheckCircle2 className="h-4 w-4 mr-1" /> Done
-                                  </Button>
+                                  ""
                                 ) : status === "pending" ? (
                                   <div className="flex items-center text-orange-600 text-sm font-bold"><Clock className="h-4 w-4 mr-1" /> Reviewing</div>
                                 ) : isLocked || !participantData ? (

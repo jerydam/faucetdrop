@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
     Settings, ArrowRight, Coins, Loader2, 
     Calendar, Sparkles, Users, LayoutGrid, List, 
-    Clock, CalendarClock
+    Clock, CalendarClock, Zap, Hourglass, CheckCircle2, AlertCircle, Filter
 } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header"; 
@@ -38,6 +38,8 @@ interface QuestsResponse {
     message?: string;
 }
 
+type FilterType = 'all' | 'active' | 'upcoming' | 'ended';
+
 const useCountdown = (targetDate: string | null): string => {
   const [timeLeft, setTimeLeft] = useState<string>("");
   useEffect(() => {
@@ -62,11 +64,20 @@ const getQuestStatus = (quest: QuestOverview) => {
     const now = new Date();
     const startDate = new Date(quest.startDate);
     const endDate = new Date(quest.endDate);
-    if (!quest.isFunded) return { label: "Pending Funding", color: "bg-yellow-100 text-yellow-800 border-yellow-200", interactable: false };
+    // Upcoming check is independent of funding — show countdown regardless
     if (now < startDate) return { label: "Upcoming", color: "bg-blue-100 text-blue-800 border-blue-200", interactable: false };
+    if (!quest.isFunded) return { label: "Pending Funding", color: "bg-yellow-100 text-yellow-800 border-yellow-200", interactable: false };
     if (now > endDate) return { label: "Ended", color: "bg-gray-100 text-gray-600 border-gray-200", interactable: false };
     return { label: "Active", color: "bg-green-100 text-green-800 border-green-200", interactable: true };
 };
+
+// Filter tab config
+const FILTER_TABS: { key: FilterType; label: string; icon: React.ReactNode }[] = [
+    { key: 'all',      label: 'All',      icon: <Filter className="h-3.5 w-3.5" /> },
+    { key: 'active',   label: 'Active',   icon: <Zap className="h-3.5 w-3.5" /> },
+    { key: 'upcoming', label: 'Upcoming', icon: <Hourglass className="h-3.5 w-3.5" /> },
+    { key: 'ended',    label: 'Ended',    icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+];
 
 function QuestCard({ quest, isOwner, viewMode, onNavigate }: {
     quest: QuestOverview;
@@ -75,10 +86,18 @@ function QuestCard({ quest, isOwner, viewMode, onNavigate }: {
     onNavigate: (slug: string) => void;
 }) {
     const status = getQuestStatus(quest);
-    const isUpcoming = status.label === "Upcoming";
-    const isActive = status.label === "Active";
+    const now = new Date();
+    const startDate = new Date(quest.startDate);
+    const endDate = new Date(quest.endDate);
+
+    // Date-based flags — independent of funding status
+    const isUpcoming = now < startDate;
+    const isOngoing  = now >= startDate && now <= endDate;
+    const isEnded    = now > endDate;
+
+    // Countdowns driven by dates, not status label
     const startCountdown = useCountdown(isUpcoming ? quest.startDate : null);
-    const endCountdown = useCountdown(isActive ? quest.endDate : null);
+    const endCountdown   = useCountdown(isOngoing  ? quest.endDate   : null);
 
     return (
         <Card className="group hover:shadow-lg transition-all duration-300 border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col bg-white dark:bg-slate-950">
@@ -100,21 +119,28 @@ function QuestCard({ quest, isOwner, viewMode, onNavigate }: {
                                 <span className={`px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full border ${status.color}`}>
                                     {status.label}
                                 </span>
+                                {/* Show unfunded badge separately when upcoming but not funded */}
+                                {isUpcoming && !quest.isFunded && (
+                                    <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full border bg-yellow-100 text-yellow-800 border-yellow-200 flex items-center gap-1">
+                                        <AlertCircle className="h-3 w-3" /> Pending Funding
+                                    </span>
+                                )}
                             </div>
                             <p className={`text-sm text-muted-foreground ${viewMode === 'grid' ? 'line-clamp-3' : 'line-clamp-2'}`}>
                                 {quest.description}
                             </p>
 
+                            {/* Countdown: always show for upcoming quests, funded or not */}
                             {isUpcoming && startCountdown && (
-                                <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300">
                                     <CalendarClock className="h-4 w-4 shrink-0" />
                                     <span className="text-xs font-semibold">
                                         Starts in: <span className="font-mono">{startCountdown}</span>
                                     </span>
                                 </div>
                             )}
-                            {isActive && endCountdown && (
-                                <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                            {isOngoing && endCountdown && (
+                                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300">
                                     <Clock className="h-4 w-4 shrink-0" />
                                     <span className="text-xs font-semibold">
                                         Ends in: <span className="font-mono">{endCountdown}</span>
@@ -161,7 +187,9 @@ function QuestCard({ quest, isOwner, viewMode, onNavigate }: {
                             <span className="truncate">
                                 {isUpcoming
                                     ? `Starts: ${new Date(quest.startDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
-                                    : `Ends: ${new Date(quest.endDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`}
+                                    : isEnded
+                                        ? `Ended: ${new Date(quest.endDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+                                        : `Ends: ${new Date(quest.endDate).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`}
                             </span>
                        </div>
                     </div>
@@ -177,6 +205,7 @@ export default function QuestHomePage() {
     const [quests, setQuests] = useState<QuestOverview[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [activeFilter, setActiveFilter] = useState<FilterType>('all');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
         if (typeof window === 'undefined') return 'grid';
         return (localStorage.getItem('questViewMode') as 'grid' | 'list') || 'grid';
@@ -204,11 +233,62 @@ export default function QuestHomePage() {
 
     useEffect(() => { fetchQuests(); }, []);
 
-    const filteredQuests = useMemo(() => {
+    // Base filtered list: valid addresses + active flag only
+    const validQuests = useMemo(() => {
         return quests.filter(quest =>
             quest.faucetAddress?.startsWith("0x") && quest.isActive === true
         );
     }, [quests]);
+
+    // Count per filter tab for badges
+    const filterCounts = useMemo(() => {
+        const now = new Date();
+        return {
+            all:      validQuests.length,
+            active:   validQuests.filter(q => new Date(q.startDate) <= now && new Date(q.endDate) >= now && q.isFunded).length,
+            upcoming: validQuests.filter(q => new Date(q.startDate) > now).length,
+            ended:    validQuests.filter(q => new Date(q.endDate) < now).length,
+        };
+    }, [validQuests]);
+
+    // Sorted + filtered quests
+    const filteredQuests = useMemo(() => {
+        const now = new Date();
+
+        const getStatusPriority = (quest: QuestOverview) => {
+            const start = new Date(quest.startDate);
+            const end = new Date(quest.endDate);
+            if (now >= start && now <= end && quest.isFunded) return 0;  // Active — top
+            if (now < start) return 1;                                    // Upcoming
+            if (!quest.isFunded && now <= end) return 2;                  // Pending Funding
+            return 3;                                                      // Ended — last
+        };
+
+        const sorted = [...validQuests].sort((a, b) => {
+            const aPriority = getStatusPriority(a);
+            const bPriority = getStatusPriority(b);
+            if (aPriority !== bPriority) return aPriority - bPriority;
+            const aStart = new Date(a.startDate).getTime();
+            const bStart = new Date(b.startDate).getTime();
+            const aEnd = new Date(a.endDate).getTime();
+            const bEnd = new Date(b.endDate).getTime();
+            if (aPriority === 0) return bStart - aStart; // Active: most recently started first
+            if (aPriority === 1) return aStart - bStart; // Upcoming: soonest first
+            if (aPriority === 2) return bEnd - aEnd;     // Ended: most recently ended first
+            return 0;
+        });
+
+        if (activeFilter === 'all') return sorted;
+
+        return sorted.filter(quest => {
+            const start = new Date(quest.startDate);
+            const end = new Date(quest.endDate);
+            if (activeFilter === 'active')   return start <= now && end >= now && quest.isFunded;
+            if (activeFilter === 'upcoming') return start > now;
+            if (activeFilter === 'ended')    return end < now;
+            return true;
+        });
+    }, [validQuests, activeFilter]);
 
     return (
         <>
@@ -239,6 +319,41 @@ export default function QuestHomePage() {
                 </div>
             </div>
 
+            {/* ── FILTER TABS ── */}
+            {!isLoading && !error && (
+                <div className="flex items-center gap-2 flex-wrap">
+                    {FILTER_TABS.map(tab => {
+                        const count = filterCounts[tab.key];
+                        const isSelected = activeFilter === tab.key;
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveFilter(tab.key)}
+                                className={`
+                                    inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200
+                                    ${isSelected
+                                        ? 'bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/20'
+                                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:text-primary'
+                                    }
+                                `}
+                            >
+                                {tab.icon}
+                                {tab.label}
+                                <span className={`
+                                    text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center
+                                    ${isSelected
+                                        ? 'bg-white/20 text-primary-foreground'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                                    }
+                                `}>
+                                    {count}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
             {isLoading ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                     <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
@@ -252,8 +367,17 @@ export default function QuestHomePage() {
                 </Card>
             ) : filteredQuests.length === 0 ? (
                 <Card className="py-20 text-center text-muted-foreground border-dashed">
-                    <p className="text-lg">No active quests found.</p>
-                    <Button variant="link" onClick={() => router.push('/quest/create-quest')}>Be the first to create one!</Button>
+                    <p className="text-lg">
+                        {activeFilter === 'all'
+                            ? 'No active quests found.'
+                            : `No ${activeFilter} quests found.`}
+                    </p>
+                    {activeFilter === 'all' && (
+                        <Button variant="link" onClick={() => router.push('/quest/create-quest')}>Be the first to create one!</Button>
+                    )}
+                    {activeFilter !== 'all' && (
+                        <Button variant="link" onClick={() => setActiveFilter('all')}>View all quests</Button>
+                    )}
                 </Card>
             ) : (
                 <div className={`grid gap-6 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'}`}>

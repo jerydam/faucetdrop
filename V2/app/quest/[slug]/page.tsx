@@ -677,12 +677,12 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
       });
       const json = await res.json();
       if (json.success) {
-        toast.success("Check-in successful! +10 points awarded.");
+        toast.success("Check-in successful! +100 points awarded.");
         if (json.participant) {
           setParticipantData(json.participant);
         } else {
           setParticipantData((prev) =>
-            prev ? { ...prev, last_checkin_at: new Date().toISOString(), points: (prev.points || 0) + 10 } : null
+            prev ? { ...prev, last_checkin_at: new Date().toISOString(), points: (prev.points || 0) + 100 } : null
           );
         }
         await loadUserProgress();
@@ -697,7 +697,7 @@ const [isRefreshingAdmin, setIsRefreshingAdmin] = useState(false);
   };
   const [isAdminEditing, setIsAdminEditing] = useState(false);
   const getCheckinStatus = () => {
-    if (!participantData?.last_checkin_at) return { canCheckin: true, message: "Check in now for +10 points!" };
+    if (!participantData?.last_checkin_at) return { canCheckin: true, message: "Check in now for +100 points!" };
     const last = new Date(participantData.last_checkin_at);
     const next = new Date(last.getTime() + 24 * 60 * 60 * 1000);
     const now = new Date();

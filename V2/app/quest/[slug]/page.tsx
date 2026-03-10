@@ -2070,7 +2070,7 @@ export default function QuestDetailsPage() {
                 </div>
 
                 {/* Highlighted the points on mobile by giving it a distinct layout, while keeping it minimal on desktop */}
-                <div className="order-1 sm:order-2 bg-white  sm:bg-transparent rounded-lg p-3 sm:p-0 shadow-sm sm:shadow-none border border-slate-100 dark:border-slate-800 sm:border-none flex sm:block items-center justify-between sm:text-right w-full sm:w-auto self-start">
+                <div className="order-1 sm:order-2  sm:bg-transparent rounded-lg p-3 sm:p-0 shadow-sm sm:shadow-none border border-slate-100 dark:border-slate-800 sm:border-none flex sm:block items-center justify-between sm:text-right w-full sm:w-auto self-start">
                   <div className="text-xs text-muted-foreground uppercase font-bold tracking-wider order-2 sm:order-none">
                     Total Points
                   </div>
@@ -2192,10 +2192,10 @@ export default function QuestDetailsPage() {
                         <Badge
                           variant="outline"
                           className={`px-4 py-1 text-sm font-bold uppercase tracking-wide ${isLockedStage || !participantData
-                              ? "border-slate-300 text-slate-400"
-                              : stageMeta?.isUnlocked
-                                ? "border-green-500 text-green-600 bg-green-50 dark:bg-green-950/20"
-                                : "border-primary/50 text-primary bg-primary/5"
+                            ? "border-slate-300 text-slate-400"
+                            : stageMeta?.isUnlocked
+                              ? "border-green-500 text-green-600 bg-green-50 dark:bg-green-950/20"
+                              : "border-primary/50 text-primary bg-primary/5"
                             }`}
                         >
                           {stage}

@@ -895,6 +895,29 @@ export default function QuestDetailsPage() {
 
   const handleSubmitTask = async () => {
     if (!selectedTask || !userWalletAddress) return;
+
+    // ✅ CHECK & COMPARE ONLY FOR "NONE" TASKS
+    if (selectedTask.verificationType === "none" && selectedTask.url) {
+      const clickTimestamp = sessionStorage.getItem(`task_click_${selectedTask.id}`);
+      
+      // Check 1: Did they click the link?
+      if (!clickTimestamp) {
+        toast.error("Please click the button the action button to perform the Task!");
+        return; // Stop submission
+      }
+
+      // Check 2: Has it been 15 seconds?
+      const elapsedSeconds = (Date.now() - parseInt(clickTimestamp)) / 1000;
+      if (elapsedSeconds < 15) {
+        const remaining = Math.ceil(15 - elapsedSeconds);
+        toast.error(`Please spend atleast 30seconds.`);
+        return; // Stop submission
+      }
+
+      // ✅ REMOVE the timestamp since they passed the check
+      sessionStorage.removeItem(`task_click_${selectedTask.id}`);
+    }
+
     setSubmittingTaskId(selectedTask.id);
 
     const cancelSubmission = async (submissionId: string) => {
@@ -1221,6 +1244,10 @@ export default function QuestDetailsPage() {
         // ─────────────────────────────────────────────────────────────────────────
       } else if (selectedTask.verificationType === "none") {
         toast.success("✅ Task completed! Points added.");
+        
+        // ── NEW: Clear the timestamp after success ──
+        sessionStorage.removeItem(`task_click_${selectedTask.id}`);
+        
         await refreshAllStats();
         setShowSubmitModal(false);
         setSubmissionData({ proofUrl: "", notes: "", file: null });
@@ -2916,7 +2943,7 @@ export default function QuestDetailsPage() {
                             : "Click below to visit the target page and complete the task."}
                         </p>
                       </div>
-                      <Button
+                     <Button
                         size="sm"
                         className="w-full max-w-xs gap-2 font-bold uppercase tracking-wider"
                         variant={isXShareTask ? "default" : "outline"}
@@ -2924,6 +2951,11 @@ export default function QuestDetailsPage() {
                           if (isXShareTask) {
                             handleXShareAction(selectedTask);
                           } else {
+                            // ✅ ONLY track the click time if it is a "none" verification task
+                            if (selectedTask.verificationType === "none") {
+                              sessionStorage.setItem(`task_click_${selectedTask.id}`, Date.now().toString());
+                            }
+                            
                             window.open(selectedTask.url, "_blank");
                           }
                         }}

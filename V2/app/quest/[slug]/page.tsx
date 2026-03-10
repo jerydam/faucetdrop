@@ -697,7 +697,7 @@ export default function QuestDetailsPage() {
   };
   const [isAdminEditing, setIsAdminEditing] = useState(false);
   const getCheckinStatus = () => {
-    if (!participantData?.last_checkin_at) return { canCheckin: true, message: "Check in now for +100 points!" };
+    if (!participantData?.last_checkin_at) return { canCheckin: true, message: "Check in now for +50 points!" };
     const last = new Date(participantData.last_checkin_at);
     const next = new Date(last.getTime() + 24 * 60 * 60 * 1000);
     const now = new Date();

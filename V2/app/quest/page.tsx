@@ -292,9 +292,7 @@ export default function QuestHomePage() {
                 <div>
                     <div className="flex items-center gap-3">
                         <h2 className="text-3xl font-bold tracking-tight">Explore Quests</h2>
-                        <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 flex items-center gap-1 shadow-sm">
-                            <Sparkles className="h-3 w-3" /> Beta Phase
-                        </Badge>
+                        
                     </div>
                     <p className="text-muted-foreground mt-1">Participate in active campaigns to earn crypto rewards.</p>
                 </div>

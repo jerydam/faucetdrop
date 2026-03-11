@@ -541,7 +541,7 @@ const { openSubscriptionModal } = useSubscriptionModal()
                 <div>
                     <h1 className="text-3xl font-bold flex items-center gap-2">
                         {draftId ? "Edit Quest Draft" : "Create Quest Campaign"}
-                        <Badge variant="secondary" className="text-sm"><Sparkles className="h-3 w-3 mr-1" /> Beta</Badge>
+                       
                     </h1>
                     <p className="text-muted-foreground mt-1">
                         {phase === 1 ? "Step 1: Set up campaign details and token rewards" : "Step 2: Configure tasks, stages and timeline"}

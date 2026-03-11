@@ -413,7 +413,10 @@ async function fetchOwnerFaucetsDetails(supabaseClient: any, addresses: string[]
                             faucetAddress: q.faucetAddress
                         }));
                     
-                    const published = myQuests.filter((q: any) => !q.isDraft);
+                    const published = myQuests.filter((q: any) => !q.isDraft).map((q: any) => ({
+                            ...q,
+                            isDemo: q.faucetAddress?.startsWith("draft-") || q.faucetAddress?.startsWith("demo-")
+                        }));
                     console.log('[Dashboard] Published quests loaded:', published.length)
                     setPublishedQuests(published);
                 }
@@ -957,12 +960,12 @@ function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
             {quest.imageUrl && (
                 <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
             )}
-                <div className="absolute top-2 right-2 flex gap-1">
+               <div className="absolute top-2 right-2 flex gap-1">
                     <Badge variant={type === 'draft' ? "outline" : "default"}>
                         {type === 'draft' ? 'Draft' : 'Published'}
                     </Badge>
-                    {type === 'draft' && quest.isDemo && (
-                        <Badge className="bg-amber-500 text-white border-0"> Demo</Badge>
+                    {(quest.isDemo || quest.faucetAddress?.startsWith("draft-") || quest.faucetAddress?.startsWith("demo-")) && (
+                        <Badge className="bg-amber-500 text-white border-0">Demo</Badge>
                     )}
                 </div>
             </div>

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
     Settings, ArrowRight, Coins, Loader2, 
     Calendar, Sparkles, Users, LayoutGrid, List, 
-    Clock, CalendarClock, Zap, Hourglass, CheckCircle2, AlertCircle, Filter
+    Clock, CalendarClock, Zap, Hourglass, CheckCircle2, Filter
 } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header"; 
@@ -64,9 +64,7 @@ const getQuestStatus = (quest: QuestOverview) => {
     const now = new Date();
     const startDate = new Date(quest.startDate);
     const endDate = new Date(quest.endDate);
-    // Upcoming check is independent of funding — show countdown regardless
     if (now < startDate) return { label: "Upcoming", color: "bg-blue-100 text-blue-800 border-blue-200", interactable: false };
-    if (!quest.isFunded) return { label: "Pending Funding", color: "bg-yellow-100 text-yellow-800 border-yellow-200", interactable: false };
     if (now > endDate) return { label: "Ended", color: "bg-gray-100 text-gray-600 border-gray-200", interactable: false };
     return { label: "Active", color: "bg-green-100 text-green-800 border-green-200", interactable: true };
 };
@@ -103,9 +101,11 @@ function QuestCard({ quest, isOwner, viewMode, onNavigate }: {
         <Card className="group hover:shadow-lg transition-all duration-300 border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col bg-white dark:bg-slate-950">
             <div className={`flex flex-1 ${viewMode === 'list' ? 'flex-col md:flex-row' : 'flex-col'}`}>
                 
-                {quest.imageUrl && (
-                    <div className={`shrink-0 bg-slate-100 dark:bg-slate-900 border-b md:border-b-0 ${viewMode === 'list' ? 'md:border-r border-slate-200 dark:border-slate-800 w-full md:w-64 h-48 md:h-auto min-h-[12rem]' : 'w-full h-48'}`}>
-                        <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
+               {quest.imageUrl && (
+                    <div className={`shrink-0 bg-slate-100 dark:bg-slate-900 border-b md:border-b-0 ${viewMode === 'list' ? 'md:border-r border-slate-200 dark:border-slate-800 w-full md:w-48' : 'w-full'}`}>
+                        <div className="aspect-square w-full overflow-hidden">
+                            <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
+                        </div>
                     </div>
                 )}
 
@@ -119,12 +119,7 @@ function QuestCard({ quest, isOwner, viewMode, onNavigate }: {
                                 <span className={`px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full border ${status.color}`}>
                                     {status.label}
                                 </span>
-                                {/* Show unfunded badge separately when upcoming but not funded */}
-                                {isUpcoming && !quest.isFunded && (
-                                    <span className="px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full border bg-yellow-100 text-yellow-800 border-yellow-200 flex items-center gap-1">
-                                        <AlertCircle className="h-3 w-3" /> Pending Funding
-                                    </span>
-                                )}
+                                
                             </div>
                             <p className={`text-sm text-muted-foreground ${viewMode === 'grid' ? 'line-clamp-3' : 'line-clamp-2'}`}>
                                 {quest.description}
@@ -245,7 +240,7 @@ export default function QuestHomePage() {
         const now = new Date();
         return {
             all:      validQuests.length,
-            active:   validQuests.filter(q => new Date(q.startDate) <= now && new Date(q.endDate) >= now && q.isFunded).length,
+            active:   validQuests.filter(q => new Date(q.startDate) <= now && new Date(q.endDate) >= now).length,
             upcoming: validQuests.filter(q => new Date(q.startDate) > now).length,
             ended:    validQuests.filter(q => new Date(q.endDate) < now).length,
         };
@@ -258,11 +253,10 @@ export default function QuestHomePage() {
         const getStatusPriority = (quest: QuestOverview) => {
             const start = new Date(quest.startDate);
             const end = new Date(quest.endDate);
-            if (now >= start && now <= end && quest.isFunded) return 0;  // Active — top
-            if (now < start) return 1;                                    // Upcoming
-            if (!quest.isFunded && now <= end) return 2;                  // Pending Funding
-            return 3;                                                      // Ended — last
-        };
+            if (now >= start && now <= end) return 0;  // Active
+            if (now < start) return 1;                 // Upcoming
+            return 2;                                  // Ended
+};
 
         const sorted = [...validQuests].sort((a, b) => {
             const aPriority = getStatusPriority(a);
@@ -283,7 +277,7 @@ export default function QuestHomePage() {
         return sorted.filter(quest => {
             const start = new Date(quest.startDate);
             const end = new Date(quest.endDate);
-            if (activeFilter === 'active')   return start <= now && end >= now && quest.isFunded;
+            if (activeFilter === 'active') return start <= now && end >= now;
             if (activeFilter === 'upcoming') return start > now;
             if (activeFilter === 'ended')    return end < now;
             return true;

@@ -62,6 +62,7 @@ import { useWallet } from "@/hooks/use-wallet";
 import { Contract, BrowserProvider, parseEther, ZeroAddress } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
+import { SubscriptionModal } from "@/components/subscribe";
 
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
@@ -213,6 +214,9 @@ export default function QuestDetailsPage() {
   // ============= STATE =============
   const [questData, setQuestData] = useState<any | null>(null);
   const [creatorSubscribed, setCreatorSubscribed] = useState<boolean>(true);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+
+// And wherever your modal is rendered:
 
   // ── NEW: FETCH CREATOR'S SUBSCRIPTION STATUS ──
   useEffect(() => {
@@ -277,7 +281,7 @@ export default function QuestDetailsPage() {
     currentStageTotal: 0,
     currentStageThreshold: 0,
   });
-
+   const isDemoQuest = faucetAddress?.startsWith("draft-") || faucetAddress?.startsWith("demo-")
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [hasOpenedLink, setHasOpenedLink] = useState<Record<string, boolean>>({});
@@ -531,25 +535,22 @@ export default function QuestDetailsPage() {
   }, [questData?.rawEndDate, questData?.claimWindowHours]);
 
   const questTiming = useMemo(() => {
-    if (!questData?.rawStartDate || !questData?.rawEndDate) {
-      return { isLive: false, notStartedYet: true, isEnded: false, isReviewing: false, isCreatorUnsubscribed: false };
-    }
-    const now = new Date();
-    const start = new Date(questData.rawStartDate);
-    const end = new Date(questData.rawEndDate);
-    const reviewEnd = new Date(end.getTime() + (24 * 60 * 60 * 1000));
-
-    return {
-      // Must be subscribed to be live!
-      isLive: now >= start && now <= end && questData.isActive && creatorSubscribed,
-      notStartedYet: now < start,
-      isEnded: now > end,
-      isReviewing: now > end && now <= reviewEnd,
-      isPaused: !questData.isActive,
-      isCreatorUnsubscribed: !creatorSubscribed, // <-- New Flag
-    };
-  }, [questData?.rawStartDate, questData?.rawEndDate, questData?.isActive, creatorSubscribed]);
-
+  if (!questData?.rawStartDate || !questData?.rawEndDate) {
+    return { isLive: false, notStartedYet: true, isEnded: false, isReviewing: false, isCreatorUnsubscribed: false };
+  }
+  const now = new Date();
+  const start = new Date(questData.rawStartDate);
+  const end = new Date(questData.rawEndDate);
+  const reviewEnd = new Date(end.getTime() + (24 * 60 * 60 * 1000));
+  return {
+    isLive: now >= start && now <= end && questData.isActive && (creatorSubscribed || isDemoQuest), // <- changed
+    notStartedYet: now < start,
+    isEnded: now > end,
+    isReviewing: now > end && now <= reviewEnd,
+    isPaused: !questData.isActive,
+    isCreatorUnsubscribed: !creatorSubscribed && !isDemoQuest, // <- also fix this so the "locked" banner doesn't show on demo
+  };
+}, [questData?.rawStartDate, questData?.rawEndDate, questData?.isActive, creatorSubscribed, isDemoQuest]);
   const allParticipants = leaderboard.filter(
     (entry) => entry.walletAddress.toLowerCase() !== questData?.creatorAddress.toLowerCase()
   );
@@ -879,18 +880,8 @@ export default function QuestDetailsPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { toast.error("File size exceeds 2MB limit."); e.target.value = ""; return; }
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
-    img.onload = () => {
-      if (img.width > 2048 || img.height > 2048) {
-        toast.error("Image dimensions exceed 2048x2048px limit.");
-        e.target.value = "";
-        setSubmissionData((prev) => ({ ...prev, file: null }));
-      } else {
-        setSubmissionData((prev) => ({ ...prev, file }));
-      }
-    };
+    if (file.size > 5 * 1024 * 1024) { toast.error("File size exceeds 5MB limit."); e.target.value = ""; return; }
+    setSubmissionData((prev) => ({ ...prev, file }));
   };
 
   const handleSubmitTask = async () => {
@@ -1389,7 +1380,7 @@ export default function QuestDetailsPage() {
         42220: { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", decimals: 6 }, // Celo USDT
         1135: { address: "0x05D032ac25d322df992303dCa074EE7392C117b9", decimals: 6 }, // Lisk USDT
         42161: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 }, // Arb USDT
-        8453: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 }, // Base USDC
+        8453: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }, // Base USDC
         56: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 }, // BNB USDT (18 decimals)
       };
 
@@ -1682,7 +1673,9 @@ export default function QuestDetailsPage() {
 
 
   // ── BLOCKAGE UI FOR CREATORS ──
-  if (isCreator && !hasActiveSubscription) {
+ 
+  if (isCreator && !hasActiveSubscription && !isDemoQuest) {
+  
     return (
       <div className="flex flex-col min-h-screen">
         <Header pageTitle={questData.title || "Subscription Required"} />
@@ -1755,9 +1748,37 @@ export default function QuestDetailsPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header pageTitle={questData.title} />
-
+      
       <div className="max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-8 pb-20 relative">
         {/* ============= HERO SECTION ============= */}
+        {isCreator && isDemoQuest && (
+        <div className="w-full overflow-hidden border bg-violet-50 border-b dark:bg-violet-950/20 py-2 dark:border-violet-700/50 border-violet-300">
+                <div className="flex whitespace-nowrap animate-marquee">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <span key={i} className="inline-flex items-center gap-2 px-8 text-xs font-semibold text-white">
+                            <Coins className="h-3.5 w-3.5 shrink-0" />
+                            Subscribe today to go live, fund your reward pool, accept real participants, and unlock all quest features.
+                            <span className="text-white">·</span>
+                        </span>
+                    ))}
+                </div>
+            </div>
+      )}
+
+        {isCreator && !questData.isFunded && !isDemoQuest &&  (
+         <div className="w-full overflow-hidden bg-yellow-500/10 border-b border-yellow-500/30 py-2">
+                <div className="flex whitespace-nowrap animate-marquee">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <span key={i} className="inline-flex items-center gap-2 px-8 text-xs font-semibold text-yellow-700 dark:text-yellow-400">
+                            <Coins className="h-3.5 w-3.5 shrink-0" />
+                            Fund your quest so participants can receive their rewards automatically.
+                            <span className="text-yellow-500">·</span>
+                        </span>
+                    ))}
+                </div>
+            </div>
+        )}
+        
         <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl min-h-[160px] md:min-h-[300px]">
           {/* Background Layer */}
           <div className="absolute inset-0 z-0">
@@ -1822,9 +1843,7 @@ export default function QuestDetailsPage() {
                       <div className="flex flex-col md:flex-row items-center md:items-start gap-3 flex-wrap justify-center md:justify-start">
                         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight">{questData.title}</h1>
                         <div className="flex flex-wrap items-center justify-center gap-2">
-                          <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-800 flex items-center gap-1 shadow-sm h-6 px-3">
-                            <Sparkles className="h-3 w-3" /> Beta Phase
-                          </Badge>
+                          
                           <Badge variant={questData.isActive ? "default" : "destructive"} className="h-6 px-3">
                             {questData.isActive ? "Live" : "Paused"}
                           </Badge>
@@ -1847,17 +1866,39 @@ export default function QuestDetailsPage() {
                 </div>
 
                 {/* Admin Fund Button */}
-                {isCreator && !questData.isFunded && (
-                  <div className="w-full md:w-auto shrink-0 mt-2 md:mt-0">
-                    <Button
-                      size="lg"
-                      onClick={() => { setFundAmount(""); setShowFundModal(true); }}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/20"
-                    >
-                      <Coins className="mr-2 h-5 w-5" /> Fund Quest
-                    </Button>
-                  </div>
-                )}
+               {isCreator && (isDemoQuest || !questData.isFunded) && (
+  <div className="w-full md:w-auto shrink-0 mt-2 md:mt-0">
+  {isDemoQuest ? (
+    <Button
+      size="lg"
+      onClick={() => setShowSubscribeModal(true)}
+      disabled={isFunding}
+      className="w-full bg-transparent hover:to-indigo-700 text-white shadow-lg font-bold"
+    >
+      {isFunding ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Sparkles className="mr-2 h-5 w-5" />}
+      {isFunding ? "Processing..." : "Subscribe to Go Live — $100"}
+    </Button>
+  ) : hasActiveSubscription ? (
+    <Button
+      size="lg"
+      onClick={() => { setFundAmount(""); setShowFundModal(true); }}
+      className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-900/20"
+    >
+      <Coins className="mr-2 h-5 w-5" /> Fund Quest
+    </Button>
+  ) : (
+    <Button
+      size="lg"
+      onClick={() => setShowSubscribeModal(true)}
+      disabled={isFunding}
+      className="w-full bg-transparent hover:to-indigo-700 text-white shadow-lg font-bold"
+    >
+      {isFunding ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <ShieldCheck className="mr-2 h-5 w-5" />}
+      {isFunding ? "Processing..." : "Subscribe Now — $100"}
+    </Button>
+  )}
+</div>
+)}
               </div>
 
               {/* ── Stats Area ── */}
@@ -1977,7 +2018,7 @@ export default function QuestDetailsPage() {
             </div>
           </div>
         )}
-        {!creatorSubscribed && !isCreator && (
+        {!creatorSubscribed && !isCreator && !isDemoQuest && (
           <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-full text-red-600 dark:text-red-400">
@@ -2519,17 +2560,20 @@ export default function QuestDetailsPage() {
                       </Button>
                     )}
 
-                    <Button
-                      variant={isAdminEditing ? "outline" : "default"}
-                      onClick={() => setIsAdminEditing(!isAdminEditing)}
-                      className="w-full sm:w-auto shadow-sm"
-                    >
-                      {isAdminEditing ? (
-                        <><ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard</>
-                      ) : (
-                        <><Settings className="mr-2 h-4 w-4" /> Edit Quest & Tasks</>
-                      )}
-                    </Button>
+                    {(hasActiveSubscription || isDemoQuest) && (
+                      <Button
+                        variant={isAdminEditing ? "outline" : "default"}
+                        onClick={() => setIsAdminEditing(!isAdminEditing)}
+                        className="w-full sm:w-auto shadow-sm"
+                      >
+                        {isAdminEditing ? (
+                          <><ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard</>
+                        ) : (
+                          <><Settings className="mr-2 h-4 w-4" /> Edit Quest & Tasks</>
+                        )}
+                      </Button>
+                    )}
+
                   </div>
                 </div>
 
@@ -2898,7 +2942,7 @@ export default function QuestDetailsPage() {
                           />
                           <Upload className="h-8 w-8 text-slate-400 mb-2" />
                           <p className="text-sm font-semibold">Click or drag screenshot here</p>
-                          <p className="text-xs text-muted-foreground mt-1">Max 2MB · PNG, JPG, GIF</p>
+                          <p className="text-xs text-muted-foreground mt-1">Max 5MB · Any resolution · PNG, JPG, GIF`</p>
                           {submissionData.file && (
                             <Badge className="mt-3 bg-green-500 text-white">{submissionData.file.name}</Badge>
                           )}
@@ -3114,7 +3158,14 @@ export default function QuestDetailsPage() {
             </Card>
           </div>
         )}
-
+        <SubscriptionModal
+          open={showSubscribeModal}
+          onOpenChange={setShowSubscribeModal}
+          onSuccess={() => {
+            setShowSubscribeModal(false);
+            setUserProfile(prev => prev ? { ...prev, is_quest_subscribed: true } : null);
+          }}
+        />
         {/* ============= FUNDING MODAL ============= */}
         {showFundModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">

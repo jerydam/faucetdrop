@@ -9,7 +9,8 @@ import { Toaster } from "sonner"
 import { NetworkProvider } from "@/hooks/use-network"
 import { WalletProvider } from "@/components/wallet-provider"
 import { Footer } from "@/components/footer"
-import { Providers } from "@/components/PrivyProvider" // Import your Providers component
+import { Providers } from "@/components/PrivyProvider"
+import { SubscriptionModalProvider } from "@/components/subscribe"
 import sdk from "@farcaster/miniapp-sdk"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -83,6 +84,7 @@ export default function RootLayout({
           <Providers>
             <NetworkProvider>
               <WalletProvider>
+              <SubscriptionModalProvider>
                 <div className="min-h-screen flex flex-col">
                   <main className="flex-1">
                     {children}
@@ -90,7 +92,8 @@ export default function RootLayout({
                   <Footer />
                 </div>
                 <Toaster richColors position="top-center" closeButton />
-              </WalletProvider>
+              </SubscriptionModalProvider>
+            </WalletProvider>
             </NetworkProvider>
           </Providers>
         </ThemeProvider>

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useWallet } from "@/components/wallet-provider" 
-import { useNetwork } from "@/hooks/use-network" 
+import { useNetwork, Network } from "@/hooks/use-network" 
 import { getUserFaucets } from "@/lib/faucet"
 import { Header } from "@/components/header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -38,17 +38,32 @@ const XIcon = ({ className }: { className?: string }) => (
 // --- Types ---
 interface FaucetData {
   faucetAddress: string;
-  name: string;
-  chainId: number;
-  faucetType: string;
-  createdAt?: string;
-  slug?: string;  
+  name:          string;
+  chainId:       number;          // already existed
+  faucetType:    string;
+  createdAt?:    string;
+  slug?:         string;
+  imageUrl?:     string;
+  // ── new fields from faucet_details ──
+  tokenSymbol?:  string;
+  tokenDecimals?: number;
+  isEther?:      boolean;
+  isClaimActive?: boolean;
+  claimAmount?:  bigint;
+  startTime?:    string | number;
+  endTime?:      string | number;
+  token?:        string;
+  network?:      Network;
+  description?:  string;
+  owner?:        string;
+  factoryAddress?: string;
 }
 
 interface QuestData {
     faucetAddress?: string; 
     slug?: string;
     title: string;
+    isDemo?: boolean;
     description: string;
     imageUrl: string;
     creatorAddress?: string;
@@ -96,6 +111,58 @@ export default function DashboardPage() {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         )
+
+     // ─── paste these outside the component, after supabase client ───
+
+const getNativeTokenSymbol = (networkName: string): string => {
+  switch (networkName) {
+    case "Celo": return "CELO";
+    case "Lisk": return "ETH";
+    case "Arbitrum":
+    case "Base":
+    case "Ethereum": return "ETH";
+    case "BNB": return "BNB";
+    default: return "ETH";
+  }
+};
+
+async function fetchOwnerFaucetsMeta(supabaseClient: any, ownerAddress: string) {
+  const { data, error } = await supabaseClient
+    .from("network_faucets")
+    .select("faucet_address, slug, is_claim_active, is_ether, start_time, token_symbol, faucet_name, owner_address, factory_address, factory_type, chain_id")
+    .eq("owner_address", ownerAddress.toLowerCase());
+
+  if (error) throw new Error(`network_faucets owner fetch: ${error.message}`);
+  return (data ?? []).map((r: any) => ({
+    faucetAddress:  r.faucet_address,
+    isClaimActive:  r.is_claim_active,
+    isEther:        r.is_ether,
+    slug:           r.slug,
+    createdAt:      r.start_time,
+    tokenSymbol:    r.token_symbol,
+    name:           r.faucet_name,
+    owner:          r.owner_address,
+    factoryAddress: r.factory_address,
+    factoryType:    r.factory_type,
+    chainId:        r.chain_id,
+  }));
+}
+
+async function fetchOwnerFaucetsDetails(supabaseClient: any, addresses: string[]) {
+  if (addresses.length === 0) return {};
+  const { data, error } = await supabaseClient
+    .from("faucet_details")
+    .select("*")
+    .in("faucet_address", addresses.map((a: string) => a.toLowerCase()));
+
+  if (error) throw new Error(`faucet_details owner fetch: ${error.message}`);
+  const map: Record<string, any> = {};
+  for (const row of data ?? []) {
+    map[row.faucet_address.toLowerCase()] = row;
+  }
+  return map;
+}
+
     // Data State
     const [userQuizzes, setUserQuizzes] = useState<QuizData[]>([]);
     const [faucets, setFaucets] = useState<FaucetData[]>([]);
@@ -279,25 +346,58 @@ export default function DashboardPage() {
             // STEP 3: Fetch user's faucets
             if (userWallet) {
                 console.log('[Dashboard] Fetching faucets for wallet:', userWallet.slice(0, 8))
-                const faucetData = await getUserFaucets(userWallet);
+                // NEW (replace with this):
+                const metaList = await fetchOwnerFaucetsMeta(supabase, userWallet);
+                const detailMap = await fetchOwnerFaucetsDetails(supabase, metaList.map((m: any) => m.faucetAddress));
 
-                const { data: slugRows } = await supabase
-                .from("network_faucets")
-                .select("faucet_address, slug")
-                .in("faucet_address", faucetData.map((f: FaucetData) => f.faucetAddress.toLowerCase()));
+                const enrichedFaucets: FaucetData[] = metaList.map((meta: any) => {
+                const row = detailMap[meta.faucetAddress.toLowerCase()];
+                const chainNetwork = networks.find((n) => n.chainId === (meta as any).chainId);
 
-                const slugMap: Record<string, string> = {};
-                for (const row of slugRows ?? []) {
-                    slugMap[row.faucet_address] = row.slug;
+                if (row) {
+                    return {
+                    faucetAddress: row.faucet_address,
+                    name:          row.faucet_name,
+                    slug:          row.slug || meta.slug,
+                    tokenSymbol:   row.token_symbol || (row.is_ether ? getNativeTokenSymbol(chainNetwork?.name || "Ethereum") : "TOK"),
+                    tokenDecimals: row.token_decimals ?? 18,
+                    isEther:       row.is_ether,
+                    claimAmount:   row.claim_amount ? BigInt(row.claim_amount) : undefined,
+                    startTime:     row.start_time,
+                    endTime:       row.end_time,
+                    isClaimActive: row.is_claim_active,
+                    token:         row.token_address,
+                    network:       chainNetwork,
+                    createdAt:     row.start_time,
+                    description:   row.description,
+                    imageUrl:      row.image_url || "/default.jpeg",
+                    owner:         row.owner_address,
+                    factoryAddress: row.factory_address || meta.factoryAddress,
+                    faucetType:    meta.factoryType || "dropcode",
+                    chainId:       (meta as any).chainId,
+                    } as FaucetData & { chainId: number };
                 }
 
-                const faucetsWithSlugs: FaucetData[] = faucetData.map((f: FaucetData) => ({
-                    ...f,
-                    slug: slugMap[f.faucetAddress.toLowerCase()] ?? undefined,
-                }));
+                // Fallback to meta only
+                return {
+                    faucetAddress: meta.faucetAddress,
+                    name:          meta.name,
+                    slug:          meta.slug,
+                    tokenSymbol:   meta.tokenSymbol || (meta.isEther ? getNativeTokenSymbol(chainNetwork?.name || "Ethereum") : "TOK"),
+                    tokenDecimals: 18,
+                    isEther:       meta.isEther,
+                    isClaimActive: meta.isClaimActive,
+                    network:       chainNetwork,
+                    createdAt:     meta.createdAt,
+                    owner:         meta.owner,
+                    factoryAddress: meta.factoryAddress,
+                    imageUrl:      "/default.jpeg",
+                    faucetType:    meta.factoryType || "dropcode",
+                    chainId:       (meta as any).chainId,
+                } as FaucetData & { chainId: number };
+                });
 
-                console.log('[Dashboard] Faucets loaded:', faucetsWithSlugs.length)
-                setFaucets(faucetsWithSlugs);
+                setFaucets(enrichedFaucets);
 
                 // STEP 4: Fetch published quests
                 console.log('[Dashboard] Fetching quests...')
@@ -333,7 +433,8 @@ export default function DashboardPage() {
                                     creatorAddress: d.creator_address,
                                     imageUrl: d.image_url,
                                     title: d.title,
-                                    description: d.description
+                                    description: d.description,
+                                    isDemo: !d.is_subscribed  // flag demo drafts from unsubscribed creators
                                 }));
                                 console.log('[Dashboard] Drafts loaded:', formattedDrafts.length)
                                 setDraftQuests(formattedDrafts);
@@ -676,7 +777,7 @@ export default function DashboardPage() {
                                                 key={quest.faucetAddress} 
                                                 quest={quest} 
                                                 type="draft"
-                                                onClick={() => router.push(`/quest/create-quest?draftId=${quest.faucetAddress}`)}
+                                                onClick={() => router.push(`/quest/create-quest?draftId=${quest.faucetAddress}${quest.isDemo ? '&demo=true' : ''}`)}
                                                 onDelete={(quest) => {
                                                     setDeleteDialog({ open: true, quest })
                                                     setDeleteConfirmInput("")
@@ -763,18 +864,28 @@ export default function DashboardPage() {
 function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner }: any) {
     const networkName = getNetworkName(faucet.chainId)
     const networkColor = getNetworkColor(faucet.chainId)
-
     return (
-        <Card className="hover:shadow-lg transition-all duration-200 flex flex-col group border-l-4" style={{ borderLeftColor: networkColor }}>
+        <Card className="hover:shadow-md transition-all group cursor-pointer flex flex-col">
+            {/* Square image header */}
+            <div className="relative aspect-square w-full bg-muted overflow-hidden rounded-t-lg">
+                {faucet.imageUrl ? (
+                    <img src={faucet.imageUrl} alt={faucet.name} className="w-full h-full object-cover" />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-primary/5">
+                        <span className="text-primary/30 text-4xl font-bold uppercase">{faucet.name?.charAt(0) || "F"}</span>
+                    </div>
+                )}
+                <Badge className="absolute top-2 right-2 capitalize text-xs" variant="secondary">
+                    {faucet.faucetType}
+                </Badge>
+            </div>
             <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                     <Badge variant="outline" className="mb-2 bg-background" style={{ borderColor: networkColor, color: networkColor }}>
                         <span className="w-1.5 h-1.5 rounded-full mr-1.5" style={{ backgroundColor: networkColor }}></span>
                         {networkName}
                     </Badge>
-                    <Badge variant="secondary" className="capitalize text-xs">
-                        {faucet.faucetType}
-                    </Badge>
+                    
                 </div>
                 <CardTitle className="truncate text-lg">{faucet.name}</CardTitle>
                 <CardDescription className="font-mono text-xs flex items-center gap-2 mt-1">
@@ -793,7 +904,7 @@ function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner
 function QuizCard({ quiz, onClick }: { quiz: QuizData; onClick: () => void }) {
     return (
         <Card className="hover:shadow-md transition-all group cursor-pointer flex flex-col" onClick={onClick}>
-            <div className="relative h-32 w-full bg-muted overflow-hidden rounded-t-lg">
+            <div className="relative aspect-square w-full bg-muted overflow-hidden rounded-t-lg">
                 {quiz.coverImageUrl ? (
                     <img src={quiz.coverImageUrl} alt={quiz.title} className="w-full h-full object-cover" />
                 ) : (
@@ -842,13 +953,18 @@ interface QuestCardProps {
 function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
     return (
         <Card className={`hover:shadow-md transition-all group ${type === 'draft' ? 'border-dashed border-orange-200 bg-orange-50/10' : ''}`}>
-            <div className="relative h-32 w-full bg-muted overflow-hidden rounded-t-lg cursor-pointer" onClick={onClick}>
-                {quest.imageUrl && (
-                    <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
-                )}
-                <Badge className="absolute top-2 right-2" variant={type === 'draft' ? "outline" : "default"}>
-                    {type === 'draft' ? 'Draft' : 'Published'}
-                </Badge>
+           <div className="relative aspect-square w-full bg-muted overflow-hidden rounded-t-lg cursor-pointer" onClick={onClick}>
+            {quest.imageUrl && (
+                <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
+            )}
+                <div className="absolute top-2 right-2 flex gap-1">
+                    <Badge variant={type === 'draft' ? "outline" : "default"}>
+                        {type === 'draft' ? 'Draft' : 'Published'}
+                    </Badge>
+                    {type === 'draft' && quest.isDemo && (
+                        <Badge className="bg-amber-500 text-white border-0"> Demo</Badge>
+                    )}
+                </div>
             </div>
             <CardContent className="p-4">
                 <h4 className="font-bold truncate text-base mb-1">{quest.title || "Untitled Quest"}</h4>

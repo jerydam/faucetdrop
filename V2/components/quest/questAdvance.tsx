@@ -8,6 +8,7 @@
       import { Label } from "@/components/ui/label"
       import { Textarea } from "@/components/ui/textarea"
       import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+       import { useSubscriptionModal } from "@/components/subscribe"
       import { Badge } from "@/components/ui/badge"
       import {
         Clock, Trash2, Loader2, Rocket,
@@ -16,7 +17,9 @@
         Link as LinkIcon, Code, CalendarDays, CheckCircle2, MessageSquareText,
         ShieldCheck,
         XIcon,
-        Send
+        Send,
+        ChevronUp,
+        ChevronDown
       } from "lucide-react"
       import { useWallet } from "@/hooks/use-wallet"
       import { BrowserProvider, ZeroAddress } from 'ethers'
@@ -478,8 +481,9 @@
         saveDraftProgress?: any // Kept for prop compatibility
         handleStagePassRequirementChange?: any
         getStageColor?: any
+        onSubscribed?: () => void
         getCategoryColor?: any
-        
+        isDemoMode?: boolean 
         getVerificationIcon?: any
         handleFinalize?: any
       }
@@ -497,13 +501,17 @@
         stageTaskCounts,
         initialNewTaskForm,
         handleAddTask,
+        onSubscribed,
         handleUpdateTask,
+        isDemoMode = false, 
         handleRemoveTask,
         isFinalizing,
         setError,
       }: Phase2Props) {
         const { isConnected, chainId, address, provider } = useWallet()
         const router = useRouter()
+
+        const { openSubscriptionModal } = useSubscriptionModal()
         // Inject default points for the form initial state
         const [newTask, setNewTask] = useState<Partial<QuestTask>>({ ...initialNewTaskForm, points: 100 })
         const [editingTask, setEditingTask] = useState<QuestTask | null>(null)
@@ -512,7 +520,7 @@
         const [telegramBotStatus, setTelegramBotStatus] = useState<{
           checking: boolean; is_admin: boolean | null; bot_username: string; message: string;
         }>({ checking: false, is_admin: null, bot_username: "", message: "" });
-
+        const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({})
         const [discordBotStatus, setDiscordBotStatus] = useState<{
           checking: boolean; is_in_server: boolean | null; message: string;
         }>({ checking: false, is_in_server: null, message: "" });
@@ -634,7 +642,7 @@
           if (!/^https?:\/\//i.test(cleanUrl)) cleanUrl = `https://${cleanUrl}`
           return cleanUrl.replace(/\/+$/, "")
         }
-
+        
         const isOnchainVerification = newTask.verificationType === 'onchain'
         const isSocialTemplate = newTask.category === 'social'
         const [isCustomTask, setIsCustomTask] = useState(false)
@@ -711,7 +719,14 @@
         };
 
     const handleDeployAndFinalize = async () => {
-      const now = new Date();
+      const subRes = await fetch(`${API_BASE_URL}/api/users/${address?.toLowerCase()}/subscription`)
+
+      const subData = await subRes.json()
+      const isActuallySubscribed = subData.success && subData.hasActiveSubscription === true
+
+      // Override isDemoMode based on server truth, ignore client state
+      const shouldSkipDeploy = !isActuallySubscribed
+            const now = new Date();
       // 1. Create proper Date objects using BOTH date and time
       const startDateTimeObj = new Date(`${newQuest.startDate}T${newQuest.startTime || "00:00"}`);
       const endDateTimeObj = new Date(`${newQuest.endDate}T${newQuest.endTime || "00:00"}`);
@@ -777,16 +792,22 @@
           newQuest.claimWindowUnit === "hours" ? claimValue : claimValue * 24;
 
         const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000) + (24 * 60 * 60);
-        if (!provider) throw new Error("Wallet provider is not ready.");
 
-        const deployedAddress = await createQuestReward(
-          provider,
-          targetFactory,
-          newQuest.title.trim(),
-          newQuest.tokenAddress || ZeroAddress,
-          questEndTimeSeconds,
-          hoursInt
-        );
+        let deployedAddress: string;
+
+        if (shouldSkipDeploy) {
+            deployedAddress = newQuest.faucetAddress || `demo-${crypto.randomUUID()}`
+        } else {
+            if (!provider) throw new Error("Wallet provider is not ready.")
+            deployedAddress = await createQuestReward(
+                provider,
+                targetFactory,
+                newQuest.title.trim(),
+                newQuest.tokenAddress || ZeroAddress,
+                questEndTimeSeconds,
+                hoursInt
+            )
+        }
 
         const baseSlug = newQuest.title
           .toLowerCase()
@@ -840,680 +861,721 @@
 
         return (
           <div className="space-y-10 max-w-7xl mx-auto py-8 px-4">
-          
+          {isDemoMode && (
+              <div className="rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/20 px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                      <span className="text-2xl shrink-0">⚡</span>
+                      <div>
+                          <p className="font-bold text-amber-800 dark:text-amber-300 text-sm">Demo Mode Active</p>
+                          <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                              Only auto-verify tasks are available (Social, On-Chain, Instant). Subscribe to unlock manual review tasks and go live.
+                          </p>
+                      </div>
+                  </div>
+                  <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 font-bold"
+                    onClick={() => openSubscriptionModal({ onSuccess: () => onSubscribed?.() })}
+                >
+                    Subscribe to Go Live
+                </Button>
+              </div>
+          )}
       
             {/* 2. Tasks Management */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              
-              {/* LEFT: Task Form */}
-              <div className="lg:col-span-7 space-y-6">
-                <Card className="border-border/50 shadow-sm bg-card h-full">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <LayoutList className="h-5 w-5 text-primary" />
-                      {editingTask ? "Edit Task" : "Add New Task"}
-                    </CardTitle>
-                    <CardDescription>Configure task details and validation.</CardDescription>
-                  </CardHeader>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                {/* LEFT: Task Form */}
+                <div className="lg:col-span-7 space-y-6">
+                  <Card className="border-border/50 shadow-sm bg-card h-full">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <LayoutList className="h-5 w-5 text-primary" />
+                        {editingTask ? "Edit Task" : "Add New Task"}
+                      </CardTitle>
+                      <CardDescription>Configure task details and validation.</CardDescription>
+                    </CardHeader>
 
-                  <CardContent className="space-y-5">
-                    {/* Stage & Category */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-medium uppercase text-muted-foreground">Target Stage</Label>
-                        <Select value={newTask.stage || "Beginner"} onValueChange={(v: TaskStage) => setNewTask(p => ({ ...p, stage: v, points: getDefaultPointsForStage(v) }))} disabled={!!editingTask?.isSystem}>
-                          <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {TASK_STAGES.map(stage => (
-                              <SelectItem key={stage} value={stage}>
-                                <div className="flex items-center gap-2"><span>{stage}</span></div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                    <CardContent className="space-y-5">
+                      {/* Stage & Category */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium uppercase text-muted-foreground">Target Stage</Label>
+                          <Select value={newTask.stage || "Beginner"} onValueChange={(v: TaskStage) => setNewTask(p => ({ ...p, stage: v, points: getDefaultPointsForStage(v) }))} disabled={!!editingTask?.isSystem}>
+                            <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {TASK_STAGES.map(stage => (
+                                <SelectItem key={stage} value={stage}>
+                                  <div className="flex items-center gap-2"><span>{stage}</span></div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium uppercase text-muted-foreground">Category</Label>
+                          <Select value={newTask.category} onValueChange={(v:any) => setNewTask(p => ({ ...p, category: v }))} disabled={!!editingTask?.isSystem}>
+                            <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                            <SelectContent>{availableCategories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-medium uppercase text-muted-foreground">Category</Label>
-                        <Select value={newTask.category} onValueChange={(v:any) => setNewTask(p => ({ ...p, category: v }))} disabled={!!editingTask?.isSystem}>
-                          <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
-                          <SelectContent>{availableCategories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                    </div>
 
-                    {/* Quick Add */}
-                    {!editingTask && (
-                      <div className="space-y-2">
-                        <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Zap className="h-3 w-3 text-yellow-500"/> Quick Add</Label>
-                        <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs h-7 font-semibold"
-                          onClick={() => {
-                            setIsCustomTask(true)  // ← must be here
-                            setNewTask({
-                              ...CUSTOM_TASK_TEMPLATE,
-                              stage: newTask.stage || 'Beginner',
-                              points: getDefaultPointsForStage(newTask.stage || 'Beginner')
-                            })
-                          }}                    >
-                          <Plus className="h-3 w-3 mr-1" /> Custom Task
-                        </Button>
-                        {(SUGGESTED_TASKS_BY_STAGE[newTask.stage || 'Beginner'] || [])
-                          .filter(s => s.action !== 'custom')
-                          .map((s, i) => (
-                            <Button key={i} variant="secondary" size="sm" className="text-xs h-7 bg-muted/50 hover:bg-muted" onClick={() => handleUseSuggestedTaskInternal(s)}>
-                              <Plus className="h-3 w-3 mr-1" />{s.title}
-                            </Button>
-                          ))}
-                      </div>
-                      </div>
-                    )}
-
-                    {/* Task Configuration */}
-                    <div className="space-y-2">
-                      <Label className="text-xs font-medium uppercase text-muted-foreground">Task Details</Label>
-                    {isCustomTask ? (
-                      <div className="p-4 border border-border rounded-lg bg-muted/30 space-y-4">
-                        <div className="flex items-center gap-2">
-                          <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center">
-                            <Zap className="h-3.5 w-3.5 text-primary" />
+                      {/* Quick Add */}
+                     {!editingTask && (
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                            <Zap className="h-3 w-3 text-yellow-500"/> Quick Add
+                          </Label>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                                isDemoMode
+                                  ? "border-muted bg-muted/30 text-muted-foreground cursor-not-allowed opacity-50"
+                                  : "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                              }`}
+                              onClick={() => {
+                                if (isDemoMode) {
+                                  toast.warning("Custom tasks are not available in Demo Mode. Subscribe to unlock all task types.")
+                                  return
+                                }
+                                setIsCustomTask(true)
+                                setNewTask({
+                                  ...CUSTOM_TASK_TEMPLATE,
+                                  stage: newTask.stage || 'Beginner',
+                                  points: getDefaultPointsForStage(newTask.stage || 'Beginner')
+                                })
+                              }}
+                            >
+                              {isDemoMode ? <Lock className="h-3 w-3" /> : <Plus className="h-3 w-3" />} Custom
+                            </button>
+                            {(SUGGESTED_TASKS_BY_STAGE[newTask.stage || 'Beginner'] || [])
+                              .filter(s => s.action !== 'custom')
+                              .map((s, i) => (
+                                <button
+                                  key={i}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-muted/40 text-foreground/80 hover:bg-muted hover:text-foreground hover:border-border/80 transition-colors"
+                                  onClick={() => {
+                                    if (isDemoMode && !['auto_social', 'none'].includes(s.verificationType || '')) {
+                                      toast.warning("This task type is not available in Demo Mode. Subscribe to unlock all Task types.")
+                                      return
+                                    }
+                                    handleUseSuggestedTaskInternal(s)
+                                  }}
+                                >
+                                  <Plus className="h-3 w-3" />{s.title}
+                                </button>
+                              ))}
                           </div>
-                          <span className="text-xs font-bold text-foreground uppercase tracking-wide">Custom Task</span>
-                          <Badge variant="outline" className="ml-auto text-[10px]">Flexible</Badge>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground font-medium">Task Title <span className="text-red-400">*</span></Label>
-                          <Input
-                            className="bg-background"
-                            placeholder="e.g. Sign up on our platform, Complete onboarding..."
-                            value={newTask.title || ""}
-                            onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground font-medium">
-                            Action Label <span className="text-red-400">*</span>
-                          </Label>
-                          <Input
-                            className="bg-background"
-                            placeholder="e.g. signup, interact, complete, submit..."
-                            value={newTask.action === 'custom' ? '' : newTask.action || ''}
-                            onChange={e => setNewTask(p => ({ ...p, action: e.target.value || 'custom' }))}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                            <LinkIcon className="h-3 w-3" /> Reference URL <span className="text-muted-foreground font-normal">(optional)</span>
-                          </Label>
-                          <Input
-                            className="bg-background"
-                            placeholder="https://your-site.com/signup"
-                            value={newTask.url || ""}
-                            onChange={e => setNewTask(p => ({ ...p, url: e.target.value }))}
-                            onBlur={() => { if (newTask.url && newTask.url.includes('.')) setNewTask(p => ({ ...p, url: normalizeUrl(p.url || '') })) }}
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                            <Code className="h-3 w-3" /> Contract Address <span className="text-muted-foreground font-normal">(optional)</span>
-                          </Label>
-                          <Input
-                            className="bg-background font-mono"
-                            placeholder="0x... (leave blank if not applicable)"
-                            value={newTask.targetContractAddress || ""}
-                            onChange={e => setNewTask(p => ({ ...p, targetContractAddress: e.target.value }))}
-                          />
-                        </div>
-                        <div className="flex items-start gap-2 p-2.5 bg-muted/50 rounded-md border border-border">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                          <p className="text-[11px] text-muted-foreground leading-relaxed">
-                            Participants will submit <strong>a link</strong> and <strong>upload an image</strong> as proof of completion.
-                          </p>
-                        </div>
-                      </div>
-                      ) : isSocialTemplate ? (
-                        <div className="p-3 border border-blue-500/20 rounded-lg bg-blue-500/10 space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs text-blue-400">Platform</Label>
-                              <Select value={newTask.targetPlatform} onValueChange={(v: TaskStage) => {
-                                setNewTask(p => ({ ...p, stage: v, points: getDefaultPointsForStage(v) }))
-                                setIsCustomTask(false) // ← ADD THIS
-                              }}>
-                                <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
-                                <SelectContent>{SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                              </Select>
+                      )}
+
+                      {/* Task Configuration */}
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium uppercase text-muted-foreground">Task Details</Label>
+                      {isCustomTask ? (
+                        <div className="p-4 border border-border rounded-lg bg-muted/30 space-y-4">
+                          <div className="flex items-center gap-2">
+                            <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center">
+                              <Zap className="h-3.5 w-3.5 text-primary" />
                             </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-blue-400">Action</Label>
-                            <Select value={newTask.action} onValueChange={(v:any) => setNewTask(p => ({ ...p, action: v, title: generateSocialTaskTitle(p.targetPlatform || '', v) }))}>
-                              <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {getAvailableActions(newTask.targetPlatform || 'Twitter').map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
+                            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Custom Task</span>
+                            <Badge variant="outline" className="ml-auto text-[10px]">Flexible</Badge>
                           </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground font-medium">Task Title <span className="text-red-400">*</span></Label>
+                            <Input
+                              className="bg-background"
+                              placeholder="e.g. Sign up on our platform, Complete onboarding..."
+                              value={newTask.title || ""}
+                              onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))}
+                            />
                           </div>
-                          <Input 
-                            value={newTask.title || ""} 
-                            onChange={(e) => setNewTask(p => ({ ...p, title: e.target.value }))}
-                            className="h-8 bg-background/50 border-blue-500/30 text-sm font-medium" 
-                            placeholder="Task Title"
-                          />
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground font-medium">
+                              Action Label <span className="text-red-400">*</span>
+                            </Label>
+                            <Input
+                              className="bg-background"
+                              placeholder="e.g. signup, interact, complete, submit..."
+                              value={newTask.action === 'custom' ? '' : newTask.action || ''}
+                              onChange={e => setNewTask(p => ({ ...p, action: e.target.value || 'custom' }))}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                              <LinkIcon className="h-3 w-3" /> Reference URL <span className="text-muted-foreground font-normal">(optional)</span>
+                            </Label>
+                            <Input
+                              className="bg-background"
+                              placeholder="https://your-site.com/signup"
+                              value={newTask.url || ""}
+                              onChange={e => setNewTask(p => ({ ...p, url: e.target.value }))}
+                              onBlur={() => { if (newTask.url && newTask.url.includes('.')) setNewTask(p => ({ ...p, url: normalizeUrl(p.url || '') })) }}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                              <Code className="h-3 w-3" /> Contract Address <span className="text-muted-foreground font-normal">(optional)</span>
+                            </Label>
+                            <Input
+                              className="bg-background font-mono"
+                              placeholder="0x... (leave blank if not applicable)"
+                              value={newTask.targetContractAddress || ""}
+                              onChange={e => setNewTask(p => ({ ...p, targetContractAddress: e.target.value }))}
+                            />
+                          </div>
+                          <div className="flex items-start gap-2 p-2.5 bg-muted/50 rounded-md border border-border">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                              Participants will submit <strong>a link</strong> and <strong>upload an image</strong> as proof of completion.
+                            </p>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <Input className="bg-background" placeholder="Task Title (e.g., Hold 100 USDC)" value={newTask.title || ""} onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))} disabled={!!editingTask?.isSystem} />
-                          
-                          {/* Onchain Action Selector */}
-                          {isOnchainVerification && (
-                            <div className="p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg space-y-2">
-                              <Label className="text-xs text-purple-600 font-bold flex items-center gap-2"><Zap className="h-3 w-3"/> On-Chain Requirement</Label>
-                              <Select value={newTask.action} onValueChange={(v) => setNewTask(p => ({ ...p, action: v }))}>
-                                <SelectTrigger className="bg-background border-purple-500/30"><SelectValue placeholder="Select Requirement Type" /></SelectTrigger>
+                        ) : isSocialTemplate ? (
+                          <div className="p-3 border border-blue-500/20 rounded-lg bg-blue-500/10 space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-blue-400">Platform</Label>
+                                <Select value={newTask.targetPlatform} onValueChange={(v: TaskStage) => {
+                                  setNewTask(p => ({ ...p, stage: v, points: getDefaultPointsForStage(v) }))
+                                  setIsCustomTask(false) // ← ADD THIS
+                                }}>
+                                  <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
+                                  <SelectContent>{SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                                </Select>
+                              </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-blue-400">Action</Label>
+                              <Select value={newTask.action} onValueChange={(v:any) => setNewTask(p => ({ ...p, action: v, title: generateSocialTaskTitle(p.targetPlatform || '', v) }))}>
+                                <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                  {ONCHAIN_ACTIONS.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
+                                  {getAvailableActions(newTask.targetPlatform || 'Twitter').map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             </div>
-                          )}
+                            </div>
+                            <Input 
+                              value={newTask.title || ""} 
+                              onChange={(e) => setNewTask(p => ({ ...p, title: e.target.value }))}
+                              className="h-8 bg-background/50 border-blue-500/30 text-sm font-medium" 
+                              placeholder="Task Title"
+                            />
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <Input className="bg-background" placeholder="Task Title (e.g., Hold 100 USDC)" value={newTask.title || ""} onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))} disabled={!!editingTask?.isSystem} />
+                            
+                            {/* Onchain Action Selector */}
+                            {isOnchainVerification && (
+                              <div className="p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg space-y-2">
+                                <Label className="text-xs text-purple-600 font-bold flex items-center gap-2"><Zap className="h-3 w-3"/> On-Chain Requirement</Label>
+                                <Select value={newTask.action} onValueChange={(v) => setNewTask(p => ({ ...p, action: v }))}>
+                                  <SelectTrigger className="bg-background border-purple-500/30"><SelectValue placeholder="Select Requirement Type" /></SelectTrigger>
+                                  <SelectContent>
+                                    {ONCHAIN_ACTIONS.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Custom Task Description Field */}
+                        <div className="pt-2">
+                          <Label className="text-xs font-medium uppercase text-muted-foreground">Task Description & Instructions</Label>
+                          <Textarea
+                            className="bg-background mt-1 min-h-[60px] text-sm"
+                            placeholder="e.g. Share link to profile, upload screenshot of tx, sign up on our website..."
+                            value={newTask.description || ""}
+                            onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))}
+                            disabled={!!editingTask?.isSystem}
+                          />
                         </div>
-                      )}
-                      
-                      {/* Custom Task Description Field */}
-                      <div className="pt-2">
-                        <Label className="text-xs font-medium uppercase text-muted-foreground">Task Description & Instructions</Label>
-                        <Textarea
-                          className="bg-background mt-1 min-h-[60px] text-sm"
-                          placeholder="e.g. Share link to profile, upload screenshot of tx, sign up on our website..."
-                          value={newTask.description || ""}
-                          onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))}
-                          disabled={!!editingTask?.isSystem}
-                        />
                       </div>
-                    </div>
 
-                    {/* Dynamic Inputs */}
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-medium uppercase text-muted-foreground">Points</Label>
-                        <Input type="number" className="bg-background" value={newTask.points ?? ""} onChange={e => setNewTask((p:any) => ({ ...p, points: e.target.value }))} disabled={!!editingTask?.isSystem} />
-                        {/* Discord Server ID Field (Mandatory for Auto-Verify) */}
-                          {newTask.targetPlatform === 'Discord' && newTask.verificationType === 'auto_social' && (
-                            <div className="space-y-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-                              <Label className="text-xs font-bold text-indigo-500 flex items-center gap-1">
-                                <ShieldCheck className="h-3 w-3"/> Discord Server ID
+                      {/* Dynamic Inputs */}
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium uppercase text-muted-foreground">Points</Label>
+                          <Input type="number" className="bg-background" value={newTask.points ?? ""} onChange={e => setNewTask((p:any) => ({ ...p, points: e.target.value }))} disabled={!!editingTask?.isSystem} />
+                          {/* Discord Server ID Field (Mandatory for Auto-Verify) */}
+                            {newTask.targetPlatform === 'Discord' && newTask.verificationType === 'auto_social' && (
+                              <div className="space-y-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                                <Label className="text-xs font-bold text-indigo-500 flex items-center gap-1">
+                                  <ShieldCheck className="h-3 w-3"/> Discord Server ID
+                                </Label>
+                                <Input 
+                                  className="bg-background" 
+                                  placeholder="e.g. 1476641584958144675"
+                                  value={newTask.targetServerId || ""} 
+                                  onChange={e => setNewTask((p: any) => ({ ...p, targetServerId: e.target.value }))} 
+                                />
+                                <p className="text-[10px] text-muted-foreground">
+                                  Required for auto-verification. Right-click your Server name, and select "Copy Server ID".
+                                </p>
+                              </div>
+                            )}
+                        </div>
+
+                        {isSocialTemplate && (
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center">
+                                <LinkIcon className="h-3 w-3"/> {getSocialInputLabel()}
                               </Label>
                               <Input 
                                 className="bg-background" 
-                                placeholder="e.g. 1476641584958144675"
-                                value={newTask.targetServerId || ""} 
-                                onChange={e => setNewTask((p: any) => ({ ...p, targetServerId: e.target.value }))} 
+                                placeholder="https://..."
+                                value={newTask.url || ""} 
+                                onChange={e => setNewTask((p: any) => ({ ...p, url: e.target.value }))} 
+                                onBlur={() => {
+                                  if (newTask.url && newTask.url.includes('.')) {
+                                    setNewTask((p: any) => ({ ...p, url: normalizeUrl(p.url) }))
+                                  }
+                                }}
                               />
-                              <p className="text-[10px] text-muted-foreground">
-                                Required for auto-verification. Right-click your Server name, and select "Copy Server ID".
+                              {/* Discord Role ID Field */}
+                            {newTask.targetPlatform === 'Discord' && newTask.action === 'role' && (
+                              <div className="space-y-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                                <Label className="text-xs font-bold text-indigo-500 flex items-center gap-1">
+                                  <ShieldCheck className="h-3 w-3"/> Required Role ID
+                                </Label>
+                                <Input 
+                                  className="bg-background" 
+                                  placeholder="e.g. 104239849202392"
+                                  value={""} 
+                                  onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value }))} 
+                                />
+                                <p className="text-[10px] text-muted-foreground">Right-click the Role in server settings, and select "Copy Role ID".</p>
+                              </div>
+                            )}
+                            </div>
+
+                            
+                            
+
+                            {/* Telegram Message Count Field */}
+                            {newTask.targetPlatform === 'Telegram' && newTask.action === 'message_count' && (
+                              <div className="space-y-2 p-3 bg-sky-500/10 border border-sky-500/20 rounded-lg">
+                                <Label className="text-xs font-bold text-sky-600 flex items-center gap-1">
+                                  <MessageSquareText className="h-3 w-3"/> Required Message Count
+                                </Label>
+                                <Input 
+                                  type="number"
+                                  className="bg-background" 
+                                  placeholder="e.g. 10"
+                                  value={newTask.minTxCount || ""} 
+                                  onChange={e => setNewTask((p: any) => ({ ...p, minTxCount: e.target.value }))} 
+                                />
+                                <p className="text-[10px] text-muted-foreground">Users must send this many messages in the group to pass.</p>
+                              </div>
+                            )}
+
+                            {newTask.targetPlatform === 'Twitter' && ['quote', 'comment'].includes(newTask.action || '') && (
+                              <div className="space-y-2">
+                                <Label className="text-xs font-medium uppercase text-muted-foreground">Target Tag/Handle</Label>
+                                <Input 
+                                  className="bg-background" 
+                                  placeholder="@FaucetDrops"
+                                  value={newTask.targetHandle || ""} 
+                                  onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value.replace('@', '') }))} 
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* DISCORD ADD BOT HELPER */}
+                        {newTask.targetPlatform === 'Discord' && newTask.verificationType === 'auto_social' && (
+                          <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
+                            discordBotStatus.is_in_server === true
+                              ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800"
+                              : discordBotStatus.is_in_server === false
+                              ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800"
+                              : "bg-indigo-50 border-indigo-200 text-indigo-800 dark:bg-indigo-900/20 dark:border-indigo-800"
+                          }`}>
+                            {discordBotStatus.is_in_server === true ? (
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                <span><strong>✅ Bot is in your server.</strong> Auto-verification is fully enabled!</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                <div className="flex items-start gap-3">
+                                  {discordBotStatus.is_in_server === false ? (
+                                    <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                                  ) : (
+                                    <ShieldCheck className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
+                                  )}
+                                  <div>
+                                    <strong className="block mb-1 text-base">
+                                      {discordBotStatus.is_in_server === false 
+                                        ? "Bot is not in the server yet!" 
+                                        : "Action Required: Add Discord Bot"}
+                                    </strong>
+                                    To verify server memberships and roles automatically, our bot must be invited to your server.
+                                    <ol className="mt-2 space-y-1 list-decimal list-inside text-xs opacity-90">
+                                      <li>Paste your Server Invite Link into the URL field above</li>
+                                      <li>Click <strong>Add Bot</strong> below to invite it to that server</li>
+                                      <li>Click <strong>Verify Bot Status</strong> to confirm it worked</li>
+                                    </ol>
+                                  </div>
+                                </div>
+                    
+                                <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
+                                  <Button type="button" variant="outline" size="sm" className="text-xs h-8 bg-white dark:bg-slate-900"
+                                    onClick={() => window.open(`https://discord.com/oauth2/authorize?client_id=1466125172342915145&permissions=8&integration_type=0&scope=bot`, "_blank")}
+                                  >
+                                    <Plus className="h-3 w-3 mr-2" /> Add Bot to Discord Server
+                                  </Button>
+                    
+                                  <Button type="button" size="sm" className={`text-xs h-8 ${discordBotStatus.is_in_server === false ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}
+                                    onClick={() => checkDiscordBotStatus(newTask.targetServerId || "")} 
+                                    disabled={discordBotStatus.checking || !newTask.targetServerId}
+                                  >
+                                    {discordBotStatus.checking ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Send className="h-3 w-3 mr-2" />}
+                                    {discordBotStatus.is_in_server === false ? "Check Status Again" : "Verify Bot Status"}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* TELEGRAM ADD BOT HELPER */}
+                        {newTask.targetPlatform === 'Telegram' && newTask.verificationType === 'auto_social' && (
+                          <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
+                            telegramBotStatus.is_admin === true
+                              ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800"
+                              : telegramBotStatus.is_admin === false
+                              ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800"
+                              : "bg-sky-50 border-sky-200 text-sky-800 dark:bg-sky-900/20 dark:border-sky-800"
+                          }`}>
+                            {telegramBotStatus.is_admin === true ? (
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                <span><strong>✅ Bot is admin.</strong> Auto-verification is fully enabled!</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                <div className="flex items-start gap-3">
+                                  {telegramBotStatus.is_admin === false ? (
+                                    <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                                  ) : (
+                                    <ShieldCheck className="h-5 w-5 text-sky-600 shrink-0 mt-0.5" />
+                                  )}
+                                  <div>
+                                    <strong className="block mb-1 text-base">
+                                      {telegramBotStatus.is_admin === false 
+                                        ? "Bot is not an admin yet!" 
+                                        : "Action Required: Add Bot to Telegram"}
+                                    </strong>
+                                    To enable auto-verification, you must add our bot to your channel/group as an administrator.
+                                    {telegramBotStatus.is_admin === false && (
+                                      <p className="mt-2 text-xs font-semibold text-orange-600 dark:text-orange-400">
+                                        Without this, submissions will go to manual review.
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                    
+                                <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
+                                  <Button type="button" variant="outline" size="sm" className="text-xs h-8 bg-white dark:bg-slate-900"
+                                    onClick={() => window.open(`https://t.me/${telegramBotStatus.bot_username || "FaucetDropsauth_bot"}?startgroup=true`, "_blank")}
+                                  >
+                                    <Plus className="h-3 w-3 mr-2" /> Add Bot to Telegram
+                                  </Button>
+                    
+                                  <Button type="button" size="sm" className={`text-xs h-8 ${telegramBotStatus.is_admin === false ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-sky-600 hover:bg-sky-700 text-white"}`}
+                                    onClick={() => checkTelegramBotAdmin(newTask.url || "")} disabled={telegramBotStatus.checking || !newTask.url}
+                                  >
+                                    {telegramBotStatus.checking ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Send className="h-3 w-3 mr-2" />}
+                                    {telegramBotStatus.is_admin === false ? "Check Status Again" : "Verify Bot is Admin"}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {showContractInput && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center"><Code className="h-3 w-3"/> Contract Address</Label>
+                            <Input className="bg-background font-mono" placeholder="0x... (Empty for Native)" value={newTask.targetContractAddress ?? ""} onChange={e => setNewTask(p => ({ ...p, targetContractAddress: e.target.value }))} />
+                          </div>
+                        )}
+                        {showUrlInput && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium uppercase text-muted-foreground">
+                              {showTimeboundInputs ? "Platform / dApp URL" : "Reference URL"}
+                            </Label>
+                            <Input className="bg-background" placeholder={showTimeboundInputs ? "https://your-dapp.com/swap" : "https://..."} value={newTask.url ?? ""} onChange={e => setNewTask(p => ({ ...p, url: e.target.value }))} disabled={!!editingTask?.isSystem} />
+                            {showTimeboundInputs && (
+                              <p className="text-[10px] text-muted-foreground">Participants will click this link to visit your platform and complete the interaction.</p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* UPDATED TIMEBOUND BLOCK WITH CREATOR INSTRUCTIONS */}
+                        {showTimeboundInputs && (
+                          <div className="space-y-4 col-span-full p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                            <div>
+                              <Label className="text-sm text-purple-600 font-bold flex items-center gap-1 mb-1">
+                                <CalendarClock className="h-4 w-4"/> Timebound Contract Interaction
+                              </Label>
+                              <p className="text-xs text-purple-700/80 dark:text-purple-300/80">
+                                <strong>How it works:</strong> The user clicks your <b>dApp URL</b> above, connects their wallet on your site, and interacts with the <b>Contract Address</b> you provided. We will automatically scan the blockchain to verify they sent a transaction to that contract between the dates below.
                               </p>
                             </div>
-                          )}
-                      </div>
 
-                      {isSocialTemplate && (
-                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label className="text-[10px] uppercase text-muted-foreground">Start Date & Time (Local)</Label>
+                                <Input 
+                                  type="datetime-local" 
+                                  className="bg-background border-purple-500/30"
+                                  value={formatForDateTimeLocal(newTask.startDate)}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setNewTask(p => ({ ...p, startDate: val ? new Date(val).toISOString() : undefined }))
+                                  }} 
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-[10px] uppercase text-muted-foreground">End Date & Time (Local)</Label>
+                                <Input 
+                                  type="datetime-local" 
+                                  className="bg-background border-purple-500/30"
+                                  value={formatForDateTimeLocal(newTask.endDate)}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setNewTask(p => ({ ...p, endDate: val ? new Date(val).toISOString() : undefined }))
+                                  }} 
+                                />
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">Dates are automatically converted and verified securely in UTC.</p>
+                          </div>
+                        )}
+                        {showAmountInput && (
                           <div className="space-y-2">
-                            <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center">
-                              <LinkIcon className="h-3 w-3"/> {getSocialInputLabel()}
-                            </Label>
-                            <Input 
-                              className="bg-background" 
-                              placeholder="https://..."
-                              value={newTask.url || ""} 
-                              onChange={e => setNewTask((p: any) => ({ ...p, url: e.target.value }))} 
-                              onBlur={() => {
-                                if (newTask.url && newTask.url.includes('.')) {
-                                  setNewTask((p: any) => ({ ...p, url: normalizeUrl(p.url) }))
-                                }
-                              }}
-                            />
-                            {/* Discord Role ID Field */}
-                          {newTask.targetPlatform === 'Discord' && newTask.action === 'role' && (
-                            <div className="space-y-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-                              <Label className="text-xs font-bold text-indigo-500 flex items-center gap-1">
-                                <ShieldCheck className="h-3 w-3"/> Required Role ID
-                              </Label>
-                              <Input 
-                                className="bg-background" 
-                                placeholder="e.g. 104239849202392"
-                                value={""} 
-                                onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value }))} 
-                              />
-                              <p className="text-[10px] text-muted-foreground">Right-click the Role in server settings, and select "Copy Role ID".</p>
-                            </div>
-                          )}
+                            <Label className="text-xs font-medium uppercase text-muted-foreground">Min Amount</Label>
+                            <Input type="number" className="bg-background" placeholder="e.g. 100" value={newTask.minAmount ?? ""} onChange={e => setNewTask(p => ({ ...p, minAmount: e.target.value }))} />
                           </div>
-
-                          
-                          
-
-                          {/* Telegram Message Count Field */}
-                          {newTask.targetPlatform === 'Telegram' && newTask.action === 'message_count' && (
-                            <div className="space-y-2 p-3 bg-sky-500/10 border border-sky-500/20 rounded-lg">
-                              <Label className="text-xs font-bold text-sky-600 flex items-center gap-1">
-                                <MessageSquareText className="h-3 w-3"/> Required Message Count
-                              </Label>
-                              <Input 
-                                type="number"
-                                className="bg-background" 
-                                placeholder="e.g. 10"
-                                value={newTask.minTxCount || ""} 
-                                onChange={e => setNewTask((p: any) => ({ ...p, minTxCount: e.target.value }))} 
-                              />
-                              <p className="text-[10px] text-muted-foreground">Users must send this many messages in the group to pass.</p>
-                            </div>
-                          )}
-
-                          {newTask.targetPlatform === 'Twitter' && ['quote', 'comment'].includes(newTask.action || '') && (
-                            <div className="space-y-2">
-                              <Label className="text-xs font-medium uppercase text-muted-foreground">Target Tag/Handle</Label>
-                              <Input 
-                                className="bg-background" 
-                                placeholder="@FaucetDrops"
-                                value={newTask.targetHandle || ""} 
-                                onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value.replace('@', '') }))} 
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* DISCORD ADD BOT HELPER */}
-                      {newTask.targetPlatform === 'Discord' && newTask.verificationType === 'auto_social' && (
-                        <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
-                          discordBotStatus.is_in_server === true
-                            ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800"
-                            : discordBotStatus.is_in_server === false
-                            ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800"
-                            : "bg-indigo-50 border-indigo-200 text-indigo-800 dark:bg-indigo-900/20 dark:border-indigo-800"
-                        }`}>
-                          {discordBotStatus.is_in_server === true ? (
-                            <div className="flex items-center gap-2">
-                              <CheckCircle2 className="h-5 w-5 text-green-600" />
-                              <span><strong>✅ Bot is in your server.</strong> Auto-verification is fully enabled!</span>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              <div className="flex items-start gap-3">
-                                {discordBotStatus.is_in_server === false ? (
-                                  <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
-                                ) : (
-                                  <ShieldCheck className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
-                                )}
-                                <div>
-                                  <strong className="block mb-1 text-base">
-                                    {discordBotStatus.is_in_server === false 
-                                      ? "Bot is not in the server yet!" 
-                                      : "Action Required: Add Discord Bot"}
-                                  </strong>
-                                  To verify server memberships and roles automatically, our bot must be invited to your server.
-                                  <ol className="mt-2 space-y-1 list-decimal list-inside text-xs opacity-90">
-                                    <li>Paste your Server Invite Link into the URL field above</li>
-                                    <li>Click <strong>Add Bot</strong> below to invite it to that server</li>
-                                    <li>Click <strong>Verify Bot Status</strong> to confirm it worked</li>
-                                  </ol>
-                                </div>
-                              </div>
-                  
-                              <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
-                                <Button type="button" variant="outline" size="sm" className="text-xs h-8 bg-white dark:bg-slate-900"
-                                  onClick={() => window.open(`https://discord.com/oauth2/authorize?client_id=1466125172342915145&permissions=8&integration_type=0&scope=bot`, "_blank")}
-                                >
-                                  <Plus className="h-3 w-3 mr-2" /> Add Bot to Discord Server
-                                </Button>
-                  
-                                <Button type="button" size="sm" className={`text-xs h-8 ${discordBotStatus.is_in_server === false ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}
-                                  onClick={() => checkDiscordBotStatus(newTask.targetServerId || "")} 
-                                  disabled={discordBotStatus.checking || !newTask.targetServerId}
-                                >
-                                  {discordBotStatus.checking ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Send className="h-3 w-3 mr-2" />}
-                                  {discordBotStatus.is_in_server === false ? "Check Status Again" : "Verify Bot Status"}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* TELEGRAM ADD BOT HELPER */}
-                      {newTask.targetPlatform === 'Telegram' && newTask.verificationType === 'auto_social' && (
-                        <div className={`mt-3 p-4 rounded-lg border text-sm transition-colors col-span-full ${
-                          telegramBotStatus.is_admin === true
-                            ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800"
-                            : telegramBotStatus.is_admin === false
-                            ? "bg-orange-50 border-orange-200 text-orange-800 dark:bg-orange-900/20 dark:border-orange-800"
-                            : "bg-sky-50 border-sky-200 text-sky-800 dark:bg-sky-900/20 dark:border-sky-800"
-                        }`}>
-                          {telegramBotStatus.is_admin === true ? (
-                            <div className="flex items-center gap-2">
-                              <CheckCircle2 className="h-5 w-5 text-green-600" />
-                              <span><strong>✅ Bot is admin.</strong> Auto-verification is fully enabled!</span>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              <div className="flex items-start gap-3">
-                                {telegramBotStatus.is_admin === false ? (
-                                  <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
-                                ) : (
-                                  <ShieldCheck className="h-5 w-5 text-sky-600 shrink-0 mt-0.5" />
-                                )}
-                                <div>
-                                  <strong className="block mb-1 text-base">
-                                    {telegramBotStatus.is_admin === false 
-                                      ? "Bot is not an admin yet!" 
-                                      : "Action Required: Add Bot to Telegram"}
-                                  </strong>
-                                  To enable auto-verification, you must add our bot to your channel/group as an administrator.
-                                  {telegramBotStatus.is_admin === false && (
-                                    <p className="mt-2 text-xs font-semibold text-orange-600 dark:text-orange-400">
-                                      Without this, submissions will go to manual review.
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                  
-                              <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-black/5 dark:border-white/10">
-                                <Button type="button" variant="outline" size="sm" className="text-xs h-8 bg-white dark:bg-slate-900"
-                                  onClick={() => window.open(`https://t.me/${telegramBotStatus.bot_username || "FaucetDropsauth_bot"}?startgroup=true`, "_blank")}
-                                >
-                                  <Plus className="h-3 w-3 mr-2" /> Add Bot to Telegram
-                                </Button>
-                  
-                                <Button type="button" size="sm" className={`text-xs h-8 ${telegramBotStatus.is_admin === false ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-sky-600 hover:bg-sky-700 text-white"}`}
-                                  onClick={() => checkTelegramBotAdmin(newTask.url || "")} disabled={telegramBotStatus.checking || !newTask.url}
-                                >
-                                  {telegramBotStatus.checking ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <Send className="h-3 w-3 mr-2" />}
-                                  {telegramBotStatus.is_admin === false ? "Check Status Again" : "Verify Bot is Admin"}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {showContractInput && (
-                        <div className="space-y-2">
-                          <Label className="text-xs font-medium uppercase text-muted-foreground flex gap-1 items-center"><Code className="h-3 w-3"/> Contract Address</Label>
-                          <Input className="bg-background font-mono" placeholder="0x... (Empty for Native)" value={newTask.targetContractAddress ?? ""} onChange={e => setNewTask(p => ({ ...p, targetContractAddress: e.target.value }))} />
-                        </div>
-                      )}
-                      {showUrlInput && (
-                        <div className="space-y-2">
-                          <Label className="text-xs font-medium uppercase text-muted-foreground">
-                            {showTimeboundInputs ? "Platform / dApp URL" : "Reference URL"}
-                          </Label>
-                          <Input className="bg-background" placeholder={showTimeboundInputs ? "https://your-dapp.com/swap" : "https://..."} value={newTask.url ?? ""} onChange={e => setNewTask(p => ({ ...p, url: e.target.value }))} disabled={!!editingTask?.isSystem} />
-                          {showTimeboundInputs && (
-                            <p className="text-[10px] text-muted-foreground">Participants will click this link to visit your platform and complete the interaction.</p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* UPDATED TIMEBOUND BLOCK WITH CREATOR INSTRUCTIONS */}
-                      {showTimeboundInputs && (
-                        <div className="space-y-4 col-span-full p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                          <div>
-                            <Label className="text-sm text-purple-600 font-bold flex items-center gap-1 mb-1">
-                              <CalendarClock className="h-4 w-4"/> Timebound Contract Interaction
-                            </Label>
-                            <p className="text-xs text-purple-700/80 dark:text-purple-300/80">
-                              <strong>How it works:</strong> The user clicks your <b>dApp URL</b> above, connects their wallet on your site, and interacts with the <b>Contract Address</b> you provided. We will automatically scan the blockchain to verify they sent a transaction to that contract between the dates below.
-                            </p>
+                        )}
+                        {showDaysInput && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium uppercase text-muted-foreground">Min Wallet Age (Days)</Label>
+                            <Input type="number" className="bg-background" placeholder="e.g. 30" value={newTask.minDays ?? ""} onChange={e => setNewTask(p => ({ ...p, minDays: e.target.value }))} />
                           </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-[10px] uppercase text-muted-foreground">Start Date & Time (Local)</Label>
-                              <Input 
-                                type="datetime-local" 
-                                className="bg-background border-purple-500/30"
-                                value={formatForDateTimeLocal(newTask.startDate)}
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  setNewTask(p => ({ ...p, startDate: val ? new Date(val).toISOString() : undefined }))
-                                }} 
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label className="text-[10px] uppercase text-muted-foreground">End Date & Time (Local)</Label>
-                              <Input 
-                                type="datetime-local" 
-                                className="bg-background border-purple-500/30"
-                                value={formatForDateTimeLocal(newTask.endDate)}
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  setNewTask(p => ({ ...p, endDate: val ? new Date(val).toISOString() : undefined }))
-                                }} 
-                              />
-                            </div>
+                        )}
+                        {showTxCountInput && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium uppercase text-muted-foreground">Min Transactions</Label>
+                            <Input type="number" className="bg-background" placeholder="e.g. 50" value={newTask.minTxCount ?? ""} onChange={e => setNewTask(p => ({ ...p, minTxCount: e.target.value }))} />
                           </div>
-                          <p className="text-[10px] text-muted-foreground">Dates are automatically converted and verified securely in UTC.</p>
-                        </div>
-                      )}
-                      {showAmountInput && (
-                        <div className="space-y-2">
-                          <Label className="text-xs font-medium uppercase text-muted-foreground">Min Amount</Label>
-                          <Input type="number" className="bg-background" placeholder="e.g. 100" value={newTask.minAmount ?? ""} onChange={e => setNewTask(p => ({ ...p, minAmount: e.target.value }))} />
-                        </div>
-                      )}
-                      {showDaysInput && (
-                        <div className="space-y-2">
-                          <Label className="text-xs font-medium uppercase text-muted-foreground">Min Wallet Age (Days)</Label>
-                          <Input type="number" className="bg-background" placeholder="e.g. 30" value={newTask.minDays ?? ""} onChange={e => setNewTask(p => ({ ...p, minDays: e.target.value }))} />
-                        </div>
-                      )}
-                      {showTxCountInput && (
-                        <div className="space-y-2">
-                          <Label className="text-xs font-medium uppercase text-muted-foreground">Min Transactions</Label>
-                          <Input type="number" className="bg-background" placeholder="e.g. 50" value={newTask.minTxCount ?? ""} onChange={e => setNewTask(p => ({ ...p, minTxCount: e.target.value }))} />
-                        </div>
-                      )}
+                        )}
 
-                      {/* {!isOnchainVerification && !isSocialTemplate && (
-                        <div className="space-y-2">
-                          <Label className="text-xs font-medium uppercase text-muted-foreground">Reference URL</Label>
-                          <Input className="bg-background" placeholder="https://..." value={newTask.url ?? ""} onChange={e => setNewTask(p => ({ ...p, url: e.target.value }))} disabled={!!editingTask?.isSystem} />
-                        </div>
-                      )} */}
-                    </div>
-
-                    {/* Verification Method */}
-                    <div className="space-y-2 pt-2 border-t">
-                      <Label className="text-xs font-medium uppercase text-muted-foreground flex justify-between">
-                        Verification Method
-                        {newTask.verificationType === 'none' && <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20 text-[10px]">Auto-complete</Badge>}
-                      </Label>
-                      <Select 
-                        value={newTask.verificationType || "manual_link"} 
-                        onValueChange={(v: VerificationType) => setNewTask(p => ({ 
-                          ...p, 
-                          verificationType: v,
-                          action: v === 'onchain' && !p.action ? 'hold_token' : p.action 
-                        }))}
-                        disabled={!!editingTask?.isSystem || isCustomTask}
-                        
-                      >
-                        <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="manual_link">Manual Link Submission</SelectItem>
-                          <SelectItem value="manual_upload">Manual Proof Upload (Image)</SelectItem>
-                          <SelectItem value="manual_link_image">Manual Link & Image Upload</SelectItem>
-                          <SelectItem value="auto_social" disabled={!['social','referral'].includes(newTask.category || '')}>Auto-Verify (Socials)</SelectItem>
-                          <SelectItem value="onchain" className="font-bold text-purple-600">⚡ On-Chain Verification Engine</SelectItem>
-                          <SelectItem value="none">Instant Reward (Auto-Complete)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    {isOnchainVerification && (
-                      <p className="text-[10px] text-purple-600 mt-1 flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3"/> Automatic check on {networks.find(n => n.chainId.toString() === chainId?.toString())?.name || "Current Chain"}.
-                      </p>
-                    )}
-                    {/* NEW: Custom task verification note */}
-                    {isCustomTask && (
-                      <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3"/> Custom tasks always use link + image upload for maximum flexibility.
-                      </p>
-                    )}
-                      {/* Fallback Warning for Unsupported Auto-Verify */}
-                    {newTask.verificationType === 'auto_social' && !['Twitter', 'Discord', 'Telegram'].includes(newTask.targetPlatform || '') && (
-                      <div className="p-3 mt-2 bg-orange-500/10 border border-orange-500/20 rounded-lg text-xs flex flex-col gap-2 text-orange-600 dark:text-orange-400">
-                          <div className="flex items-start">
-                            <AlertTriangle className="h-4 w-4 shrink-0 mr-1.5 mt-0.5" />
-                            <span>Auto-verify is not fully supported for <b>{newTask.targetPlatform}</b>. Participants will automatically be asked to submit a link and image as a fallback.</span>
+                        {/* {!isOnchainVerification && !isSocialTemplate && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-medium uppercase text-muted-foreground">Reference URL</Label>
+                            <Input className="bg-background" placeholder="https://..." value={newTask.url ?? ""} onChange={e => setNewTask(p => ({ ...p, url: e.target.value }))} disabled={!!editingTask?.isSystem} />
                           </div>
-                          
-                          {/* Smart Recommendation Box */}
-                          <div className="ml-5 p-2 bg-orange-500/10 rounded border border-orange-500/10">
-                            <span className="font-semibold text-orange-700 dark:text-orange-300">💡 Recommended Method: </span>
-                            <span className="font-medium text-orange-800 dark:text-orange-200">
-                            {['Youtube', 'Instagram', 'Tiktok', 'Facebook'].includes(newTask.targetPlatform || '') 
-                                ? 'Manual Link & Image Upload' 
-                                : ['Linkedin', 'Thread', 'Farcaster'].includes(newTask.targetPlatform || '') 
-                                ? 'Manual Link Submission'
-                                : newTask.targetPlatform === 'Website'
-                                ? 'Instant Reward (for visits) or Manual Proof Upload'
-                                : 'Manual Link & Image Upload'}
-                            </span>
-                          </div>
+                        )} */}
                       </div>
-                    )}
-                  
-                    {/* Warning for Invalid On-Chain Action or Social Category Mismatch */}
-                    {/* Find this block and update the array in TWO places: */}
-                    {newTask.verificationType === 'onchain' && (newTask.category === 'social' || !['hold_token', 'hold_nft', 'wallet_age', 'tx_count', 'timebound_interaction'].includes(newTask.action || '')) && (
-                      <div className="p-3 mt-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs flex flex-col gap-2 text-purple-700 dark:text-purple-300">
-                          <div className="flex items-start">
-                            <AlertTriangle className="h-4 w-4 shrink-0 mr-1.5 mt-0.5" />
-                            <span>
-                              <b>Action Mismatch:</b> {newTask.category === 'social' 
-                                ? "Social tasks cannot use on-chain verification." 
-                                : "On-chain verification is only supported for specific on-chain requirements (Hold Token, Hold NFT, Wallet Age, Tx Count, or Interact with Contract)."}
-                            </span>
-                          </div>
-                          <div className="ml-5 p-2 bg-purple-500/10 rounded border border-purple-500/10">                     
-                            <span className="font-semibold text-purple-700 dark:text-purple-300">💡 Recommended Fix: </span>
-                            <span className="font-medium text-purple-800 dark:text-purple-200">
-                              {newTask.category === 'social' 
-                                  ? 'Change Verification Method to "Auto-Verify (Socials)" or "Manual Link & Image Upload"' 
-                                  : ['trading', 'swap'].includes(newTask.category || '') 
-                                  ? 'Select a valid On-Chain Action from the dropdown above, OR change Verification to "Manual Link Submission"'
-                                  : newTask.category === 'content'
-                                  ? 'Change Verification Method to "Manual Link Submission" or "Manual Proof Upload (Image)"'
-                                  : 'Change Verification Method to "Manual Link Submission" or "Instant Reward"'}
-                            </span>
-                          </div>
-                      </div>
-                    )}
-                    </div>
 
-                    {/* Action Buttons */}
-                    <div className="pt-4 flex items-center justify-end gap-3 border-t">
-                      {editingTask && <Button variant="ghost" onClick={() => { setEditingTask(null); setNewTask({ ...initialNewTaskForm, points: 100 }); setIsCustomTask(false) }}>Cancel</Button>}
-                      {editingTask?.isSystem ? (
-                        <div className="text-xs text-yellow-600 bg-yellow-50 px-3 py-1 rounded">System tasks are read-only</div>
-                      ) : (
-                        <Button 
-                          onClick={async () => {
-                            let t = { ...newTask } as QuestTask
-
-                            if (t.url && t.url.includes('.')) t.url = normalizeUrl(t.url)
-
-                            if (t.targetPlatform === 'Twitter' && (t.action === 'quote' || t.action === 'comment')) {
-                              if (!t.targetHandle) {
-                                  toast.error("A target handle is required for tag verification.")
-                                  return
-                              }
-                            }
-
-                            if (t.targetPlatform === 'Discord' && t.action === 'role' && !t.targetHandle) {
-                              toast.error("Role ID is required for Discord Role verification.");
-                              return;
-                            }
-
-                            if (t.targetPlatform === 'Telegram' && t.action === 'message_count' && (!t.minTxCount || Number(t.minTxCount) < 1)) {
-                              toast.error("A valid message count threshold is required.");
-                              return;
-                            }
-
-                            if (!t.title || !t.points) return;
-                            
-                            try {
-                              if (editingTask) {
-                                await handleUpdateTask(t)
-                                toast.success("Task updated")
-                              } else {
-                                await handleAddTask(t)
-                                toast.success("Task added")
-                              }
-                            } catch { toast.error("Failed to save task") }
-                            finally { setEditingTask(null); setNewTask({ ...initialNewTaskForm, points: 100 }); setIsCustomTask(false) }
-                          }}
-                          disabled={
-                            !newTask.title ||
-                            !newTask.points ||
-                            (isCustomTask && (!newTask.title?.trim() || newTask.action === 'custom')) || 
-                            (!isCustomTask && showContractInput && !newTask.targetContractAddress?.trim() && newTask.action !== 'hold_token') ||
-                            (showTimeboundInputs && (!newTask.startDate || !newTask.endDate || !newTask.url?.trim())) || 
-                            (newTask.verificationType === 'onchain' && newTask.category === 'social') || 
-                            (newTask.verificationType === 'onchain' && !['hold_token', 'hold_nft', 'wallet_age', 'tx_count', 'timebound_interaction'].includes(newTask.action || ''))
-                          }
+                      {/* Verification Method */}
+                      <div className="space-y-2 pt-2 border-t">
+                        <Label className="text-xs font-medium uppercase text-muted-foreground flex justify-between">
+                          Verification Method
+                          {newTask.verificationType === 'none' && <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20 text-[10px]">Auto-complete</Badge>}
+                        </Label>
+                        <Select 
+                          value={newTask.verificationType || "manual_link"} 
+                          onValueChange={(v: VerificationType) => setNewTask(p => ({ 
+                            ...p, 
+                            verificationType: v,
+                            action: v === 'onchain' && !p.action ? 'hold_token' : p.action 
+                          }))}
+                          disabled={!!editingTask?.isSystem || isCustomTask}
+                          
                         >
-                          {editingTask ? "Save Changes" : <><Plus className="mr-2 h-4 w-4" /> Add Task</>}
-                        </Button>
+                          <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual_link">Manual Link Submission</SelectItem>
+                            <SelectItem value="manual_upload">Manual Proof Upload (Image)</SelectItem>
+                            <SelectItem value="manual_link_image">Manual Link & Image Upload</SelectItem>
+                            <SelectItem value="auto_social" disabled={!['social','referral'].includes(newTask.category || '')}>Auto-Verify (Socials)</SelectItem>
+                            <SelectItem value="onchain" className="font-bold text-purple-600">⚡ On-Chain Verification Engine</SelectItem>
+                            <SelectItem value="none">Instant Reward (Auto-Complete)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      {isOnchainVerification && (
+                        <p className="text-[10px] text-purple-600 mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3"/> Automatic check on {networks.find(n => n.chainId.toString() === chainId?.toString())?.name || "Current Chain"}.
+                        </p>
                       )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* RIGHT: Stages */}
-              <div className="lg:col-span-5 flex flex-col h-full gap-6">
-                <Card className="flex-1 border-border/50 shadow-sm bg-card flex flex-col">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg flex items-center justify-between">
-                      <span className="flex items-center gap-2"><Trophy className="h-5 w-5 text-yellow-500"/> Stages</span>
-                      <Badge variant="outline">{newQuest.tasks.filter((t: any) => !t.isSystem).length} Tasks</Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex-1 overflow-y-auto pr-1 space-y-6">
-                    {TASK_STAGES.map((stage, index) => {
-                      const totalPoints = stageTotals[stage] || 0
-                      const count = stageTaskCounts[stage] || 0
-                      const reqPass = stagePassRequirements[stage]
-                      // Only showing custom user-created tasks in this view
-                      const stageTasks = newQuest.tasks.filter((t: QuestTask) => t.stage === stage && !t.isSystem)
-
-                      return (
-                        <div key={stage} className={`relative pl-4 ${index !== TASK_STAGES.length - 1 ? 'border-l-2 border-muted pb-6' : ''}`}>
-                          <div className={`absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 bg-background border-primary`} />
-                          
-                          <div className={`mb-3 p-3 rounded-lg border bg-card dark:bg-slate-900 border-border shadow-sm`}>
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <h4 className="text-sm font-semibold text-foreground">{stage}</h4>
-                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{count} Tasks • {totalPoints} Pts</p>
-                              </div>
-                              <Unlock className="h-4 w-4 text-green-500"/>
+                      {/* NEW: Custom task verification note */}
+                      {isCustomTask && (
+                        <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3"/> Custom tasks always use link + image upload for maximum flexibility.
+                        </p>
+                      )}
+                        {/* Fallback Warning for Unsupported Auto-Verify */}
+                      {newTask.verificationType === 'auto_social' && !['Twitter', 'Discord', 'Telegram'].includes(newTask.targetPlatform || '') && (
+                        <div className="p-3 mt-2 bg-orange-500/10 border border-orange-500/20 rounded-lg text-xs flex flex-col gap-2 text-orange-600 dark:text-orange-400">
+                            <div className="flex items-start">
+                              <AlertTriangle className="h-4 w-4 shrink-0 mr-1.5 mt-0.5" />
+                              <span>Auto-verify is not fully supported for <b>{newTask.targetPlatform}</b>. Participants will automatically be asked to submit a link and image as a fallback.</span>
                             </div>
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
-                              <Label className="text-[10px] whitespace-nowrap text-muted-foreground flex items-center gap-1"><Percent className="h-3 w-3"/> Pass Req (70%)</Label>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="font-mono text-xs bg-muted/30">{reqPass} Pts</Badge>
+                            
+                            {/* Smart Recommendation Box */}
+                            <div className="ml-5 p-2 bg-orange-500/10 rounded border border-orange-500/10">
+                              <span className="font-semibold text-orange-700 dark:text-orange-300">💡 Recommended Method: </span>
+                              <span className="font-medium text-orange-800 dark:text-orange-200">
+                              {['Youtube', 'Instagram', 'Tiktok', 'Facebook'].includes(newTask.targetPlatform || '') 
+                                  ? 'Manual Link & Image Upload' 
+                                  : ['Linkedin', 'Thread', 'Farcaster'].includes(newTask.targetPlatform || '') 
+                                  ? 'Manual Link Submission'
+                                  : newTask.targetPlatform === 'Website'
+                                  ? 'Instant Reward (for visits) or Manual Proof Upload'
+                                  : 'Manual Link & Image Upload'}
+                              </span>
+                            </div>
+                        </div>
+                      )}
+                    
+                      {/* Warning for Invalid On-Chain Action or Social Category Mismatch */}
+                      {/* Find this block and update the array in TWO places: */}
+                      {newTask.verificationType === 'onchain' && (newTask.category === 'social' || !['hold_token', 'hold_nft', 'wallet_age', 'tx_count', 'timebound_interaction'].includes(newTask.action || '')) && (
+                        <div className="p-3 mt-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-xs flex flex-col gap-2 text-purple-700 dark:text-purple-300">
+                            <div className="flex items-start">
+                              <AlertTriangle className="h-4 w-4 shrink-0 mr-1.5 mt-0.5" />
+                              <span>
+                                <b>Action Mismatch:</b> {newTask.category === 'social' 
+                                  ? "Social tasks cannot use on-chain verification." 
+                                  : "On-chain verification is only supported for specific on-chain requirements (Hold Token, Hold NFT, Wallet Age, Tx Count, or Interact with Contract)."}
+                              </span>
+                            </div>
+                            <div className="ml-5 p-2 bg-purple-500/10 rounded border border-purple-500/10">                     
+                              <span className="font-semibold text-purple-700 dark:text-purple-300">💡 Recommended Fix: </span>
+                              <span className="font-medium text-purple-800 dark:text-purple-200">
+                                {newTask.category === 'social' 
+                                    ? 'Change Verification Method to "Auto-Verify (Socials)" or "Manual Link & Image Upload"' 
+                                    : ['trading', 'swap'].includes(newTask.category || '') 
+                                    ? 'Select a valid On-Chain Action from the dropdown above, OR change Verification to "Manual Link Submission"'
+                                    : newTask.category === 'content'
+                                    ? 'Change Verification Method to "Manual Link Submission" or "Manual Proof Upload (Image)"'
+                                    : 'Change Verification Method to "Manual Link Submission" or "Instant Reward"'}
+                              </span>
+                            </div>
+                        </div>
+                      )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="pt-4 flex items-center justify-end gap-3 border-t">
+                        {editingTask && <Button variant="ghost" onClick={() => { setEditingTask(null); setNewTask({ ...initialNewTaskForm, points: 100 }); setIsCustomTask(false) }}>Cancel</Button>}
+                        {editingTask?.isSystem ? (
+                          <div className="text-xs text-yellow-600 bg-yellow-50 px-3 py-1 rounded">System tasks are read-only</div>
+                        ) : (
+                          <Button 
+                          onClick={async () => {
+                            // ADD THIS BLOCK at the very top:
+                            if (isDemoMode && !['auto_social', 'none'].includes(newTask.verificationType || '')) {
+                                toast.warning("This task type is not available in Demo Mode. Subscribe to unlock all verification types.")
+                                return
+                            }
+                              let t = { ...newTask } as QuestTask
+
+                              if (t.url && t.url.includes('.')) t.url = normalizeUrl(t.url)
+
+                              if (t.targetPlatform === 'Twitter' && (t.action === 'quote' || t.action === 'comment')) {
+                                if (!t.targetHandle) {
+                                    toast.error("A target handle is required for tag verification.")
+                                    return
+                                }
+                              }
+
+                              if (t.targetPlatform === 'Discord' && t.action === 'role' && !t.targetHandle) {
+                                toast.error("Role ID is required for Discord Role verification.");
+                                return;
+                              }
+
+                              if (t.targetPlatform === 'Telegram' && t.action === 'message_count' && (!t.minTxCount || Number(t.minTxCount) < 1)) {
+                                toast.error("A valid message count threshold is required.");
+                                return;
+                              }
+
+                              if (!t.title || !t.points) return;
+                              
+                              try {
+                                if (editingTask) {
+                                  await handleUpdateTask(t)
+                                  toast.success("Task updated")
+                                } else {
+                                  await handleAddTask(t)
+                                  toast.success("Task added")
+                                }
+                              } catch { toast.error("Failed to save task") }
+                              finally { setEditingTask(null); setNewTask({ ...initialNewTaskForm, points: 100 }); setIsCustomTask(false) }
+                            }}
+                            disabled={
+                              !newTask.title ||
+                              !newTask.points ||
+                              (isCustomTask && (!newTask.title?.trim() || newTask.action === 'custom')) || 
+                              (!isCustomTask && showContractInput && !newTask.targetContractAddress?.trim() && newTask.action !== 'hold_token') ||
+                              (showTimeboundInputs && (!newTask.startDate || !newTask.endDate || !newTask.url?.trim())) || 
+                              (newTask.verificationType === 'onchain' && newTask.category === 'social') || 
+                              (newTask.verificationType === 'onchain' && !['hold_token', 'hold_nft', 'wallet_age', 'tx_count', 'timebound_interaction'].includes(newTask.action || ''))
+                            }
+                          >
+                            {editingTask ? "Save Changes" : <><Plus className="mr-2 h-4 w-4" /> Add Task</>}
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* RIGHT: Stages */}
+                <div className="lg:col-span-5 flex flex-col h-full gap-6">
+                  <Card className="flex-1 border-border/50 shadow-sm bg-card flex flex-col">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Trophy className="h-5 w-5 text-yellow-500"/> Stages</span>
+                        <Badge variant="outline">{newQuest.tasks.filter((t: any) => !t.isSystem).length} Tasks</Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 overflow-y-auto pr-1 space-y-6">
+                      {TASK_STAGES.map((stage, index) => {
+                        const totalPoints = stageTotals[stage] || 0
+                        const count = stageTaskCounts[stage] || 0
+                        const reqPass = stagePassRequirements[stage]
+                        // Only showing custom user-created tasks in this view
+                        const stageTasks = newQuest.tasks.filter((t: QuestTask) => t.stage === stage && !t.isSystem)
+
+                        return (
+                          <div key={stage} className={`relative pl-4 ${index !== TASK_STAGES.length - 1 ? 'border-l-2 border-muted pb-6' : ''}`}>
+                            <div className={`absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 bg-background border-primary`} />
+                            
+                            <div className={`mb-3 p-3 rounded-lg border bg-card dark:bg-slate-900 border-border shadow-sm`}>
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <h4 className="text-sm font-semibold text-foreground">{stage}</h4>
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{count} Tasks • {totalPoints} Pts</p>
+                                </div>
+                                <Unlock className="h-4 w-4 text-green-500"/>
+                              </div>
+                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
+                                <Label className="text-[10px] whitespace-nowrap text-muted-foreground flex items-center gap-1"><Percent className="h-3 w-3"/> Pass Req (70%)</Label>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="font-mono text-xs bg-muted/30">{reqPass} Pts</Badge>
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="space-y-1.5">
-                            {stageTasks.map((t: QuestTask) => (
+                            <div className="space-y-1.5">
+                            {(expandedStages[stage] ? stageTasks : stageTasks.slice(0, 2)).map((t: QuestTask) => (
                               <div key={t.id} className="group flex items-center justify-between p-2 rounded border transition-all bg-muted/20 hover:bg-muted/40">
                                 <div className="flex items-center gap-2 overflow-hidden">
                                   <GripVertical className="h-3 w-3 text-muted-foreground/30"/>
@@ -1523,22 +1585,37 @@
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] font-mono text-muted-foreground">{t.points}</span>
                                   <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
-                                      <>
-                                        <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => { setEditingTask(t); setNewTask(t); setIsCustomTask(t.action === 'custom') }}><Settings className="h-3 w-3 text-muted-foreground"/></Button>
-                                        <Button size="icon" variant="ghost" className="h-5 w-5 hover:bg-red-500/10 text-destructive" onClick={async () => await handleRemoveTask(t.id)}><Trash2 className="h-3 w-3"/></Button>
-                                      </>
+                                    <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => { setEditingTask(t); setNewTask(t); setIsCustomTask(t.action === 'custom') }}>
+                                      <Settings className="h-3 w-3 text-muted-foreground"/>
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-5 w-5 hover:bg-red-500/10 text-destructive" onClick={async () => await handleRemoveTask(t.id)}>
+                                      <Trash2 className="h-3 w-3"/>
+                                    </Button>
                                   </div>
                                 </div>
                               </div>
                             ))}
+
+                            {stageTasks.length > 2 && (
+                              <button
+                                onClick={() => setExpandedStages(prev => ({ ...prev, [stage]: !prev[stage] }))}
+                                className="w-full mt-1 py-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground border border-dashed border-border rounded-md hover:border-primary/40 hover:bg-muted/20 transition-all flex items-center justify-center gap-1"
+                              >
+                                {expandedStages[stage] ? (
+                                  <><ChevronUp className="h-3 w-3" /> Show less</>
+                                ) : (
+                                  <><ChevronDown className="h-3 w-3" /> {stageTasks.length - 2} more task{stageTasks.length - 2 > 1 ? 's' : ''}</>
+                                )}
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      )
-                    })}
-                  </CardContent>
-                </Card>
+                          </div>
+                        )
+                      })}
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
-            </div>
             {/* 2. Referral Program Configuration */}
             <Card className="border-border/50 shadow-sm bg-card">
               <CardHeader className="pb-4">
@@ -1604,16 +1681,16 @@
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label>Start Date & Time</Label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <Input 
                         type="date" 
-                        className="bg-background/50" 
+                        className="bg-background/50 flex-1" 
                         value={newQuest.startDate || ""} 
                         onChange={e => setNewQuest((p:any) => ({...p, startDate: e.target.value}))} 
                       />
                       <Input 
                         type="time" 
-                        className="bg-background/50" 
+                        className="bg-background/50 sm:w-32" 
                         value={newQuest.startTime || ""} 
                         onChange={e => setNewQuest((p:any) => ({...p, startTime: e.target.value}))} 
                       />
@@ -1622,16 +1699,16 @@
                   
                   <div className="space-y-2">
                     <Label>End Date & Time</Label>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <Input 
                         type="date" 
-                        className="bg-background/50" 
+                        className="bg-background/50 flex-1" 
                         value={newQuest.endDate || ""} 
                         onChange={e => setNewQuest((p:any) => ({...p, endDate: e.target.value}))} 
                       />
                       <Input 
                         type="time" 
-                        className="bg-background/50" 
+                        className="bg-background/50 sm:w-32" 
                         value={newQuest.endTime || ""} 
                         onChange={e => setNewQuest((p:any) => ({...p, endTime: e.target.value}))} 
                       />
@@ -1641,7 +1718,7 @@
                   {/* Quest Duration Quick Picks */}
                   <div className="space-y-2 col-span-1 md:col-span-2">
                     <Label className="text-xs text-muted-foreground">Quick Set Quest Duration</Label>
-                    <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                       {[
                         { label: '3 Days', days: 3 },
                         { label: '5 Days', days: 5 },
@@ -1654,7 +1731,7 @@
                         <Badge
                           key={`duration-${preset.label}`}
                           variant="outline"
-                          className="cursor-pointer hover:bg-primary/10 transition-colors"
+                          className="cursor-pointer hover:bg-primary/10 transition-colors shrink-0"
                           onClick={() => handleDurationSelect(preset.days)}
                         >
                           {preset.label}
@@ -1673,8 +1750,9 @@
 
                 <div className="space-y-3 pt-2 border-t border-border/50">
                   <Label className="text-muted-foreground">Claim Window After End</Label>
-                  <div className="flex gap-3 items-center">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                     <Input
+                      disabled
                       type="number"
                       className="bg-background/50 w-28"
                       value={newQuest.claimWindowValue ?? "7"}
@@ -1682,6 +1760,7 @@
                       min="1"
                     />
                     <Select
+                      disabled
                       value={newQuest.claimWindowUnit || "days"}
                       onValueChange={v => setNewQuest((p: any) => ({ ...p, claimWindowUnit: v }))}
                     >
@@ -1696,20 +1775,22 @@
                   </div>
                   
                   {/* Claim Window Quick Picks */}
-                  <div className="flex flex-wrap gap-2 mt-2">
+                 <div className="flex flex-wrap gap-1.5 mt-2">
+
                     {[
-                      { label: '7hrs', v: '7', u: 'hours' },
+                     
                       { label: '24hrs', v: '24', u: 'hours' },
                       { label: '3 Days', v: '3', u: 'days' },
                       { label: '5 Days', v: '5', u: 'days' },
                       { label: '7 Days', v: '7', u: 'days' },
                       { label: '14 Days', v: '14', u: 'days' },
                       { label: '21 Days', v: '21', u: 'days' },
+                      { label: '30 Days', v: '30', u: 'days' },
                     ].map(preset => (
                       <Badge
                         key={`claim-${preset.label}`}
                         variant="outline"
-                        className="cursor-pointer hover:bg-primary/10 transition-colors"
+                        className="cursor-pointer hover:bg-primary/10 transition-colors shrink-0"
                         onClick={() => setNewQuest((p: any) => ({ ...p, claimWindowValue: preset.v, claimWindowUnit: preset.u }))}
                       >
                         {preset.label}

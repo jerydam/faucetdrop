@@ -223,10 +223,15 @@ interface TaskFormProps {
   initial: EditableTask;
   onSave: (task: EditableTask) => void;
   onCancel: () => void;
+  isDemoQuest?: boolean; 
 }
 
-function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
+function TaskForm({ initial, onSave, onCancel, isDemoQuest }: TaskFormProps) {
+  
   const [task, setTask] = useState<EditableTask>({ ...initial });
+  const availableVerificationTypes = isDemoQuest
+    ? VERIFICATION_TYPES.filter(({ value }) => value === "auto_social" || value === "none")
+    : VERIFICATION_TYPES;
 
   const [discordStatus, setDiscordStatus] = useState<{ checking: boolean; ok: boolean | null; msg: string }>({ checking: false, ok: null, msg: "" });
   const [telegramStatus, setTelegramStatus] = useState<{ checking: boolean; ok: boolean | null; botUsername: string }>({ checking: false, ok: null, botUsername: "" });
@@ -420,7 +425,7 @@ function TaskForm({ initial, onSave, onCancel }: TaskFormProps) {
             })}>
             <SelectTrigger className="h-10 bg-white dark:bg-slate-950"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {VERIFICATION_TYPES.map(({ value, label }) => (
+              {availableVerificationTypes.map(({ value, label }) => (
                 <SelectItem key={value} value={value} className={value === "onchain" ? "font-bold text-violet-600" : ""}>{label}</SelectItem>
               ))}
             </SelectContent>
@@ -758,6 +763,7 @@ export function QuestEditPanel({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const { provider } = useWallet();
+  const isDemoQuest = faucetAddress?.startsWith("draft-") || faucetAddress?.startsWith("demo-");
 
   // ── Distribution State ──
   const [distModel, setDistModel] = useState(questData?.distributionConfig?.model || "equal");
@@ -993,13 +999,27 @@ export function QuestEditPanel({
 
   // ── Task Array Handlers ──
   const startAddingTask = () => {
-    setNewTaskDraft(makeBlankTask(defaultStageForNew()));
-    setAddingNew(true);
-    setEditingTaskId(null);
-    setExpandedTask(null);
-  };
+  if (isDemoQuest) {
+    toast.error("Subscribe to unlock full quest editing");
+    return;
+  }
+  setNewTaskDraft(makeBlankTask(defaultStageForNew()));
+  setAddingNew(true);
+  setEditingTaskId(null);
+  setExpandedTask(null);
+};
   const handleNewTaskSave = (task: EditableTask) => { setTasks((p) => [...p, task]); setAddingNew(false); setNewTaskDraft(null); toast.success("Task added — click Save All Tasks to persist"); };
-  const startEditing = (id: string) => { setEditingTaskId(id); setAddingNew(false); setNewTaskDraft(null); setExpandedTask(null); };
+const startEditing = (id: string) => {
+  if (isDemoQuest) {
+    toast.error("Subscribe to unlock full quest editing");
+    return;
+  }
+  setEditingTaskId(id);
+  setAddingNew(false);
+  setNewTaskDraft(null);
+  setExpandedTask(null);
+};
+
   const handleEditSave = (updated: EditableTask) => { setTasks((p) => p.map((t) => (t.id === updated.id ? updated : t))); setEditingTaskId(null); toast.success("Task updated — click Save All Tasks to persist"); };
   const deleteTask = (id: string) => { setTasks((p) => p.filter((t) => t.id !== id)); setDeleteCandidate(null); if (editingTaskId === id) setEditingTaskId(null); toast.success("Task removed"); };
   
@@ -1159,6 +1179,7 @@ export function QuestEditPanel({
                           initial={task}
                           onSave={handleEditSave}
                           onCancel={() => setEditingTaskId(null)}
+                          isDemoQuest={isDemoQuest}
                         />
                       </div>
                     )}
@@ -1178,18 +1199,28 @@ export function QuestEditPanel({
                     initial={newTaskDraft}
                     onSave={handleNewTaskSave}
                     onCancel={() => { setAddingNew(false); setNewTaskDraft(null); }}
+                    isDemoQuest={isDemoQuest}
                   />
                 </div>
               )}
 
               {/* Add Task Button */}
               {!addingNew && (
-                <Button variant="outline"
-                  className="w-full border-dashed h-12 gap-2 hover:border-primary hover:bg-primary/5 hover:text-primary transition-colors bg-white dark:bg-slate-950"
-                  onClick={startAddingTask}>
-                  <Plus className="h-4 w-4" />
-                  Add New Task
-                </Button>
+                isDemoQuest ? (
+                  <div className="w-full border border-dashed border-amber-300 dark:border-amber-700 rounded-lg h-12 flex items-center justify-center gap-2 bg-amber-50/50 dark:bg-amber-950/10">
+                    <Lock className="h-4 w-4 text-amber-500" />
+                    <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                      Subscribe to add & edit tasks
+                    </span>
+                  </div>
+                ) : (
+                  <Button variant="outline"
+                    className="w-full border-dashed h-12 gap-2 hover:border-primary hover:bg-primary/5 hover:text-primary transition-colors bg-white dark:bg-slate-950"
+                    onClick={startAddingTask}>
+                    <Plus className="h-4 w-4" />
+                    Add New Task
+                  </Button>
+                )
               )}
             </>
           )}

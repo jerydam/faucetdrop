@@ -204,23 +204,18 @@ const ImageUploadField: React.FC<{
         const file = e.target.files?.[0]
         if (!file) return
         setResolutionError(null)
+        if (file.size > 5 * 1024 * 1024) {
+            setResolutionError("File size exceeds 5MB limit.")
+            if (fileInputRef.current) fileInputRef.current.value = ""
+            return
+        }
         const reader = new FileReader()
         reader.onload = (ev) => {
-            const img = new Image()
-            img.onload = () => {
-                if (img.width > maxWidth || img.height > maxHeight) {
-                    setResolutionError(`Image too large. Max: ${maxWidth}x${maxHeight}. Found: ${img.width}x${img.height}`)
-                    if (fileInputRef.current) fileInputRef.current.value = ""
-                    return
-                }
-                setPreviewUrl(ev.target?.result as string)
-                onFileUpload(file)
-            }
-            img.src = ev.target?.result as string
+            setPreviewUrl(ev.target?.result as string)
+            onFileUpload(file)
         }
         reader.readAsDataURL(file)
     }
-
     const handleRemove = () => {
         onImageUrlChange("")
         setPreviewUrl(null)
@@ -397,7 +392,7 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
    // ── Phase 1 validity ─────────────────────────────────────────────────────
     const isPhase1Valid = useMemo(() => {
         const hasValidTitle = (newQuest.title || "").trim().length >= 3 && !nameError
-        const hasImage = !!newQuest.imageUrl && !newQuest.imageUrl.includes('placehold.co')
+        const hasImage = true
         const hasToken = !!selectedToken
 
         // 👇 NEW: Ensure no ranks are exactly 0 or empty when using custom tiers
@@ -522,12 +517,14 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                     return dateStr;
                 }
             };
+            const DEFAULT_QUEST_IMAGE = "https://placehold.co/1024x1024/1e293b/94a3b8?text=Quest"
+            const DEFAULT_QUEST_DESCRIPTION = "Complete tasks to earn points and compete for rewards in this quest campaign."
 
             const payload = {
                 creatorAddress: address,
                 title: newQuest.title.trim(),
-                description: newQuest.description,
-                imageUrl: newQuest.imageUrl,
+                description: newQuest.description?.trim() || DEFAULT_QUEST_DESCRIPTION,
+                imageUrl: newQuest.imageUrl || DEFAULT_QUEST_IMAGE,
                 rewardPool: computedPool.toString(),   // ✅ always correct
                 rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
                 tokenAddress: selectedToken.address,

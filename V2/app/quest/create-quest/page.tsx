@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { toast } from 'sonner'
 import { Sparkles, ShieldAlert, ChevronLeft, CheckCircle2, ArrowRight, LayoutDashboard, Loader2 } from "lucide-react"
-
+import { useSubscriptionModal } from '@/components/subscribe'
 import Phase1QuestDetailsRewards, { 
     type QuestData, 
     type TokenConfiguration 
@@ -17,6 +17,7 @@ import Phase2TimingTasksFinalize, {
     type TaskStage, 
     type QuestTask, 
     type VerificationType 
+    
 } from '@/components/quest/questAdvance'
 
 import { useWallet } from "@/hooks/use-wallet"
@@ -178,7 +179,8 @@ function QuestCreatorContent() {
     const [stagePassRequirements, setStagePassRequirements] = useState(initialStagePassRequirements)
     const [isFinalizing, setIsFinalizing] = useState(false)
     const [showDraftSuccessModal, setShowDraftSuccessModal] = useState(false)
-
+    const [isDemoMode, setIsDemoMode] = useState(false)
+    const [showPostPhase1Modal, setShowPostPhase1Modal] = useState(false)
     // Add this EFFECT to fetch the profile
     useEffect(() => {
         if (!address) return;
@@ -300,9 +302,23 @@ function QuestCreatorContent() {
 
                     toast.success("Draft loaded successfully")
                     
-                    if (titleVal) {
-                        setPhase(2)
+                   try {
+                    const creatorAddress = q.creatorAddress || q.creator_address
+                    if (creatorAddress) {
+                        const subRes = await fetch(`${API_BASE_URL}/api/users/${creatorAddress.toLowerCase()}/subscription`)
+                        const subData = await subRes.json()
+                        const isSubscribed = subData.success && subData.hasActiveSubscription === true
+                        setIsDemoMode(!isSubscribed)
+                    } else {
+                        setIsDemoMode(true) // no creator address = safe default
                     }
+                } catch {
+                    setIsDemoMode(true) // check failed = safe default
+                }
+
+                if (titleVal) {
+                    setPhase(2)
+                }
 
                 } else {
                     toast.error("Draft not found")
@@ -464,8 +480,8 @@ const handleRemoveTask = async (taskId: string) => {
 
     const handleDraftSaved = (faucetAddress: string) => {
         setNewQuest(prev => ({ ...prev, faucetAddress }))
-        setShowDraftSuccessModal(true)
-    }
+        setShowPostPhase1Modal(true)
+}
 
     const handleContinueToTasks = () => {
         setShowDraftSuccessModal(false)
@@ -477,7 +493,8 @@ const handleRemoveTask = async (taskId: string) => {
         setShowDraftSuccessModal(false)
         router.push('/dashboard/{username?}') 
     }
-
+    // At the top of your component, add:
+const { openSubscriptionModal } = useSubscriptionModal()
     const handleEditTask = (task: QuestTask) => { }
     const validateTask = () => true
     const handleUseSuggestedTask = (t: any) => { }
@@ -587,6 +604,8 @@ const handleRemoveTask = async (taskId: string) => {
                         getCategoryColor={getCategoryColor}
                         getVerificationIcon={getVerificationIcon}
                         handleUseSuggestedTask={handleUseSuggestedTask}
+                        isDemoMode={isDemoMode}
+                        onSubscribed={() => setIsDemoMode(false)}
                         isFinalizing={isFinalizing}
                         setError={setError}
                         handleFinalize={handleFinalize}
@@ -595,55 +614,114 @@ const handleRemoveTask = async (taskId: string) => {
             )}
 
             {/* SUCCESS MODAL POPUP */}
-            {showDraftSuccessModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 relative">
-                        <div className="flex flex-col items-center text-center space-y-4">
-                            <div className="h-16 w-16 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-500 rounded-full flex items-center justify-center mb-2">
-                                <CheckCircle2 className="h-8 w-8" />
-                            </div>
-                            
-                            <div>
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Quest Saved Successfully!</h3>
-                                <p className="text-muted-foreground mt-2 text-sm">
-                                    Your quest Details and Token Configuration are now saved. Would you like to proceed to configure Tasks & Timing now, or finish later?
-                                </p>
-                            </div>
-
-                            <div className="grid grid-cols-1 w-full gap-3 mt-4">
-                                <Button 
-                                    size="lg" 
-                                    onClick={handleContinueToTasks} 
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-md group"
-                                >
-                                    Continue to Add Tasks
-                                    <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                                </Button>
-                                
-                               <Button size="lg"
-                                    // Customize styling to match your theme if needed
-                                    className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold h-12" 
-                                    onClick={() => {
-                                        // 1. Priority: Try Username first, then fallback to Wallet Address
-                                        const routeParam = userProfile?.username || address;
-                                        
-                                        // 2. Only navigate if we have a valid identifier
-                                        if (routeParam) {
-                                            setShowDraftSuccessModal(false); // Close the modal first
-                                            router.push(`/dashboard/${routeParam}`);
-                                        } else {
-                                            // Fallback for disconnected state
-                                            router.push('/dashboard');
-                                        }
-                                    }}
-                                >
-                                    Continue Later (Dashboard)
-                                </Button>
-                            </div>
-                        </div>
+    {showPostPhase1Modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-0 relative overflow-hidden">
+            {/* Header gradient */}
+            
+            
+            <div className="p-6 space-y-5">
+                {/* Success check */}
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-full flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold">Quest Details Saved!</h3>
+                        <p className="text-sm text-muted-foreground">Now configure tasks to activate your quest.</p>
                     </div>
                 </div>
-            )}
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700/40 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+                        Subscription required · $100 USDT to go live
+                    </div>
+                {/* Advantages panel */}
+                <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4 space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Why subscribe?</p>
+                    <ol className="space-y-2 text-sm text-blue-900 dark:text-blue-200">
+                        {[
+                            "- Unlimited quest campaigns with full task types",
+                            "- Access to ready made task Template",
+                            "- Access to our community, enabling you to scale quest seamlessly and acquire new users.",
+                            "- On-chain verification engine for Blockchain Task",
+                            "- Full admin dashboard & submission review",
+                            "- Multi-stage quest progression system",
+                            "- Reward Distribution mechanism with smart contract that handle your distribution automatically",
+                        ].map((item, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                                <span>{item}</span>
+                            </li>
+                        ))}
+                    </ol>
+                    <div className="pt-2 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between">
+                        <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">30-day full access</span>
+                        <span className="text-lg font-black text-blue-700 dark:text-blue-300">$100 USDT</span>
+                    </div>
+                </div>
+
+                {/* Demo mode notice */}
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                    <span className="shrink-0">⚡</span>
+                    <span><strong>Demo Mode</strong> lets you add tasks and gives you limited access to participants and our verification engine. Create a demo quest to share with your team to test our platform.</span>
+                </div>
+
+                {/* Action buttons */}
+                <div className="grid grid-cols-1 gap-3 pt-1">
+                    <Button
+                        size="lg"
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold shadow-md h-12"
+                        onClick={() => {
+                                setShowPostPhase1Modal(false)
+                                setPhase(2)
+                                window.scrollTo(0, 0)
+                            }}
+                    >
+                         Continue To Add Task
+                    </Button>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <Button
+                            variant="outline"
+                            className="w-full h-11 font-semibold border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                            onClick={() => {
+                                setIsDemoMode(true)
+                                setShowPostPhase1Modal(false)
+                                setPhase(2)
+                                window.scrollTo(0, 0)
+                            }}
+                        >
+                            ⚡ Try Demo
+                        </Button>
+
+                        <Button
+    variant="outline"
+    className="w-full h-11 font-semibold"
+    onClick={() => {
+        setShowPostPhase1Modal(false)
+        openSubscriptionModal({ onSuccess: () => setIsDemoMode(false) })
+    }}
+>
+    Subscribe Now — $100/month
+</Button>
+                    </div>
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() => {
+                            setShowPostPhase1Modal(false)
+                            const routeParam = userProfile?.username || address
+                            if (routeParam) router.push(`/dashboard/${routeParam}`)
+                        }}
+                    >
+                        Save & Continue Later
+                    </Button>
+                </div>
+            </div>
+        </div>
+    </div>
+)}
         </div>
     )
 }

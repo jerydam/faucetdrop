@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { useWallets } from "@privy-io/react-auth";
 import { getNetworkByChainId } from "@/hooks/use-network";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 interface QuizOption { id: "A" | "B" | "C" | "D"; text: string }
 interface QuizQuestion {

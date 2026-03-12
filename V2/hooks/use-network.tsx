@@ -75,7 +75,7 @@ export const networks: Network[] = [
       dropcode: "0x8D1306b3970278b3AB64D1CE75377BDdf00f61da",
       custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5",
       quest: "0x28E06CBD5E22B0f4E39D277457Be13E160fC742F",
-      quiz: "0x99225AeEF0feeab06c6d72054330b148ed7E95dd"
+      quiz: "0xF9e41c0b83c580d3259C7aAB30256a94082E7A1e"
     },
     tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
     nativeCurrency: {
@@ -110,7 +110,7 @@ export const networks: Network[] = [
       droplist: "0x0837EACf85472891F350cba74937cB02D90E60A4",
       dropcode: "0xd6Cb67dF496fF739c4eBA2448C1B0B44F4Cf0a7C",
       custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7",
-      quest: "",
+      quest: "0xc7889C58B51574d32C83b2e2F60d5eC145103Eb3",
       quiz: ""  
     },
     tokenAddress: ZeroAddress,
@@ -148,7 +148,7 @@ export const networks: Network[] = [
       droplist: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
       dropcode: "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
       custom: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-      quest: "",
+      quest: "0x72680B6ad792a0069B3Bd5Acfd76182f3c63b703",
       quiz: ""
     },
     tokenAddress: ZeroAddress,
@@ -186,7 +186,7 @@ export const networks: Network[] = [
       droplist: "0x945431302922b69D500671201CEE62900624C6d5",
       dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
       custom: "0x587b840140321DD8002111282748acAdaa8fA206",
-      quest: "",
+      quest: "0xb0B955e9B4a98A1323cE099A97632D5c4fc5d210",
       quiz: ""
     },
     tokenAddress: ZeroAddress,
@@ -224,7 +224,7 @@ export const networks: Network[] = [
       droplist: "0x4B8c7A12660C4847c65662a953F517198fBFc0ED",
       dropcode: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
       custom: "0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36",
-      quest: "",
+      quest: "0x7E8D2A012cF5356e77f9eeccdddb942E72800f76",
       quiz: ""
     },
     tokenAddress: ZeroAddress,

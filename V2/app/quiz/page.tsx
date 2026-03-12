@@ -1,7 +1,7 @@
 "use client";
 /**
  * /app/quiz/page.tsx  –  FaucetDrops Quiz Hub
- * Full dark/light theme + responsive
+ * System theme — works with light/dark toggle
  */
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -10,14 +10,14 @@ import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Search, Plus, Zap, Trophy, Users, Clock, Loader2, Sparkles,
+  Search, Plus, Trophy, Users, Clock, Loader2,
   Gamepad2, Play, CheckCircle2, Hash, RefreshCw, BookOpen,
-  ChevronRight, Trash2, Droplets, AlertTriangle
+  ChevronRight, Trash2, AlertTriangle, Zap, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 interface QuizCard {
   code: string;
@@ -39,39 +39,35 @@ interface QuizCard {
 const STATUS_CONFIG = {
   waiting: {
     label: "Waiting",
-    color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/40",
+    color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
     dot: "bg-blue-500 dark:bg-blue-400",
     icon: Clock,
   },
   active: {
     label: "Live",
-    color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-400 dark:border-green-500/40 animate-pulse",
+    color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-200 dark:border-green-500/20 animate-pulse",
     dot: "bg-green-500 dark:bg-green-400",
     icon: Play,
   },
   finished: {
     label: "Ended",
-    color: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-700/40 dark:text-slate-400 dark:border-slate-600/40",
-    dot: "bg-slate-400 dark:bg-slate-500",
+    color: "bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-white/10",
+    dot: "bg-slate-300 dark:bg-white/20",
     icon: CheckCircle2,
   },
 };
 
-function GridBg() {
-  return (
-    <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-      <div
-        className="absolute inset-0 opacity-[0.035] dark:opacity-[0.06]"
-        style={{
-          backgroundImage: `linear-gradient(#6366f1 1px, transparent 1px), linear-gradient(90deg, #6366f1 1px, transparent 1px)`,
-          backgroundSize: "60px 60px",
-        }}
-      />
-    </div>
-  );
-}
-
-function QuizCardItem({ quiz, onClick, isCreator, onDelete }: { quiz: QuizCard; onClick: () => void; isCreator: boolean; onDelete: (e: React.MouseEvent) => void }) {
+function QuizCardItem({
+  quiz,
+  onClick,
+  isCreator,
+  onDelete,
+}: {
+  quiz: QuizCard;
+  onClick: () => void;
+  isCreator: boolean;
+  onDelete: (e: React.MouseEvent) => void;
+}) {
   const s = STATUS_CONFIG[quiz.status];
   const isLive = quiz.status === "active";
   const isFull = quiz.maxParticipants > 0 && quiz.playerCount >= quiz.maxParticipants;
@@ -80,34 +76,24 @@ function QuizCardItem({ quiz, onClick, isCreator, onDelete }: { quiz: QuizCard; 
     <button
       onClick={onClick}
       className={cn(
-        "group relative w-full text-left rounded-2xl overflow-hidden transition-all duration-300",
-        "bg-white dark:bg-slate-900/80 border shadow-sm",
-        "hover:shadow-xl hover:-translate-y-0.5",
+        "group relative w-full text-left rounded-2xl overflow-hidden transition-all duration-200",
+        "bg-white dark:bg-slate-900 border hover:border-blue-400 dark:hover:border-blue-500/40 hover:-translate-y-0.5 shadow-sm hover:shadow-md",
         isLive
-          ? "border-green-300 dark:border-green-500/30 hover:border-green-400 dark:hover:border-green-400/60 hover:shadow-green-100/60 dark:hover:shadow-green-500/10"
-          : "border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:shadow-indigo-50 dark:hover:shadow-indigo-500/10"
+          ? "border-green-300 dark:border-green-500/20"
+          : "border-slate-200 dark:border-white/[0.07]"
       )}
     >
       {/* Cover strip */}
       <div className="relative h-28 overflow-hidden">
         {quiz.coverImageUrl ? (
           <img
-            src={quiz.coverImageUrl} alt=""
-            className="w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity scale-105 group-hover:scale-100 duration-500"
+            src={quiz.coverImageUrl}
+            alt=""
+            className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity"
           />
         ) : (
-          <div className={cn(
-            "w-full h-full flex items-center justify-center",
-            isLive
-              ? "bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900/50 dark:via-emerald-950 dark:to-slate-900"
-              : quiz.status === "finished"
-              ? "bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:via-slate-900 dark:to-slate-950"
-              : "bg-gradient-to-br from-indigo-50 to-violet-100 dark:from-indigo-900/40 dark:via-violet-950 dark:to-slate-900"
-          )}>
-            <Gamepad2 className={cn(
-              "h-12 w-12",
-              isLive ? "text-green-400/60 dark:text-green-400/20" : "text-indigo-400/40 dark:text-indigo-400/20"
-            )} />
+          <div className="w-full h-full bg-slate-100 dark:bg-slate-950 flex items-center justify-center">
+            <Gamepad2 className="h-12 w-12 text-slate-200 dark:text-white/5" />
           </div>
         )}
 
@@ -123,17 +109,15 @@ function QuizCardItem({ quiz, onClick, isCreator, onDelete }: { quiz: QuizCard; 
 
         <div className="absolute top-3 right-3 flex items-center gap-2">
           {quiz.isAiGenerated && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-500/30 dark:text-purple-300 dark:border-purple-500/40 backdrop-blur">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 backdrop-blur">
               <Sparkles className="h-3 w-3" /> AI
             </span>
           )}
           {isCreator && (
             <div
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(e);
-              }}
-              className="p-1.5 rounded-full bg-red-100/90 text-red-600 hover:bg-red-600 hover:text-white dark:bg-red-900/60 dark:text-red-400 dark:hover:bg-red-600 dark:hover:text-white backdrop-blur transition-colors border border-red-200 dark:border-red-800 shadow-sm"
+              onClick={(e) => { e.stopPropagation(); onDelete(e); }}
+              className="p-1.5 rounded-full bg-red-50 dark:bg-red-500/20 text-red-500 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/30 transition-colors border border-red-200 dark:border-red-500/30 backdrop-blur"
+
               title="Delete Quiz"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -143,7 +127,7 @@ function QuizCardItem({ quiz, onClick, isCreator, onDelete }: { quiz: QuizCard; 
 
         {quiz.reward && quiz.reward.poolAmount > 0 && (
           <div className="absolute bottom-3 right-3">
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-200 dark:bg-yellow-500/20 dark:text-yellow-400 dark:border-yellow-500/40 backdrop-blur">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-500/20 backdrop-blur">
               <Trophy className="h-3 w-3" /> {quiz.reward.poolAmount} {quiz.reward.tokenSymbol}
             </span>
           </div>
@@ -153,7 +137,7 @@ function QuizCardItem({ quiz, onClick, isCreator, onDelete }: { quiz: QuizCard; 
       {/* Card body */}
       <div className="p-4 space-y-3">
         <div>
-          <h3 className="font-black text-slate-900 dark:text-white text-base leading-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors line-clamp-2">
+          <h3 className="font-bold text-slate-900 dark:text-white text-sm leading-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">
             {quiz.title}
           </h3>
           {quiz.description && (
@@ -173,20 +157,23 @@ function QuizCardItem({ quiz, onClick, isCreator, onDelete }: { quiz: QuizCard; 
             </span>
           )}
           <span className="ml-auto text-[10px]">
-            by {quiz.creatorUsername || quiz.creatorAddress.slice(0, 6) + "…"}
-          </span>
+            by {quiz.creatorUsername?.trim() || quiz.creatorAddress.slice(0, 6) + "…"}
+           </span>
         </div>
 
-        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
-          <span className="font-mono text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1">
+        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-white/[0.06]">
+          <span className="font-mono text-xs text-slate-300 dark:text-white/20 flex items-center gap-1">
             <Hash className="h-3 w-3" />{quiz.code}
           </span>
           <span className={cn(
             "text-xs font-bold flex items-center gap-1 transition-colors",
-            isFull ? "text-slate-400 dark:text-slate-500" :
-            isLive ? "text-green-600 dark:text-green-400 group-hover:text-green-700 dark:group-hover:text-green-300" :
-            quiz.status === "finished" ? "text-slate-400 dark:text-slate-500" :
-            "text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-700 dark:group-hover:text-indigo-300"
+            isFull
+              ? "text-slate-300 dark:text-white/20"
+              : isLive
+              ? "text-green-600 dark:text-green-400"
+              : quiz.status === "finished"
+              ? "text-slate-300 dark:text-white/20"
+              : "text-blue-600 dark:text-blue-400 group-hover:text-blue-500 dark:group-hover:text-blue-300"
           )}>
             {isFull ? "Full" : quiz.status === "finished" ? "View Results" : isLive ? "Join Now" : "Enter Lobby"}
             <ChevronRight className="h-3.5 w-3.5" />
@@ -195,7 +182,7 @@ function QuizCardItem({ quiz, onClick, isCreator, onDelete }: { quiz: QuizCard; 
       </div>
 
       {isLive && (
-        <div className="absolute inset-0 rounded-2xl border-2 border-green-400/20 dark:border-green-500/20 pointer-events-none animate-pulse" />
+        <div className="absolute inset-0 rounded-2xl border border-green-400/20 dark:border-green-500/10 pointer-events-none animate-pulse" />
       )}
     </button>
   );
@@ -211,12 +198,10 @@ export default function QuizListPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "waiting" | "active" | "finished">("all");
   const [codeInput, setCodeInput] = useState("");
   const [isJumping, setIsJumping] = useState(false);
-
-  // ── Modal State for Deletion ──
   const [quizToDelete, setQuizToDelete] = useState<QuizCard | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
-  
+
   const fetchQuizzes = async (silent = false) => {
     if (!silent) setIsLoading(true); else setIsRefreshing(true);
     try {
@@ -233,36 +218,29 @@ export default function QuizListPage() {
     return () => clearInterval(t);
   }, []);
 
-  // ✅ New delete trigger
   const initiateDelete = (quiz: QuizCard) => {
     setQuizToDelete(quiz);
     setDeleteConfirmText("");
   };
 
-  // ✅ New deletion confirmation logic
   const confirmDelete = async () => {
-    if (!quizToDelete) return;
-    if (deleteConfirmText !== quizToDelete.code) return;
-    
+    if (!quizToDelete || deleteConfirmText !== quizToDelete.code) return;
     setIsDeleting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/quiz/${quizToDelete.code}?walletAddress=${userWalletAddress}`, {
-        method: "DELETE"
-      });
-      
+      const res = await fetch(
+        `${API_BASE_URL}/api/quiz/${quizToDelete.code}?walletAddress=${userWalletAddress}`,
+        { method: "DELETE" }
+      );
       const data = await res.json();
       if (data.success) {
         toast.success("Quiz deleted successfully");
         setQuizzes(prev => prev.filter(q => q.code !== quizToDelete.code));
-        setQuizToDelete(null); // Close modal
+        setQuizToDelete(null);
       } else {
         toast.error(data.detail || "Failed to delete quiz");
       }
-    } catch (err) {
-      toast.error("Error deleting quiz");
-    } finally {
-      setIsDeleting(false);
-    }
+    } catch { toast.error("Error deleting quiz"); }
+    finally { setIsDeleting(false); }
   };
 
   const handleJumpToCode = async () => {
@@ -293,78 +271,75 @@ export default function QuizListPage() {
     });
   }, [quizzes, statusFilter, searchQuery]);
 
-  const liveCount = quizzes.filter(q => q.status === "active").length;
+  const liveCount    = quizzes.filter(q => q.status === "active").length;
   const waitingCount = quizzes.filter(q => q.status === "waiting").length;
+  const endedCount   = quizzes.filter(q => q.status === "finished").length;
+
+  const filterTabs = [
+    { key: "all",      label: "All",      count: quizzes.length },
+    { key: "active",   label: "Active",   count: liveCount },
+    { key: "waiting",  label: "Upcoming", count: waitingCount },
+    { key: "finished", label: "Ended",    count: endedCount },
+  ] as const;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col relative">
-      <GridBg />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
       <Header pageTitle="Quiz Hub" />
 
-      <div className="relative z-10 max-w-7xl mx-auto w-full px-4 sm:px-6 pb-20 space-y-6 sm:space-y-8 pt-6">
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 pb-20 space-y-6 pt-6">
 
         {/* ── Hero ── */}
-        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 via-white to-violet-50 dark:from-indigo-950/80 dark:via-slate-900/90 dark:to-violet-950/80 p-6 sm:p-8 md:p-12">
-          <div
-            className="absolute inset-0 opacity-[0.04] dark:opacity-[0.05]"
-            style={{ backgroundImage: "radial-gradient(circle, #6366f1 1px, transparent 1px)", backgroundSize: "32px 32px" }}
-          />
-
-          <div className="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 lg:gap-10">
-            {/* Left */}
+        <div className="border border-slate-200 dark:border-white/[0.07] bg-white dark:bg-slate-900 rounded-2xl p-6 sm:p-8">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
             <div className="space-y-3 flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 border border-indigo-200 dark:border-indigo-500/40 flex items-center justify-center shrink-0">
-                  <Gamepad2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center shrink-0">
+                  <Gamepad2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase tracking-widest">FaucetDrops Quiz</span>
+                <span className="text-blue-600 dark:text-blue-400 font-bold text-xs uppercase tracking-widest">FaucetDrops Quiz</span>
               </div>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 dark:text-white leading-none">
-                Quiz <span className="text-indigo-600 dark:text-indigo-400">Hub</span>
+              <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white leading-none">
+                Quiz Hub
               </h1>
-              <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base max-w-lg">
+              <p className="text-slate-500 dark:text-slate-400 text-sm max-w-lg">
                 Join a live quiz, browse upcoming games, or create your own — with real token rewards for winners.
               </p>
               <div className="flex flex-wrap items-center gap-4 pt-1">
                 {liveCount > 0 && (
                   <span className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm font-bold">
-                    <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-400 animate-pulse" />
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                     {liveCount} Live Now
                   </span>
                 )}
                 {waitingCount > 0 && (
                   <span className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-sm font-bold">
-                    <span className="w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
                     {waitingCount} Starting Soon
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Right: join + create */}
-            <div className="w-full lg:w-auto shrink-0 space-y-3">
-              <div className="bg-white/70 dark:bg-black/30 backdrop-blur rounded-2xl border border-slate-200/80 dark:border-white/10 p-4 space-y-3 w-full lg:min-w-[280px]">
-                <p className="text-slate-500 dark:text-white/50 text-xs uppercase font-bold tracking-widest">Join with Code</p>
-                <div className="flex gap-2">
-                  <Input
-                    value={codeInput}
-                    onChange={e => setCodeInput(e.target.value.toUpperCase())}
-                    onKeyDown={e => e.key === "Enter" && handleJumpToCode()}
-                    placeholder="ABC123"
-                    maxLength={8}
-                    className="font-mono font-black text-lg tracking-widest bg-white dark:bg-white/5 border-slate-300 dark:border-white/20 text-slate-900 dark:text-white h-12 placeholder:text-slate-300 dark:placeholder:text-white/20 focus-visible:border-indigo-500"
-                  />
-                </div>
-              </div>
-              {userWalletAddress && (
+            <div className="w-full lg:w-auto shrink-0 space-y-2 lg:min-w-[260px]">
+              <p className="text-slate-400 dark:text-slate-500 text-xs uppercase font-bold tracking-widest mb-2">Join with Code</p>
+              <div className="flex gap-2">
+                <Input
+                  value={codeInput}
+                  onChange={e => setCodeInput(e.target.value.toUpperCase())}
+                  onKeyDown={e => e.key === "Enter" && handleJumpToCode()}
+                  placeholder="ABC123"
+                  maxLength={8}
+                  className="font-mono font-black text-base tracking-widest bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white h-11 placeholder:text-slate-300 dark:placeholder:text-white/20 focus-visible:border-blue-500"
+                />
                 <Button
-                  className="w-full h-11 font-bold bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white border-0"
+                  className="h-11 px-4 font-bold bg-blue-600 hover:bg-blue-500 text-white border-0 shrink-0"
                   onClick={handleJumpToCode}
                   disabled={isJumping || codeInput.length < 4}
                 >
-                  {isJumping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Droplets className="h-4 w-4" />}
+                  {isJumping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                 </Button>
-              )}
+              </div>
+             
             </div>
           </div>
         </div>
@@ -377,32 +352,38 @@ export default function QuizListPage() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search by title, code, or creator..."
-              className="pl-10 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus-visible:border-indigo-500 h-11"
+              className="pl-10 bg-white dark:bg-slate-900 border-slate-200 dark:border-white/[0.07] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus-visible:border-blue-500 h-11"
             />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {(["all", "active", "waiting", "finished"] as const).map(s => (
+            {filterTabs.map(tab => (
               <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
                 className={cn(
-                  "px-3 py-2 rounded-xl text-xs font-bold capitalize transition-all border whitespace-nowrap",
-                  statusFilter === s
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:text-slate-900 dark:hover:text-white"
+                  "inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all border",
+                  statusFilter === tab.key
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/[0.07] hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/20"
                 )}
               >
-                {s === "all" ? `All (${quizzes.length})` :
-                 s === "active" ? `🟢 Live (${liveCount})` :
-                 s === "waiting" ? `🔵 Soon (${waitingCount})` :
-                 `Ended (${quizzes.filter(q => q.status === "finished").length})`}
+                {tab.label}
+                <span className={cn(
+                  "text-[10px] font-mono px-1 py-0.5 rounded-full",
+                  statusFilter === tab.key
+                    ? "bg-white/20 text-white"
+                    : "bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500"
+                )}>
+                  {tab.count}
+                </span>
               </button>
             ))}
+
             <button
               onClick={() => fetchQuizzes(true)}
               disabled={isRefreshing}
-              className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-indigo-300 dark:hover:border-indigo-500/50 transition-all disabled:opacity-50"
+              className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/[0.07] text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all disabled:opacity-30"
             >
               <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
             </button>
@@ -413,23 +394,24 @@ export default function QuizListPage() {
         {isLoading ? (
           <div className="flex items-center justify-center py-32">
             <div className="text-center space-y-4">
-              <Loader2 className="h-10 w-10 animate-spin text-indigo-500 mx-auto" />
-              <p className="text-slate-400 dark:text-slate-500 text-sm animate-pulse">Loading quizzes...</p>
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto" />
+              <p className="text-slate-400 dark:text-slate-500 text-sm">Loading quizzes...</p>
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 space-y-4">
-            <div className="w-20 h-20 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center shadow-sm">
-              <Gamepad2 className="h-9 w-9 text-slate-300 dark:text-slate-600" />
-            </div>
+          <div className="border border-dashed border-slate-200 dark:border-white/[0.07] rounded-2xl flex flex-col items-center justify-center py-24 space-y-4">
+            <Gamepad2 className="h-10 w-10 text-slate-200 dark:text-white/10" />
             <div className="text-center">
-              <h3 className="text-slate-900 dark:text-white font-bold text-lg">No quizzes found</h3>
-              <p className="text-slate-500 text-sm mt-1">
+              <h3 className="text-slate-600 dark:text-slate-400 font-bold">No quizzes found</h3>
+              <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">
                 {searchQuery ? "Try a different search term" : "Be the first to create one!"}
               </p>
             </div>
             {userWalletAddress && (
-              <Button onClick={() => router.push("/quiz/create-quiz")} className="bg-indigo-600 hover:bg-indigo-500 text-white">
+              <Button
+                onClick={() => router.push("/quiz/create-quiz")}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold border-0"
+              >
                 <Plus className="mr-2 h-4 w-4" /> Create Quiz
               </Button>
             )}
@@ -442,9 +424,9 @@ export default function QuizListPage() {
                 className="animate-in fade-in slide-in-from-bottom-3"
                 style={{ animationDelay: `${i * 40}ms`, animationFillMode: "backwards" }}
               >
-                <QuizCardItem 
-                  quiz={quiz} 
-                  onClick={() => router.push(`/quiz/${quiz.code}`)} 
+                <QuizCardItem
+                  quiz={quiz}
+                  onClick={() => router.push(`/quiz/${quiz.code}`)}
                   isCreator={userWalletAddress?.toLowerCase() === quiz.creatorAddress.toLowerCase()}
                   onDelete={() => initiateDelete(quiz)}
                 />
@@ -454,57 +436,52 @@ export default function QuizListPage() {
         )}
       </div>
 
-      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {/* ── Delete Confirmation Modal ── */}
       {quizToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
-            
-            <div className="flex items-center gap-4 text-red-600 dark:text-red-500 mb-5">
-              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-6 w-6" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/[0.07] rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+
+            <div className="flex items-center gap-4 mb-5">
+              <div className="w-11 h-11 rounded-full bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-5 w-5 text-red-500 dark:text-red-400" />
               </div>
               <div>
-                <h3 className="text-lg font-black text-slate-900 dark:text-white">Delete Quiz?</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
-                  This action is permanent and cannot be undone.
-                </p>
+                <h3 className="text-base font-black text-slate-900 dark:text-white">Delete Quiz?</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">This action cannot be undone.</p>
               </div>
             </div>
 
-            <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-6">
-              <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
-                To confirm, type the quiz code: <strong className="text-slate-900 dark:text-white select-none">{quizToDelete.code}</strong>
+            <div className="bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-xl p-4 mb-5">
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+                Type the quiz code to confirm:{" "}
+                <strong className="text-slate-900 dark:text-white select-none">{quizToDelete.code}</strong>
               </p>
               <Input
                 value={deleteConfirmText}
-                onChange={(e) => setDeleteConfirmText(e.target.value.toUpperCase())}
-                onPaste={(e) => {
-                  e.preventDefault();
-                  toast.warning("Pasting disabled. Please type the code.");
-                }}
+                onChange={e => setDeleteConfirmText(e.target.value.toUpperCase())}
+                onPaste={e => { e.preventDefault(); toast.warning("Pasting disabled. Please type the code."); }}
                 placeholder="Type code here..."
-                className="h-12 font-mono font-bold text-center tracking-widest uppercase border-red-200 dark:border-red-900/50 focus-visible:ring-red-500 bg-white dark:bg-slate-900"
+                className="h-11 font-mono font-bold text-center tracking-widest uppercase bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus-visible:border-red-500 placeholder:text-slate-300 dark:placeholder:text-white/20"
               />
             </div>
 
             <div className="flex gap-3">
               <Button
                 variant="outline"
-                className="flex-1 h-11 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                className="flex-1 h-11 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white bg-transparent"
                 onClick={() => setQuizToDelete(null)}
                 disabled={isDeleting}
               >
                 Cancel
               </Button>
               <Button
-                className="flex-1 h-11 bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50"
+                className="flex-1 h-11 bg-red-600 hover:bg-red-500 text-white font-bold border-0 disabled:opacity-40"
                 disabled={deleteConfirmText !== quizToDelete.code || isDeleting}
                 onClick={confirmDelete}
               >
                 {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete Forever"}
               </Button>
             </div>
-
           </div>
         </div>
       )}

@@ -7955,13 +7955,7 @@ export const QUIZ_FACTORY_ABI =[
 			{
 				"indexed": false,
 				"internalType": "address",
-				"name": "backendA",
-				"type": "address"
-			},
-			{
-				"indexed": false,
-				"internalType": "address",
-				"name": "backendB",
+				"name": "backend",
 				"type": "address"
 			},
 			{
@@ -8031,12 +8025,7 @@ export const QUIZ_FACTORY_ABI =[
 			},
 			{
 				"internalType": "address",
-				"name": "_backendA",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_backendB",
+				"name": "_backend",
 				"type": "address"
 			},
 			{
@@ -8324,12 +8313,7 @@ export const QUIZ_ABI = [
 			},
 			{
 				"internalType": "address",
-				"name": "_backendA",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_backendB",
+				"name": "_backend",
 				"type": "address"
 			},
 			{
@@ -8674,6 +8658,19 @@ export const QUIZ_ABI = [
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "QuizStarted",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
 				"indexed": true,
 				"internalType": "address",
 				"name": "user",
@@ -8700,6 +8697,25 @@ export const QUIZ_ABI = [
 			}
 		],
 		"name": "RewardAmountSet",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "participant",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "totalSubmissions",
+				"type": "uint256"
+			}
+		],
+		"name": "TaskSubmitted",
 		"type": "event"
 	},
 	{
@@ -8787,20 +8803,7 @@ export const QUIZ_ABI = [
 	},
 	{
 		"inputs": [],
-		"name": "backendA",
-		"outputs": [
-			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "backendB",
+		"name": "backend",
 		"outputs": [
 			{
 				"internalType": "address",
@@ -9047,6 +9050,19 @@ export const QUIZ_ABI = [
 		"type": "function"
 	},
 	{
+		"inputs": [],
+		"name": "isStarted",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
 		"inputs": [
 			{
 				"internalType": "address",
@@ -9125,6 +9141,26 @@ export const QUIZ_ABI = [
 	},
 	{
 		"inputs": [],
+		"name": "startQuiz",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "participant",
+				"type": "address"
+			}
+		],
+		"name": "submitQuiz",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
 		"name": "token",
 		"outputs": [
 			{
@@ -9139,6 +9175,19 @@ export const QUIZ_ABI = [
 	{
 		"inputs": [],
 		"name": "totalParticipants",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "totalSubmissions",
 		"outputs": [
 			{
 				"internalType": "uint256",

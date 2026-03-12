@@ -13,15 +13,17 @@ import {
   Loader2, Users, Trophy, Crown, Zap, Check, X,
   ArrowUp, ArrowDown, Minus, Home, Share2, Play,
   Plus,
+  Clock,
 } from "lucide-react";
 import { getContractFundedStatus } from "@/lib/quiz";
 import { Wallet, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { useWallets } from "@privy-io/react-auth";
-import { BrowserProvider, Contract, parseUnits } from "ethers";
+import { BrowserProvider, Contract, parseUnits,Interface, TransactionRequest } from "ethers";
+import { QUIZ_ABI, ERC20_ABI } from "@/lib/abis";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ── Safe WS URL ──
 function getWsBaseUrl(): string {
@@ -59,7 +61,6 @@ interface Question {
 interface PersonalResult {
   isCorrect: boolean;
   pointsEarned: number;
-  correctId: string;
   streak: number;
 }
 
@@ -167,7 +168,125 @@ function LinearTimer({ seconds, total }: { seconds: number; total: number }) {
     </div>
   );
 }
+interface ClaimBannerProps { code: string; myWallet: string; }
+function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
+  const { wallets } = useWallets();
+  const activeWallet = wallets?.[0];
+  const [status, setStatus] = useState<"loading" | "eligible" | "claimed" | "expired" | "not_winner">("loading");
+  const [amount, setAmount] = useState<number>(0);
+  const [symbol, setSymbol] = useState<string>("");
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [claimedTx, setClaimedTx] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  useEffect(() => {
+    if (!myWallet) return;
+    fetch(`${API_BASE_URL}/api/quiz/${code}/payouts`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.success) { setStatus("not_winner"); return; }
+        const me = d.payouts?.find((p: any) => p.wallet_address.toLowerCase() === myWallet.toLowerCase());
+        if (!me) { setStatus("not_winner"); return; }
+        if (me.status === "claimed") { setStatus("claimed"); return; }
+        setAmount(me.amount);
+        setSymbol(me.token_symbol);
+        fetch(`${API_BASE_URL}/api/quiz/${code}/claim-window`)
+          .then(r => r.json())
+          .then(w => {
+            if (w.isActive && w.secondsRemaining > 0) { setTimeLeft(w.secondsRemaining); setStatus("eligible"); }
+            else setStatus("expired");
+          })
+          .catch(() => setStatus("eligible")); // fallback: show button anyway
+      })
+      .catch(() => setStatus("not_winner"));
+  }, [code, myWallet]);
+
+  useEffect(() => {
+    if (status !== "eligible" || timeLeft <= 0) return;
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) { clearInterval(timerRef.current!); setStatus("expired"); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current!);
+  }, [status, timeLeft]);
+
+  const formatTime = (s: number) => {
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
+  };
+
+  const handleClaim = async () => {
+    if (!activeWallet) { toast.error("Wallet not connected"); return; }
+    setIsClaiming(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/claim`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: myWallet }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.detail || data.message || "Claim failed");
+      setClaimedTx(data.txHash);
+      setStatus("claimed");
+      toast.success("Reward claimed! It's now in your wallet.");
+    } catch (e: any) {
+      toast.error(e.message || "Claim failed");
+    } finally { setIsClaiming(false); }
+  };
+
+  if (status === "loading") return (
+    <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+      <Loader2 className="h-5 w-5 animate-spin text-slate-400 shrink-0" />
+      <p className="text-slate-500 dark:text-slate-400 text-sm">Checking your reward status...</p>
+    </div>
+  );
+  if (status === "not_winner") return null;
+  if (status === "claimed") return (
+    <div className="max-w-xl mx-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+      <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-green-700 dark:text-green-400 font-bold text-sm">Reward Claimed ✓</p>
+        <p className="text-green-600 dark:text-green-500 text-xs mt-0.5">{amount} {symbol} has been sent to your wallet</p>
+      </div>
+      {claimedTx && (
+        <a href={`https://celoscan.io/tx/${claimedTx}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
+          <ExternalLink className="h-4 w-4 text-green-500" />
+        </a>
+      )}
+    </div>
+  );
+  if (status === "expired") return (
+    <div className="max-w-xl mx-auto bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+      <AlertCircle className="h-5 w-5 text-slate-400 shrink-0" />
+      <div>
+        <p className="text-slate-600 dark:text-slate-300 font-bold text-sm">Claim Window Expired</p>
+        <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">The reward claim period for this quiz has closed.</p>
+      </div>
+    </div>
+  );
+  return (
+    <div className="max-w-xl mx-auto bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600/30 rounded-2xl p-4 shadow-sm animate-in slide-in-from-top-4 duration-500">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-yellow-100 dark:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 flex items-center justify-center shrink-0">
+          <Trophy className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-yellow-800 dark:text-yellow-300 font-black text-base">You won {amount} {symbol}!</p>
+          <p className="text-yellow-700 dark:text-yellow-400/80 text-xs mt-0.5 flex items-center gap-1">
+            <Clock className="h-3 w-3" /> Claim window closes in <span className="font-bold tabular-nums">{formatTime(timeLeft)}</span>
+          </p>
+        </div>
+        <Button className="shrink-0 h-10 px-4 font-bold bg-yellow-500 hover:bg-yellow-400 text-black border-0" onClick={handleClaim} disabled={isClaiming}>
+          {isClaiming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Claim Now"}
+        </Button>
+      </div>
+    </div>
+  );
+}
 // ─────────────────────────────────────────────────────────────
 //  QuizGameOver
 // ─────────────────────────────────────────────────────────────
@@ -197,21 +316,47 @@ function QuizGameOver({ quizMeta, code, leaderboard, myWallet, isCreator, showCo
   }, [payoutsData]);
 
   const handleClaim = async () => {
-    if (!activeWallet || !payoutsData?.faucetAddress) { toast.error("Wallet not connected or contract missing"); return; }
+    if (!activeWallet) { 
+      toast.error("Wallet not connected"); 
+      return; 
+    }
+    
     setIsClaiming(true);
+    toast.info("Processing claim... please wait.");
+    
     try {
-      const privyProvider = await activeWallet.getEthereumProvider();
-      const ethersProvider = new BrowserProvider(privyProvider);
-      const signer = await ethersProvider.getSigner();
-      const contract = new Contract(payoutsData.faucetAddress, ["function claim() external"], signer);
-      toast.info("Confirm claim transaction...");
-      const tx = await contract.claim();
-      await tx.wait();
-      setClaimedTx(tx.hash);
-      toast.success("Reward claimed!");
-      await fetch(`${API_BASE_URL}/api/quiz/${code}/claim-ack`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: myWallet, txHash: tx.hash }) }).catch(() => { });
+      // ✅ Request the backend to execute the claim
+      const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: myWallet })
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok || !data.success) {
+        throw new Error(data.detail || data.message || "Claim failed");
+      }
+
+      setClaimedTx(data.txHash);
+      toast.success("Reward claimed successfully! It is now in your wallet.");
+      
+      // Update local state so the button changes to "✓ Claimed"
+      setPayoutsData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          payouts: prev.payouts.map(p => 
+            p.wallet_address.toLowerCase() === myWallet.toLowerCase() 
+              ? { ...p, status: "claimed", tx_hash: data.txHash } 
+              : p
+          )
+        };
+      });
+
     } catch (e: any) {
-      toast.error(e.reason || "Claim failed");
+      console.error("Claim error:", e);
+      toast.error(e.message || "Failed to process claim");
     } finally {
       setIsClaiming(false);
     }
@@ -230,6 +375,8 @@ function QuizGameOver({ quizMeta, code, leaderboard, myWallet, isCreator, showCo
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-white">Quiz Complete!</h1>
           <p className="text-slate-500 dark:text-slate-400 font-medium text-sm sm:text-base">{quizMeta?.title}</p>
         </div>
+
+        {!isCreator && <ClaimBanner code={code} myWallet={myWallet} />}
 
         {/* Prize Pool Banner */}
         {!loadingPayouts && totalWinners > 0 && (
@@ -497,7 +644,7 @@ export default function QuizCodePage() {
   const { wallets } = useWallets();
   const activeWallet = wallets?.[0];
   const code = (params.code as string || "").toUpperCase();
-
+  const sessionKeyRef = useRef<CryptoKey | null>(null);
   const [quizReward, setQuizReward] = useState<{
     contractAddress: string;
     tokenAddress: string;
@@ -508,7 +655,7 @@ export default function QuizCodePage() {
     poolAmount: string;
     isFunded: boolean;
   } | null>(null);
-
+  const reconnectAttempts = useRef(0);
   const [isFunded, setIsFunded] = useState(false);
   const [contractBalance, setContractBalance] = useState("0");
   const [isFunding, setIsFunding] = useState(false);
@@ -545,7 +692,7 @@ export default function QuizCodePage() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [hasJoined, setHasJoined] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
-
+  const hasSubmittedOnChain = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
   const myWallet = userWalletAddress?.toLowerCase() ?? "";
   const chainId = activeWallet
@@ -649,17 +796,44 @@ export default function QuizCodePage() {
     timerRef.current = setInterval(tick, 250);
   }, []);
 
-  // ── WebSocket ──
-  const connectWS = useCallback(() => {
+async function decryptMessage(keyMaterial: CryptoKey, b64: string): Promise<any> {
+  const raw    = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const nonce  = raw.slice(0, 12);
+  const ct     = raw.slice(12);
+  const plain  = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, keyMaterial, ct);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+async function importKey(b64Key: string): Promise<CryptoKey> {
+  const raw = Uint8Array.from(atob(b64Key), c => c.charCodeAt(0));
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+}
+
+const connectWS = useCallback(() => {
     if (!code || !userWalletAddress) return;
     const ws = new WebSocket(`${getWsBaseUrl()}/ws/quiz/${code}`);
     wsRef.current = ws;
 
-    ws.onopen = () => ws.send(JSON.stringify({ type: "identify", walletAddress: userWalletAddress }));
+    ws.onopen = () => {
+      reconnectAttempts.current = 0; // Reset attempts on successful connection
+      ws.send(JSON.stringify({ type: "identify", walletAddress: userWalletAddress }));
+    };
 
-    ws.onmessage = (ev) => {
+    ws.onmessage = async (ev) => {
       let msg: any;
-      try { msg = JSON.parse(ev.data); } catch { return; }
+      try {
+        // If we have a session key, decrypt — otherwise parse raw (for the key handshake itself)
+        if (sessionKeyRef.current) {
+          msg = await decryptMessage(sessionKeyRef.current, ev.data);
+        } else {
+          msg = JSON.parse(ev.data);
+          // First message should always be session_key
+          if (msg.type === "session_key") {
+            sessionKeyRef.current = await importKey(msg.key);
+            return; // don't process further
+          }
+        }
+      } catch { return; }
 
       switch (msg.type) {
         case "state_sync":
@@ -675,31 +849,68 @@ export default function QuizCodePage() {
           setSelectedId(null); setHasSubmitted(false); setRevealCorrectId(null); setPersonalResult(null); setPhase("question");
           startTimer(msg.startedAt, msg.timeLimit);
           break;
-        case "answer_result": setPersonalResult({ isCorrect: msg.isCorrect, pointsEarned: msg.pointsEarned, correctId: msg.correctId, streak: msg.streak }); break;
+        case "answer_result": setPersonalResult({ isCorrect: msg.isCorrect, pointsEarned: msg.pointsEarned, streak: msg.streak }); break;
         case "question_end":
           if (timerRef.current) clearInterval(timerRef.current);
           setTimeLeft(0); setRevealCorrectId(msg.correctId); setPhase("reveal");
           break;
-        case "leaderboard":
-          setLeaderboard(msg.entries || []); setIsLastQuestion(!!msg.isLast);
+        // ADD — wrap each case body in {}
+        case "leaderboard": {
+          setLeaderboard(msg.entries || []);
+          setIsLastQuestion(!!msg.isLast);
           const me = (msg.entries || []).find((e: any) => e.walletAddress.toLowerCase() === myWallet);
-          if (me) { setMyRankChange(me.rankChange); if (me.rankChange > 0) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 4000); } }
+          if (me) {
+            setMyRankChange(me.rankChange);
+            if (me.rankChange > 0) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 4000); }
+          }
           setPhase("leaderboard");
           break;
-        case "game_over":
-          setLeaderboard(msg.finalLeaderboard || []); setPhase("game_over");
+        }
+        case "game_over": {
+          setLeaderboard(msg.finalLeaderboard || []);
+          setPhase("game_over");
           const fMe = (msg.finalLeaderboard || []).find((e: any) => e.walletAddress.toLowerCase() === myWallet);
           if (fMe?.rank === 1) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 6000); }
           break;
+        }
       }
     };
-    ws.onclose = () => setTimeout(() => { if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); }, 2000);
+
+    ws.onclose = (event) => {
+      sessionKeyRef.current = null;
+      // If server explicitly closes it normally (1000) or for policy violation (1008), do not reconnect.
+      if (event.code === 1000 || event.code === 1008) return;
+
+      // Stop trying after 5 failed attempts (prevents infinite server spam)
+      if (reconnectAttempts.current >= 5) {
+        toast.error("Lost connection to the quiz server. Please refresh the page.");
+        return;
+      }
+
+      reconnectAttempts.current += 1;
+      
+      // Exponential backoff: 2s, 4s, 6s, 8s, 10s
+      const delay = 2000 * reconnectAttempts.current; 
+      
+      setTimeout(() => { 
+        if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); 
+      }, delay);
+    };
   }, [code, userWalletAddress, startTimer, myWallet]);
 
   useEffect(() => {
-    if (hasJoined && userWalletAddress) connectWS();
-    return () => { wsRef.current?.close(); if (timerRef.current) clearInterval(timerRef.current); };
-  }, [hasJoined, connectWS]);
+  if (!hasJoined || !userWalletAddress || wsRef.current?.readyState === WebSocket.OPEN) return;
+
+  connectWS();
+
+  return () => { 
+    // Only close if we are actually unmounting the quiz component entirely
+    if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+    }
+  };
+}, [hasJoined, userWalletAddress]); // Removed connectWS from dependencies
 
   // ── SOUND EFFECTS TRIGGERS ──
   useEffect(() => {
@@ -725,17 +936,42 @@ export default function QuizCodePage() {
     if (!userWalletAddress || !username) { toast.error("Set a username in your profile"); return; }
     setIsJoining(true);
     try {
-      const r = await fetch(`${API_BASE_URL}/api/quiz/${code}/join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: userWalletAddress, username, avatarUrl }) });
+      const r = await fetch(`${API_BASE_URL}/api/quiz/${code}/join`, { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ walletAddress: userWalletAddress, username, avatarUrl }) 
+      });
       const d = await r.json();
-      if (d.success) { setHasJoined(true); toast.success("Joined quiz!"); }
-      else if (d.finished) { setPhase("game_over"); toast.info("This quiz has already ended."); }
-      else if (d.active) { setHasJoined(true); setIsSpectator(true); toast.info("Quiz in progress — spectating"); }
-      else { toast.error(d.message || "Failed to join"); }
-    } catch { toast.error("Failed to join"); }
-    finally { setIsJoining(false); }
+      
+      if (d.success) { 
+        setHasJoined(true); 
+        toast.success("Joined quiz!"); 
+
+        // 🚀 NEW: Trigger On-Chain Join (Fire and forget)
+        fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress: userWalletAddress })
+        }).catch(err => console.error("On-chain join error:", err));
+
+      } else if (d.finished) { 
+        setPhase("game_over"); 
+        toast.info("This quiz has already ended."); 
+      } else if (d.active) { 
+        setHasJoined(true); 
+        setIsSpectator(true); 
+        toast.info("Quiz in progress — spectating"); 
+      } else { 
+        toast.error(d.message || "Failed to join"); 
+      }
+    } catch { 
+      toast.error("Failed to join"); 
+    } finally { 
+      setIsJoining(false); 
+    }
   };
 
-const handleFundReward = async () => {
+  const handleFundReward = async () => {
   if (!quizReward) { 
     toast.error("No reward configured"); 
     return; 
@@ -754,23 +990,19 @@ const handleFundReward = async () => {
     const signer = await provider.getSigner();
     const userAddress = await signer.getAddress();
 
-    // Calculate gross amount (pool + 5% total platform fee for Quiz)
-    // (2% backend + 3% vault = 5%)
-    const baseAmountWei = parseUnits(quizReward.poolAmount, quizReward.tokenDecimals);
-    const totalAmountWei = (baseAmountWei * 100n) / 95n;
+    const quizContract = new Contract(quizReward.contractAddress, QUIZ_ABI, signer);
 
-    // Unified ABI matching your deployed Solidity contract perfectly
-    const FUND_ABI = ["function fund(uint256 _tokenAmount) external payable"];
-    const quizContract = new Contract(quizReward.contractAddress, FUND_ABI, signer);
+    // ─── DYNAMIC FEE CALCULATION (reads live contract values) ───
+    const backendFeePct = await quizContract.BACKEND_FEE_PERCENT();
+    const vaultFeePct = await quizContract.VAULT_FEE_PERCENT();
+    const totalFeePct = Number(backendFeePct) + Number(vaultFeePct); // e.g. 2 + 3 = 5
+
+    const baseAmountWei = parseUnits(quizReward.poolAmount, quizReward.tokenDecimals);
+    // total = base + fees  (exact same math as your original 100/95 but now dynamic)
+    const totalAmountWei = (baseAmountWei * 100n) / BigInt(100 - totalFeePct);
 
     if (!quizReward.isNativeToken) {
-      // ─── ERC20 PATH ───
-      const ERC20_ABI = [
-        "function approve(address spender, uint256 amount) public returns (bool)",
-        "function balanceOf(address account) public view returns (uint256)",
-        "function allowance(address owner, address spender) public view returns (uint256)",
-      ];
-
+      // ─── ERC20 PATH (the one that was failing) ───
       const tokenContract = new Contract(quizReward.tokenAddress, ERC20_ABI, signer);
 
       const balance = await tokenContract.balanceOf(userAddress);
@@ -778,28 +1010,40 @@ const handleFundReward = async () => {
         throw new Error("Insufficient token balance for prize + fees.");
       }
 
-      const currentAllowance = await tokenContract.allowance(userAddress, quizReward.contractAddress);
+      let currentAllowance = await tokenContract.allowance(userAddress, quizReward.contractAddress);
       if (currentAllowance < totalAmountWei) {
         toast.info("Step 1/2: Approving tokens...");
         const appTx = await tokenContract.approve(quizReward.contractAddress, totalAmountWei);
         await appTx.wait();
         toast.success("Approval confirmed!");
+
+        // ─── CRITICAL FIX: Poll until allowance is visible on the RPC node ───
+        // (This is the #1 reason for "Could not estimate gas" after Privy approvals)
+        let polls = 0;
+        while (currentAllowance < totalAmountWei && polls < 10) {
+          await new Promise(r => setTimeout(r, 2500));
+          currentAllowance = await tokenContract.allowance(userAddress, quizReward.contractAddress);
+          polls++;
+          console.log(`Polling allowance... ${currentAllowance.toString()} / ${totalAmountWei.toString()}`);
+        }
+        if (currentAllowance < totalAmountWei) {
+          throw new Error("Approval still not visible after 25s. Try again.");
+        }
       }
 
       toast.info("Step 2/2: Funding contract...");
-      
-      // ✨ FIXED: Passed totalAmountWei exactly like your working Quest code.
-      // NO overrides object. This prevents Ethers from stripping your data payload!
+
+      // ─── SIMPLIFIED & RELIABLE CALL (no manual encoding, no manual gas estimation) ───
+      // ethers v6 now handles estimation + revert reason automatically
       const tx = await quizContract.fund(totalAmountWei);
       await tx.wait();
 
       setFundTxHash(tx.hash);
 
     } else {
-      // ─── NATIVE TOKEN PATH ───
+      // ─── NATIVE TOKEN PATH (unchanged, already worked) ───
       toast.info("Confirm funding transaction in your wallet...");
       
-      // Native tokens DO require the msg.value override, and 0n as the param
       const tx = await quizContract.fund(0n, { 
         value: totalAmountWei 
       });
@@ -823,7 +1067,7 @@ const handleFundReward = async () => {
 
   } catch (err: any) {
     console.error("Funding Error:", err);
-    // Extracts the deepest nested error message if Ethers v6 tries to bury it
+    // This will now show the REAL contract revert reason (e.g. "OwnableUnauthorizedAccount", "InsufficientBalance", etc.)
     const msg = err?.info?.error?.message || err?.reason || err?.message || "Funding failed";
     setFundError(msg);
     toast.error(msg);
@@ -831,18 +1075,51 @@ const handleFundReward = async () => {
     setIsFunding(false);
   }
 };
+
   const handleSelectAnswer = (optId: string) => {
     if (!currentQ || timeLeft <= 0 || isSpectator) return;
+    
     const timeTaken = (currentQ.timeLimit - timeLeft);
-    wsRef.current?.send(JSON.stringify({ type: hasSubmitted ? "change_answer" : "submit_answer", questionIndex: currentQ.index, answerId: optId, timeTaken }));
+    
+    // Standard WebSocket Sync
+    wsRef.current?.send(JSON.stringify({ 
+      type: hasSubmitted ? "change_answer" : "submit_answer", 
+      questionIndex: currentQ.index, 
+      answerId: optId, 
+      timeTaken 
+    }));
+    
     if (!hasSubmitted) setHasSubmitted(true);
     setSelectedId(optId);
+
+    // 🚀 NEW: Trigger On-Chain Submit (Only on the VERY FIRST answer of the quiz)
+    if (!hasSubmittedOnChain.current && userWalletAddress) {
+      hasSubmittedOnChain.current = true; // Mark as triggered so we don't spam the blockchain
+      
+      fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletAddress: userWalletAddress,
+          questionIndex: currentQ.index,
+          answerId: optId,
+          timeTaken: timeTaken
+        })
+      }).catch(err => console.error("On-chain submit error:", err));
+    }
   };
 
   const handleStartQuiz = () => {
     if (!userWalletAddress) return;
     setIsStarting(true);
+    
+    // 1. Instantly start the game for players via WebSocket
     wsRef.current?.send(JSON.stringify({ type: "start_quiz", walletAddress: userWalletAddress }));
+
+    // 🚀 2. NEW: Trigger On-Chain Start (Fire and forget)
+    fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-start`, {
+      method: "POST"
+    }).catch(err => console.error("On-chain start error:", err));
   };
 
   const myEntry = leaderboard.find(e => e.walletAddress.toLowerCase() === myWallet);

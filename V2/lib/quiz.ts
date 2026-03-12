@@ -8,7 +8,7 @@ import {
 } from "ethers";
 
 import { ERC20_ABI, QUIZ_FACTORY_ABI, QUIZ_ABI } from "./abis";
-import { BACKEND_ADDRESS, BACKUP_BACKEND_ADDRESS } from './faucet';
+import { BACKEND_ADDRESS} from './faucet';
 
 // ✅ Import the helper from your useNetwork file (adjust the path to match your project structure)
 import { getNetworkByChainId } from "@/hooks/use-network"; 
@@ -53,7 +53,7 @@ export async function deployQuizReward(
         throw new Error(`No Quiz factory deployed on chain ${chainId}`);
     }
     
-    if (!isAddress(BACKEND_ADDRESS) || !isAddress(BACKUP_BACKEND_ADDRESS)) {
+    if (!isAddress(BACKEND_ADDRESS) ) {
         throw new Error("Backend wallet addresses not configured (check NEXT_PUBLIC_BACKEND_WALLET_A/B)");
     }
 
@@ -65,7 +65,6 @@ export async function deployQuizReward(
         config.name,
         tokenAddr,
         BACKEND_ADDRESS,
-        BACKUP_BACKEND_ADDRESS,
         config.claimWindowDuration ?? DEFAULT_CLAIM_WINDOW,
     ]);
 

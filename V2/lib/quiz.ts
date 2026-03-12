@@ -6,11 +6,13 @@ import {
     parseUnits,
     ZeroAddress,
 } from "ethers";
+
 import { ERC20_ABI, QUIZ_FACTORY_ABI, QUIZ_ABI } from "./abis";
 import { BACKEND_ADDRESS, BACKUP_BACKEND_ADDRESS } from './faucet';
 
 // ✅ Import the helper from your useNetwork file (adjust the path to match your project structure)
 import { getNetworkByChainId } from "@/hooks/use-network"; 
+import { toast } from "sonner";
 
 // ── Divvi helpers ────────────────────────────────────────────────────────────
 const appendDivviReferralData = (data: string): string => data;
@@ -93,36 +95,76 @@ export async function deployQuizReward(
 }
 
 // ── 2. Fund an existing QuizReward contract ──────────────────────────────────
+
 export async function fundQuizReward(
-    provider: BrowserProvider,
-    chainId: number,
-    contractAddress: string,
-    config: Pick<QuizRewardConfig, "tokenAddress" | "tokenDecimals" | "isNativeToken" | "poolAmount">
-): Promise<FundResult> {
-    if (!isAddress(contractAddress)) throw new Error("Invalid contract address");
+  provider: BrowserProvider,
+  chainId: number,
+  contractAddress: string,
+  reward: {
+    tokenAddress: string;
+    tokenDecimals: number;
+    isNativeToken: boolean;
+    poolAmount: string;
+  }
+) {
+  const signer = await provider.getSigner();
+  const signerAddress = await signer.getAddress();
 
-    const signer = await provider.getSigner();
-    const amountBig = parseUnits(config.poolAmount, config.tokenDecimals);
-    const contract = new Contract(contractAddress, QUIZ_ABI, signer);
+  const PLATFORM_FEE_PERCENT = 5n;
+  const poolAmountParsed = parseUnits(reward.poolAmount, reward.tokenDecimals);
+  const grossAmount = (poolAmountParsed * 100n) / (100n - PLATFORM_FEE_PERCENT);
 
-    let tx;
-    if (config.isNativeToken) {
-        tx = await contract.fund(0, { value: amountBig });
-    } else {
-        const token = new Contract(config.tokenAddress, ERC20_ABI, signer);
-        const signerAddr = await signer.getAddress();
-        const allowance: bigint = await token.allowance(signerAddr, contractAddress);
-        if (allowance < amountBig) {
-            const approveTx = await token.approve(contractAddress, amountBig);
-            await approveTx.wait();
-        }
-        tx = await contract.fund(amountBig);
+  if (reward.isNativeToken) {
+    // Manually encode fund(0) calldata
+    const iface = new Interface(["function fund(uint256 _tokenAmount) external payable"]);
+    const data = iface.encodeFunctionData("fund", [0n]);
+
+    const tx = await signer.sendTransaction({
+      to: contractAddress,
+      value: grossAmount,
+      data, // explicit calldata
+    });
+    await tx.wait();
+    return { txHash: tx.hash };
+
+  } else {
+    // ── Step 1: Approve ──
+    const erc20Iface = new Interface([
+      "function approve(address,uint256) external returns (bool)",
+      "function allowance(address,address) external view returns (uint256)",
+    ]);
+
+    const erc20 = new Contract(reward.tokenAddress, erc20Iface, signer);
+    const allowance: bigint = await erc20.allowance(signerAddress, contractAddress);
+
+    if (allowance < grossAmount) {
+      toast.info("Step 1/2: Approving token spend...");
+      // Manually encode approve calldata
+      const approveData = erc20Iface.encodeFunctionData("approve", [contractAddress, grossAmount]);
+      const approveTx = await signer.sendTransaction({
+        to: reward.tokenAddress,
+        data: approveData,
+        value: 0n,
+      });
+      await approveTx.wait();
+      toast.success("Approval confirmed!");
     }
 
-    const receipt = await tx.wait();
-    if (!receipt) throw new Error("No receipt from fund tx");
-    await reportTransactionToDivvi(tx.hash, chainId);
+    // ── Step 2: Fund ──
+    toast.info("Step 2/2: Funding contract...");
+    const fundIface = new Interface(["function fund(uint256 _tokenAmount) external"]);
+    const fundData = fundIface.encodeFunctionData("fund", [grossAmount]);
+
+    // Send raw transaction with explicit data — bypasses Privy stripping calldata
+    const tx = await signer.sendTransaction({
+      to: contractAddress,
+      data: fundData,  // explicit calldata guaranteed
+      value: 0n,       // no ETH for ERC20
+      gasLimit: 300000n,
+    });
+    await tx.wait();
     return { txHash: tx.hash };
+  }
 }
 
 // ── 3. Check if contract is funded ───────────────────────────────────────────

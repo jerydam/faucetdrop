@@ -14,10 +14,10 @@ import {
   ArrowUp, ArrowDown, Minus, Home, Share2, Play,
   Plus,
 } from "lucide-react";
-import { fundQuizReward, getContractFundedStatus } from "@/lib/quiz";
+import { getContractFundedStatus } from "@/lib/quiz";
 import { Wallet, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { useWallets } from "@privy-io/react-auth";
-import { BrowserProvider, Contract, formatUnits } from "ethers";
+import { BrowserProvider, Contract, parseUnits } from "ethers";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -735,53 +735,102 @@ export default function QuizCodePage() {
     finally { setIsJoining(false); }
   };
 
-  const handleFundReward = async () => {
-    if (!quizReward || !wallets[0]) {
-      toast.error("Wallet not connected");
-      return;
+const handleFundReward = async () => {
+  if (!quizReward) { 
+    toast.error("No reward configured"); 
+    return; 
+  }
+  if (!activeWallet) { 
+    toast.error("Wallet not ready"); 
+    return; 
+  }
+
+  setIsFunding(true);
+  setFundError("");
+
+  try {
+    const privyProvider = await activeWallet.getEthereumProvider();
+    const provider = new BrowserProvider(privyProvider);
+    const signer = await provider.getSigner();
+    const userAddress = await signer.getAddress();
+
+    // Calculate gross amount (pool + 5% total platform fee for Quiz)
+    // (2% backend + 3% vault = 5%)
+    const baseAmountWei = parseUnits(quizReward.poolAmount, quizReward.tokenDecimals);
+    const totalAmountWei = (baseAmountWei * 100n) / 95n;
+
+    // Unified ABI matching your deployed Solidity contract perfectly
+    const FUND_ABI = ["function fund(uint256 _tokenAmount) external payable"];
+    const quizContract = new Contract(quizReward.contractAddress, FUND_ABI, signer);
+
+    if (!quizReward.isNativeToken) {
+      // ─── ERC20 PATH ───
+      const ERC20_ABI = [
+        "function approve(address spender, uint256 amount) public returns (bool)",
+        "function balanceOf(address account) public view returns (uint256)",
+        "function allowance(address owner, address spender) public view returns (uint256)",
+      ];
+
+      const tokenContract = new Contract(quizReward.tokenAddress, ERC20_ABI, signer);
+
+      const balance = await tokenContract.balanceOf(userAddress);
+      if (balance < totalAmountWei) {
+        throw new Error("Insufficient token balance for prize + fees.");
+      }
+
+      const currentAllowance = await tokenContract.allowance(userAddress, quizReward.contractAddress);
+      if (currentAllowance < totalAmountWei) {
+        toast.info("Step 1/2: Approving tokens...");
+        const appTx = await tokenContract.approve(quizReward.contractAddress, totalAmountWei);
+        await appTx.wait();
+        toast.success("Approval confirmed!");
+      }
+
+      toast.info("Step 2/2: Funding contract...");
+      
+      // ✨ FIXED: Passed totalAmountWei exactly like your working Quest code.
+      // NO overrides object. This prevents Ethers from stripping your data payload!
+      const tx = await quizContract.fund(totalAmountWei);
+      await tx.wait();
+
+      setFundTxHash(tx.hash);
+
+    } else {
+      // ─── NATIVE TOKEN PATH ───
+      toast.info("Confirm funding transaction in your wallet...");
+      
+      // Native tokens DO require the msg.value override, and 0n as the param
+      const tx = await quizContract.fund(0n, { 
+        value: totalAmountWei 
+      });
+      await tx.wait();
+
+      setFundTxHash(tx.hash);
     }
-    setIsFunding(true);
-    setFundError("");
-    try {
-      const privyProvider = await wallets[0].getEthereumProvider();
-      const ethersProvider = new BrowserProvider(privyProvider);
 
-      // Get chainId from active wallet
-      const network = await ethersProvider.getNetwork();
-      const currentChainId = Number(network.chainId);
+    setIsFunded(true);
+    toast.success("Reward pool funded!");
 
-      toast.info("Confirm funding transaction in your wallet…");
-      const { txHash } = await fundQuizReward(
-        ethersProvider,
-        currentChainId,
-        quizReward.contractAddress,
-        {
-          tokenAddress: quizReward.tokenAddress,
-          tokenDecimals: quizReward.tokenDecimals,
-          isNativeToken: quizReward.isNativeToken,
-          poolAmount: quizReward.poolAmount,
-        }
-      );
+    // Notify backend
+    await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        txHash: fundTxHash, 
+        contractAddress: quizReward.contractAddress 
+      }),
+    }).catch(() => {});
 
-      setFundTxHash(txHash);
-      setIsFunded(true);
-      toast.success("Reward pool funded! You can now start the quiz.");
-
-      // Notify backend that it's funded
-      await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txHash, contractAddress: quizReward.contractAddress }),
-      }).catch(() => { });
-    } catch (err: any) {
-      const msg = err?.reason || err?.message || "Funding failed";
-      setFundError(msg);
-      toast.error(msg);
-    } finally {
-      setIsFunding(false);
-    }
-  };
-
+  } catch (err: any) {
+    console.error("Funding Error:", err);
+    // Extracts the deepest nested error message if Ethers v6 tries to bury it
+    const msg = err?.info?.error?.message || err?.reason || err?.message || "Funding failed";
+    setFundError(msg);
+    toast.error(msg);
+  } finally {
+    setIsFunding(false);
+  }
+};
   const handleSelectAnswer = (optId: string) => {
     if (!currentQ || timeLeft <= 0 || isSpectator) return;
     const timeTaken = (currentQ.timeLimit - timeLeft);
@@ -840,7 +889,9 @@ export default function QuizCodePage() {
       </div>
     );
   }
-
+const grossDisplayAmount = quizReward
+  ? (parseFloat(quizReward.poolAmount) * 100 / 95).toFixed(4)
+  : "0";
   // Lobby waiting room
   if (phase === "lobby") {
     return (
@@ -878,50 +929,78 @@ export default function QuizCodePage() {
             </div>
           </div>
 
-          {isCreator && (
+         {isCreator && (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5 max-w-lg mx-auto shadow-sm">
               <div className="text-center">
                 <Crown className="h-8 w-8 mx-auto mb-3 text-indigo-500" />
                 <p className="text-slate-900 dark:text-white font-black text-2xl">You are the Host</p>
                 <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                  Fund the reward pool, then start the quiz when players are ready.
+                  Start the quiz whenever players are ready.
                 </p>
               </div>
 
-              {quizReward && (
-                <FundRewardButton
-                  quizReward={quizReward}
-                  isFunded={isFunded}
-                  isFunding={isFunding}
-                  isFundedCheckLoading={isFundedCheckLoading}
-                  contractBalance={contractBalance}
-                  fundTxHash={fundTxHash}
-                  fundError={fundError}
-                  onFund={handleFundReward}
-                  chainId={chainId}
-                />
-              )}
+              {/* Funded status banner OR Optional Fund Button */}
+              {isFunded && quizReward ? (
+                <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-xl px-4 py-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-green-700 dark:text-green-400">Reward Pool Funded ✓</p>
+                    <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
+                      {contractBalance} {quizReward.tokenSymbol} locked in contract
+                    </p>
+                  </div>
+                  {fundTxHash && (
+                    <a href={`https://celoscan.io/tx/${fundTxHash}`} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 text-green-500" />
+                    </a>
+                  )}
+                </div>
+              ) : quizReward ? (
+                /* OPTIONAL FUND BUTTON - No longer blocks the Start Button */
+                <Button
+                  variant="outline"
+                  className="w-full h-12 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-all"
+                  onClick={handleFundReward}
+                  disabled={isFunding || isFundedCheckLoading}
+                >
+                  {isFunding ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirming...</>
+                  ) : isFundedCheckLoading ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking balance...</>
+                  ) : (
+                    <><Wallet className="mr-2 h-4 w-4" /> Fund {grossDisplayAmount} {quizReward?.tokenSymbol} (Optional)</>
+                  )}
+                </Button>
+              ) : null}
 
+              {/* ALWAYS ACTIVE START BUTTON */}
               <Button
-                className="w-full h-14 text-lg font-bold text-white shadow-lg transition-all"
-                style={{
-                  background: isFunded
-                    ? "linear-gradient(135deg, #4f46e5, #7c3aed)"
-                    : undefined,
-                }}
-                variant={isFunded ? "default" : "outline"}
+                className="w-full h-14 text-lg font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
                 onClick={handleStartQuiz}
-                disabled={isStarting || !isFunded}
-                title={!isFunded ? "Fund the reward pool first" : undefined}
+                disabled={isStarting}
               >
                 {isStarting ? (
                   <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Starting…</>
-                ) : !isFunded ? (
-                  <><AlertCircle className="mr-2 h-5 w-5 text-amber-400" /> Fund Rewards to Start</>
                 ) : (
-                  <><Play className="mr-2 h-5 w-5" /> START QUIZ ({players.length} players)</>
+                  <><Play className="mr-2 h-5 w-5 fill-current" /> START QUIZ ({players.length} players)</>
                 )}
               </Button>
+
+              {/* Error */}
+              {fundError && (
+                <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2">
+                  <p className="text-xs text-red-700 dark:text-red-400 font-medium break-words">{fundError}</p>
+                </div>
+              )}
+
+              {/* Contract address */}
+              {quizReward && (
+                <div className="flex items-center gap-2 px-1">
+                  <p className="text-[10px] text-slate-400 font-medium">Contract:</p>
+                  <p className="text-[10px] font-mono text-slate-500 truncate flex-1">{quizReward.contractAddress}</p>
+                </div>
+              )}
             </div>
           )}
         </div>

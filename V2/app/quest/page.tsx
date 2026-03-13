@@ -12,7 +12,7 @@ import {
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header"; 
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 interface QuestOverview {
     faucetAddress: string;

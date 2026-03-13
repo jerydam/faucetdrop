@@ -1,7 +1,7 @@
 import { BrowserProvider } from 'ethers';
 import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "https://faucetdrop-backend.onrender.com";
 const ENABLE_DIVVI_REFERRAL = true;
 const DEBUG_MODE = process.env.NODE_ENV === 'development';
 

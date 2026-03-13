@@ -22,6 +22,7 @@ import { BrowserProvider, Contract, parseUnits,Interface, formatUnits, Transacti
 import { fundQuizReward } from "@/lib/quiz";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { WalletConnectButton } from "@/components/wallet-connect";
 // ── On-chain error parser ──────────────────────────────────────
 function parseOnchainError(err: any): string {
   // User rejected the transaction in their wallet
@@ -737,7 +738,7 @@ export default function QuizCodePage() {
   const [fundError, setFundError] = useState("");
   const [fundTxHash, setFundTxHash] = useState("");
   const [isFundedCheckLoading, setIsFundedCheckLoading] = useState(false);
-
+  const [isReturningPlayer, setIsReturningPlayer] = useState(false);
   const [phase, setPhase] = useState<GamePhase>("loading");
   const [quizMeta, setQuizMeta] = useState<{ title: string; totalQuestions: number; creatorAddress: string; coverImageUrl?: string | null } | null>(null);
 
@@ -966,19 +967,21 @@ const connectWS = useCallback(() => {
           setQuizMeta(prev => prev ?? msg.quiz);
           setPlayers(msg.players || []);
           
-          // 🚀 RECOVERY LOGIC: Check if I am already in the backend's player list
+          // Check if I am already in the backend's player list
           const amIPlaying = (msg.players || []).some((p: any) => p.walletAddress.toLowerCase() === myWallet);
           
           if (amIPlaying) {
+            setIsReturningPlayer(true); // <--- Tells the button to say "Continue"
+          }
+          
+          // Only auto-bypass the join screen if you are the CREATOR (Host)
+          if (msg.isCreator) {
             setHasJoined(true);
-            setIsSpectator(false); // Make sure they are playing!
-          } else if (msg.isCreator) {
-            setHasJoined(true);
-            setIsSpectator(true); // Creator is always a spectator
+            setIsSpectator(true);
           }
 
           if (msg.status === "finished") setPhase("game_over");
-          break;
+          break;  
 
         case "game_starting":
           toast.success(msg.message);
@@ -1095,14 +1098,6 @@ const connectWS = useCallback(() => {
         } else {
           toast.success(d.message || "Joined quiz!"); 
         }
-
-        // 🚀 Trigger On-Chain Join (Fire and forget)
-        fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-join`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress: userWalletAddress })
-        }).catch(err => console.error("On-chain join error:", err));
-
       } else if (d.finished) { 
         setPhase("game_over"); 
         toast.info("This quiz has already ended."); 
@@ -1173,16 +1168,6 @@ const handleFundReward = async () => {
     if (!hasSubmittedOnChain.current && userWalletAddress) {
       hasSubmittedOnChain.current = true; // Mark as triggered so we don't spam the blockchain
       
-      fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          walletAddress: userWalletAddress,
-          questionIndex: currentQ.index,
-          answerId: optId,
-          timeTaken: timeTaken
-        })
-      }).catch(err => console.error("On-chain submit error:", err));
     }
   };
 
@@ -1235,15 +1220,15 @@ const handleFundReward = async () => {
   </div>
   {/* Join button */}
   <Button
-    className="w-full h-14 text-lg font-bold bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl shadow-xl shadow-indigo-900/40 border-0"
+    className="w-full h-14 text-lg font-bold bg-slate-900 hover:bg-blue-600 text-white rounded-2xl shadow-xl shadow-indigo-900/40 border-0"
     onClick={handleJoin}
     disabled={isJoining || !username}
   >
     {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5" />}
-    {!username ? "Set Username First" : "Join Quiz"}
+    {!username ? "Set Username First" : (isReturningPlayer ? "Continue" : "Join Quiz")}
   </Button>
   {!username && (
-    <p className="text-amber-600 dark:text-amber-400 text-xs font-medium">Go to your profile to set a username before joining</p>
+    <p className="text-amber-600 dark:text-amber-400 text-xs font-medium">Connect Profile to join Quiz<WalletConnectButton/> </p>
   )}
 </div>
     );

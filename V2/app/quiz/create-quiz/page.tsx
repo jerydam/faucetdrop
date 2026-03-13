@@ -691,26 +691,33 @@ const [pdfSecondsPerQuestion, setPdfSecondsPerQuestion] = useState(20);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   // Add the handler function
-  // AFTER
 const handlePdfFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
   const file = e.target.files?.[0];
   if (!file) return;
   if (pdfInputRef.current) pdfInputRef.current.value = "";
 
-  if (file.type !== "application/pdf") {
-    toast.error("Please upload a valid PDF file.");
+  // ✅ Mobile browsers report PDFs inconsistently — check name too
+  const isPdf =
+    file.type === "application/pdf" ||
+    file.type === "application/x-pdf" ||
+    file.type === "" || // iOS sometimes sends empty MIME type
+    file.name.toLowerCase().endsWith(".pdf");
+
+  if (!isPdf) {
+    toast.error("Please upload a PDF file.");
     return;
   }
+
   if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
     toast.error(`Max size is ${MAX_FILE_SIZE_MB}MB.`);
     return;
   }
 
-  // Stash file and open the count picker modal
   setPendingPdfFile(file);
   setPdfNumQuestions(5);
   setShowPdfModal(true);
 };
+
 
 const handlePdfUpload = async () => {
   if (!pendingPdfFile) return;
@@ -1204,26 +1211,31 @@ const handlePdfUpload = async () => {
             {/* PDF import */}
             <input
               type="file"
-              accept="application/pdf"
+              accept="application/pdf,.pdf"
               ref={pdfInputRef}
               className="hidden"
               onChange={handlePdfFileSelected}
-
             />
-            <button
-              onClick={() => !isPdfUploading && pdfInputRef.current?.click()}
-              disabled={isPdfUploading}
+            <label
               className={cn(
-                "h-9 px-3 rounded-xl border-2 text-xs font-bold flex items-center gap-1.5 transition-all",
+                "h-9 px-3 rounded-xl border-2 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
                 isPdfUploading
-                  ? "bg-muted border-border text-muted-foreground cursor-wait"
+                  ? "bg-muted border-border text-muted-foreground cursor-wait pointer-events-none"
                   : "bg-card border-border text-muted-foreground hover:border-primary/50 hover:text-primary"
               )}
             >
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                ref={pdfInputRef}
+                className="hidden"
+                onChange={handlePdfFileSelected}
+                disabled={isPdfUploading}
+              />
               {isPdfUploading
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading…</>
                 : <><FileText className="h-3.5 w-3.5" /> PDF</>}
-            </button>
+            </label>
             <button
               onClick={addQuestion}
               className="h-9 px-3 rounded-xl border-2 border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary text-primary font-bold text-xs flex items-center gap-1.5 transition-all"

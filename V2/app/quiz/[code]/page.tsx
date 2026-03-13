@@ -910,21 +910,6 @@ export default function QuizCodePage() {
     }).catch(() => toast.error("Failed to load quiz"));
   }, [code, userWalletAddress, router]);
 
-  // ── Auto-rejoin ──
-  useEffect(() => {
-    if (isCreator || !userWalletAddress || !username.trim() || hasJoined || phase !== "lobby") return;
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/join`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: userWalletAddress, username, avatarUrl }) });
-        const data = await res.json();
-        if (data.success) { setHasJoined(true); toast.success("Welcome back!", { duration: 1200 }); }
-        else if (data.finished) { setPhase("game_over"); }
-        else if (data.active) { setHasJoined(true); setIsSpectator(true); }
-      } catch (err) { }
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [isCreator, userWalletAddress, username, hasJoined, phase, code, avatarUrl]);
-
   // ── Timer ──
   const startTimer = useCallback((startedAt: number, timeLimit: number) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -980,7 +965,23 @@ const connectWS = useCallback(() => {
         case "state_sync":
           setQuizMeta(prev => prev ?? msg.quiz);
           setPlayers(msg.players || []);
+          
+          // 🚀 RECOVERY LOGIC: Check if I am already in the backend's player list
+          const amIPlaying = (msg.players || []).some((p: any) => p.walletAddress.toLowerCase() === myWallet);
+          
+          if (amIPlaying) {
+            setHasJoined(true);
+            setIsSpectator(false); // Make sure they are playing!
+          } else if (msg.isCreator) {
+            setHasJoined(true);
+            setIsSpectator(true); // Creator is always a spectator
+          }
+
           if (msg.status === "finished") setPhase("game_over");
+          break;
+
+        case "game_starting":
+          toast.success(msg.message);
           break;
         case "player_list": setPlayers(msg.players || []); break;
         case "countdown": setPhase("countdown"); setCountdownVal(msg.value); break;
@@ -1039,19 +1040,20 @@ const connectWS = useCallback(() => {
     };
   }, [code, userWalletAddress, startTimer, myWallet]);
 
+  // ── Connect WS instantly to restore session state ──
   useEffect(() => {
-  if (!hasJoined || !userWalletAddress || wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (!userWalletAddress || wsRef.current?.readyState === WebSocket.OPEN) return;
 
-  connectWS();
+    connectWS();
 
-  return () => { 
-    // Only close if we are actually unmounting the quiz component entirely
-    if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-    }
-  };
-}, [hasJoined, userWalletAddress]); // Removed connectWS from dependencies
+    return () => { 
+      if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
+      }
+    };
+  }, [userWalletAddress, connectWS]);
+
 
   // ── SOUND EFFECTS TRIGGERS ──
   useEffect(() => {
@@ -1086,9 +1088,15 @@ const connectWS = useCallback(() => {
       
       if (d.success) { 
         setHasJoined(true); 
-        toast.success("Joined quiz!"); 
+        setIsSpectator(false); // Make sure they are playing, not spectating
+        
+        if (d.status === "active") {
+          toast.success("Joined mid-game! Wait for the next question."); 
+        } else {
+          toast.success(d.message || "Joined quiz!"); 
+        }
 
-        // 🚀 NEW: Trigger On-Chain Join (Fire and forget)
+        // 🚀 Trigger On-Chain Join (Fire and forget)
         fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-join`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1098,10 +1106,6 @@ const connectWS = useCallback(() => {
       } else if (d.finished) { 
         setPhase("game_over"); 
         toast.info("This quiz has already ended."); 
-      } else if (d.active) { 
-        setHasJoined(true); 
-        setIsSpectator(true); 
-        toast.info("Quiz in progress — spectating"); 
       } else { 
         toast.error(d.message || "Failed to join"); 
       }

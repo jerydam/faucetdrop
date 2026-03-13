@@ -93,7 +93,6 @@ export async function deployQuizReward(
     return { contractAddress, txHash: tx.hash };
 }
 
-// ── 2. Fund an existing QuizReward contract ──────────────────────────────────
 
 export async function fundQuizReward(
   provider: BrowserProvider,
@@ -102,98 +101,104 @@ export async function fundQuizReward(
   reward: {
     tokenAddress: string;
     tokenDecimals: number;
-    isNativeToken: boolean;
+    isNativeToken: boolean; // ← ignored now
     poolAmount: string;
   }
-) {
+): Promise<FundResult> {
   const signer = await provider.getSigner();
   const signerAddress = await signer.getAddress();
 
-  const PLATFORM_FEE_PERCENT = 5n;
-  const poolAmountParsed = parseUnits(reward.poolAmount, reward.tokenDecimals);
-  const grossAmount = (poolAmountParsed * 100n) / (100n - PLATFORM_FEE_PERCENT);
+  const quizContract = new Contract(contractAddress, QUIZ_ABI, signer);
 
-  if (reward.isNativeToken) {
-    // Manually encode fund(0) calldata
-    const iface = new Interface(["function fund(uint256 _tokenAmount) external payable"]);
-    const data = iface.encodeFunctionData("fund", [0n]);
+  // ── READ REAL FEES (they are percent: 2 + 3 = 5) ──
+  const backendFeePct = await quizContract.BACKEND_FEE_PERCENT(); // 2
+  const vaultFeePct = await quizContract.VAULT_FEE_PERCENT();     // 3
+  const totalFeePct = Number(backendFeePct) + Number(vaultFeePct); // 5
 
-    const tx = await signer.sendTransaction({
-      to: contractAddress,
-      value: grossAmount,
-      data, // explicit calldata
-    });
+  const baseAmountWei = parseUnits(reward.poolAmount, reward.tokenDecimals);
+  const grossAmount = (baseAmountWei * 100n) / BigInt(100 - totalFeePct); // ← correct 5% math
+
+  console.log(`[FUND] Fees: ${totalFeePct}% | Base: ${baseAmountWei} | Gross to send: ${grossAmount}`);
+
+  const isNative = (await quizContract.token()) === ZeroAddress;
+
+  if (isNative) {
+    toast.info("Confirm funding transaction in your wallet...");
+    const tx = await quizContract.fund(0n, { value: grossAmount }); // pass 0 + send gross in value
     await tx.wait();
     return { txHash: tx.hash };
-
   } else {
-    // ── Step 1: Approve ──
-    const erc20Iface = new Interface([
-      "function approve(address,uint256) external returns (bool)",
-      "function allowance(address,address) external view returns (uint256)",
-    ]);
+    const tokenContract = new Contract(await quizContract.token(), ERC20_ABI, signer);
 
-    const erc20 = new Contract(reward.tokenAddress, erc20Iface, signer);
-    const allowance: bigint = await erc20.allowance(signerAddress, contractAddress);
+    const balance = await tokenContract.balanceOf(signerAddress);
+    if (balance < grossAmount) throw new Error("Insufficient token balance for prize + fees.");
 
+    let allowance = await tokenContract.allowance(signerAddress, contractAddress);
     if (allowance < grossAmount) {
-      toast.info("Step 1/2: Approving token spend...");
-      // Manually encode approve calldata
-      const approveData = erc20Iface.encodeFunctionData("approve", [contractAddress, grossAmount]);
-      const approveTx = await signer.sendTransaction({
-        to: reward.tokenAddress,
-        data: approveData,
-        value: 0n,
-      });
+      toast.info("Step 1/2: Approving tokens...");
+      const approveTx = await tokenContract.approve(contractAddress, grossAmount);
       await approveTx.wait();
       toast.success("Approval confirmed!");
+
+      // Poll for sync
+      let polls = 0;
+      while (allowance < grossAmount && polls < 10) {
+        await new Promise(r => setTimeout(r, 2500));
+        allowance = await tokenContract.allowance(signerAddress, contractAddress);
+        polls++;
+      }
     }
 
-    // ── Step 2: Fund ──
     toast.info("Step 2/2: Funding contract...");
-    const fundIface = new Interface(["function fund(uint256 _tokenAmount) external"]);
-    const fundData = fundIface.encodeFunctionData("fund", [grossAmount]);
-
-    // Send raw transaction with explicit data — bypasses Privy stripping calldata
-    const tx = await signer.sendTransaction({
-      to: contractAddress,
-      data: fundData,  // explicit calldata guaranteed
-      value: 0n,       // no ETH for ERC20
-      gasLimit: 300000n,
-    });
+    const tx = await quizContract.fund(grossAmount);
     await tx.wait();
     return { txHash: tx.hash };
   }
 }
 
-// ── 3. Check if contract is funded ───────────────────────────────────────────
+
 export async function getContractFundedStatus(
     provider: BrowserProvider,
     contractAddress: string,
-    tokenAddress: string,
-    tokenDecimals: number,
-    isNativeToken: boolean,
+    // These params are kept for compatibility but ignored
+    _tokenAddress: string,
+    _tokenDecimals: number,
+    _isNativeToken: boolean,
     requiredAmount: string
 ): Promise<{ isFunded: boolean; balance: string; balanceRaw: bigint }> {
     if (!contractAddress || !isAddress(contractAddress)) {
         return { isFunded: false, balance: "0", balanceRaw: 0n };
     }
+
     try {
+        const quizContract = new Contract(contractAddress, QUIZ_ABI, provider);
+        const contractToken = await quizContract.token();
+        const isNative = contractToken === ZeroAddress;
+
+        console.log(`[FUNDED CHECK] Contract token: ${contractToken} → ${isNative ? "NATIVE" : "ERC20"}`);
+
         let balanceBig: bigint;
-        if (isNativeToken) {
+        if (isNative) {
             balanceBig = await provider.getBalance(contractAddress);
         } else {
-            const token = new Contract(tokenAddress, ERC20_ABI, provider);
-            balanceBig = await token.balanceOf(contractAddress);
+            const tokenContract = new Contract(contractToken, ERC20_ABI, provider);
+            balanceBig = await tokenContract.balanceOf(contractAddress);
         }
-        const required = parseUnits(requiredAmount || "0", tokenDecimals);
-        const balance = (Number(balanceBig) / 10 ** tokenDecimals).toFixed(4);
+
+        const required = parseUnits(requiredAmount || "0", _tokenDecimals);
+        const balanceFormatted = (Number(balanceBig) / 10 ** _tokenDecimals).toFixed(4);
+
+        const isFunded = balanceBig >= required && balanceBig > 0n;
+
+        console.log(`[FUNDED CHECK] Required: ${required}, Actual balance: ${balanceBig} → Funded: ${isFunded}`);
+
         return {
-            isFunded: balanceBig >= required && balanceBig > 0n,
-            balance,
+            isFunded,
+            balance: balanceFormatted,
             balanceRaw: balanceBig,
         };
-    } catch {
+    } catch (e) {
+        console.error("Funded status check failed:", e);
         return { isFunded: false, balance: "0", balanceRaw: 0n };
     }
 }

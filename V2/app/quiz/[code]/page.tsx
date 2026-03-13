@@ -18,11 +18,75 @@ import {
 import { getContractFundedStatus } from "@/lib/quiz";
 import { Wallet, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { useWallets } from "@privy-io/react-auth";
-import { BrowserProvider, Contract, parseUnits,Interface, TransactionRequest } from "ethers";
-import { QUIZ_ABI, ERC20_ABI } from "@/lib/abis";
+import { BrowserProvider, Contract, parseUnits,Interface, formatUnits, TransactionRequest } from "ethers";
+import { fundQuizReward } from "@/lib/quiz";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+// ── On-chain error parser ──────────────────────────────────────
+function parseOnchainError(err: any): string {
+  // User rejected the transaction in their wallet
+  if (
+    err?.code === 4001 ||
+    err?.code === "ACTION_REJECTED" ||
+    err?.info?.error?.code === 4001 ||
+    err?.message?.toLowerCase().includes("user rejected") ||
+    err?.message?.toLowerCase().includes("user denied")
+  ) {
+    return "Transaction cancelled — you rejected it in your wallet.";
+  }
 
+  // Insufficient funds for gas
+  if (
+    err?.message?.toLowerCase().includes("insufficient funds") ||
+    err?.message?.toLowerCase().includes("insufficient balance")
+  ) {
+    return "Insufficient balance to cover this transaction + gas fees.";
+  }
+
+  // Contract revert with a reason string
+  if (err?.reason && typeof err.reason === "string" && err.reason.trim()) {
+    return `Contract error: ${err.reason}`;
+  }
+
+  // ethers v6 nested revert data
+  if (err?.info?.error?.message) {
+    const inner = err.info.error.message as string;
+    // Strip verbose RPC prefixes like "execution reverted: "
+    const cleaned = inner.replace(/^execution reverted:\s*/i, "").trim();
+    if (cleaned) return `Contract error: ${cleaned}`;
+  }
+
+  // Network / RPC issues
+  if (
+    err?.message?.toLowerCase().includes("network") ||
+    err?.message?.toLowerCase().includes("could not detect network")
+  ) {
+    return "Network error — check your connection and try again.";
+  }
+
+  // Gas estimation failed (usually means the tx would revert)
+  if (
+    err?.message?.toLowerCase().includes("cannot estimate gas") ||
+    err?.message?.toLowerCase().includes("gas required exceeds")
+  ) {
+    return "Transaction would fail on-chain — check your balance and allowance.";
+  }
+
+  // Nonce issues
+  if (err?.message?.toLowerCase().includes("nonce")) {
+    return "Transaction nonce conflict — please reset your wallet activity and retry.";
+  }
+  if (
+    err?.data === "0x2c5211c6" ||
+    err?.message?.includes("2c5211c6") ||
+    err?.reason === "InvalidAmount"
+  ) {
+    return "Fund amount rejected by contract — the pool amount may have changed. Try refreshing the page.";
+  }
+  // Fallback: trim long raw messages
+  const raw: string = err?.message || "Unknown error";
+  return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
+}
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 // ── Safe WS URL ──
@@ -171,7 +235,11 @@ function LinearTimer({ seconds, total }: { seconds: number; total: number }) {
 interface ClaimBannerProps { code: string; myWallet: string; }
 function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
   const { wallets } = useWallets();
-  const activeWallet = wallets?.[0];
+  const { address: userWalletAddress } = useWallet();
+  const activeWallet = 
+  wallets.find((w) => w.walletClientType === 'privy') || 
+  wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) || 
+  wallets?.[0];
   const [status, setStatus] = useState<"loading" | "eligible" | "claimed" | "expired" | "not_winner">("loading");
   const [amount, setAmount] = useState<number>(0);
   const [symbol, setSymbol] = useState<string>("");
@@ -234,8 +302,8 @@ function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
       setStatus("claimed");
       toast.success("Reward claimed! It's now in your wallet.");
     } catch (e: any) {
-      toast.error(e.message || "Claim failed");
-    } finally { setIsClaiming(false); }
+      toast.error(parseOnchainError(e));
+    }finally { setIsClaiming(false); }
   };
 
   if (status === "loading") return (
@@ -295,11 +363,15 @@ interface PayoutsData { success: boolean; faucetAddress: string; chainId: number
 
 function QuizGameOver({ quizMeta, code, leaderboard, myWallet, isCreator, showConfetti, router }: any) {
   const [payoutsData, setPayoutsData] = useState<PayoutsData | null>(null);
+  const { address: userWalletAddress } = useWallet();
   const [loadingPayouts, setLoadingPayouts] = useState(true);
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimedTx, setClaimedTx] = useState<string | null>(null);
   const { wallets } = useWallets();
-  const activeWallet = wallets?.[0];
+  const activeWallet = 
+  wallets.find((w) => w.walletClientType === 'privy') || 
+  wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) || 
+  wallets?.[0];
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/quiz/${code}/payouts`).then(r => r.json()).then(d => { if (d.success) setPayoutsData(d); }).finally(() => setLoadingPayouts(false));
@@ -642,7 +714,10 @@ export default function QuizCodePage() {
   const router = useRouter();
   const { address: userWalletAddress } = useWallet();
   const { wallets } = useWallets();
-  const activeWallet = wallets?.[0];
+   const activeWallet = 
+  wallets.find((w) => w.walletClientType === 'privy') || 
+  wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) || 
+  wallets?.[0];
   const code = (params.code as string || "").toUpperCase();
   const sessionKeyRef = useRef<CryptoKey | null>(null);
   const [quizReward, setQuizReward] = useState<{
@@ -664,7 +739,8 @@ export default function QuizCodePage() {
   const [isFundedCheckLoading, setIsFundedCheckLoading] = useState(false);
 
   const [phase, setPhase] = useState<GamePhase>("loading");
-  const [quizMeta, setQuizMeta] = useState<{ title: string; totalQuestions: number; creatorAddress: string } | null>(null);
+  const [quizMeta, setQuizMeta] = useState<{ title: string; totalQuestions: number; creatorAddress: string; coverImageUrl?: string | null } | null>(null);
+
   const [players, setPlayers] = useState<Player[]>([]);
   const [countdownVal, setCountdownVal] = useState(3);
 
@@ -707,18 +783,56 @@ export default function QuizCodePage() {
       .catch(() => { });
   }, [userWalletAddress]);
 
-
+  const handleSyncFunding = async () => {
+  if (!quizReward) return;
+  setIsFundedCheckLoading(true);
+  try {
+    const privyProvider = await wallets[0].getEthereumProvider();
+    const ethersProvider = new BrowserProvider(privyProvider);
+    const result = await getContractFundedStatus(
+      ethersProvider,
+      quizReward.contractAddress,
+      quizReward.tokenAddress,
+      quizReward.tokenDecimals,
+      quizReward.isNativeToken,
+      quizReward.poolAmount
+    );
+    if (result.isFunded) {
+      setIsFunded(true);
+      setContractBalance(result.balance);
+      await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txHash: "manual-sync",
+          contractAddress: quizReward.contractAddress,
+        }),
+      });
+      toast.success("Funding status synced!");
+    } else {
+      toast.error(`Contract balance is ${result.balance} — not yet funded.`);
+    }
+  } catch (e: any) {
+    toast.error("Sync failed: " + e.message);
+  } finally {
+    setIsFundedCheckLoading(false);
+  }
+};
+// ── Smart Funding Check & Auto-Heal ──
   useEffect(() => {
-    if (!isCreator || !quizReward?.contractAddress || isFunded) return;
+    // Only run if the user is the creator, the contract is known, and a wallet is connected
+    if (!isCreator || !quizReward?.contractAddress || !wallets[0]) return;
 
     let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval>;
 
     const checkFunded = async () => {
-      if (!wallets[0]) return;
       setIsFundedCheckLoading(true);
+      
       try {
         const privyProvider = await wallets[0].getEthereumProvider();
         const ethersProvider = new BrowserProvider(privyProvider);
+        
         const result = await getContractFundedStatus(
           ethersProvider,
           quizReward.contractAddress,
@@ -727,27 +841,54 @@ export default function QuizCodePage() {
           quizReward.isNativeToken,
           quizReward.poolAmount
         );
+        
         if (!cancelled) {
-          setIsFunded(result.isFunded);
           setContractBalance(result.balance);
+          setIsFunded(result.isFunded);
+
+          // 🚀 IF FUNDED: Stop checking and tell the database!
+          if (result.isFunded) {
+            // 1. Immediately kill the polling interval so we don't spam the RPC
+            clearInterval(intervalId);
+            
+            // 2. Tell the backend to update the DB (Self-Healing)
+            fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                txHash: "auto-detected-on-reload", // Indicates the frontend found the balance
+                contractAddress: quizReward.contractAddress 
+              }),
+            }).catch(err => console.error("Failed to sync funding to DB:", err));
+          }
         }
-      } catch { }
-      if (!cancelled) setIsFundedCheckLoading(false);
+      } catch (e) { 
+        console.error("Balance check error:", e);
+      } finally {
+        if (!cancelled) setIsFundedCheckLoading(false);
+      }
     };
 
+    // 1. ALWAYS do one immediate hard-check when the page loads
     checkFunded();
-    const interval = setInterval(checkFunded, 10_000); // re-check every 10s
+    
+    // 2. Start polling every 10 seconds. 
+    // (If the check above returns true, it instantly clears this interval!)
+    intervalId = setInterval(checkFunded, 10_000); 
+    
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      clearInterval(intervalId);
     };
-  }, [isCreator, quizReward, isFunded, wallets]);
+  // Re-run this effect ONLY if the contract address or connected wallet changes
+  }, [isCreator, quizReward?.contractAddress, wallets[0]?.address, code]);
+
   // ── Load quiz meta ──
   useEffect(() => {
     if (!code) return;
     fetch(`${API_BASE_URL}/api/quiz/${code}`).then(r => r.json()).then(d => {
       if (d.success) {
-        setQuizMeta({ title: d.quiz.title, totalQuestions: d.quiz.totalQuestions, creatorAddress: d.quiz.creatorAddress });
+        setQuizMeta({ title: d.quiz.title, totalQuestions: d.quiz.totalQuestions, creatorAddress: d.quiz.creatorAddress, coverImageUrl: d.quiz.coverImageUrl ?? null });
         if (d.quiz.reward?.isOnChain && d.quiz.reward?.contractAddress) {
           setQuizReward({
             contractAddress: d.quiz.reward.contractAddress,
@@ -971,15 +1112,9 @@ const connectWS = useCallback(() => {
     }
   };
 
-  const handleFundReward = async () => {
-  if (!quizReward) { 
-    toast.error("No reward configured"); 
-    return; 
-  }
-  if (!activeWallet) { 
-    toast.error("Wallet not ready"); 
-    return; 
-  }
+const handleFundReward = async () => {
+  if (!quizReward) { toast.error("No reward configured"); return; }
+  if (!activeWallet) { toast.error("Wallet not ready"); return; }
 
   setIsFunding(true);
   setFundError("");
@@ -987,95 +1122,33 @@ const connectWS = useCallback(() => {
   try {
     const privyProvider = await activeWallet.getEthereumProvider();
     const provider = new BrowserProvider(privyProvider);
-    const signer = await provider.getSigner();
-    const userAddress = await signer.getAddress();
 
-    const quizContract = new Contract(quizReward.contractAddress, QUIZ_ABI, signer);
+    const { txHash } = await fundQuizReward(provider, chainId, quizReward.contractAddress, {
+      tokenAddress: quizReward.tokenAddress,
+      tokenDecimals: quizReward.tokenDecimals,
+      isNativeToken: quizReward.isNativeToken,
+      poolAmount: quizReward.poolAmount,
+    });
 
-    // ─── DYNAMIC FEE CALCULATION (reads live contract values) ───
-    const backendFeePct = await quizContract.BACKEND_FEE_PERCENT();
-    const vaultFeePct = await quizContract.VAULT_FEE_PERCENT();
-    const totalFeePct = Number(backendFeePct) + Number(vaultFeePct); // e.g. 2 + 3 = 5
-
-    const baseAmountWei = parseUnits(quizReward.poolAmount, quizReward.tokenDecimals);
-    // total = base + fees  (exact same math as your original 100/95 but now dynamic)
-    const totalAmountWei = (baseAmountWei * 100n) / BigInt(100 - totalFeePct);
-
-    if (!quizReward.isNativeToken) {
-      // ─── ERC20 PATH (the one that was failing) ───
-      const tokenContract = new Contract(quizReward.tokenAddress, ERC20_ABI, signer);
-
-      const balance = await tokenContract.balanceOf(userAddress);
-      if (balance < totalAmountWei) {
-        throw new Error("Insufficient token balance for prize + fees.");
-      }
-
-      let currentAllowance = await tokenContract.allowance(userAddress, quizReward.contractAddress);
-      if (currentAllowance < totalAmountWei) {
-        toast.info("Step 1/2: Approving tokens...");
-        const appTx = await tokenContract.approve(quizReward.contractAddress, totalAmountWei);
-        await appTx.wait();
-        toast.success("Approval confirmed!");
-
-        // ─── CRITICAL FIX: Poll until allowance is visible on the RPC node ───
-        // (This is the #1 reason for "Could not estimate gas" after Privy approvals)
-        let polls = 0;
-        while (currentAllowance < totalAmountWei && polls < 10) {
-          await new Promise(r => setTimeout(r, 2500));
-          currentAllowance = await tokenContract.allowance(userAddress, quizReward.contractAddress);
-          polls++;
-          console.log(`Polling allowance... ${currentAllowance.toString()} / ${totalAmountWei.toString()}`);
-        }
-        if (currentAllowance < totalAmountWei) {
-          throw new Error("Approval still not visible after 25s. Try again.");
-        }
-      }
-
-      toast.info("Step 2/2: Funding contract...");
-
-      // ─── SIMPLIFIED & RELIABLE CALL (no manual encoding, no manual gas estimation) ───
-      // ethers v6 now handles estimation + revert reason automatically
-      const tx = await quizContract.fund(totalAmountWei);
-      await tx.wait();
-
-      setFundTxHash(tx.hash);
-
-    } else {
-      // ─── NATIVE TOKEN PATH (unchanged, already worked) ───
-      toast.info("Confirm funding transaction in your wallet...");
-      
-      const tx = await quizContract.fund(0n, { 
-        value: totalAmountWei 
-      });
-      await tx.wait();
-
-      setFundTxHash(tx.hash);
-    }
-
+    setFundTxHash(txHash);
     setIsFunded(true);
-    toast.success("Reward pool funded!");
+    toast.success("Reward pool funded! 🎉");
 
-    // Notify backend
     await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        txHash: fundTxHash, 
-        contractAddress: quizReward.contractAddress 
-      }),
+      body: JSON.stringify({ txHash, contractAddress: quizReward.contractAddress }),
     }).catch(() => {});
 
   } catch (err: any) {
     console.error("Funding Error:", err);
-    // This will now show the REAL contract revert reason (e.g. "OwnableUnauthorizedAccount", "InsufficientBalance", etc.)
-    const msg = err?.info?.error?.message || err?.reason || err?.message || "Funding failed";
+    const msg = parseOnchainError(err);
     setFundError(msg);
     toast.error(msg);
   } finally {
     setIsFunding(false);
   }
 };
-
   const handleSelectAnswer = (optId: string) => {
     if (!currentQ || timeLeft <= 0 || isSpectator) return;
     
@@ -1142,25 +1215,39 @@ const connectWS = useCallback(() => {
   }
 
   // Pre-join screen
-  if (!hasJoined && !isCreator && phase === "lobby") {
+   if (!hasJoined && !isCreator && phase === "lobby") {
+    const cover = quizMeta?.coverImageUrl;
     return (
-      <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950">
-        <Header pageTitle={quizMeta?.title ?? "Quiz Lobby"} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm space-y-6 text-center">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-sm">
-              <p className="text-slate-500 dark:text-slate-400 text-sm font-bold uppercase tracking-widest mb-3">Quiz Code</p>
-              <div className="text-6xl font-black tracking-widest text-slate-900 dark:text-white">{code}</div>
+      <div className="relative flex flex-col min-h-screen overflow-hidden">
+        {/* Background */}
+        
+        <div className="relative z-10 flex flex-col min-h-screen">
+          <Header pageTitle={quizMeta?.title ?? "Quiz Lobby"} />
+          <div className="flex-1 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm space-y-5 text-center">
+              {/* Code pill */}
+              <div className="inline-flex flex-col items-center gap-1 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-8 py-5 shadow-xl">
+                <p className="text-white/60 text-xs font-bold uppercase tracking-widest">Quiz Code</p>
+                <div className="text-5xl font-black tracking-[0.15em] text-white drop-shadow">{code}</div>
+              </div>
+              {/* Title */}
+              <div className="space-y-1.5">
+                <h2 className="text-2xl font-black text-white drop-shadow">{quizMeta?.title}</h2>
+                <p className="text-white/60 text-sm font-medium">{quizMeta?.totalQuestions} questions</p>
+              </div>
+              {/* Join button */}
+              <Button
+                className="w-full h-14 text-lg font-bold bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl shadow-xl shadow-indigo-900/40 border-0"
+                onClick={handleJoin}
+                disabled={isJoining || !username}
+              >
+                {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5" />}
+                {!username ? "Set Username First" : "Join Quiz"}
+              </Button>
+              {!username && (
+                <p className="text-amber-400 text-xs font-medium">Go to your profile to set a username before joining</p>
+              )}
             </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-black text-slate-900 dark:text-white">{quizMeta?.title}</h2>
-              <p className="text-slate-500 dark:text-slate-400 text-sm">{quizMeta?.totalQuestions} questions</p>
-            </div>
-            <Button className="w-full h-14 text-lg font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-500/20" onClick={handleJoin} disabled={isJoining || !username}>
-              {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5" />}
-              {!username ? "Set Username First" : "Join Quiz"}
-            </Button>
-            {!username && <p className="text-amber-600 dark:text-amber-400 text-xs">Go to your profile to set a username before joining</p>}
           </div>
         </div>
       </div>
@@ -1170,116 +1257,149 @@ const grossDisplayAmount = quizReward
   ? (parseFloat(quizReward.poolAmount) * 100 / 95).toFixed(4)
   : "0";
   // Lobby waiting room
-  if (phase === "lobby") {
+   if (phase === "lobby") {
+    const cover = quizMeta?.coverImageUrl;
     return (
-      <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-950">
-        <Header pageTitle={quizMeta?.title ?? "Quiz Lobby"} />
-        <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6 pb-20">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-            <div className="text-center sm:text-left">
-              <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Quiz Code</p>
-              <div className="text-4xl font-black tracking-widest text-slate-900 dark:text-white">{code}</div>
-            </div>
-            <Button variant="outline" className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`); toast.success("Link copied!"); }}>
-              <Share2 className="mr-2 h-4 w-4" /> Share Link
-            </Button>
-          </div>
+      <div className="relative flex flex-col min-h-screen overflow-hidden">
+        {/* Background */}
+        
+        <div className="relative z-10 flex flex-col min-h-screen">
+          <Header pageTitle={quizMeta?.title ?? "Quiz Lobby"} />
+          <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6 pb-20">
 
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-              <h3 className="text-slate-900 dark:text-white font-bold flex items-center gap-2"><Users className="h-4 w-4 text-indigo-500" /> Players Joined</h3>
-              <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 border-0">{players.length}</Badge>
-            </div>
-            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[50vh] overflow-y-auto">
-              {players.length === 0 ? (
-                <p className="col-span-full text-center text-slate-400 dark:text-slate-500 py-10 text-sm font-medium">Waiting for players to join...</p>
-              ) : players.map((p) => (
-                <div key={p.walletAddress} className={cn("flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-xl px-3 py-2.5 border border-transparent", p.walletAddress.toLowerCase() === myWallet && "border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10")}>
-                  <Avatar className="h-8 w-8 shrink-0">
-                    <AvatarImage src={p.avatarUrl ?? undefined} />
-                    <AvatarFallback className="text-xs font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white">{p.username?.slice(0, 2).toUpperCase() ?? "??"}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-slate-900 dark:text-white text-sm font-bold truncate">{p.username}</span>
-                  {p.walletAddress.toLowerCase() === myWallet && <Badge className="text-[9px] h-4 px-1.5 bg-indigo-600 text-white border-0 ml-auto shrink-0">YOU</Badge>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-         {isCreator && (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-5 max-w-lg mx-auto shadow-sm">
-              <div className="text-center">
-                <Crown className="h-8 w-8 mx-auto mb-3 text-indigo-500" />
-                <p className="text-slate-900 dark:text-white font-black text-2xl">You are the Host</p>
-                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                  Start the quiz whenever players are ready.
-                </p>
+            {/* Code + share row */}
+            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+              <div className="text-center sm:text-left">
+                <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Quiz Code</p>
+                <div className="text-4xl font-black tracking-widest text-white drop-shadow">{code}</div>
               </div>
-
-              {/* Funded status banner OR Optional Fund Button */}
-              {isFunded && quizReward ? (
-                <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-xl px-4 py-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-green-700 dark:text-green-400">Reward Pool Funded ✓</p>
-                    <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
-                      {contractBalance} {quizReward.tokenSymbol} locked in contract
-                    </p>
-                  </div>
-                  {fundTxHash && (
-                    <a href={`https://celoscan.io/tx/${fundTxHash}`} target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4 text-green-500" />
-                    </a>
-                  )}
-                </div>
-              ) : quizReward ? (
-                /* OPTIONAL FUND BUTTON - No longer blocks the Start Button */
-                <Button
-                  variant="outline"
-                  className="w-full h-12 border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/20 transition-all"
-                  onClick={handleFundReward}
-                  disabled={isFunding || isFundedCheckLoading}
-                >
-                  {isFunding ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirming...</>
-                  ) : isFundedCheckLoading ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking balance...</>
-                  ) : (
-                    <><Wallet className="mr-2 h-4 w-4" /> Fund {grossDisplayAmount} {quizReward?.tokenSymbol} (Optional)</>
-                  )}
-                </Button>
-              ) : null}
-
-              {/* ALWAYS ACTIVE START BUTTON */}
               <Button
-                className="w-full h-14 text-lg font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
-                style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
-                onClick={handleStartQuiz}
-                disabled={isStarting}
+                variant="outline"
+                className="bg-white/10 hover:bg-white/20 border-white/20 text-white"
+                onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`); toast.success("Link copied!"); }}
               >
-                {isStarting ? (
-                  <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Starting…</>
-                ) : (
-                  <><Play className="mr-2 h-5 w-5 fill-current" /> START QUIZ ({players.length} players)</>
-                )}
+                <Share2 className="mr-2 h-4 w-4" /> Share Link
               </Button>
-
-              {/* Error */}
-              {fundError && (
-                <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2">
-                  <p className="text-xs text-red-700 dark:text-red-400 font-medium break-words">{fundError}</p>
-                </div>
-              )}
-
-              {/* Contract address */}
-              {quizReward && (
-                <div className="flex items-center gap-2 px-1">
-                  <p className="text-[10px] text-slate-400 font-medium">Contract:</p>
-                  <p className="text-[10px] font-mono text-slate-500 truncate flex-1">{quizReward.contractAddress}</p>
-                </div>
-              )}
             </div>
-          )}
+
+            {/* Players */}
+            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl overflow-hidden shadow-lg">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                <h3 className="text-white font-bold flex items-center gap-2">
+                  <Users className="h-4 w-4 text-indigo-300" /> Players Joined
+                </h3>
+                <Badge className="bg-indigo-500/30 text-indigo-200 border-indigo-400/30">{players.length}</Badge>
+              </div>
+              <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[50vh] overflow-y-auto">
+                {players.length === 0 ? (
+                  <p className="col-span-full text-center text-white/40 py-10 text-sm font-medium">Waiting for players to join...</p>
+                ) : players.map((p) => (
+                  <div key={p.walletAddress} className={cn(
+                    "flex items-center gap-2 bg-white/10 rounded-xl px-3 py-2.5 border",
+                    p.walletAddress.toLowerCase() === myWallet
+                      ? "border-indigo-400/40 bg-indigo-500/20"
+                      : "border-white/10"
+                  )}>
+                    <Avatar className="h-8 w-8 shrink-0">
+                      <AvatarImage src={p.avatarUrl ?? undefined} />
+                      <AvatarFallback className="text-xs font-bold bg-white/20 text-white">{p.username?.slice(0, 2).toUpperCase() ?? "??"}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-white text-sm font-bold truncate">{p.username}</span>
+                    {p.walletAddress.toLowerCase() === myWallet && (
+                      <Badge className="text-[9px] h-4 px-1.5 bg-indigo-500 text-white border-0 ml-auto shrink-0">YOU</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Host panel */}
+            {isCreator && (
+  <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-6 space-y-5 max-w-lg mx-auto shadow-lg">
+    <div className="text-center">
+      <Crown className="h-8 w-8 mx-auto mb-3 text-indigo-300" />
+      <p className="text-white font-black text-2xl">You are the Host</p>
+      <p className="text-white/60 text-sm mt-1">Fund the reward pool to unlock the Start button.</p>
+    </div>
+
+    {/* FUND STATUS + BUTTON */}
+    {isFunded && quizReward ? (
+      <div className="flex items-center gap-3 bg-green-500/15 border border-green-400/30 rounded-xl px-4 py-3">
+        <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-green-300">Reward Pool Funded ✓</p>
+          <p className="text-xs text-green-400/80 mt-0.5">
+            {contractBalance} {quizReward.tokenSymbol} locked in contract
+          </p>
+        </div>
+        {fundTxHash && (
+          <a href={`https://celoscan.io/tx/${fundTxHash}`} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="h-4 w-4 text-green-400" />
+          </a>
+        )}
+      </div>
+    ) : quizReward ? (
+      <Button
+        variant="outline"
+        className="w-full h-12 border-amber-400/40 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 font-bold"
+        onClick={handleFundReward}
+        disabled={isFunding || isFundedCheckLoading}
+      >
+        {isFunding ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirming in wallet...
+          </>
+        ) : isFundedCheckLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking on-chain balance...
+          </>
+        ) : (
+          <>
+            <Wallet className="mr-2 h-4 w-4" />
+            Fund {grossDisplayAmount} {quizReward.tokenSymbol} (Required)
+          </>
+        )}
+      </Button>
+    ) : null}
+
+    {/* START BUTTON — ONLY VISIBLE AFTER FUNDING */}
+    {isFunded && (
+      <Button
+        className="w-full h-14 text-lg font-bold text-white shadow-xl shadow-indigo-900/50 transition-all hover:scale-[1.02] active:scale-[0.98] border-0"
+        style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+        onClick={handleStartQuiz}
+        disabled={isStarting}
+      >
+        {isStarting ? (
+          <>
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Starting…
+          </>
+        ) : (
+          <>
+            <Play className="mr-2 h-5 w-5 fill-current" /> START QUIZ ({players.length} players)
+          </>
+        )}
+      </Button>
+    )}
+   
+
+    {/* Error */}
+    {fundError && (
+      <div className="bg-red-500/15 border border-red-400/30 rounded-lg px-3 py-2">
+        <p className="text-xs text-red-300 font-medium break-words">{fundError}</p>
+      </div>
+    )}
+
+    {/* Contract address */}
+    {quizReward && (
+      <div className="flex items-center gap-2 px-1">
+        <p className="text-[10px] text-white/30 font-medium">Contract:</p>
+        <p className="text-[10px] font-mono text-white/40 truncate flex-1">{quizReward.contractAddress}</p>
+      </div>
+    )}
+  </div>
+)}
+          </div>
         </div>
       </div>
     );

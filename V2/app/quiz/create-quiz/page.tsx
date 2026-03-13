@@ -28,7 +28,65 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWallets } from "@privy-io/react-auth";
 import { getNetworkByChainId } from "@/hooks/use-network";
+// ── On-chain error parser ──────────────────────────────────────
+function parseOnchainError(err: any): string {
+  // User rejected the transaction in their wallet
+  if (
+    err?.code === 4001 ||
+    err?.code === "ACTION_REJECTED" ||
+    err?.info?.error?.code === 4001 ||
+    err?.message?.toLowerCase().includes("user rejected") ||
+    err?.message?.toLowerCase().includes("user denied")
+  ) {
+    return "Transaction cancelled — you rejected it in your wallet.";
+  }
 
+  // Insufficient funds for gas
+  if (
+    err?.message?.toLowerCase().includes("insufficient funds") ||
+    err?.message?.toLowerCase().includes("insufficient balance")
+  ) {
+    return "Insufficient balance to cover this transaction + gas fees.";
+  }
+
+  // Contract revert with a reason string
+  if (err?.reason && typeof err.reason === "string" && err.reason.trim()) {
+    return `Contract error: ${err.reason}`;
+  }
+
+  // ethers v6 nested revert data
+  if (err?.info?.error?.message) {
+    const inner = err.info.error.message as string;
+    // Strip verbose RPC prefixes like "execution reverted: "
+    const cleaned = inner.replace(/^execution reverted:\s*/i, "").trim();
+    if (cleaned) return `Contract error: ${cleaned}`;
+  }
+
+  // Network / RPC issues
+  if (
+    err?.message?.toLowerCase().includes("network") ||
+    err?.message?.toLowerCase().includes("could not detect network")
+  ) {
+    return "Network error — check your connection and try again.";
+  }
+
+  // Gas estimation failed (usually means the tx would revert)
+  if (
+    err?.message?.toLowerCase().includes("cannot estimate gas") ||
+    err?.message?.toLowerCase().includes("gas required exceeds")
+  ) {
+    return "Transaction would fail on-chain — check your balance and allowance.";
+  }
+
+  // Nonce issues
+  if (err?.message?.toLowerCase().includes("nonce")) {
+    return "Transaction nonce conflict — please reset your wallet activity and retry.";
+  }
+
+  // Fallback: trim long raw messages
+  const raw: string = err?.message || "Unknown error";
+  return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
+}
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 interface QuizOption { id: "A" | "B" | "C" | "D"; text: string }
@@ -591,7 +649,8 @@ export default function CreateQuizPage() {
 
   const targetNetwork = getNetworkByChainId(chainId);
   const isSupportedNetwork = !!targetNetwork?.factories?.quiz;
-
+  // Add alongside your existing pdfNumQuestions state
+const [pdfSecondsPerQuestion, setPdfSecondsPerQuestion] = useState(20);
   // Wizard step: 0=details, 1=questions, 2=rewards, 3=launch
   const [wizardStep, setWizardStep] = useState(0);
 
@@ -657,17 +716,21 @@ const handlePdfUpload = async () => {
   if (!pendingPdfFile) return;
   setShowPdfModal(false);
   setIsPdfUploading(true);
-  toast.info("Reading PDF… this might take a few seconds 🧠");
+  
+  // 🔔 1. Start loading toast for PDF
+  let toastId = toast.loading("📄 Reading PDF and extracting facts...");
 
   try {
     const formData = new FormData();
     formData.append("file", pendingPdfFile);
     formData.append("numQuestions", String(pdfNumQuestions));
+    formData.append("timePerQuestion", String(pdfSecondsPerQuestion));
 
     const res = await fetch(`${API_BASE_URL}/api/quiz/generate-from-pdf`, {
       method: "POST",
       body: formData,
     });
+    
     const data = await res.json();
 
     if (data.success && data.questions) {
@@ -676,20 +739,24 @@ const handlePdfUpload = async () => {
         question: q.question,
         options: q.options,
         correctId: q.correctId,
-        timeLimit: q.timeLimit || 30,
+        timeLimit: pdfSecondsPerQuestion,
       }));
+      
       setQuestions(prev => {
         if (prev.length === 1 && !prev[0].question.trim() && !prev[0].options[0].text.trim()) {
           return newQuestions;
         }
         return [...prev, ...newQuestions];
       });
-      toast.success(`✨ ${newQuestions.length} questions imported from PDF!`);
+      
+      // 🔔 2. Success update!
+      toast.success(`✨ ${newQuestions.length} questions imported from PDF!`, { id: toastId });
     } else {
       throw new Error(data.detail || data.message || "Failed to process PDF");
     }
   } catch (err: any) {
-    toast.error(err?.message || "Error processing PDF");
+    // 🔔 3. Error update!
+    toast.error(`❌ Error processing PDF: ${err?.message}`, { id: toastId });
   } finally {
     setIsPdfUploading(false);
     setPendingPdfFile(null);
@@ -814,15 +881,25 @@ const handlePdfUpload = async () => {
     if (!aiTopic.trim()) { toast.error("Enter a topic!"); return; }
     if (!userWalletAddress) { toast.error("Connect your wallet"); return; }
     if (!isSupportedNetwork) { toast.error("Unsupported network. Switch chains."); return; }
+    
     setIsGenerating(true);
     setDeployStep("deploying");
     setDeployError("");
+    
+    // 🔔 1. Start the loading toast
+    let toastId = toast.loading("⛓️ Deploying QuizReward contract...");
+    
     try {
       const privyProvider = await wallets[0]?.getEthereumProvider();
       const ethersProvider = new BrowserProvider(privyProvider);
+      
       const { contractAddress, txHash: deployTxHash } = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig());
       setRewardContractAddress(contractAddress);
+      
+      // 🔔 2. Update toast for the AI generation phase (which takes the longest)
+      toast.loading("🤖 Contract deployed! AI is generating your questions...", { id: toastId });
       setDeployStep("saving");
+      
       const res = await fetch(`${API_BASE_URL}/api/quiz/generate-ai`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -831,20 +908,34 @@ const handlePdfUpload = async () => {
           timePerQuestion: aiTimePerQ, creatorAddress: userWalletAddress,
           creatorUsername, coverImageUrl: coverImageUrl || null,
           title: title || undefined, chainId,
+          faucetAddress: contractAddress, // 🛠️ Crucial fix from earlier
           reward: { ...buildPayload().reward, contractAddress, deployTxHash, isOnChain: true, isFunded: false },
         }),
       });
+      
       const data = await res.json();
+      
       if (data.success) {
-        setDeployStep("done"); setCreatedCode(data.code);
-        toast.success(`🎉 Quiz created! Code: ${data.code}`);
+        setDeployStep("done"); 
+        setCreatedCode(data.code);
+        
+        // 🔔 3. Final success update!
+        toast.success(`✨ AI Quiz created! Code: ${data.code}`, { id: toastId });
+        
         setTimeout(() => router.push(`/quiz/${data.code}`), 1500);
-      } else throw new Error(data.detail || "Generation failed");
-    } catch (err: any) {
+      } else {
+        throw new Error(data.detail || "Generation failed");
+      }
+     } catch (err: any) {
       setDeployStep("error");
-      const msg = err?.reason || err?.message || "Failed";
-      setDeployError(msg); toast.error(msg);
-    } finally { setIsGenerating(false); }
+      const msg = parseOnchainError(err);
+      setDeployError(msg); 
+      
+      // 🔔 4. Update toast to show error
+      toast.error(`❌ Failed: ${msg}`, { id: toastId });
+    } finally { 
+      setIsGenerating(false); 
+    }
   };
 
   const handleSubmit = async () => {
@@ -853,34 +944,59 @@ const handlePdfUpload = async () => {
     if (!userWalletAddress) { toast.error("Connect your wallet"); return; }
     if (isUploadingCover) { toast.error("Wait for image upload"); return; }
     if (!isSupportedNetwork) { toast.error("Switch to a supported network"); return; }
+    
     setIsSubmitting(true);
     setDeployStep("deploying");
     setDeployError("");
+    
+    // 🔔 1. Start the loading toast
+    let toastId = toast.loading("⛓️ Deploying QuizReward contract...");
+    
     try {
       const privyProvider = await wallets[0]?.getEthereumProvider();
       const ethersProvider = new BrowserProvider(privyProvider);
+      
       const { contractAddress, txHash: deployTxHash } = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig());
       setRewardContractAddress(contractAddress);
+      
+      // 🔔 2. Update toast when contract deploys
+      toast.loading("💾 Contract deployed! Saving quiz data to server...", { id: toastId });
       setDeployStep("saving");
+      
       const payload = {
         ...buildPayload(),
+        faucetAddress: contractAddress, // 🛠️ Crucial fix from earlier
         reward: { ...buildPayload().reward, contractAddress, deployTxHash, isOnChain: true, isFunded: false },
       };
+      
       const res = await fetch(`${API_BASE_URL}/api/quiz/create`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      
       const data = await res.json();
+      
       if (data.success) {
-        setDeployStep("done"); setCreatedCode(data.code);
-        toast.success(`🎊 Quiz created! Code: ${data.code}`);
+        setDeployStep("done"); 
+        setCreatedCode(data.code);
+        
+        // 🔔 3. Final success update!
+        toast.success(`🎉 Quiz created successfully! Code: ${data.code}`, { id: toastId });
+        
         setTimeout(() => router.push(`/quiz/${data.code}`), 1500);
-      } else throw new Error(data.detail || "Create failed");
+      } else {
+        throw new Error(data.detail || "Create failed");
+      }
     } catch (err: any) {
       setDeployStep("error");
-      const msg = err?.reason || err?.message || "Failed";
-      setDeployError(msg); toast.error(msg);
-    } finally { setIsSubmitting(false); }
+      const msg = parseOnchainError(err);
+      setDeployError(msg); 
+      
+      // 🔔 4. Update toast to show error
+      toast.error(`❌ Failed: ${msg}`, { id: toastId });
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   const completedQuestions = questions.filter(q => q.question.trim() && q.options.every(o => o.text.trim())).length;
@@ -1022,7 +1138,7 @@ const handlePdfUpload = async () => {
             <div className="space-y-2">
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Questions</Label>
               <div className="flex flex-wrap gap-1.5">
-                {[5, 10, 15, 20].map(n => (
+                {[5, 10, 15, 20, 30, 40, 60].map(n => (
                   <button key={n} onClick={() => setAiNumQ(n)}
                     className={cn("px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all",
                       aiNumQ === n ? "bg-primary border-primary text-primary-foreground shadow-sm" : "bg-card border-border text-muted-foreground hover:border-primary/50")}>
@@ -1052,7 +1168,7 @@ const handlePdfUpload = async () => {
           <div className="space-y-2">
             <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Seconds per question</Label>
             <div className="flex flex-wrap gap-1.5">
-              {[5, 10, 15, 20, 30, 45, 60].map(t => (
+              {[3, 5, 7, 10, 15, 20, 30].map(t => (
                 <button key={t} onClick={() => setAiTimePerQ(t)}
                   className={cn("px-3 py-1.5 rounded-xl text-xs font-black border-2 transition-all",
                     aiTimePerQ === t ? "bg-primary border-primary text-primary-foreground shadow-sm" : "bg-card border-border text-muted-foreground hover:border-primary/50")}>
@@ -1658,7 +1774,7 @@ const handlePdfUpload = async () => {
           </div>
         )}
 
-        {/* ── PDF Question Count Modal ── */}
+{/* ── PDF Question Count Modal ── */}
 {showPdfModal && (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/[0.07] rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 space-y-5">
@@ -1680,7 +1796,6 @@ const handlePdfUpload = async () => {
         <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
           How many questions?
         </label>
-        {/* Quick picks */}
         <div className="flex flex-wrap gap-2">
           {[3, 5, 8, 10, 15, 20].map(n => (
             <button
@@ -1697,7 +1812,6 @@ const handlePdfUpload = async () => {
             </button>
           ))}
         </div>
-        {/* Custom number input */}
         <div className="flex items-center gap-3 pt-1">
           <button
             onClick={() => setPdfNumQuestions(n => Math.max(1, n - 1))}
@@ -1712,8 +1826,48 @@ const handlePdfUpload = async () => {
             className="w-9 h-9 rounded-xl border-2 border-border bg-card text-foreground font-black text-base hover:border-primary transition-all shrink-0"
           >+</button>
         </div>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-border" />
+
+      {/* Time per question picker */}
+      <div className="space-y-3">
+        <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+          Seconds per question?
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[3, 5, 7, 10, 15, 20, 30].map(s => (
+            <button
+              key={s}
+              onClick={() => setPdfSecondsPerQuestion(s)}
+              className={cn(
+                "h-9 w-12 rounded-xl text-sm font-black border-2 transition-all",
+                pdfSecondsPerQuestion === s
+                  ? "bg-primary border-primary text-primary-foreground shadow-sm scale-105"
+                  : "bg-card border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={() => setPdfSecondsPerQuestion(n => Math.max(5, n - 5))}
+            className="w-9 h-9 rounded-xl border-2 border-border bg-card text-foreground font-black text-base hover:border-primary transition-all shrink-0"
+          >−</button>
+          <div className="flex-1 text-center">
+            <span className="text-3xl font-black text-primary tabular-nums">{pdfSecondsPerQuestion}</span>
+            <p className="text-[10px] text-muted-foreground">seconds</p>
+          </div>
+          <button
+            onClick={() => setPdfSecondsPerQuestion(n => Math.min(120, n + 5))}
+            className="w-9 h-9 rounded-xl border-2 border-border bg-card text-foreground font-black text-base hover:border-primary transition-all shrink-0"
+          >+</button>
+        </div>
         <p className="text-[11px] text-muted-foreground text-center">
-          AI will extract up to {pdfNumQuestions} questions from your document
+          {pdfNumQuestions} questions × {pdfSecondsPerQuestion}s = ~{Math.round(pdfNumQuestions * pdfSecondsPerQuestion / 60)} min total
         </p>
       </div>
 

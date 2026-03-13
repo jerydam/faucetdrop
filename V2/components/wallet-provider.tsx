@@ -1,6 +1,5 @@
 "use client"
-
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
 import { BrowserProvider, type JsonRpcSigner } from "ethers"
 import { useDisconnect, useSwitchChain, useChainId } from 'wagmi'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
@@ -16,9 +15,10 @@ interface WalletContextType {
   walletType: 'embedded' | 'external' | null
   connect: () => Promise<void>
   disconnect: () => Promise<void>
-  disconnectExternalWallet: () => Promise<void> 
+  disconnectExternalWallet: () => Promise<void>
   ensureCorrectNetwork: (requiredChainId: number) => Promise<boolean>
   switchChain: (newChainId: number) => Promise<void>
+  refreshProvider: () => Promise<void>
 }
 
 export const WalletContext = createContext<WalletContextType>({
@@ -34,73 +34,142 @@ export const WalletContext = createContext<WalletContextType>({
   disconnectExternalWallet: async () => {},
   ensureCorrectNetwork: async () => false,
   switchChain: async () => {},
+  refreshProvider: async () => {},
 })
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [provider, setProvider] = useState<BrowserProvider | null>(null)
   const [signer, setSigner] = useState<JsonRpcSigner | null>(null)
   const [walletType, setWalletType] = useState<'embedded' | 'external' | null>(null)
-  
-  // Privy hooks
+  // ✅ Track chainId from the LIVE provider, not wagmi
+  const [liveChainId, setLiveChainId] = useState<number | null>(null)
+
   const { ready, authenticated, login, logout, user } = usePrivy()
   const { wallets } = useWallets()
-  
-  // Wagmi hooks
   const { disconnect: wagmiDisconnect } = useDisconnect()
   const { switchChain: wagmiSwitchChain } = useSwitchChain()
-  const chainId = useChainId()
+  const wagmiChainId = useChainId() // only used as fallback
 
-  const getActiveWallet = () => {
+  const getActiveWallet = useCallback(() => {
     if (!authenticated || wallets.length === 0) return null
-    
-    // Prioritize embedded wallet
     const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
     const externalWallet = wallets.find(w => w.walletClientType !== 'privy')
-    
-    // Check if user has ANY standard social auth method
     const hasAuthMethod = user?.email || user?.google || user?.twitter || user?.discord || user?.telegram
-    
-    if (hasAuthMethod && embeddedWallet) {
-      return embeddedWallet
-    }
-    
+    if (hasAuthMethod && embeddedWallet) return embeddedWallet
     return embeddedWallet || externalWallet || wallets[0]
-  }
+  }, [authenticated, wallets, user])
 
   const activeWallet = getActiveWallet()
   const address = activeWallet?.address || null
-  
-  // Derived state
   const isConnected = ready && authenticated && !!address && !!signer
-  // FIX 1: Single declaration. Do not spin if authenticated but 0 physical wallets exist
   const isConnecting = !ready || (authenticated && wallets.length > 0 && !address)
 
-  // FIX 2: The "Missing Wallet" Safety Net Detector for Mobile
+  // ✅ Core fix: always build a fresh provider and read chainId directly from RPC
+  const setupProvider = useCallback(async (wallet = activeWallet) => {
+    if (!wallet) {
+      setProvider(null)
+      setSigner(null)
+      setWalletType(null)
+      setLiveChainId(null)
+      return
+    }
+    try {
+      const isEmbedded = wallet.walletClientType === 'privy'
+      const ethereumProvider = await wallet.getEthereumProvider()
+      const ethersProvider = new BrowserProvider(ethereumProvider)
+
+      // ✅ Read chainId directly from RPC — never trust cached values on mobile
+      const network = await ethersProvider.getNetwork()
+      const detectedChainId = Number(network.chainId)
+
+      const ethersSigner = await ethersProvider.getSigner()
+
+      setProvider(ethersProvider)
+      setSigner(ethersSigner)
+      setWalletType(isEmbedded ? 'embedded' : 'external')
+      setLiveChainId(detectedChainId)
+    } catch (error) {
+      console.error('❌ [WalletProvider] Error setting up wallet:', error)
+      if (activeWallet?.walletClientType !== 'privy') {
+        toast.error("Could not connect to your wallet app. Please ensure it is unlocked.", { duration: 5000 })
+        logout()
+      }
+      setProvider(null)
+      setSigner(null)
+      setWalletType(null)
+      setLiveChainId(null)
+    }
+  }, [activeWallet, logout])
+
+  const refreshProvider = useCallback(async () => {
+    await setupProvider()
+  }, [setupProvider])
+
+  // Re-setup whenever wallet list or auth changes
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      if (!cancelled) await setupProvider()
+    }
+    run()
+    return () => { cancelled = true }
+  }, [authenticated, wallets.length, activeWallet?.address])
+
+  // ✅ Listen for chainChanged on the raw provider and refresh
+  useEffect(() => {
+    if (!activeWallet) return
+    let rawProvider: any = null
+
+    const handleChainChange = async (chainHex: string) => {
+      const newChainId = parseInt(chainHex, 16)
+      console.log('[WalletProvider] chainChanged ->', newChainId)
+      // Rebuild provider with new chain context
+      await setupProvider()
+    }
+
+    const attach = async () => {
+      try {
+        rawProvider = await activeWallet.getEthereumProvider()
+        rawProvider.on?.('chainChanged', handleChainChange)
+        rawProvider.on?.('accountsChanged', refreshProvider)
+      } catch (e) {
+        console.error('[WalletProvider] Could not attach chain listener', e)
+      }
+    }
+
+    attach()
+
+    return () => {
+      try {
+        rawProvider?.removeListener?.('chainChanged', handleChainChange)
+        rawProvider?.removeListener?.('accountsChanged', refreshProvider)
+      } catch {}
+    }
+  }, [activeWallet?.address])
+
+  // Missing wallet safety net
   useEffect(() => {
     if (ready && authenticated && wallets.length === 0) {
-      // Delay slightly to give Privy a moment to inject the wallet
       const timer = setTimeout(() => {
         if (wallets.length === 0) {
           toast.error(
-            "Account recognized, but your external wallet is missing on this device. Please log in using WalletConnect or your mobile wallet app browser.", 
+            "Account recognized, but your external wallet is missing on this device. Please log in using WalletConnect or your mobile wallet app browser.",
             { duration: 6000 }
           )
-          logout() // Gracefully log them out so they aren't stuck on a blank screen
+          logout()
         }
       }, 2500)
       return () => clearTimeout(timer)
     }
   }, [ready, authenticated, wallets.length, logout])
 
-  // Auto-disconnect external wallet if embedded wallet exists + user has auth method
+  // Auto-disconnect external when embedded exists
   useEffect(() => {
     const autoDisconnectExternal = async () => {
       if (!authenticated || wallets.length <= 1) return
-      
       const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
       const externalWallet = wallets.find(w => w.walletClientType !== 'privy')
       const hasAuthMethod = user?.email || user?.google || user?.twitter || user?.discord || user?.telegram
-      
       if (hasAuthMethod && embeddedWallet && externalWallet) {
         try {
           await externalWallet.disconnect()
@@ -111,64 +180,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }
       }
     }
-
     autoDisconnectExternal()
-  }, [authenticated, wallets, user, wagmiDisconnect])
-
-  // Setup provider from the active wallet
-  useEffect(() => {
-    let isMounted = true
-
-    const setupProvider = async () => {
-      if (!activeWallet) {
-        if (isMounted) {
-          setProvider(null)
-          setSigner(null)
-          setWalletType(null)
-        }
-        return
-      }
-
-      try {
-        const isEmbedded = activeWallet.walletClientType === 'privy'
-        const ethereumProvider = await activeWallet.getEthereumProvider()
-        const ethersProvider = new BrowserProvider(ethereumProvider)
-        const ethersSigner = await ethersProvider.getSigner()
-        
-        if (isMounted) {
-          setProvider(ethersProvider)
-          setSigner(ethersSigner)
-          setWalletType(isEmbedded ? 'embedded' : 'external')
-        }
-      } catch (error) {
-        console.error('❌ [WalletProvider] Error setting up wallet:', error)
-        
-        // FIX 3: Catch Provider initialization failures
-        if (activeWallet.walletClientType !== 'privy') {
-          toast.error("Could not connect to your wallet app. Please ensure it is unlocked.", { duration: 5000 })
-          logout()
-        }
-        
-        if (isMounted) {
-          setProvider(null)
-          setSigner(null)
-          setWalletType(null)
-        }
-      }
-    }
-
-    setupProvider()
-
-    // Cleanup to prevent memory leaks
-    return () => {
-      isMounted = false
-    }
-  }, [authenticated, wallets, activeWallet, logout])
+  }, [authenticated, wallets.length, user])
 
   const connect = async () => {
     try {
       await login()
-    } catch (error: any) {
+    } catch {
       toast.error("Failed to connect wallet")
     }
   }
@@ -179,6 +197,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setProvider(null)
       setSigner(null)
       setWalletType(null)
+      setLiveChainId(null)
       await logout()
       toast.warning("Wallet disconnected")
     } catch (error) {
@@ -194,18 +213,63 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         wagmiDisconnect()
         toast.success("External wallet disconnected")
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to disconnect external wallet")
     }
   }
 
+  // ✅ Fixed switchChain: uses raw provider request, works for ALL wallet types on mobile
   const switchChain = async (newChainId: number) => {
+    if (!activeWallet) throw new Error("No wallet connected")
+
+    const hexChainId = `0x${newChainId.toString(16)}`
+
     try {
-      if (!activeWallet) throw new Error("No wallet connected")
-      await wagmiSwitchChain({ chainId: newChainId })
+      const rawProvider = await activeWallet.getEthereumProvider()
+
+      try {
+        await rawProvider.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: hexChainId }],
+        })
+      } catch (switchErr: any) {
+        // Chain not added to wallet yet — add it
+        if (switchErr.code === 4902 || switchErr.message?.includes("Unrecognized chain ID")) {
+          // Try wagmi as fallback for adding the chain
+          await wagmiSwitchChain({ chainId: newChainId })
+        } else {
+          throw switchErr
+        }
+      }
+
+      // ✅ Poll until the provider confirms the new chain (mobile doesn't fire chainChanged reliably)
+      let confirmed = false
+      for (let i = 0; i < 12; i++) {
+        await new Promise(r => setTimeout(r, 500))
+        try {
+          const ethProvider = new BrowserProvider(rawProvider)
+          const network = await ethProvider.getNetwork()
+          if (Number(network.chainId) === newChainId) {
+            confirmed = true
+            break
+          }
+        } catch {}
+      }
+
+      if (!confirmed) {
+        toast.warning("Network may not have switched — please verify in your wallet")
+      }
+
+      // Rebuild provider with confirmed new chain
+      await setupProvider()
       toast.success("Network switched")
+
     } catch (error: any) {
-      toast.error("Failed to switch network")
+      if (error?.code === 4001 || error?.message?.includes("rejected")) {
+        toast.error("Network switch cancelled")
+      } else {
+        toast.error("Failed to switch network — try switching manually in your wallet")
+      }
       throw error
     }
   }
@@ -215,17 +279,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       try {
         await connect()
         await new Promise(resolve => setTimeout(resolve, 2000))
-      } catch (error) {
+      } catch {
         return false
       }
     }
 
-    if (chainId !== requiredChainId) {
+    // ✅ Use liveChainId (from actual RPC) not wagmi's cached chainId
+    const currentChain = liveChainId ?? wagmiChainId
+    if (currentChain !== requiredChainId) {
       try {
         await switchChain(requiredChainId)
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        await new Promise(resolve => setTimeout(resolve, 1000))
         return true
-      } catch (error) {
+      } catch {
         return false
       }
     }
@@ -238,7 +304,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         provider,
         signer,
         address,
-        chainId: chainId || null,
+        chainId: liveChainId ?? wagmiChainId ?? null, // ✅ live RPC chain wins
         isConnected,
         isConnecting,
         walletType,
@@ -247,6 +313,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         disconnectExternalWallet,
         ensureCorrectNetwork,
         switchChain,
+        refreshProvider,
       }}
     >
       {children}

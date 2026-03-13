@@ -87,7 +87,7 @@ function parseOnchainError(err: any): string {
   const raw: string = err?.message || "Unknown error";
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ── Safe WS URL ──
 function getWsBaseUrl(): string {
@@ -1218,39 +1218,30 @@ const handleFundReward = async () => {
    if (!hasJoined && !isCreator && phase === "lobby") {
     const cover = quizMeta?.coverImageUrl;
     return (
-      <div className="relative flex flex-col min-h-screen overflow-hidden">
-        {/* Background */}
-        
-        <div className="relative z-10 flex flex-col min-h-screen">
-          <Header pageTitle={quizMeta?.title ?? "Quiz Lobby"} />
-          <div className="flex-1 flex items-center justify-center p-4">
-            <div className="w-full max-w-sm space-y-5 text-center">
-              {/* Code pill */}
-              <div className="inline-flex flex-col items-center gap-1 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-8 py-5 shadow-xl">
-                <p className="text-white/60 text-xs font-bold uppercase tracking-widest">Quiz Code</p>
-                <div className="text-5xl font-black tracking-[0.15em] text-white drop-shadow">{code}</div>
-              </div>
-              {/* Title */}
-              <div className="space-y-1.5">
-                <h2 className="text-2xl font-black text-white drop-shadow">{quizMeta?.title}</h2>
-                <p className="text-white/60 text-sm font-medium">{quizMeta?.totalQuestions} questions</p>
-              </div>
-              {/* Join button */}
-              <Button
-                className="w-full h-14 text-lg font-bold bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl shadow-xl shadow-indigo-900/40 border-0"
-                onClick={handleJoin}
-                disabled={isJoining || !username}
-              >
-                {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5" />}
-                {!username ? "Set Username First" : "Join Quiz"}
-              </Button>
-              {!username && (
-                <p className="text-amber-400 text-xs font-medium">Go to your profile to set a username before joining</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="w-full max-w-sm space-y-5 text-center">
+  {/* Code pill */}
+  <div className="inline-flex flex-col items-center gap-1 bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-2xl px-8 py-5 shadow-xl">
+    <p className="text-slate-500 dark:text-white/60 text-xs font-bold uppercase tracking-widest">Quiz Code</p>
+    <div className="text-5xl font-black tracking-[0.15em] text-slate-900 dark:text-white drop-shadow">{code}</div>
+  </div>
+  {/* Title */}
+  <div className="space-y-1.5">
+    <h2 className="text-2xl font-black text-slate-900 dark:text-white">{quizMeta?.title}</h2>
+    <p className="text-slate-500 dark:text-white/60 text-sm font-medium">{quizMeta?.totalQuestions} questions</p>
+  </div>
+  {/* Join button */}
+  <Button
+    className="w-full h-14 text-lg font-bold bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl shadow-xl shadow-indigo-900/40 border-0"
+    onClick={handleJoin}
+    disabled={isJoining || !username}
+  >
+    {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5" />}
+    {!username ? "Set Username First" : "Join Quiz"}
+  </Button>
+  {!username && (
+    <p className="text-amber-600 dark:text-amber-400 text-xs font-medium">Go to your profile to set a username before joining</p>
+  )}
+</div>
     );
   }
 const grossDisplayAmount = quizReward
@@ -1260,148 +1251,136 @@ const grossDisplayAmount = quizReward
    if (phase === "lobby") {
     const cover = quizMeta?.coverImageUrl;
     return (
-      <div className="relative flex flex-col min-h-screen overflow-hidden">
-        {/* Background */}
-        
-        <div className="relative z-10 flex flex-col min-h-screen">
-          <Header pageTitle={quizMeta?.title ?? "Quiz Lobby"} />
-          <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6 pb-20">
-
-            {/* Code + share row */}
-            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
-              <div className="text-center sm:text-left">
-                <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Quiz Code</p>
-                <div className="text-4xl font-black tracking-widest text-white drop-shadow">{code}</div>
-              </div>
-              <Button
-                variant="outline"
-                className="bg-white/10 hover:bg-white/20 border-white/20 text-white"
-                onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`); toast.success("Link copied!"); }}
-              >
-                <Share2 className="mr-2 h-4 w-4" /> Share Link
-              </Button>
-            </div>
-
-            {/* Players */}
-            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl overflow-hidden shadow-lg">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-                <h3 className="text-white font-bold flex items-center gap-2">
-                  <Users className="h-4 w-4 text-indigo-300" /> Players Joined
-                </h3>
-                <Badge className="bg-indigo-500/30 text-indigo-200 border-indigo-400/30">{players.length}</Badge>
-              </div>
-              <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[50vh] overflow-y-auto">
-                {players.length === 0 ? (
-                  <p className="col-span-full text-center text-white/40 py-10 text-sm font-medium">Waiting for players to join...</p>
-                ) : players.map((p) => (
-                  <div key={p.walletAddress} className={cn(
-                    "flex items-center gap-2 bg-white/10 rounded-xl px-3 py-2.5 border",
-                    p.walletAddress.toLowerCase() === myWallet
-                      ? "border-indigo-400/40 bg-indigo-500/20"
-                      : "border-white/10"
-                  )}>
-                    <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src={p.avatarUrl ?? undefined} />
-                      <AvatarFallback className="text-xs font-bold bg-white/20 text-white">{p.username?.slice(0, 2).toUpperCase() ?? "??"}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-white text-sm font-bold truncate">{p.username}</span>
-                    {p.walletAddress.toLowerCase() === myWallet && (
-                      <Badge className="text-[9px] h-4 px-1.5 bg-indigo-500 text-white border-0 ml-auto shrink-0">YOU</Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Host panel */}
-            {isCreator && (
-  <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-6 space-y-5 max-w-lg mx-auto shadow-lg">
-    <div className="text-center">
-      <Crown className="h-8 w-8 mx-auto mb-3 text-indigo-300" />
-      <p className="text-white font-black text-2xl">You are the Host</p>
-      <p className="text-white/60 text-sm mt-1">Fund the reward pool to unlock the Start button.</p>
+      <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-6 pb-20">
+  {/* Code + share row */}
+  <div className="bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/15 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+    <div className="text-center sm:text-left">
+      <p className="text-slate-500 dark:text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Quiz Code</p>
+      <div className="text-4xl font-black tracking-widest text-slate-900 dark:text-white">{code}</div>
     </div>
-
-    {/* FUND STATUS + BUTTON */}
-    {isFunded && quizReward ? (
-      <div className="flex items-center gap-3 bg-green-500/15 border border-green-400/30 rounded-xl px-4 py-3">
-        <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-green-300">Reward Pool Funded ✓</p>
-          <p className="text-xs text-green-400/80 mt-0.5">
-            {contractBalance} {quizReward.tokenSymbol} locked in contract
-          </p>
-        </div>
-        {fundTxHash && (
-          <a href={`https://celoscan.io/tx/${fundTxHash}`} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="h-4 w-4 text-green-400" />
-          </a>
-        )}
-      </div>
-    ) : quizReward ? (
-      <Button
-        variant="outline"
-        className="w-full h-12 border-amber-400/40 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 font-bold"
-        onClick={handleFundReward}
-        disabled={isFunding || isFundedCheckLoading}
-      >
-        {isFunding ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirming in wallet...
-          </>
-        ) : isFundedCheckLoading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking on-chain balance...
-          </>
-        ) : (
-          <>
-            <Wallet className="mr-2 h-4 w-4" />
-            Fund {grossDisplayAmount} {quizReward.tokenSymbol} (Required)
-          </>
-        )}
-      </Button>
-    ) : null}
-
-    {/* START BUTTON — ONLY VISIBLE AFTER FUNDING */}
-    {isFunded && (
-      <Button
-        className="w-full h-14 text-lg font-bold text-white shadow-xl shadow-indigo-900/50 transition-all hover:scale-[1.02] active:scale-[0.98] border-0"
-        style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
-        onClick={handleStartQuiz}
-        disabled={isStarting}
-      >
-        {isStarting ? (
-          <>
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Starting…
-          </>
-        ) : (
-          <>
-            <Play className="mr-2 h-5 w-5 fill-current" /> START QUIZ ({players.length} players)
-          </>
-        )}
-      </Button>
-    )}
-   
-
-    {/* Error */}
-    {fundError && (
-      <div className="bg-red-500/15 border border-red-400/30 rounded-lg px-3 py-2">
-        <p className="text-xs text-red-300 font-medium break-words">{fundError}</p>
-      </div>
-    )}
-
-    {/* Contract address */}
-    {quizReward && (
-      <div className="flex items-center gap-2 px-1">
-        <p className="text-[10px] text-white/30 font-medium">Contract:</p>
-        <p className="text-[10px] font-mono text-white/40 truncate flex-1">{quizReward.contractAddress}</p>
-      </div>
-    )}
+    <Button
+      variant="outline"
+      className="border-slate-300 dark:border-white/20 text-slate-700 dark:text-white hover:bg-slate-200 dark:hover:bg-white/20 bg-transparent"
+      onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`); toast.success("Link copied!"); }}
+    >
+      <Share2 className="mr-2 h-4 w-4" /> Share Link
+    </Button>
   </div>
-)}
-          </div>
+
+  {/* Players */}
+  <div className="bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/15 rounded-2xl overflow-hidden shadow-sm">
+    <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-white/10">
+      <h3 className="text-slate-800 dark:text-white font-bold flex items-center gap-2">
+        <Users className="h-4 w-4 text-indigo-500 dark:text-indigo-300" /> Players Joined
+      </h3>
+      <Badge className="bg-indigo-100 dark:bg-indigo-500/30 text-indigo-700 dark:text-indigo-200 border-indigo-200 dark:border-indigo-400/30">{players.length}</Badge>
+    </div>
+    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[50vh] overflow-y-auto">
+      {players.length === 0 ? (
+        <p className="col-span-full text-center text-slate-400 dark:text-white/40 py-10 text-sm font-medium">Waiting for players to join...</p>
+      ) : players.map((p) => (
+        <div key={p.walletAddress} className={cn(
+          "flex items-center gap-2 rounded-xl px-3 py-2.5 border",
+          p.walletAddress.toLowerCase() === myWallet
+            ? "border-indigo-300 dark:border-indigo-400/40 bg-indigo-50 dark:bg-indigo-500/20"
+            : "border-slate-200 dark:border-white/10 bg-white dark:bg-white/10"
+        )}>
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarImage src={p.avatarUrl ?? undefined} />
+            <AvatarFallback className="text-xs font-bold bg-slate-200 dark:bg-white/20 text-slate-700 dark:text-white">{p.username?.slice(0, 2).toUpperCase() ?? "??"}</AvatarFallback>
+          </Avatar>
+          <span className="text-slate-800 dark:text-white text-sm font-bold truncate">{p.username}</span>
+          {p.walletAddress.toLowerCase() === myWallet && (
+            <Badge className="text-[9px] h-4 px-1.5 bg-indigo-500 text-white border-0 ml-auto shrink-0">YOU</Badge>
+          )}
         </div>
+      ))}
+    </div>
+  </div>
+
+  {/* Host panel */}
+  {isCreator && (
+    <div className="bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/15 rounded-2xl p-6 space-y-5 max-w-lg mx-auto shadow-sm">
+      <div className="text-center">
+        <Crown className="h-8 w-8 mx-auto mb-3 text-indigo-500 dark:text-indigo-300" />
+        <p className="text-slate-900 dark:text-white font-black text-2xl">You are the Host</p>
+        <p className="text-slate-500 dark:text-white/60 text-sm mt-1">Fund the reward pool to unlock the Start button.</p>
       </div>
+
+      {isFunded && quizReward ? (
+        <div className="flex items-center gap-3 bg-green-50 dark:bg-green-500/15 border border-green-200 dark:border-green-400/30 rounded-xl px-4 py-3">
+          <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-green-700 dark:text-green-300">Reward Pool Funded ✓</p>
+            <p className="text-xs text-green-600 dark:text-green-400/80 mt-0.5">
+              {contractBalance} {quizReward.tokenSymbol} locked in contract
+            </p>
+          </div>
+          {fundTxHash && (
+            <a href={`https://celoscan.io/tx/${fundTxHash}`} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="h-4 w-4 text-green-500 dark:text-green-400" />
+            </a>
+          )}
+        </div>
+      ) : quizReward ? (
+        <Button
+          variant="outline"
+          className="w-full h-12 border-amber-400 dark:border-amber-400/40 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 font-bold"
+          onClick={handleFundReward}
+          disabled={isFunding || isFundedCheckLoading}
+        >
+          {isFunding ? (
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirming in wallet...</>
+          ) : isFundedCheckLoading ? (
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking on-chain balance...</>
+          ) : (
+            <><Wallet className="mr-2 h-4 w-4" /> Fund {grossDisplayAmount} {quizReward.tokenSymbol} (Required)</>
+          )}
+        </Button>
+      ) : null}
+
+      {!isFunded && quizReward && (
+        <button
+          onClick={handleSyncFunding}
+          disabled={isFundedCheckLoading}
+          className="w-full h-10 rounded-xl text-sm font-bold border border-slate-300 dark:border-white/20 text-slate-500 dark:text-white/60 hover:text-slate-800 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/40 transition-all flex items-center justify-center gap-2"
+        >
+          {isFundedCheckLoading
+            ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking chain...</>
+            : "↻ Already funded? Sync status"}
+        </button>
+      )}
+
+      {isFunded && (
+        <Button
+          className="w-full h-14 text-lg font-bold text-white shadow-xl shadow-indigo-900/20 transition-all hover:scale-[1.02] active:scale-[0.98] border-0"
+          style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+          onClick={handleStartQuiz}
+          disabled={isStarting}
+        >
+          {isStarting ? (
+            <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Starting…</>
+          ) : (
+            <><Play className="mr-2 h-5 w-5 fill-current" /> START QUIZ ({players.length} players)</>
+          )}
+        </Button>
+      )}
+
+      {fundError && (
+        <div className="bg-red-50 dark:bg-red-500/15 border border-red-200 dark:border-red-400/30 rounded-lg px-3 py-2">
+          <p className="text-xs text-red-600 dark:text-red-300 font-medium break-words">{fundError}</p>
+        </div>
+      )}
+
+      {quizReward && (
+        <div className="flex items-center gap-2 px-1">
+          <p className="text-[10px] text-slate-400 dark:text-white/30 font-medium">Contract:</p>
+          <p className="text-[10px] font-mono text-slate-500 dark:text-white/40 truncate flex-1">{quizReward.contractAddress}</p>
+        </div>
+      )}
+    </div>
+  )}
+</div>
     );
   }
 

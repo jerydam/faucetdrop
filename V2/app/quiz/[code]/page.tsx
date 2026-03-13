@@ -1339,17 +1339,7 @@ const grossDisplayAmount = quizReward
         </Button>
       ) : null}
 
-      {!isFunded && quizReward && (
-        <button
-          onClick={handleSyncFunding}
-          disabled={isFundedCheckLoading}
-          className="w-full h-10 rounded-xl text-sm font-bold border border-slate-300 dark:border-white/20 text-slate-500 dark:text-white/60 hover:text-slate-800 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/40 transition-all flex items-center justify-center gap-2"
-        >
-          {isFundedCheckLoading
-            ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking chain...</>
-            : "↻ Already funded? Sync status"}
-        </button>
-      )}
+     
 
       {isFunded && (
         <Button

@@ -14,6 +14,7 @@ import {
   ArrowUp, ArrowDown, Minus, Home, Share2, Play,
   Plus,
   Clock,
+  ArrowLeft,
 } from "lucide-react";
 import { getContractFundedStatus } from "@/lib/quiz";
 import { Wallet, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
@@ -238,14 +239,15 @@ interface ClaimBannerProps { code: string; myWallet: string; }
 function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
   const { wallets } = useWallets();
   const { address: userWalletAddress } = useWallet();
-  const activeWallet = 
-  wallets.find((w) => w.walletClientType === 'privy') || 
-  wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) || 
-  wallets?.[0];
+  const activeWallet =
+    wallets.find((w) => w.walletClientType === "privy") ||
+    wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
+    wallets?.[0];
+
   const [status, setStatus] = useState<"loading" | "eligible" | "claimed" | "expired" | "not_winner">("loading");
-  const [amount, setAmount] = useState<number>(0);
-  const [symbol, setSymbol] = useState<string>("");
-  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [amount, setAmount] = useState(0);
+  const [symbol, setSymbol] = useState("");
+  const [timeLeft, setTimeLeft] = useState(0);
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimedTx, setClaimedTx] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -264,10 +266,14 @@ function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
         fetch(`${API_BASE_URL}/api/quiz/${code}/claim-window`)
           .then(r => r.json())
           .then(w => {
-            if (w.isActive && w.secondsRemaining > 0) { setTimeLeft(w.secondsRemaining); setStatus("eligible"); }
-            else setStatus("expired");
+            if (w.isActive && w.secondsRemaining > 0) {
+              setTimeLeft(w.secondsRemaining);
+              setStatus("eligible");
+            } else {
+              setStatus("expired");
+            }
           })
-          .catch(() => setStatus("eligible")); // fallback: show button anyway
+          .catch(() => setStatus("eligible"));
       })
       .catch(() => setStatus("not_winner"));
   }, [code, myWallet]);
@@ -295,7 +301,8 @@ function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
     setIsClaiming(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/claim`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: myWallet }),
       });
       const data = await res.json();
@@ -305,22 +312,28 @@ function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
       toast.success("Reward claimed! It's now in your wallet.");
     } catch (e: any) {
       toast.error(parseOnchainError(e));
-    }finally { setIsClaiming(false); }
+    } finally {
+      setIsClaiming(false);
+    }
   };
 
-  if (status === "loading") return (
-    <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
-      <Loader2 className="h-5 w-5 animate-spin text-slate-400 shrink-0" />
-      <p className="text-slate-500 dark:text-slate-400 text-sm">Checking your reward status...</p>
-    </div>
-  );
+  // ── Only show loading spinner to actual winners ──
+  // We don't know yet — show nothing while checking
+  if (status === "loading") return null;
+
+  // Not a winner — show nothing at all
   if (status === "not_winner") return null;
+
+  // Winner — show checking spinner only at this point
+  // (this branch is never reached since we return null above for loading,
+  //  but kept here as a safety net for any future state additions)
+
   if (status === "claimed") return (
     <div className="max-w-xl mx-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
       <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-green-700 dark:text-green-400 font-bold text-sm">Reward Claimed ✓</p>
-        <p className="text-green-600 dark:text-green-500 text-xs mt-0.5">{amount} {symbol} has been sent to your wallet</p>
+        <p className="text-green-600 dark:text-green-500 text-xs mt-0.5">{amount} {symbol} sent to your wallet</p>
       </div>
       {claimedTx && (
         <a href={`https://celoscan.io/tx/${claimedTx}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
@@ -329,15 +342,18 @@ function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
       )}
     </div>
   );
+
   if (status === "expired") return (
     <div className="max-w-xl mx-auto bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
       <AlertCircle className="h-5 w-5 text-slate-400 shrink-0" />
       <div>
         <p className="text-slate-600 dark:text-slate-300 font-bold text-sm">Claim Window Expired</p>
-        <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">The reward claim period for this quiz has closed.</p>
+        <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">The reward claim period has closed.</p>
       </div>
     </div>
   );
+
+  // status === "eligible"
   return (
     <div className="max-w-xl mx-auto bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600/30 rounded-2xl p-4 shadow-sm animate-in slide-in-from-top-4 duration-500">
       <div className="flex items-start gap-3">
@@ -347,42 +363,64 @@ function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
         <div className="flex-1 min-w-0">
           <p className="text-yellow-800 dark:text-yellow-300 font-black text-base">You won {amount} {symbol}!</p>
           <p className="text-yellow-700 dark:text-yellow-400/80 text-xs mt-0.5 flex items-center gap-1">
-            <Clock className="h-3 w-3" /> Claim window closes in <span className="font-bold tabular-nums">{formatTime(timeLeft)}</span>
+            <Clock className="h-3 w-3" />
+            Claim window closes in <span className="font-bold tabular-nums ml-1">{formatTime(timeLeft)}</span>
           </p>
         </div>
-        <Button className="shrink-0 h-10 px-4 font-bold bg-yellow-500 hover:bg-yellow-400 text-black border-0" onClick={handleClaim} disabled={isClaiming}>
+        <Button
+          className="shrink-0 h-10 px-4 font-bold bg-yellow-500 hover:bg-yellow-400 text-black border-0"
+          onClick={handleClaim}
+          disabled={isClaiming}
+        >
           {isClaiming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Claim Now"}
         </Button>
       </div>
     </div>
   );
 }
-// ─────────────────────────────────────────────────────────────
-//  QuizGameOver
-// ─────────────────────────────────────────────────────────────
 interface PayoutRecord { wallet_address: string; username: string; rank: number; points: number; amount: number; token_symbol: string; status: string; tx_hash: string | null; }
 interface PayoutsData { success: boolean; faucetAddress: string; chainId: number; payouts: PayoutRecord[]; }
 
-function QuizGameOver({ quizMeta, code, leaderboard, myWallet, isCreator, showConfetti, router }: any) {
+function QuizGameOver({
+  quizMeta, code, leaderboard, myWallet, isCreator, showConfetti, router,
+  initialResults, loadingInitialResults
+}: any) {
   const [payoutsData, setPayoutsData] = useState<PayoutsData | null>(null);
   const { address: userWalletAddress } = useWallet();
   const [loadingPayouts, setLoadingPayouts] = useState(true);
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimedTx, setClaimedTx] = useState<string | null>(null);
+  // Start in results view if we have initial results (came from quiz list page)
+  const [showFullResults, setShowFullResults] = useState(!!initialResults);
+  const [resultsData, setResultsData] = useState<any>(initialResults ?? null);
+  const [loadingResults, setLoadingResults] = useState(false);
   const { wallets } = useWallets();
-  const activeWallet = 
-  wallets.find((w) => w.walletClientType === 'privy') || 
-  wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) || 
-  wallets?.[0];
+  const activeWallet =
+    wallets.find((w) => w.walletClientType === "privy") ||
+    wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
+    wallets?.[0];
+
+  // Sync initialResults into state if they arrive after mount
+  useEffect(() => {
+    if (initialResults && !resultsData) {
+      setResultsData(initialResults);
+      setShowFullResults(true);
+    }
+  }, [initialResults]);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/quiz/${code}/payouts`).then(r => r.json()).then(d => { if (d.success) setPayoutsData(d); }).finally(() => setLoadingPayouts(false));
+    fetch(`${API_BASE_URL}/api/quiz/${code}/payouts`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPayoutsData(d); })
+      .finally(() => setLoadingPayouts(false));
   }, [code]);
 
-
-  const myPayout = payoutsData?.payouts.find(p => p.wallet_address.toLowerCase() === myWallet.toLowerCase());
+  const myPayout = payoutsData?.payouts.find(
+    p => p.wallet_address.toLowerCase() === myWallet.toLowerCase()
+  );
   const hasAlreadyClaimed = myPayout?.status === "claimed" || !!claimedTx;
   const totalWinners = payoutsData?.payouts.length ?? 0;
+
   const payoutByWallet = useMemo(() => {
     const map: Record<string, PayoutRecord> = {};
     payoutsData?.payouts.forEach(p => { map[p.wallet_address.toLowerCase()] = p; });
@@ -390,132 +428,492 @@ function QuizGameOver({ quizMeta, code, leaderboard, myWallet, isCreator, showCo
   }, [payoutsData]);
 
   const handleClaim = async () => {
-    if (!activeWallet) { 
-      toast.error("Wallet not connected"); 
-      return; 
-    }
-    
+    if (!activeWallet) { toast.error("Wallet not connected"); return; }
     setIsClaiming(true);
-    toast.info("Processing claim... please wait.");
-    
+    toast.info("Processing claim...");
     try {
-      // ✅ Request the backend to execute the claim
       const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: myWallet })
+        body: JSON.stringify({ walletAddress: myWallet }),
       });
-      
       const data = await res.json();
-      
-      if (!res.ok || !data.success) {
-        throw new Error(data.detail || data.message || "Claim failed");
-      }
-
+      if (!res.ok || !data.success) throw new Error(data.detail || data.message || "Claim failed");
       setClaimedTx(data.txHash);
-      toast.success("Reward claimed successfully! It is now in your wallet.");
-      
-      // Update local state so the button changes to "✓ Claimed"
+      toast.success("Reward claimed! It is now in your wallet.");
       setPayoutsData(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          payouts: prev.payouts.map(p => 
-            p.wallet_address.toLowerCase() === myWallet.toLowerCase() 
-              ? { ...p, status: "claimed", tx_hash: data.txHash } 
+          payouts: prev.payouts.map(p =>
+            p.wallet_address.toLowerCase() === myWallet.toLowerCase()
+              ? { ...p, status: "claimed", tx_hash: data.txHash }
               : p
-          )
+          ),
         };
       });
-
     } catch (e: any) {
-      console.error("Claim error:", e);
       toast.error(e.message || "Failed to process claim");
     } finally {
       setIsClaiming(false);
     }
   };
 
+  const fetchResults = async () => {
+    if (resultsData) { setShowFullResults(true); return; }
+    setLoadingResults(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/results`);
+      const d = await res.json();
+      if (d.success) {
+        if ((!d.leaderboard || d.leaderboard.length === 0) && leaderboard.length > 0) {
+          d.leaderboard = leaderboard;
+          d.totalPlayers = leaderboard.length;
+        }
+        setResultsData(d);
+        setShowFullResults(true);
+      } else {
+        // Fallback to live leaderboard
+        setResultsData({
+          success: true,
+          quiz: quizMeta,
+          leaderboard,
+          payouts: payoutByWallet,
+          totalPlayers: leaderboard.length,
+          endedAt: null,
+        });
+        setShowFullResults(true);
+      }
+    } catch {
+      setResultsData({
+        success: true,
+        quiz: quizMeta,
+        leaderboard,
+        payouts: payoutByWallet,
+        totalPlayers: leaderboard.length,
+        endedAt: null,
+      });
+      setShowFullResults(true);
+    } finally {
+      setLoadingResults(false);
+    }
+  };
+
+  const handleShareResults = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}/results`);
+    toast.success("Results link copied!");
+  };
+
   const top3 = leaderboard.slice(0, 3);
 
+  const EXPLORER_BASE: Record<number, string> = {
+    42220: "https://celoscan.io/tx/",
+    1135:  "https://blockscout.lisk.com/tx/",
+    42161: "https://arbiscan.io/tx/",
+    8453:  "https://basescan.org/tx/",
+    56:    "https://bscscan.com/tx/",
+  };
+
+  // ── Full Results View ──────────────────────────────────────
+  if (showFullResults) {
+    // Show loading skeleton while initial results are being fetched
+    if (loadingInitialResults && !resultsData) {
+      return (
+        <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <Loader2 className="h-10 w-10 animate-spin text-indigo-500 mx-auto" />
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Loading results...</p>
+          </div>
+        </div>
+      );
+    }
+
+    const rd = resultsData;
+    if (!rd) return null;
+
+    const { quiz: rQuiz, leaderboard: fullLb, payouts: fullPayouts, totalPlayers, endedAt } = rd;
+    const fullTop3 = fullLb.slice(0, 3);
+    const explorerBase = EXPLORER_BASE[rQuiz?.chainId] || "";
+
+    const formatDate = (iso: string | null) => {
+      if (!iso) return "";
+      return new Date(iso).toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      });
+    };
+
+    return (
+      <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
+        <Confetti active={showConfetti} />
+
+        {/* Top bar */}
+        <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+            {/* Only show back button if they came from the live game, not from quiz list */}
+            {leaderboard.length > 0 ? (
+              <button
+                onClick={() => setShowFullResults(false)}
+                className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Game Summary</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => router.push("/quiz")}
+                className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Quiz Hub</span>
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-0 font-mono text-xs">{code}</Badge>
+              <Badge className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-0 text-xs">Ended</Badge>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6 pb-20">
+
+          {/* Hero */}
+          <div className="text-center space-y-2">
+            {rQuiz?.coverImageUrl ? (
+              <div className="relative w-full max-w-md mx-auto aspect-video rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 mb-4">
+                <img src={rQuiz.coverImageUrl} alt={rQuiz.title} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <h1 className="text-white font-black text-lg sm:text-2xl text-left drop-shadow">{rQuiz.title}</h1>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-4xl sm:text-6xl mb-2">🏆</div>
+                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">{rQuiz?.title || quizMeta?.title}</h1>
+              </>
+            )}
+            <div className="flex items-center justify-center gap-3 flex-wrap text-slate-500 dark:text-slate-400 text-sm">
+              <span className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" />{totalPlayers} players
+              </span>
+              <span className="text-slate-300 dark:text-slate-700">•</span>
+              <span className="flex items-center gap-1.5">
+                <Trophy className="h-3.5 w-3.5" />{rQuiz?.totalQuestions} questions
+              </span>
+              {endedAt && (
+                <>
+                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                  <span>{formatDate(endedAt)}</span>
+                </>
+              )}
+            </div>
+            {rQuiz?.creatorUsername && (
+              <p className="text-slate-400 dark:text-slate-500 text-xs flex items-center justify-center gap-1.5">
+                <Crown className="h-3.5 w-3.5 text-yellow-500" />
+                Hosted by <span className="font-bold text-slate-600 dark:text-slate-300 ml-1">{rQuiz.creatorUsername}</span>
+              </p>
+            )}
+          </div>
+
+          {/* My result banner */}
+          {myWallet && (() => {
+            const myEntry = fullLb.find((e: any) => e.walletAddress?.toLowerCase() === myWallet);
+            if (!myEntry) return null;
+            const myFullPayout = fullPayouts?.[myWallet];
+            return (
+              <div className={cn(
+                "rounded-2xl p-4 border flex items-center gap-4",
+                myEntry.rank === 1
+                  ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30"
+                  : myEntry.rank <= 3
+                    ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+              )}>
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0",
+                  myEntry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
+                  myEntry.rank === 2 ? "bg-slate-300 text-slate-800" :
+                  myEntry.rank === 3 ? "bg-amber-600 text-white" :
+                  "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400"
+                )}>
+                  {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-900 dark:text-white">Your Result</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
+                </div>
+                {myFullPayout && (
+                  <div className="text-right shrink-0">
+                    <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+                      {myFullPayout.amount} {myFullPayout.tokenSymbol}
+                    </p>
+                    <p className={cn(
+                      "text-xs font-bold mt-0.5",
+                      myFullPayout.status === "claimed" ? "text-green-600 dark:text-green-400" : "text-amber-500"
+                    )}>
+                      {myFullPayout.status === "claimed" ? "✓ Claimed" : "Unclaimed"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Claim banner */}
+          {!isCreator && <ClaimBanner code={code} myWallet={myWallet} />}
+
+          {/* Prize pool */}
+          {rQuiz?.reward && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/30 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-yellow-700 dark:text-yellow-400 font-black text-lg">
+                  {rQuiz.reward.poolAmount} {rQuiz.reward.tokenSymbol}
+                </p>
+                <p className="text-yellow-600 dark:text-yellow-500 text-xs mt-0.5">
+                  Prize pool • Top {rQuiz.reward.totalWinners} winner{rQuiz.reward.totalWinners > 1 ? "s" : ""}
+                </p>
+              </div>
+              <Trophy className="h-8 w-8 text-yellow-400 dark:text-yellow-600 shrink-0" />
+            </div>
+          )}
+
+          {/* Podium */}
+          {fullTop3.length > 0 && (
+            <div>
+              <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-widest text-center mb-4">Top 3</p>
+              <div className="flex items-end justify-center gap-2 sm:gap-4">
+                {fullTop3[1] && (
+                  <div className="flex flex-col items-center gap-1.5 sm:gap-2">
+                    <Avatar className="h-12 w-12 sm:h-16 sm:w-16 border-4 border-slate-300 dark:border-slate-600 shadow-lg">
+                      <AvatarImage src={fullTop3[1].avatarUrl ?? undefined} />
+                      <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-sm">{fullTop3[1].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="text-center">
+                      <p className="text-slate-900 dark:text-white text-xs font-bold truncate max-w-[70px] sm:max-w-[90px]">{fullTop3[1].username}</p>
+                      <p className="text-slate-500 dark:text-slate-400 font-black text-xs sm:text-sm">{fullTop3[1].points} pts</p>
+                      {fullPayouts?.[fullTop3[1].walletAddress?.toLowerCase()] && (
+                        <p className="text-yellow-600 dark:text-yellow-400 text-[10px] font-bold">
+                          {fullPayouts[fullTop3[1].walletAddress.toLowerCase()].amount} {fullPayouts[fullTop3[1].walletAddress.toLowerCase()].tokenSymbol}
+                        </p>
+                      )}
+                    </div>
+                    <div className="bg-slate-300 dark:bg-slate-700 w-16 sm:w-28 h-20 sm:h-32 rounded-t-xl flex items-center justify-center text-2xl sm:text-4xl">🥈</div>
+                  </div>
+                )}
+                {fullTop3[0] && (
+                  <div className="flex flex-col items-center gap-1.5 sm:gap-2">
+                    <div className="text-2xl sm:text-4xl animate-bounce">👑</div>
+                    <Avatar className="h-16 w-16 sm:h-24 sm:w-24 border-4 border-yellow-400 shadow-xl">
+                      <AvatarImage src={fullTop3[0].avatarUrl ?? undefined} />
+                      <AvatarFallback className="bg-yellow-100 dark:bg-yellow-900/30 font-bold text-lg text-yellow-800 dark:text-yellow-300">{fullTop3[0].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="text-center">
+                      <p className="text-slate-900 dark:text-white text-sm font-black truncate max-w-[90px] sm:max-w-[120px]">{fullTop3[0].username}</p>
+                      <p className="text-yellow-600 dark:text-yellow-400 font-black text-base sm:text-xl">{fullTop3[0].points} pts</p>
+                      {fullPayouts?.[fullTop3[0].walletAddress?.toLowerCase()] && (
+                        <p className="text-yellow-600 dark:text-yellow-400 text-xs font-black">
+                          {fullPayouts[fullTop3[0].walletAddress.toLowerCase()].amount} {fullPayouts[fullTop3[0].walletAddress.toLowerCase()].tokenSymbol}
+                        </p>
+                      )}
+                    </div>
+                    <div className="bg-yellow-400 dark:bg-yellow-600 w-20 sm:w-36 h-28 sm:h-44 rounded-t-xl flex items-center justify-center text-3xl sm:text-5xl">🥇</div>
+                  </div>
+                )}
+                {fullTop3[2] && (
+                  <div className="flex flex-col items-center gap-1.5 sm:gap-2">
+                    <Avatar className="h-10 w-10 sm:h-14 sm:w-14 border-4 border-amber-600 shadow-lg">
+                      <AvatarImage src={fullTop3[2].avatarUrl ?? undefined} />
+                      <AvatarFallback className="bg-amber-100 dark:bg-amber-900/30 font-bold text-xs text-amber-800 dark:text-amber-300">{fullTop3[2].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="text-center">
+                      <p className="text-slate-900 dark:text-white text-xs font-bold truncate max-w-[60px] sm:max-w-[90px]">{fullTop3[2].username}</p>
+                      <p className="text-amber-700 dark:text-amber-500 font-black text-xs sm:text-sm">{fullTop3[2].points} pts</p>
+                      {fullPayouts?.[fullTop3[2].walletAddress?.toLowerCase()] && (
+                        <p className="text-yellow-600 dark:text-yellow-400 text-[10px] font-bold">
+                          {fullPayouts[fullTop3[2].walletAddress.toLowerCase()].amount} {fullPayouts[fullTop3[2].walletAddress.toLowerCase()].tokenSymbol}
+                        </p>
+                      )}
+                    </div>
+                    <div className="bg-amber-600 dark:bg-amber-800 w-14 sm:w-24 h-16 sm:h-24 rounded-t-xl flex items-center justify-center text-2xl sm:text-3xl">🥉</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Full standings */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="px-4 sm:px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h2 className="text-slate-800 dark:text-white font-bold text-sm flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-yellow-500" /> Final Standings
+              </h2>
+              <span className="text-slate-400 dark:text-slate-500 text-xs">{totalPlayers} players</span>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {fullLb.map((entry: any, i: number) => {
+                const isMe = entry.walletAddress?.toLowerCase() === myWallet;
+                const payout = fullPayouts?.[entry.walletAddress?.toLowerCase()];
+                const isWinner = !!payout;
+                return (
+                  <div
+                    key={entry.walletAddress}
+                    className={cn(
+                      "flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4",
+                      isMe && "bg-indigo-50 dark:bg-indigo-950/20",
+                      isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0",
+                      entry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
+                      entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" :
+                      entry.rank === 3 ? "bg-amber-600 text-white" :
+                      "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                    )}>
+                      {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : `#${entry.rank}`}
+                    </div>
+                    <Avatar className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 border border-slate-200 dark:border-slate-700">
+                      <AvatarImage src={entry.avatarUrl ?? undefined} />
+                      <AvatarFallback className="bg-slate-200 dark:bg-slate-800 text-xs font-bold">{entry.username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-900 dark:text-white font-bold text-xs sm:text-sm truncate">{entry.username}</span>
+                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-indigo-600 text-white border-0 shrink-0">YOU</Badge>}
+                        {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 border-0 shrink-0">🏆</Badge>}
+                        {(entry.streak > 1) && <Badge className="text-[9px] h-4 px-1 bg-orange-500 text-white border-0 shrink-0">🔥{entry.streak}</Badge>}
+                      </div>
+                      {isWinner && payout.amount > 0 && (
+                        <p className="text-yellow-600 dark:text-yellow-400 text-xs font-bold mt-0.5 flex items-center gap-1.5">
+                          {payout.amount} {payout.tokenSymbol}
+                          <span className={cn("text-[10px]", payout.status === "claimed" ? "text-green-500" : "text-amber-500")}>
+                            {payout.status === "claimed" ? "• Claimed ✓" : "• Unclaimed"}
+                          </span>
+                          {payout.status === "claimed" && payout.txHash && explorerBase && (
+                            <a href={`${explorerBase}${payout.txHash}`} target="_blank" rel="noopener noreferrer" className="text-green-500 hover:text-green-600">
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-slate-900 dark:text-white font-black text-sm sm:text-lg leading-tight">{entry.points}</p>
+                      <p className="text-slate-400 dark:text-slate-500 text-xs">pts</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            {leaderboard.length > 0 && (
+              <Button
+                variant="outline"
+                className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
+                onClick={() => setShowFullResults(false)}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" /> Game Summary
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
+              onClick={handleShareResults}
+            >
+              <Share2 className="mr-2 h-4 w-4" /> Share
+            </Button>
+            <Button
+              className="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+              onClick={() => router.push("/quiz")}
+            >
+              <Home className="mr-2 h-4 w-4" /> Quiz Hub
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Game Over Summary (live players who just finished) ─────
   return (
     <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
       <Confetti active={showConfetti} />
-      <div className="max-w-4xl mx-auto w-full p-4 sm:p-6 space-y-8 pb-24 pt-8 md:pt-12">
+      <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-24 space-y-6 sm:space-y-8">
 
-        {/* Title */}
         <div className="text-center space-y-2">
-          <div className="text-6xl md:text-7xl drop-shadow-md mb-4">🏆</div>
+          <div className="text-5xl sm:text-7xl drop-shadow-md mb-3">🏆</div>
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-white">Quiz Complete!</h1>
-          <p className="text-slate-500 dark:text-slate-400 font-medium text-sm sm:text-base">{quizMeta?.title}</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base font-medium">{quizMeta?.title}</p>
         </div>
 
         {!isCreator && <ClaimBanner code={code} myWallet={myWallet} />}
 
-        {/* Prize Pool Banner */}
         {!loadingPayouts && totalWinners > 0 && (
           <div className="max-w-xl mx-auto bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-500/30 rounded-2xl p-4 text-center shadow-sm">
             <p className="text-yellow-700 dark:text-yellow-400 text-xs font-black tracking-widest uppercase">Prize Pool Distributed</p>
-            <p className="text-yellow-600 dark:text-yellow-500/80 text-sm mt-1">Top {totalWinners} winner{totalWinners > 1 ? "s" : ""} can self-claim via the contract</p>
+            <p className="text-yellow-600 dark:text-yellow-500/80 text-sm mt-1">
+              Top {totalWinners} winner{totalWinners > 1 ? "s" : ""} can self-claim via the contract
+            </p>
           </div>
         )}
 
-        {/* Podium - Fully Responsive */}
+        {/* Podium */}
         {top3.length > 0 && (
-          <div className="flex items-end justify-center gap-2 sm:gap-4 md:gap-6 mt-8 md:mt-16">
-            {/* 2nd Place */}
+          <div className="flex items-end justify-center gap-2 sm:gap-4 md:gap-6">
             {top3[1] && (
-              <div className="flex flex-col items-center gap-2 animate-in slide-in-from-bottom-8 duration-500 delay-200">
-                <Avatar className="h-14 w-14 md:h-20 md:w-20 border-4 border-slate-300 dark:border-slate-600 shadow-lg">
+              <div className="flex flex-col items-center gap-1.5 sm:gap-2 animate-in slide-in-from-bottom-8 duration-500 delay-200">
+                <Avatar className="h-12 w-12 sm:h-16 sm:w-16 md:h-20 md:w-20 border-4 border-slate-300 dark:border-slate-600 shadow-lg">
                   <AvatarImage src={top3[1].avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white font-bold">{top3[1].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-xs sm:text-base">{top3[1].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="text-center">
-                  <p className="text-slate-900 dark:text-white text-xs md:text-sm font-bold truncate max-w-[80px] md:max-w-[100px]">{top3[1].username}</p>
-                  <p className="text-slate-500 dark:text-slate-400 font-black text-sm md:text-base">{top3[1].points}</p>
+                  <p className="text-slate-900 dark:text-white text-xs font-bold truncate max-w-[70px] sm:max-w-[100px]">{top3[1].username}</p>
+                  <p className="text-slate-500 dark:text-slate-400 font-black text-xs sm:text-base">{top3[1].points} pts</p>
                 </div>
-                <div className="bg-slate-300 dark:bg-slate-700 w-20 sm:w-24 md:w-32 h-24 md:h-36 rounded-t-xl flex items-center justify-center text-3xl md:text-4xl shadow-inner">🥈</div>
+                <div className="bg-slate-300 dark:bg-slate-700 w-16 sm:w-24 md:w-32 h-20 sm:h-28 md:h-36 rounded-t-xl flex items-center justify-center text-2xl sm:text-3xl md:text-4xl shadow-inner">🥈</div>
               </div>
             )}
-
-            {/* 1st Place */}
             {top3[0] && (
-              <div className="flex flex-col items-center gap-2 animate-in slide-in-from-bottom-8 duration-500">
-                <div className="text-3xl md:text-5xl animate-bounce mb-1">👑</div>
-                <Avatar className="h-20 w-20 md:h-28 md:w-28 border-4 border-yellow-400 dark:border-yellow-500 shadow-xl">
+              <div className="flex flex-col items-center gap-1.5 sm:gap-2 animate-in slide-in-from-bottom-8 duration-500">
+                <div className="text-2xl sm:text-4xl md:text-5xl animate-bounce mb-1">👑</div>
+                <Avatar className="h-16 w-16 sm:h-24 sm:w-24 md:h-28 md:w-28 border-4 border-yellow-400 dark:border-yellow-500 shadow-xl">
                   <AvatarImage src={top3[0].avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white font-bold text-xl">{top3[0].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-base sm:text-xl">{top3[0].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="text-center">
-                  <p className="text-slate-900 dark:text-white text-sm md:text-base font-black truncate max-w-[100px] md:max-w-[120px]">{top3[0].username}</p>
-                  <p className="text-yellow-600 dark:text-yellow-400 font-black text-lg md:text-xl">{top3[0].points}</p>
+                  <p className="text-slate-900 dark:text-white text-sm sm:text-base font-black truncate max-w-[90px] sm:max-w-[120px]">{top3[0].username}</p>
+                  <p className="text-yellow-600 dark:text-yellow-400 font-black text-base sm:text-xl">{top3[0].points} pts</p>
                 </div>
-                <div className="bg-yellow-400 dark:bg-yellow-600 w-24 sm:w-28 md:w-40 h-32 md:h-48 rounded-t-xl flex items-center justify-center text-4xl md:text-5xl shadow-inner">🥇</div>
+                <div className="bg-yellow-400 dark:bg-yellow-600 w-20 sm:w-32 md:w-40 h-28 sm:h-40 md:h-48 rounded-t-xl flex items-center justify-center text-3xl sm:text-4xl md:text-5xl shadow-inner">🥇</div>
               </div>
             )}
-
-            {/* 3rd Place */}
             {top3[2] && (
-              <div className="flex flex-col items-center gap-2 animate-in slide-in-from-bottom-8 duration-500 delay-300">
-                <Avatar className="h-12 w-12 md:h-16 md:w-16 border-4 border-amber-600 dark:border-amber-700 shadow-lg">
+              <div className="flex flex-col items-center gap-1.5 sm:gap-2 animate-in slide-in-from-bottom-8 duration-500 delay-300">
+                <Avatar className="h-10 w-10 sm:h-14 sm:w-14 md:h-16 md:w-16 border-4 border-amber-600 dark:border-amber-700 shadow-lg">
                   <AvatarImage src={top3[2].avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-white font-bold">{top3[2].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-xs">{top3[2].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="text-center">
-                  <p className="text-slate-900 dark:text-white text-xs md:text-sm font-bold truncate max-w-[80px] md:max-w-[100px]">{top3[2].username}</p>
-                  <p className="text-amber-700 dark:text-amber-600 font-black text-sm md:text-base">{top3[2].points}</p>
+                  <p className="text-slate-900 dark:text-white text-xs font-bold truncate max-w-[65px] sm:max-w-[100px]">{top3[2].username}</p>
+                  <p className="text-amber-700 dark:text-amber-600 font-black text-xs sm:text-base">{top3[2].points} pts</p>
                 </div>
-                <div className="bg-amber-600 dark:bg-amber-800 w-20 sm:w-24 md:w-28 h-20 md:h-28 rounded-t-xl flex items-center justify-center text-3xl md:text-4xl shadow-inner">🥉</div>
+                <div className="bg-amber-600 dark:bg-amber-800 w-14 sm:w-22 md:w-28 h-16 sm:h-22 md:h-28 rounded-t-xl flex items-center justify-center text-2xl sm:text-3xl md:text-4xl shadow-inner">🥉</div>
               </div>
             )}
           </div>
         )}
 
-        {/* Full Leaderboard */}
+        {/* Leaderboard */}
         <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest flex items-center justify-between">
-            Final Standings
-            {isCreator && <span className="text-indigo-500 font-mono">HOST VIEW</span>}
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
+            <span className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest flex items-center gap-1.5">
+              <Trophy className="h-3.5 w-3.5 text-yellow-500" /> Final Standings
+            </span>
+            {isCreator && <span className="text-indigo-500 font-mono text-xs">HOST VIEW</span>}
           </div>
           {loadingPayouts ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
@@ -526,34 +924,43 @@ function QuizGameOver({ quizMeta, code, leaderboard, myWallet, isCreator, showCo
                 const payout = payoutByWallet[entry.walletAddress.toLowerCase()];
                 const isWinner = !!payout;
                 const alreadyClaimed = isMe ? hasAlreadyClaimed : payout?.status === "claimed";
-
                 return (
-                  <div key={entry.walletAddress} className={cn("flex items-center gap-3 px-4 py-4 transition-all", isMe && "bg-indigo-50 dark:bg-indigo-950/20", isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500")}>
-                    <span className="text-slate-400 dark:text-slate-500 text-sm w-5 text-center font-bold shrink-0">{entry.rank}</span>
-                    <Avatar className="h-10 w-10 shrink-0">
+                  <div key={entry.walletAddress} className={cn(
+                    "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4",
+                    isMe && "bg-indigo-50 dark:bg-indigo-950/20",
+                    isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
+                  )}>
+                    <div className={cn(
+                      "w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0",
+                      entry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
+                      entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" :
+                      entry.rank === 3 ? "bg-amber-600 text-white" :
+                      "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                    )}>
+                      {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : entry.rank}
+                    </div>
+                    <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
                       <AvatarImage src={entry.avatarUrl ?? undefined} />
-                      <AvatarFallback className="bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-white text-xs font-bold">{entry.username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      <AvatarFallback className="bg-slate-200 dark:bg-slate-800 text-xs font-bold">{entry.username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-slate-900 dark:text-white font-bold text-sm truncate">{entry.username}</span>
-                        {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-indigo-600 text-white border-0 shrink-0">YOU</Badge>}
-                        {isWinner && <Badge className="text-[9px] h-4 px-1.5 bg-yellow-100 text-yellow-800 dark:bg-yellow-500 dark:text-black border-0 shrink-0">🏆 Winner</Badge>}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-900 dark:text-white font-bold text-xs sm:text-sm truncate">{entry.username}</span>
+                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-indigo-600 text-white border-0 shrink-0">YOU</Badge>}
+                        {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500 dark:text-black border-0 shrink-0">🏆</Badge>}
                       </div>
                       {isWinner && payout.amount > 0 && (
                         <p className="text-yellow-600 dark:text-yellow-400 text-xs font-bold mt-0.5">{payout.amount} {payout.token_symbol}</p>
                       )}
                     </div>
                     <div className="text-right shrink-0 space-y-1">
-                      <div className="text-slate-900 dark:text-white font-black">{entry.points} pts</div>
+                      <div className="text-slate-900 dark:text-white font-black text-sm sm:text-base">{entry.points} pts</div>
                       {isMe && isWinner && !isCreator && (
-                        alreadyClaimed ? (
-                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0 text-[10px]">✓ Claimed</Badge>
-                        ) : (
-                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black" onClick={handleClaim} disabled={isClaiming}>
-                            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim Reward"}
-                          </Button>
-                        )
+                        alreadyClaimed
+                          ? <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0 text-[10px]">✓ Claimed</Badge>
+                          : <Button size="sm" className="h-7 px-2 sm:px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0" onClick={handleClaim} disabled={isClaiming}>
+                              {isClaiming ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
+                            </Button>
                       )}
                     </div>
                   </div>
@@ -564,15 +971,43 @@ function QuizGameOver({ quizMeta, code, leaderboard, myWallet, isCreator, showCo
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 max-w-2xl mx-auto">
-          <Button variant="outline" className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white" onClick={() => router.push("/quiz")}>
-            <Home className="mr-2 h-4 w-4" /> Back to Hub
-          </Button>
-          {isCreator && (
-            <Button className="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold" onClick={() => router.push("/quiz/create-quiz")}>
-              <Plus className="mr-2 h-4 w-4" /> Create New Quiz
+        <div className="max-w-2xl mx-auto space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              className="h-12 font-bold bg-indigo-600 hover:bg-indigo-700 text-white border-0"
+              onClick={fetchResults}
+              disabled={loadingResults}
+            >
+              {loadingResults
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</>
+                : <><Trophy className="mr-2 h-4 w-4" />View Full Results</>
+              }
             </Button>
-          )}
+            <Button
+              variant="outline"
+              className="h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
+              onClick={handleShareResults}
+            >
+              <Share2 className="mr-2 h-4 w-4" /> Share
+            </Button>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
+              onClick={() => router.push("/quiz")}
+            >
+              <Home className="mr-2 h-4 w-4" /> Back to Hub
+            </Button>
+            {isCreator && (
+              <Button
+                className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold border-0"
+                onClick={() => router.push("/quiz/create-quiz")}
+              >
+                <Plus className="mr-2 h-4 w-4" /> New Quiz
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -712,6 +1147,8 @@ export { }
 //  Main Component (Phase router)
 // ═══════════════════════════════════════════════════════════════
 export default function QuizCodePage() {
+  const [initialResults, setInitialResults] = useState<any>(null);
+  const [loadingInitialResults, setLoadingInitialResults] = useState(false);
   const params = useParams();
   const router = useRouter();
   const { address: userWalletAddress } = useWallet();
@@ -854,11 +1291,18 @@ const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWall
   }, [isCreator, quizReward?.contractAddress, wallets[0]?.address, code]);
 
   // ── Load quiz meta ──
-  useEffect(() => {
-    if (!code) return;
-    fetch(`${API_BASE_URL}/api/quiz/${code}`).then(r => r.json()).then(d => {
+useEffect(() => {
+  if (!code) return;
+  fetch(`${API_BASE_URL}/api/quiz/${code}`)
+    .then(r => r.json())
+    .then(async d => {
       if (d.success) {
-        setQuizMeta({ title: d.quiz.title, totalQuestions: d.quiz.totalQuestions, creatorAddress: d.quiz.creatorAddress, coverImageUrl: d.quiz.coverImageUrl ?? null });
+        setQuizMeta({
+          title: d.quiz.title,
+          totalQuestions: d.quiz.totalQuestions,
+          creatorAddress: d.quiz.creatorAddress,
+          coverImageUrl: d.quiz.coverImageUrl ?? null,
+        });
         if (d.quiz.reward?.isOnChain && d.quiz.reward?.contractAddress) {
           setQuizReward({
             contractAddress: d.quiz.reward.contractAddress,
@@ -872,13 +1316,38 @@ const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWall
           });
           setIsFunded(d.quiz.reward.isFunded ?? false);
         }
-        if (userWalletAddress && d.quiz.creatorAddress?.toLowerCase() === userWalletAddress.toLowerCase()) {
-          setIsCreator(true); setIsSpectator(true); setHasJoined(true);
+        if (
+          userWalletAddress &&
+          d.quiz.creatorAddress?.toLowerCase() === userWalletAddress.toLowerCase()
+        ) {
+          setIsCreator(true);
+          setIsSpectator(true);
+          setHasJoined(true);
         }
-        setPhase(d.quiz.status === "finished" ? "game_over" : "lobby");
-      } else { toast.error("Quiz not found"); router.push("/quiz"); }
-    }).catch(() => toast.error("Failed to load quiz"));
-  }, [code, userWalletAddress, router]);
+
+        if (d.quiz.status === "finished") {
+          // Fetch results immediately — don't wait for a button click
+          setLoadingInitialResults(true);
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/results`);
+            const rd = await res.json();
+            if (rd.success) setInitialResults(rd);
+          } catch (e) {
+            console.error("Failed to load results:", e);
+          } finally {
+            setLoadingInitialResults(false);
+          }
+          setPhase("game_over");
+        } else {
+          setPhase(d.quiz.status === "finished" ? "game_over" : "lobby");
+        }
+      } else {
+        toast.error("Quiz not found");
+        router.push("/quiz");
+      }
+    })
+    .catch(() => toast.error("Failed to load quiz"));
+}, [code, userWalletAddress, router]);
 
   const handleToggleReady = () => {
   const newState = !isReady;
@@ -1285,9 +1754,21 @@ const handleFundReward = async () => {
     );
   }
 
-  if (phase === "game_over") {
-    return <QuizGameOver quizMeta={quizMeta} code={code} leaderboard={leaderboard} myWallet={myWallet} isCreator={isCreator} showConfetti={showConfetti} router={router} />;
-  }
+ if (phase === "game_over") {
+  return (
+    <QuizGameOver
+      quizMeta={quizMeta}
+      code={code}
+      leaderboard={leaderboard}
+      myWallet={myWallet}
+      isCreator={isCreator}
+      showConfetti={showConfetti}
+      router={router}
+      initialResults={initialResults}
+      loadingInitialResults={loadingInitialResults}
+    />
+  );
+}
 
 // ── Pre-Join Screen ──
 if (!hasJoined && !isCreator && phase === "lobby") return (

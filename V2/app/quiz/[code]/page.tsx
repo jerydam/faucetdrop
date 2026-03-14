@@ -1225,10 +1225,10 @@ const handleFundReward = async () => {
     disabled={isJoining || !username}
   >
     {isJoining ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Zap className="mr-2 h-5 w-5" />}
-    {!username ? "Set Username First" : (isReturningPlayer ? "Continue" : "Join Quiz")}
+    {!username ? <WalletConnectButton/> : (isReturningPlayer ? "Continue" : "Join Quiz")}
   </Button>
   {!username && (
-    <p className="text-amber-600 dark:text-amber-400 text-xs font-medium">Connect Profile to join Quiz<WalletConnectButton/> </p>
+    <p className="text-amber-600 dark:text-amber-400 text-xs font-medium">Connect Profile to join Quiz</p>
   )}
 </div>
     );

@@ -947,79 +947,143 @@ const connectWS = useCallback(() => {
     };
 
     ws.onmessage = async (ev) => {
-      let msg: any;
-      try {
-        // If we have a session key, decrypt — otherwise parse raw (for the key handshake itself)
-        if (sessionKeyRef.current) {
-          msg = await decryptMessage(sessionKeyRef.current, ev.data);
-        } else {
-          msg = JSON.parse(ev.data);
-          // First message should always be session_key
-          if (msg.type === "session_key") {
-            sessionKeyRef.current = await importKey(msg.key);
-            return; // don't process further
-          }
-        }
-      } catch { return; }
+  let msg: any;
 
-      switch (msg.type) {
-        case "state_sync":
-          setQuizMeta(prev => prev ?? msg.quiz);
-          setPlayers(msg.players || []);
-          
-          // Check if I am already in the backend's player list
-          const amIPlaying = (msg.players || []).some((p: any) => p.walletAddress.toLowerCase() === myWallet);
-          
-          if (amIPlaying) {
-            setIsReturningPlayer(true); // <--- Tells the button to say "Continue"
-          }
-          
-          // Only auto-bypass the join screen if you are the CREATOR (Host)
-          if (msg.isCreator) {
-            setHasJoined(true);
-            setIsSpectator(true);
-          }
+  try {
+    // ── Decrypt if we have session key, otherwise parse raw (for session_key handshake)
+    if (sessionKeyRef.current) {
+      msg = await decryptMessage(sessionKeyRef.current, ev.data);
+    } else {
+      msg = JSON.parse(ev.data);
 
-          if (msg.status === "finished") setPhase("game_over");
-          break;  
+      // First message from backend = session key
+      if (msg.type === "session_key") {
+        sessionKeyRef.current = await importKey(msg.key);
+        return; // Don't process further
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to parse/decrypt WS message", e);
+    return;
+  }
 
-        case "game_starting":
-          toast.success(msg.message);
-          break;
-        case "player_list": setPlayers(msg.players || []); break;
-        case "countdown": setPhase("countdown"); setCountdownVal(msg.value); break;
-        case "question":
-          if (timerRef.current) clearInterval(timerRef.current);
-          setCurrentQ({ index: msg.index, total: msg.total, question: msg.question, options: msg.options, timeLimit: msg.timeLimit, startedAt: msg.startedAt });
-          setSelectedId(null); setHasSubmitted(false); setRevealCorrectId(null); setPersonalResult(null); setPhase("question");
-          startTimer(msg.startedAt, msg.timeLimit);
-          break;
-        case "answer_result": setPersonalResult({ isCorrect: msg.isCorrect, pointsEarned: msg.pointsEarned, streak: msg.streak }); break;
-        case "question_end":
-          if (timerRef.current) clearInterval(timerRef.current);
-          setTimeLeft(0); setRevealCorrectId(msg.correctId); setPhase("reveal");
-          break;
-        // ADD — wrap each case body in {}
-        case "leaderboard": {
-          setLeaderboard(msg.entries || []);
-          setIsLastQuestion(!!msg.isLast);
-          const me = (msg.entries || []).find((e: any) => e.walletAddress.toLowerCase() === myWallet);
-          if (me) {
-            setMyRankChange(me.rankChange);
-            if (me.rankChange > 0) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 4000); }
-          }
-          setPhase("leaderboard");
-          break;
-        }
-        case "game_over": {
-          setLeaderboard(msg.finalLeaderboard || []);
-          setPhase("game_over");
-          const fMe = (msg.finalLeaderboard || []).find((e: any) => e.walletAddress.toLowerCase() === myWallet);
-          if (fMe?.rank === 1) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 6000); }
-          break;
+  // ─────────────────────────────────────────────────────────────
+  // MAIN SWITCH — All game logic
+  // ─────────────────────────────────────────────────────────────
+  switch (msg.type) {
+
+    // ── 1. Initial state sync (most important)
+    case "state_sync":
+      setQuizMeta(prev => prev ?? msg.quiz);
+      setPlayers(msg.players || []);
+
+      const amIPlaying = (msg.players || []).some((p: any) =>
+        p.walletAddress.toLowerCase() === myWallet
+      );
+      if (amIPlaying) setIsReturningPlayer(true);
+
+      if (msg.isCreator) {
+        setHasJoined(true);
+        setIsSpectator(true);
+      }
+
+      // 🔥 SAFETY FIX: If backend says the quiz is already active, force move out of lobby
+      if (msg.status === "active" && phase === "lobby") {
+        setPhase("countdown");
+        setCountdownVal(3);
+      }
+
+      if (msg.status === "finished") setPhase("game_over");
+      break;
+
+    // ── 2. Creator clicked "START QUIZ" → This was missing!
+    case "game_starting":
+      toast.success(msg.message || "Quiz starting in 3 seconds...");
+      setPhase("countdown");
+      setCountdownVal(3);
+      break;
+
+    // ── 3. Countdown tick
+    case "countdown":
+      setPhase("countdown");
+      setCountdownVal(msg.value);
+      break;
+
+    // ── 4. New Question
+    case "question":
+      if (timerRef.current) clearInterval(timerRef.current);
+      setCurrentQ({
+        index: msg.index,
+        total: msg.total,
+        question: msg.question,
+        options: msg.options,
+        timeLimit: msg.timeLimit,
+        startedAt: msg.startedAt,
+      });
+      setSelectedId(null);
+      setHasSubmitted(false);
+      setRevealCorrectId(null);
+      setPersonalResult(null);
+      setPhase("question");
+      startTimer(msg.startedAt, msg.timeLimit);
+      break;
+
+    // ── 5. Answer result (personal feedback)
+    case "answer_result":
+      setPersonalResult({
+        isCorrect: msg.isCorrect,
+        pointsEarned: msg.pointsEarned,
+        streak: msg.streak,
+      });
+      break;
+
+    // ── 6. Question ended (reveal correct answer)
+    case "question_end":
+      if (timerRef.current) clearInterval(timerRef.current);
+      setTimeLeft(0);
+      setRevealCorrectId(msg.correctId);
+      setPhase("reveal");
+      break;
+
+    // ── 7. Leaderboard update
+    case "leaderboard": {
+      setLeaderboard(msg.entries || []);
+      setIsLastQuestion(!!msg.isLast);
+
+      const me = (msg.entries || []).find((e: any) =>
+        e.walletAddress.toLowerCase() === myWallet
+      );
+      if (me) {
+        setMyRankChange(me.rankChange);
+        if (me.rankChange > 0) {
+          setShowConfetti(true);
+          setTimeout(() => setShowConfetti(false), 4000);
         }
       }
-    };
+      setPhase("leaderboard");
+      break;
+    }
+
+    // ── 8. Game Over
+    case "game_over": {
+      setLeaderboard(msg.finalLeaderboard || []);
+      setPhase("game_over");
+
+      const me = (msg.finalLeaderboard || []).find((e: any) =>
+        e.walletAddress.toLowerCase() === myWallet
+      );
+      if (me?.rank === 1) {
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 6000);
+      }
+      break;
+    }
+
+    // Add any other custom messages you might have here later
+    default:
+      console.log("Unknown WS message type:", msg.type);
+  }
+};
 
     ws.onclose = (event) => {
       sessionKeyRef.current = null;

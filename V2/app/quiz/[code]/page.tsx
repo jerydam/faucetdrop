@@ -771,7 +771,7 @@ export default function QuizCodePage() {
   const [isJoining, setIsJoining] = useState(false);
   const hasSubmittedOnChain = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const myWallet = userWalletAddress?.toLowerCase() ?? "";
+const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
   const chainId = activeWallet
     ? parseInt(activeWallet.chainId.split(":")[1] ?? "0")
     : 0;
@@ -938,6 +938,7 @@ async function importKey(b64Key: string): Promise<CryptoKey> {
 
 const connectWS = useCallback(() => {
     if (!code || !userWalletAddress) return;
+     if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return; 
     const ws = new WebSocket(`${getWsBaseUrl()}/ws/quiz/${code}`);
     wsRef.current = ws;
 
@@ -946,71 +947,79 @@ const connectWS = useCallback(() => {
       ws.send(JSON.stringify({ type: "identify", walletAddress: userWalletAddress }));
     };
 
-    ws.onmessage = async (ev) => {
+ws.onmessage = async (ev) => {
+  console.log("[WS RAW]", ev.data);
   let msg: any;
-
   try {
-    // ── Decrypt if we have session key, otherwise parse raw (for session_key handshake)
     if (sessionKeyRef.current) {
       msg = await decryptMessage(sessionKeyRef.current, ev.data);
     } else {
       msg = JSON.parse(ev.data);
-
-      // First message from backend = session key
       if (msg.type === "session_key") {
         sessionKeyRef.current = await importKey(msg.key);
-        return; // Don't process further
+        console.log("[WS] Session key imported");
+        return;
       }
     }
+    console.log("[WS DECODED]", msg);
   } catch (e) {
     console.warn("Failed to parse/decrypt WS message", e);
     return;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // MAIN SWITCH — All game logic
-  // ─────────────────────────────────────────────────────────────
   switch (msg.type) {
 
-    // ── 1. Initial state sync (most important)
-    case "state_sync":
-      setQuizMeta(prev => prev ?? msg.quiz);
+    // ── 1. Initial state sync
+    case "state_sync": {
+  setQuizMeta(prev => prev ?? msg.quiz);
+  setPlayers(msg.players || []);
+
+  const amIPlaying = (msg.players || []).some((p: any) =>
+    p.walletAddress.toLowerCase() === myWallet
+  );
+  if (amIPlaying) setIsReturningPlayer(true);
+
+  if (msg.isCreator) {
+    setHasJoined(true);
+    setIsSpectator(true);
+  }
+
+  // If quiz is already active on connect, jump straight into the game.
+  // The backend loop will broadcast a "question" message within seconds
+  // which will populate currentQ and start the timer.
+  if (msg.status === "active") {
+    setHasJoined(true);
+    setPhase("question"); // show loading state until "question" msg arrives
+  }
+
+  if (msg.status === "finished") setPhase("game_over");
+  break;
+}
+
+    // ── 2. Player list update
+    case "player_list": {
       setPlayers(msg.players || []);
-
-      const amIPlaying = (msg.players || []).some((p: any) =>
-        p.walletAddress.toLowerCase() === myWallet
-      );
-      if (amIPlaying) setIsReturningPlayer(true);
-
-      if (msg.isCreator) {
-        setHasJoined(true);
-        setIsSpectator(true);
-      }
-
-      // 🔥 SAFETY FIX: If backend says the quiz is already active, force move out of lobby
-      if (msg.status === "active" && phase === "lobby") {
-        setPhase("countdown");
-        setCountdownVal(3);
-      }
-
-      if (msg.status === "finished") setPhase("game_over");
       break;
+    }
 
-    // ── 2. Creator clicked "START QUIZ" → This was missing!
-    case "game_starting":
+    // ── 3. Creator clicked START → game is about to begin
+    case "game_starting": {
       toast.success(msg.message || "Quiz starting in 3 seconds...");
+      setIsStarting(false);
       setPhase("countdown");
       setCountdownVal(3);
       break;
+    }
 
-    // ── 3. Countdown tick
-    case "countdown":
+    // ── 4. Countdown tick (3 → 2 → 1)
+    case "countdown": {
       setPhase("countdown");
       setCountdownVal(msg.value);
       break;
+    }
 
-    // ── 4. New Question
-    case "question":
+    // ── 5. New question
+    case "question": {
       if (timerRef.current) clearInterval(timerRef.current);
       setCurrentQ({
         index: msg.index,
@@ -1027,29 +1036,31 @@ const connectWS = useCallback(() => {
       setPhase("question");
       startTimer(msg.startedAt, msg.timeLimit);
       break;
+    }
 
-    // ── 5. Answer result (personal feedback)
-    case "answer_result":
+    // ── 6. Personal answer feedback
+    case "answer_result": {
       setPersonalResult({
         isCorrect: msg.isCorrect,
         pointsEarned: msg.pointsEarned,
         streak: msg.streak,
       });
       break;
+    }
 
-    // ── 6. Question ended (reveal correct answer)
-    case "question_end":
+    // ── 7. Question ended — reveal correct answer
+    case "question_end": {
       if (timerRef.current) clearInterval(timerRef.current);
       setTimeLeft(0);
       setRevealCorrectId(msg.correctId);
       setPhase("reveal");
       break;
+    }
 
-    // ── 7. Leaderboard update
+    // ── 8. Leaderboard after each question
     case "leaderboard": {
       setLeaderboard(msg.entries || []);
       setIsLastQuestion(!!msg.isLast);
-
       const me = (msg.entries || []).find((e: any) =>
         e.walletAddress.toLowerCase() === myWallet
       );
@@ -1064,11 +1075,10 @@ const connectWS = useCallback(() => {
       break;
     }
 
-    // ── 8. Game Over
+    // ── 9. Game over
     case "game_over": {
       setLeaderboard(msg.finalLeaderboard || []);
       setPhase("game_over");
-
       const me = (msg.finalLeaderboard || []).find((e: any) =>
         e.walletAddress.toLowerCase() === myWallet
       );
@@ -1079,9 +1089,22 @@ const connectWS = useCallback(() => {
       break;
     }
 
-    // Add any other custom messages you might have here later
+    // ── 10. Rewards dispatched after game ends
+    case "rewards_dispatched": {
+      toast.success("🏆 Winners have been whitelisted! Claim window is now open.");
+      break;
+    }
+
+    // ── 11. Server error message
+    case "error": {
+      console.error("[WS ERROR]", msg.message);
+      toast.error(msg.message || "Something went wrong");
+      setIsStarting(false);
+      break;
+    }
+
     default:
-      console.log("Unknown WS message type:", msg.type);
+      console.log("[WS] Unhandled message type:", msg.type, msg);
   }
 };
 
@@ -1105,7 +1128,7 @@ const connectWS = useCallback(() => {
         if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); 
       }, delay);
     };
-  }, [code, userWalletAddress, startTimer, myWallet]);
+  }, [code, userWalletAddress, startTimer]);
 
   // ── Connect WS instantly to restore session state ──
   useEffect(() => {
@@ -1235,18 +1258,22 @@ const handleFundReward = async () => {
     }
   };
 
-  const handleStartQuiz = () => {
-    if (!userWalletAddress) return;
-    setIsStarting(true);
-    
-    // 1. Instantly start the game for players via WebSocket
-    wsRef.current?.send(JSON.stringify({ type: "start_quiz", walletAddress: userWalletAddress }));
+ const handleStartQuiz = () => {
+  if (!userWalletAddress) return;
+  console.log("[START] Creator clicked start", { code, userWalletAddress, wsState: wsRef.current?.readyState });
+  setIsStarting(true);
 
-    // 🚀 2. NEW: Trigger On-Chain Start (Fire and forget)
-    fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-start`, {
-      method: "POST"
-    }).catch(err => console.error("On-chain start error:", err));
-  };
+  const msg = JSON.stringify({ type: "start_quiz", walletAddress: userWalletAddress });
+  console.log("[START] Sending WS message:", msg);
+  wsRef.current?.send(msg);
+  console.log("[START] WS message sent, ws readyState:", wsRef.current?.readyState);
+
+  fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-start`, { method: "POST" })
+    .then(r => { console.log("[START] on-chain-start response status:", r.status); return r.json(); })
+    .then(d => console.log("[START] on-chain-start response body:", d))
+    .catch(err => console.warn("[START] on-chain-start fetch failed:", err.message))
+    .finally(() => { console.log("[START] fetch done, clearing isStarting"); setIsStarting(false); });
+};
 
   const myEntry = leaderboard.find(e => e.walletAddress.toLowerCase() === myWallet);
 

@@ -235,8 +235,8 @@ function LinearTimer({ seconds, total }: { seconds: number; total: number }) {
     </div>
   );
 }
-interface ClaimBannerProps { code: string; myWallet: string; }
-function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
+interface ClaimBannerProps { code: string; myWallet: string;rewardsReady?: boolean; }
+function ClaimBanner({ code, myWallet,rewardsReady }: ClaimBannerProps) {
   const { wallets } = useWallets();
   const { address: userWalletAddress } = useWallet();
   const activeWallet =
@@ -276,7 +276,7 @@ function ClaimBanner({ code, myWallet }: ClaimBannerProps) {
           .catch(() => setStatus("eligible"));
       })
       .catch(() => setStatus("not_winner"));
-  }, [code, myWallet]);
+  }, [code, myWallet, rewardsReady]);
 
   useEffect(() => {
     if (status !== "eligible" || timeLeft <= 0) return;
@@ -383,7 +383,7 @@ interface PayoutsData { success: boolean; faucetAddress: string; chainId: number
 
 function QuizGameOver({
   quizMeta, code, leaderboard, myWallet, isCreator, showConfetti, router,
-  initialResults, loadingInitialResults
+  initialResults, loadingInitialResults,rewardsReady
 }: any) {
   const [payoutsData, setPayoutsData] = useState<PayoutsData | null>(null);
   const { address: userWalletAddress } = useWallet();
@@ -413,7 +413,7 @@ function QuizGameOver({
       .then(r => r.json())
       .then(d => { if (d.success) setPayoutsData(d); })
       .finally(() => setLoadingPayouts(false));
-  }, [code]);
+  }, [code, rewardsReady]);
 
   const myPayout = payoutsData?.payouts.find(
     p => p.wallet_address.toLowerCase() === myWallet.toLowerCase()
@@ -1184,7 +1184,7 @@ export default function QuizCodePage() {
   : "0";
   const [players, setPlayers] = useState<Player[]>([]);
   const [countdownVal, setCountdownVal] = useState(3);
-
+  const [rewardsReady, setRewardsReady] = useState(false);
   const [currentQ, setCurrentQ] = useState<Question | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -1556,6 +1556,7 @@ case "kicked": {
     // ── 10. Rewards dispatched after game ends
     case "rewards_dispatched": {
       toast.success("🏆 Winners have been whitelisted! Claim window is now open.");
+      setRewardsReady(true);
       break;
     }
 
@@ -1755,21 +1756,21 @@ const handleFundReward = async () => {
   }
 
  if (phase === "game_over") {
-  return (
-    <QuizGameOver
-      quizMeta={quizMeta}
-      code={code}
-      leaderboard={leaderboard}
-      myWallet={myWallet}
-      isCreator={isCreator}
-      showConfetti={showConfetti}
-      router={router}
-      initialResults={initialResults}
-      loadingInitialResults={loadingInitialResults}
-    />
-  );
-}
-
+    return (
+      <QuizGameOver
+        quizMeta={quizMeta}
+        code={code}
+        leaderboard={leaderboard}
+        myWallet={myWallet}
+        isCreator={isCreator}
+        showConfetti={showConfetti}
+        router={router}
+        initialResults={initialResults}
+        loadingInitialResults={loadingInitialResults}
+        rewardsReady={rewardsReady} // <--- ADD THIS LINE
+      />
+    );
+  }
 // ── Pre-Join Screen ──
 if (!hasJoined && !isCreator && phase === "lobby") return (
   <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex flex-col items-center justify-center px-4 py-8">

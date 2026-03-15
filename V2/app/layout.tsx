@@ -40,7 +40,7 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
         
         {/* Primary Meta Tags */}
-        <title>FaucetDrops</title>
+        <title>FaucetDrops - Automated Onchain Reward and Engagement Platform</title>
         <meta name="title" content="app.FaucetDrops - Automated Onchain Reward and Engagement Platform" />
         <meta name="description" content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains." />
         

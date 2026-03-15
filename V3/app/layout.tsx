@@ -1,12 +1,12 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SplashScreen from "@/components/SplashScreen";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import FloatingElements from "@/components/FloatingElements";
 import ChatBot from '@/components/landingPage/ChatBot';
+import ConditionalHeader from "@/components/ConditionalHeader"; // <-- Import the wrapper
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -29,7 +29,8 @@ export default async function RootLayout({
           <FloatingElements />
           <div className="relative z-20">
             <SplashScreen />
-            <Header />
+            {/* Use the wrapper instead of the direct Header component */}
+            <ConditionalHeader /> 
             {children}
             <ChatBot /> 
             <Footer />

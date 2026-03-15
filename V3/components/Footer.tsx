@@ -22,8 +22,8 @@ const Footer = () => {
       links: [
         { name: 'About Us', href: '/aboutUs' },
         { name: 'Careers', href: '/coming-soon' },
-        { name: 'Blog', href: '/coming-soon' },
-        { name: 'Press', href: '/coming-soon' },
+        { name: 'Blog', href: '/blogs' },
+        
       ],
     },
     {

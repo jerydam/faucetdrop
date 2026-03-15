@@ -235,172 +235,29 @@ function LinearTimer({ seconds, total }: { seconds: number; total: number }) {
     </div>
   );
 }
-interface ClaimBannerProps { code: string; myWallet: string;rewardsReady?: boolean; }
-function ClaimBanner({ code, myWallet,rewardsReady }: ClaimBannerProps) {
-  const { wallets } = useWallets();
-  const { address: userWalletAddress } = useWallet();
-  const activeWallet =
-    wallets.find((w) => w.walletClientType === "privy") ||
-    wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
-    wallets?.[0];
 
-  const [status, setStatus] = useState<"loading" | "eligible" | "claimed" | "expired" | "not_winner">("loading");
-  const [amount, setAmount] = useState(0);
-  const [symbol, setSymbol] = useState("");
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [isClaiming, setIsClaiming] = useState(false);
-  const [claimedTx, setClaimedTx] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!myWallet) return;
-    fetch(`${API_BASE_URL}/api/quiz/${code}/payouts`)
-      .then(r => r.json())
-      .then(d => {
-        if (!d.success) { setStatus("not_winner"); return; }
-        const me = d.payouts?.find((p: any) => p.wallet_address.toLowerCase() === myWallet.toLowerCase());
-        if (!me) { setStatus("not_winner"); return; }
-        if (me.status === "claimed") { setStatus("claimed"); return; }
-        setAmount(me.amount);
-        setSymbol(me.token_symbol);
-        fetch(`${API_BASE_URL}/api/quiz/${code}/claim-window`)
-          .then(r => r.json())
-          .then(w => {
-            if (w.isActive && w.secondsRemaining > 0) {
-              setTimeLeft(w.secondsRemaining);
-              setStatus("eligible");
-            } else {
-              setStatus("expired");
-            }
-          })
-          .catch(() => setStatus("eligible"));
-      })
-      .catch(() => setStatus("not_winner"));
-  }, [code, myWallet, rewardsReady]);
-
-  useEffect(() => {
-    if (status !== "eligible" || timeLeft <= 0) return;
-    timerRef.current = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(timerRef.current!); setStatus("expired"); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timerRef.current!);
-  }, [status, timeLeft]);
-
-  const formatTime = (s: number) => {
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${sec}s`;
-    return `${sec}s`;
-  };
-
-  const handleClaim = async () => {
-    if (!activeWallet) { toast.error("Wallet not connected"); return; }
-    setIsClaiming(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/claim`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: myWallet }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.detail || data.message || "Claim failed");
-      setClaimedTx(data.txHash);
-      setStatus("claimed");
-      toast.success("Reward claimed! It's now in your wallet.");
-    } catch (e: any) {
-      toast.error(parseOnchainError(e));
-    } finally {
-      setIsClaiming(false);
-    }
-  };
-
-  // ── Only show loading spinner to actual winners ──
-  // We don't know yet — show nothing while checking
-  if (status === "loading") return null;
-
-  // Not a winner — show nothing at all
-  if (status === "not_winner") return null;
-
-  // Winner — show checking spinner only at this point
-  // (this branch is never reached since we return null above for loading,
-  //  but kept here as a safety net for any future state additions)
-
-  if (status === "claimed") return (
-    <div className="max-w-xl mx-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
-      <CheckCircle2 className="h-5 w-5 text-green-500 dark:text-green-400 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-green-700 dark:text-green-400 font-bold text-sm">Reward Claimed ✓</p>
-        <p className="text-green-600 dark:text-green-500 text-xs mt-0.5">{amount} {symbol} sent to your wallet</p>
-      </div>
-      {claimedTx && (
-        <a href={`https://celoscan.io/tx/${claimedTx}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
-          <ExternalLink className="h-4 w-4 text-green-500" />
-        </a>
-      )}
-    </div>
-  );
-
-  if (status === "expired") return (
-    <div className="max-w-xl mx-auto bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
-      <AlertCircle className="h-5 w-5 text-slate-400 shrink-0" />
-      <div>
-        <p className="text-slate-600 dark:text-slate-300 font-bold text-sm">Claim Window Expired</p>
-        <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">The reward claim period has closed.</p>
-      </div>
-    </div>
-  );
-
-  // status === "eligible"
-  return (
-    <div className="max-w-xl mx-auto bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-600/30 rounded-2xl p-4 shadow-sm animate-in slide-in-from-top-4 duration-500">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-yellow-100 dark:bg-yellow-500/20 border border-yellow-200 dark:border-yellow-500/30 flex items-center justify-center shrink-0">
-          <Trophy className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-yellow-800 dark:text-yellow-300 font-black text-base">You won {amount} {symbol}!</p>
-          <p className="text-yellow-700 dark:text-yellow-400/80 text-xs mt-0.5 flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            Claim window closes in <span className="font-bold tabular-nums ml-1">{formatTime(timeLeft)}</span>
-          </p>
-        </div>
-        <Button
-          className="shrink-0 h-10 px-4 font-bold bg-yellow-500 hover:bg-yellow-400 text-black border-0"
-          onClick={handleClaim}
-          disabled={isClaiming}
-        >
-          {isClaiming ? <Loader2 className="h-4 w-4 animate-spin" /> : "Claim Now"}
-        </Button>
-      </div>
-    </div>
-  );
-}
 interface PayoutRecord { wallet_address: string; username: string; rank: number; points: number; amount: number; token_symbol: string; status: string; tx_hash: string | null; }
 interface PayoutsData { success: boolean; faucetAddress: string; chainId: number; payouts: PayoutRecord[]; }
 
 function QuizGameOver({
   quizMeta, code, leaderboard, myWallet, isCreator, showConfetti, router,
-  initialResults, loadingInitialResults,rewardsReady
+  initialResults, loadingInitialResults, rewardsReady // <--- Added rewardsReady
 }: any) {
   const [payoutsData, setPayoutsData] = useState<PayoutsData | null>(null);
   const { address: userWalletAddress } = useWallet();
   const [loadingPayouts, setLoadingPayouts] = useState(true);
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimedTx, setClaimedTx] = useState<string | null>(null);
-  // Start in results view if we have initial results (came from quiz list page)
   const [showFullResults, setShowFullResults] = useState(!!initialResults);
   const [resultsData, setResultsData] = useState<any>(initialResults ?? null);
   const [loadingResults, setLoadingResults] = useState(false);
   const { wallets } = useWallets();
+  
   const activeWallet =
     wallets.find((w) => w.walletClientType === "privy") ||
     wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
     wallets?.[0];
 
-  // Sync initialResults into state if they arrive after mount
   useEffect(() => {
     if (initialResults && !resultsData) {
       setResultsData(initialResults);
@@ -408,6 +265,7 @@ function QuizGameOver({
     }
   }, [initialResults]);
 
+  // 🚀 Re-fetches instantly when rewardsReady turns true!
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/quiz/${code}/payouts`)
       .then(r => r.json())
@@ -473,26 +331,11 @@ function QuizGameOver({
         setResultsData(d);
         setShowFullResults(true);
       } else {
-        // Fallback to live leaderboard
-        setResultsData({
-          success: true,
-          quiz: quizMeta,
-          leaderboard,
-          payouts: payoutByWallet,
-          totalPlayers: leaderboard.length,
-          endedAt: null,
-        });
+        setResultsData({ success: true, quiz: quizMeta, leaderboard, payouts: payoutByWallet, totalPlayers: leaderboard.length, endedAt: null });
         setShowFullResults(true);
       }
     } catch {
-      setResultsData({
-        success: true,
-        quiz: quizMeta,
-        leaderboard,
-        payouts: payoutByWallet,
-        totalPlayers: leaderboard.length,
-        endedAt: null,
-      });
+      setResultsData({ success: true, quiz: quizMeta, leaderboard, payouts: payoutByWallet, totalPlayers: leaderboard.length, endedAt: null });
       setShowFullResults(true);
     } finally {
       setLoadingResults(false);
@@ -505,7 +348,6 @@ function QuizGameOver({
   };
 
   const top3 = leaderboard.slice(0, 3);
-
   const EXPLORER_BASE: Record<number, string> = {
     42220: "https://celoscan.io/tx/",
     1135:  "https://blockscout.lisk.com/tx/",
@@ -516,7 +358,6 @@ function QuizGameOver({
 
   // ── Full Results View ──────────────────────────────────────
   if (showFullResults) {
-    // Show loading skeleton while initial results are being fetched
     if (loadingInitialResults && !resultsData) {
       return (
         <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
@@ -537,35 +378,22 @@ function QuizGameOver({
 
     const formatDate = (iso: string | null) => {
       if (!iso) return "";
-      return new Date(iso).toLocaleDateString("en-US", {
-        month: "short", day: "numeric", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-      });
+      return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
     };
 
     return (
       <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
         <Confetti active={showConfetti} />
 
-        {/* Top bar */}
         <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-            {/* Only show back button if they came from the live game, not from quiz list */}
             {leaderboard.length > 0 ? (
-              <button
-                onClick={() => setShowFullResults(false)}
-                className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Game Summary</span>
+              <button onClick={() => setShowFullResults(false)} className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors">
+                <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Game Summary</span>
               </button>
             ) : (
-              <button
-                onClick={() => router.push("/quiz")}
-                className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Quiz Hub</span>
+              <button onClick={() => router.push("/quiz")} className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors">
+                <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Quiz Hub</span>
               </button>
             )}
             <div className="flex items-center gap-2">
@@ -576,8 +404,6 @@ function QuizGameOver({
         </div>
 
         <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6 pb-20">
-
-          {/* Hero */}
           <div className="text-center space-y-2">
             {rQuiz?.coverImageUrl ? (
               <div className="relative w-full max-w-md mx-auto aspect-video rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 mb-4">
@@ -594,13 +420,9 @@ function QuizGameOver({
               </>
             )}
             <div className="flex items-center justify-center gap-3 flex-wrap text-slate-500 dark:text-slate-400 text-sm">
-              <span className="flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" />{totalPlayers} players
-              </span>
+              <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{totalPlayers} players</span>
               <span className="text-slate-300 dark:text-slate-700">•</span>
-              <span className="flex items-center gap-1.5">
-                <Trophy className="h-3.5 w-3.5" />{rQuiz?.totalQuestions} questions
-              </span>
+              <span className="flex items-center gap-1.5"><Trophy className="h-3.5 w-3.5" />{rQuiz?.totalQuestions} questions</span>
               {endedAt && (
                 <>
                   <span className="text-slate-300 dark:text-slate-700">•</span>
@@ -608,15 +430,9 @@ function QuizGameOver({
                 </>
               )}
             </div>
-            {rQuiz?.creatorUsername && (
-              <p className="text-slate-400 dark:text-slate-500 text-xs flex items-center justify-center gap-1.5">
-                <Crown className="h-3.5 w-3.5 text-yellow-500" />
-                Hosted by <span className="font-bold text-slate-600 dark:text-slate-300 ml-1">{rQuiz.creatorUsername}</span>
-              </p>
-            )}
           </div>
 
-          {/* My result banner */}
+          {/* 🚀 My Result Card (With Claim Button) */}
           {myWallet && (() => {
             const myEntry = fullLb.find((e: any) => e.walletAddress?.toLowerCase() === myWallet);
             if (!myEntry) return null;
@@ -624,11 +440,9 @@ function QuizGameOver({
             return (
               <div className={cn(
                 "rounded-2xl p-4 border flex items-center gap-4",
-                myEntry.rank === 1
-                  ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30"
-                  : myEntry.rank <= 3
-                    ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30"
-                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                myEntry.rank === 1 ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30" : 
+                myEntry.rank <= 3 ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30" : 
+                "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
               )}>
                 <div className={cn(
                   "w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0",
@@ -644,35 +458,31 @@ function QuizGameOver({
                   <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
                 </div>
                 {myFullPayout && (
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 space-y-1.5">
                     <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
                       {myFullPayout.amount} {myFullPayout.tokenSymbol}
                     </p>
-                    <p className={cn(
-                      "text-xs font-bold mt-0.5",
-                      myFullPayout.status === "claimed" ? "text-green-600 dark:text-green-400" : "text-amber-500"
-                    )}>
-                      {myFullPayout.status === "claimed" ? "✓ Claimed" : "Unclaimed"}
-                    </p>
+                    {!isCreator && (
+                        (myFullPayout.status === "claimed" || claimedTx) ? (
+                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">✓ Claimed</Badge>
+                        ) : (
+                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
+                            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                            Claim Reward
+                          </Button>
+                        )
+                    )}
                   </div>
                 )}
               </div>
             );
           })()}
 
-          {/* Claim banner */}
-          {!isCreator && <ClaimBanner code={code} myWallet={myWallet} />}
-
-          {/* Prize pool */}
           {rQuiz?.reward && (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/30 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
               <div>
-                <p className="text-yellow-700 dark:text-yellow-400 font-black text-lg">
-                  {rQuiz.reward.poolAmount} {rQuiz.reward.tokenSymbol}
-                </p>
-                <p className="text-yellow-600 dark:text-yellow-500 text-xs mt-0.5">
-                  Prize pool • Top {rQuiz.reward.totalWinners} winner{rQuiz.reward.totalWinners > 1 ? "s" : ""}
-                </p>
+                <p className="text-yellow-700 dark:text-yellow-400 font-black text-lg">{rQuiz.reward.poolAmount} {rQuiz.reward.tokenSymbol}</p>
+                <p className="text-yellow-600 dark:text-yellow-500 text-xs mt-0.5">Prize pool • Top {rQuiz.reward.totalWinners} winner{rQuiz.reward.totalWinners > 1 ? "s" : ""}</p>
               </div>
               <Trophy className="h-8 w-8 text-yellow-400 dark:text-yellow-600 shrink-0" />
             </div>
@@ -692,11 +502,6 @@ function QuizGameOver({
                     <div className="text-center">
                       <p className="text-slate-900 dark:text-white text-xs font-bold truncate max-w-[70px] sm:max-w-[90px]">{fullTop3[1].username}</p>
                       <p className="text-slate-500 dark:text-slate-400 font-black text-xs sm:text-sm">{fullTop3[1].points} pts</p>
-                      {fullPayouts?.[fullTop3[1].walletAddress?.toLowerCase()] && (
-                        <p className="text-yellow-600 dark:text-yellow-400 text-[10px] font-bold">
-                          {fullPayouts[fullTop3[1].walletAddress.toLowerCase()].amount} {fullPayouts[fullTop3[1].walletAddress.toLowerCase()].tokenSymbol}
-                        </p>
-                      )}
                     </div>
                     <div className="bg-slate-300 dark:bg-slate-700 w-16 sm:w-28 h-20 sm:h-32 rounded-t-xl flex items-center justify-center text-2xl sm:text-4xl">🥈</div>
                   </div>
@@ -711,11 +516,6 @@ function QuizGameOver({
                     <div className="text-center">
                       <p className="text-slate-900 dark:text-white text-sm font-black truncate max-w-[90px] sm:max-w-[120px]">{fullTop3[0].username}</p>
                       <p className="text-yellow-600 dark:text-yellow-400 font-black text-base sm:text-xl">{fullTop3[0].points} pts</p>
-                      {fullPayouts?.[fullTop3[0].walletAddress?.toLowerCase()] && (
-                        <p className="text-yellow-600 dark:text-yellow-400 text-xs font-black">
-                          {fullPayouts[fullTop3[0].walletAddress.toLowerCase()].amount} {fullPayouts[fullTop3[0].walletAddress.toLowerCase()].tokenSymbol}
-                        </p>
-                      )}
                     </div>
                     <div className="bg-yellow-400 dark:bg-yellow-600 w-20 sm:w-36 h-28 sm:h-44 rounded-t-xl flex items-center justify-center text-3xl sm:text-5xl">🥇</div>
                   </div>
@@ -729,11 +529,6 @@ function QuizGameOver({
                     <div className="text-center">
                       <p className="text-slate-900 dark:text-white text-xs font-bold truncate max-w-[60px] sm:max-w-[90px]">{fullTop3[2].username}</p>
                       <p className="text-amber-700 dark:text-amber-500 font-black text-xs sm:text-sm">{fullTop3[2].points} pts</p>
-                      {fullPayouts?.[fullTop3[2].walletAddress?.toLowerCase()] && (
-                        <p className="text-yellow-600 dark:text-yellow-400 text-[10px] font-bold">
-                          {fullPayouts[fullTop3[2].walletAddress.toLowerCase()].amount} {fullPayouts[fullTop3[2].walletAddress.toLowerCase()].tokenSymbol}
-                        </p>
-                      )}
                     </div>
                     <div className="bg-amber-600 dark:bg-amber-800 w-14 sm:w-24 h-16 sm:h-24 rounded-t-xl flex items-center justify-center text-2xl sm:text-3xl">🥉</div>
                   </div>
@@ -751,26 +546,13 @@ function QuizGameOver({
               <span className="text-slate-400 dark:text-slate-500 text-xs">{totalPlayers} players</span>
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {fullLb.map((entry: any, i: number) => {
+              {fullLb.map((entry: any) => {
                 const isMe = entry.walletAddress?.toLowerCase() === myWallet;
                 const payout = fullPayouts?.[entry.walletAddress?.toLowerCase()];
                 const isWinner = !!payout;
                 return (
-                  <div
-                    key={entry.walletAddress}
-                    className={cn(
-                      "flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4",
-                      isMe && "bg-indigo-50 dark:bg-indigo-950/20",
-                      isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0",
-                      entry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
-                      entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" :
-                      entry.rank === 3 ? "bg-amber-600 text-white" :
-                      "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                    )}>
+                  <div key={entry.walletAddress} className={cn("flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4", isMe && "bg-indigo-50 dark:bg-indigo-950/20", isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500")}>
+                    <div className={cn("w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0", entry.rank === 1 ? "bg-yellow-400 text-yellow-900" : entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" : entry.rank === 3 ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400")}>
                       {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : `#${entry.rank}`}
                     </div>
                     <Avatar className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 border border-slate-200 dark:border-slate-700">
@@ -790,11 +572,6 @@ function QuizGameOver({
                           <span className={cn("text-[10px]", payout.status === "claimed" ? "text-green-500" : "text-amber-500")}>
                             {payout.status === "claimed" ? "• Claimed ✓" : "• Unclaimed"}
                           </span>
-                          {payout.status === "claimed" && payout.txHash && explorerBase && (
-                            <a href={`${explorerBase}${payout.txHash}`} target="_blank" rel="noopener noreferrer" className="text-green-500 hover:text-green-600">
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
                         </p>
                       )}
                     </div>
@@ -808,28 +585,16 @@ function QuizGameOver({
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-3">
             {leaderboard.length > 0 && (
-              <Button
-                variant="outline"
-                className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
-                onClick={() => setShowFullResults(false)}
-              >
+              <Button variant="outline" className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white" onClick={() => setShowFullResults(false)}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Game Summary
               </Button>
             )}
-            <Button
-              variant="outline"
-              className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
-              onClick={handleShareResults}
-            >
+            <Button variant="outline" className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white" onClick={handleShareResults}>
               <Share2 className="mr-2 h-4 w-4" /> Share
             </Button>
-            <Button
-              className="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
-              onClick={() => router.push("/quiz")}
-            >
+            <Button className="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold" onClick={() => router.push("/quiz")}>
               <Home className="mr-2 h-4 w-4" /> Quiz Hub
             </Button>
           </div>
@@ -838,7 +603,7 @@ function QuizGameOver({
     );
   }
 
-  // ── Game Over Summary (live players who just finished) ─────
+  // ── Game Over Summary (Live View) ─────
   return (
     <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
       <Confetti active={showConfetti} />
@@ -850,7 +615,51 @@ function QuizGameOver({
           <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base font-medium">{quizMeta?.title}</p>
         </div>
 
-        {!isCreator && <ClaimBanner code={code} myWallet={myWallet} />}
+        {/* 🚀 My Result Card (With Claim Button) */}
+        {myWallet && (() => {
+          const myEntry = leaderboard.find((e: any) => e.walletAddress?.toLowerCase() === myWallet);
+          if (!myEntry) return null;
+          const myPayout = payoutByWallet[myWallet];
+          return (
+            <div className={cn(
+              "max-w-xl mx-auto w-full rounded-2xl p-4 border flex items-center gap-4 shadow-sm",
+              myEntry.rank === 1 ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30" : 
+              myEntry.rank <= 3 ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30" : 
+              "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+            )}>
+              <div className={cn(
+                "w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0",
+                myEntry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
+                myEntry.rank === 2 ? "bg-slate-300 text-slate-800" :
+                myEntry.rank === 3 ? "bg-amber-600 text-white" :
+                "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400"
+              )}>
+                {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-slate-900 dark:text-white">Your Result</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
+              </div>
+              {myPayout && (
+                <div className="text-right shrink-0 space-y-1.5">
+                  <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+                    {myPayout.amount} {myPayout.token_symbol}
+                  </p>
+                  {!isCreator && (
+                      (myPayout.status === "claimed" || claimedTx) ? (
+                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">✓ Claimed</Badge>
+                      ) : (
+                        <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
+                          {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                          Claim Reward
+                        </Button>
+                      )
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {!loadingPayouts && totalWinners > 0 && (
           <div className="max-w-xl mx-auto bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-500/30 rounded-2xl p-4 text-center shadow-sm">
@@ -861,7 +670,6 @@ function QuizGameOver({
           </div>
         )}
 
-        {/* Podium */}
         {top3.length > 0 && (
           <div className="flex items-end justify-center gap-2 sm:gap-4 md:gap-6">
             {top3[1] && (
@@ -907,7 +715,6 @@ function QuizGameOver({
           </div>
         )}
 
-        {/* Leaderboard */}
         <div className="max-w-2xl mx-auto bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest flex items-center gap-1.5">
@@ -923,7 +730,6 @@ function QuizGameOver({
                 const isMe = entry.walletAddress.toLowerCase() === myWallet.toLowerCase();
                 const payout = payoutByWallet[entry.walletAddress.toLowerCase()];
                 const isWinner = !!payout;
-                const alreadyClaimed = isMe ? hasAlreadyClaimed : payout?.status === "claimed";
                 return (
                   <div key={entry.walletAddress} className={cn(
                     "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4",
@@ -947,21 +753,11 @@ function QuizGameOver({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-slate-900 dark:text-white font-bold text-xs sm:text-sm truncate">{entry.username}</span>
                         {isMe && <Badge className="text-[9px] h-4 px-1 bg-indigo-600 text-white border-0 shrink-0">YOU</Badge>}
-                        {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500 dark:text-black border-0 shrink-0">🏆</Badge>}
+                        {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 border-0 shrink-0">🏆</Badge>}
                       </div>
-                      {isWinner && payout.amount > 0 && (
-                        <p className="text-yellow-600 dark:text-yellow-400 text-xs font-bold mt-0.5">{payout.amount} {payout.token_symbol}</p>
-                      )}
                     </div>
                     <div className="text-right shrink-0 space-y-1">
                       <div className="text-slate-900 dark:text-white font-black text-sm sm:text-base">{entry.points} pts</div>
-                      {isMe && isWinner && !isCreator && (
-                        alreadyClaimed
-                          ? <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0 text-[10px]">✓ Claimed</Badge>
-                          : <Button size="sm" className="h-7 px-2 sm:px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0" onClick={handleClaim} disabled={isClaiming}>
-                              {isClaiming ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
-                            </Button>
-                      )}
                     </div>
                   </div>
                 );
@@ -970,40 +766,21 @@ function QuizGameOver({
           )}
         </div>
 
-        {/* Actions */}
         <div className="max-w-2xl mx-auto space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Button
-              className="h-12 font-bold bg-indigo-600 hover:bg-indigo-700 text-white border-0"
-              onClick={fetchResults}
-              disabled={loadingResults}
-            >
-              {loadingResults
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</>
-                : <><Trophy className="mr-2 h-4 w-4" />View Full Results</>
-              }
+            <Button className="h-12 font-bold bg-indigo-600 hover:bg-indigo-700 text-white border-0" onClick={fetchResults} disabled={loadingResults}>
+              {loadingResults ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</> : <><Trophy className="mr-2 h-4 w-4" />View Full Results</>}
             </Button>
-            <Button
-              variant="outline"
-              className="h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
-              onClick={handleShareResults}
-            >
+            <Button variant="outline" className="h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white" onClick={handleShareResults}>
               <Share2 className="mr-2 h-4 w-4" /> Share
             </Button>
           </div>
           <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"
-              onClick={() => router.push("/quiz")}
-            >
+            <Button variant="outline" className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white" onClick={() => router.push("/quiz")}>
               <Home className="mr-2 h-4 w-4" /> Back to Hub
             </Button>
             {isCreator && (
-              <Button
-                className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold border-0"
-                onClick={() => router.push("/quiz/create-quiz")}
-              >
+              <Button className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold border-0" onClick={() => router.push("/quiz/create-quiz")}>
                 <Plus className="mr-2 h-4 w-4" /> New Quiz
               </Button>
             )}
@@ -1169,6 +946,7 @@ export default function QuizCodePage() {
     poolAmount: string;
     isFunded: boolean;
   } | null>(null);
+  
   const reconnectAttempts = useRef(0);
   const [isFunded, setIsFunded] = useState(false);
   const [contractBalance, setContractBalance] = useState("0");

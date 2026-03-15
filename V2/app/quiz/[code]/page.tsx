@@ -241,7 +241,9 @@ interface PayoutsData { success: boolean; faucetAddress: string; chainId: number
 
 function QuizGameOver({
   quizMeta, code, leaderboard, myWallet, isCreator, showConfetti, router,
-  initialResults, loadingInitialResults, rewardsReady // <--- Added rewardsReady
+  initialResults, loadingInitialResults, rewardsReady,
+  quizReward,   // ← add
+        // ← add
 }: any) {
   const [payoutsData, setPayoutsData] = useState<PayoutsData | null>(null);
   const { address: userWalletAddress } = useWallet();
@@ -258,6 +260,50 @@ function QuizGameOver({
     wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
     wallets?.[0];
 
+  // 1. Add new state variables at the top of QuizGameOver
+const [onChainStatus, setOnChainStatus] = useState<{
+  hasReward: boolean;
+  claimed: boolean;
+  rewardAmount: string;
+  canClaim: boolean;
+} | null>(null);
+const [checkingChain, setCheckingChain] = useState(false);
+
+useEffect(() => {
+  if (!quizReward?.contractAddress || !wallets?.[0] || !myWallet) return;
+
+  let cancelled = false;
+  const checkOnChain = async () => {
+    setCheckingChain(true);
+    try {
+      const privyProvider = await wallets[0].getEthereumProvider();
+      const provider = new BrowserProvider(privyProvider);
+      const contract = new Contract(
+        quizReward.contractAddress,
+        ["function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeRemaining)"],
+        provider
+      );
+      const [claimed, hasRewardAmount, rewardAmount, canClaim] =
+        await contract.getClaimStatus(myWallet);
+
+      if (!cancelled) {
+        setOnChainStatus({
+          hasReward: hasRewardAmount,
+          claimed,
+          rewardAmount: formatUnits(rewardAmount, quizReward.tokenDecimals),
+          canClaim,
+        });
+      }
+    } catch (e) {
+      console.error("On-chain claim status check failed:", e);
+    } finally {
+      if (!cancelled) setCheckingChain(false);
+    }
+  };
+
+  checkOnChain();
+  return () => { cancelled = true; };
+}, [quizReward?.contractAddress, wallets?.[0]?.address, myWallet, claimedTx, rewardsReady]);
   useEffect(() => {
     if (initialResults && !resultsData) {
       setResultsData(initialResults);
@@ -432,51 +478,137 @@ function QuizGameOver({
             </div>
           </div>
 
-          {/* 🚀 My Result Card (With Claim Button) */}
-          {myWallet && (() => {
-            const myEntry = fullLb.find((e: any) => e.walletAddress?.toLowerCase() === myWallet);
-            if (!myEntry) return null;
-            const myFullPayout = fullPayouts?.[myWallet];
-            return (
-              <div className={cn(
-                "rounded-2xl p-4 border flex items-center gap-4",
-                myEntry.rank === 1 ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30" : 
-                myEntry.rank <= 3 ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30" : 
-                "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-              )}>
-                <div className={cn(
-                  "w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0",
-                  myEntry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
-                  myEntry.rank === 2 ? "bg-slate-300 text-slate-800" :
-                  myEntry.rank === 3 ? "bg-amber-600 text-white" :
-                  "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400"
-                )}>
-                  {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-black text-slate-900 dark:text-white">Your Result</p>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
-                </div>
-                {myFullPayout && (
-                  <div className="text-right shrink-0 space-y-1.5">
-                    <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-                      {myFullPayout.amount} {myFullPayout.tokenSymbol}
-                    </p>
-                    {!isCreator && (
-                        (myFullPayout.status === "claimed" || claimedTx) ? (
-                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">✓ Claimed</Badge>
-                        ) : (
-                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
-                            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                            Claim Reward
-                          </Button>
-                        )
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+{myWallet && (() => {
+  const myEntry = fullLb.find((e: any) => e.walletAddress?.toLowerCase() === myWallet);
+  if (!myEntry) return null;
+
+  const myFullPayout = fullPayouts?.[myWallet];
+
+  // ── Merge backend + on-chain truth ──
+  const isClaimed =
+    claimedTx ||
+    onChainStatus?.claimed ||
+    myFullPayout?.status === "claimed";
+
+  const hasReward = onChainStatus?.hasReward || !!myFullPayout;
+
+  const rewardAmt =
+    onChainStatus?.rewardAmount ||
+    (myFullPayout ? String(myFullPayout.amount) : null);
+
+  const tokenSymbol =
+    quizReward?.tokenSymbol ||
+    myFullPayout?.tokenSymbol ||
+    myFullPayout?.token_symbol ||
+    "";
+
+  return (
+    <div className={cn(
+      "rounded-2xl p-4 border flex items-center gap-4",
+      myEntry.rank === 1
+        ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30"
+        : myEntry.rank <= 3
+          ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30"
+          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+    )}>
+      {/* Rank icon */}
+      <div className={cn(
+        "w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0",
+        myEntry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
+        myEntry.rank === 2 ? "bg-slate-300 text-slate-800" :
+        myEntry.rank === 3 ? "bg-amber-600 text-white" :
+        "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400"
+      )}>
+        {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <p className="font-black text-slate-900 dark:text-white">Your Result</p>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">
+          Rank #{myEntry.rank} • {myEntry.points} points
+        </p>
+      </div>
+
+      {/* Reward section — driven by on-chain status */}
+      <div className="text-right shrink-0 space-y-1.5">
+        {/* Still loading chain */}
+        {checkingChain && !onChainStatus && (
+          <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-400 border-0 gap-1 flex items-center">
+            <Loader2 className="h-3 w-3 animate-spin" /> Checking chain…
+          </Badge>
+        )}
+
+        {/* On-chain check done */}
+        {!checkingChain && onChainStatus && (
+          <>
+            {hasReward && rewardAmt && (
+              <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+                {rewardAmt} {tokenSymbol}
+              </p>
+            )}
+
+            {!isCreator && (
+              isClaimed ? (
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+                  ✓ Claimed
+                </Badge>
+              ) : onChainStatus.canClaim ? (
+                <Button
+                  size="sm"
+                  className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
+                  onClick={handleClaim}
+                  disabled={isClaiming}
+                >
+                  {isClaiming
+                    ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    : null}
+                  Claim Reward
+                </Button>
+              ) : onChainStatus.hasReward ? (
+                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
+                  Claim window not open
+                </Badge>
+              ) : (
+                <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-500 border-0 text-xs">
+                  Not eligible
+                </Badge>
+              )
+            )}
+          </>
+        )}
+
+        {/* Chain check failed / no wallet — fall back to backend data */}
+        {!checkingChain && !onChainStatus && myFullPayout && (
+          <>
+            <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+              {myFullPayout.amount} {tokenSymbol}
+            </p>
+            {!isCreator && (
+              isClaimed ? (
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+                  ✓ Claimed
+                </Badge>
+              ) : (
+                <Button
+                  size="sm"
+                  className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
+                  onClick={handleClaim}
+                  disabled={isClaiming}
+                >
+                  {isClaiming
+                    ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    : null}
+                  Claim Reward
+                </Button>
+              )
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+})()}
+
 
           {rQuiz?.reward && (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/30 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
@@ -1533,22 +1665,24 @@ const handleFundReward = async () => {
     );
   }
 
- if (phase === "game_over") {
-    return (
-      <QuizGameOver
-        quizMeta={quizMeta}
-        code={code}
-        leaderboard={leaderboard}
-        myWallet={myWallet}
-        isCreator={isCreator}
-        showConfetti={showConfetti}
-        router={router}
-        initialResults={initialResults}
-        loadingInitialResults={loadingInitialResults}
-        rewardsReady={rewardsReady} // <--- ADD THIS LINE
-      />
-    );
-  }
+if (phase === "game_over") {
+  return (
+    <QuizGameOver
+      quizMeta={quizMeta}
+      code={code}
+      leaderboard={leaderboard}
+      myWallet={myWallet}
+      isCreator={isCreator}
+      showConfetti={showConfetti}
+      router={router}
+      initialResults={initialResults}
+      loadingInitialResults={loadingInitialResults}
+      rewardsReady={rewardsReady}
+      quizReward={quizReward}        // ← add this
+      wallets={wallets}              // ← add this (needed for the provider)
+    />
+  );
+}
 // ── Pre-Join Screen ──
 if (!hasJoined && !isCreator && phase === "lobby") return (
   <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex flex-col items-center justify-center px-4 py-8">

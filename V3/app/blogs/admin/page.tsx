@@ -8,7 +8,6 @@ import {
 import { getSession, getAdmin, clearSession, API } from "../_lib/auth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-
 interface BlogPost {
   id: string;
   slug: string;
@@ -21,13 +20,11 @@ interface BlogPost {
   likes_count: number;
   views_count: number;
 }
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short", day: "numeric", year: "numeric"
   });
 }
-
 export default function BlogAdminPage() {
   const router = useRouter();
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -36,11 +33,9 @@ export default function BlogAdminPage() {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const admin = getAdmin();
-
   useEffect(() => {
     if (!getSession()) router.replace("/blogs/login");
-  }, []);
-
+  }, [router]);
   const fetchPosts = useCallback(async () => {
     setLoading(true);
     try {
@@ -50,9 +45,7 @@ export default function BlogAdminPage() {
     } catch { toast.error("Failed to load posts"); }
     finally { setLoading(false); }
   }, []);
-
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
-
   const handleDelete = async (slug: string, title: string) => {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
     const token = getSession();
@@ -68,35 +61,30 @@ export default function BlogAdminPage() {
       if (!res.ok || !data.success) throw new Error(data.detail || "Delete failed");
       setPosts(prev => prev.filter(p => p.slug !== slug));
       toast.success("Post deleted");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setDeletingSlug(null);
     }
   };
-
   const handleLogout = async () => {
     const token = getSession();
     if (token) await fetch(`${API}/api/blogs/logout?sessionToken=${token}`, { method: "POST" }).catch(() => {});
     clearSession();
     router.push("/blogs");
   };
-
   const filtered = posts.filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
     p.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
   );
-
   const stats = {
     total: posts.length,
     totalLikes: posts.reduce((s, p) => s + p.likes_count, 0),
     totalViews: posts.reduce((s, p) => s + p.views_count, 0),
   };
-
   return (
     <div className="min-h-screen">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6 pb-20">
-
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
@@ -132,7 +120,6 @@ export default function BlogAdminPage() {
             </button>
           </div>
         </div>
-
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 sm:gap-4">
           {[
@@ -146,7 +133,6 @@ export default function BlogAdminPage() {
             </div>
           ))}
         </div>
-
         {/* Toolbar */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex-1 min-w-50 relative">
@@ -181,7 +167,6 @@ export default function BlogAdminPage() {
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           </button>
         </div>
-
         {/* Posts */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -198,7 +183,7 @@ export default function BlogAdminPage() {
                 onClick={() => router.push("/blogs/create-blog")}
                 className="mt-4 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-all"
               >
-                <Plus className="h-4 w-4" /> create First Post
+                <Plus className="h-4 w-4" /> Create First Post
               </button>
             )}
           </div>
@@ -218,6 +203,7 @@ export default function BlogAdminPage() {
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {post.cover_image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={post.cover_image_url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0 border border-white/10" />
                     ) : (
                       <div className="w-10 h-10 rounded-lg bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center shrink-0">
@@ -268,6 +254,7 @@ export default function BlogAdminPage() {
               >
                 <div className="aspect-video bg-white/5 overflow-hidden">
                   {post.cover_image_url
+                    // eslint-disable-next-line @next/next/no-img-element
                     ? <img src={post.cover_image_url} alt="" className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center"><Rss className="h-10 w-10 text-white/10" /></div>
                   }

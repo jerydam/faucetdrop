@@ -1,12 +1,18 @@
 const SESSION_KEY = "blog_admin_token";
 const ADMIN_KEY   = "blog_admin_info";
 
+export interface AdminInfo {
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+}
+
 export function getSession(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(SESSION_KEY);
 }
 
-export function setSession(token: string, admin: any) {
+export function setSession(token: string, admin: AdminInfo) {
   localStorage.setItem(SESSION_KEY, token);
   localStorage.setItem(ADMIN_KEY, JSON.stringify(admin));
 }
@@ -16,11 +22,11 @@ export function clearSession() {
   localStorage.removeItem(ADMIN_KEY);
 }
 
-export function getAdmin(): { username: string; displayName: string; avatarUrl: string } | null {
+export function getAdmin(): AdminInfo | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(ADMIN_KEY);
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  try { return JSON.parse(raw) as AdminInfo; } catch { return null; }
 }
 
 // Generate a stable browser fingerprint for likes (no wallet needed)

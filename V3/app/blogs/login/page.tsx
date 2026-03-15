@@ -4,8 +4,6 @@ import { useRouter } from "next/navigation";
 import { Loader2, Lock, Eye, EyeOff, Rss } from "lucide-react";
 import { setSession, getSession, API } from "../_lib/auth";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-
 export default function BlogLoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -13,11 +11,9 @@ export default function BlogLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
   useEffect(() => {
     if (getSession()) router.replace("/blogs/admin");
-  }, []);
-
+  }, [router]);
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) { setError("Both fields are required"); return; }
@@ -34,17 +30,15 @@ export default function BlogLoginPage() {
       setSession(data.sessionToken, data.admin);
       toast.success(`Welcome back, ${data.admin.displayName}!`);
       router.push("/blogs/admin");
-    } catch (e: any) {
-      setError(e.message || "Login failed");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Login failed");
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
-
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/80 border border-indigo-500/40 mb-4 shadow-xl shadow-indigo-900/30">
@@ -53,18 +47,15 @@ export default function BlogLoginPage() {
           <h1 className="text-2xl font-black text-white">Blog Admin</h1>
           <p className="text-white/40 text-sm mt-1">Sign in to manage posts</p>
         </div>
-
         {/* Card */}
         <div className="bg-white/5 border border-white/10 backdrop-blur-sm rounded-2xl p-6 shadow-2xl shadow-black/30">
           <form onSubmit={handleLogin} className="space-y-4">
-
             {error && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 flex items-center gap-2 text-red-400 text-sm font-medium">
                 <Lock className="h-4 w-4 shrink-0" />
                 {error}
               </div>
             )}
-
             <div className="space-y-1.5">
               <label className="text-white/50 text-xs font-bold uppercase tracking-wider block">Username</label>
               <input
@@ -76,7 +67,6 @@ export default function BlogLoginPage() {
                 className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/20 text-sm outline-none focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/10 transition-all"
               />
             </div>
-
             <div className="space-y-1.5">
               <label className="text-white/50 text-xs font-bold uppercase tracking-wider block">Password</label>
               <div className="relative">
@@ -97,7 +87,6 @@ export default function BlogLoginPage() {
                 </button>
               </div>
             </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -107,7 +96,6 @@ export default function BlogLoginPage() {
             </button>
           </form>
         </div>
-
         <p className="text-center text-white/20 text-xs mt-6">
           FaucetDrops Blog Management System
         </p>

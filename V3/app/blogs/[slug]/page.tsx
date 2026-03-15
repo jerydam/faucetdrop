@@ -8,7 +8,6 @@ import {
 import { cn } from "@/lib/utils";
 import { getBrowserFingerprint, API } from "../_lib/auth";
 import { toast } from "sonner";
-
 interface BlogPost {
   id: string;
   slug: string;
@@ -25,18 +24,15 @@ interface BlogPost {
   likes_count: number;
   views_count: number;
 }
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "long", day: "numeric", year: "numeric"
   });
 }
-
 function formatReadTime(content: string) {
   const words = content.split(/\s+/).length;
   return `${Math.max(1, Math.ceil(words / 200))} min read`;
 }
-
 function renderContent(content: string) {
   return content.split("\n\n").map((para, i) => {
     if (!para.trim()) return null;
@@ -47,7 +43,6 @@ function renderContent(content: string) {
     );
   });
 }
-
 export default function BlogDetailPage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();
@@ -59,7 +54,6 @@ export default function BlogDetailPage() {
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [liking, setLiking] = useState(false);
-
   useEffect(() => {
     if (!slug) return;
     setLoading(true);
@@ -76,7 +70,6 @@ export default function BlogDetailPage() {
       .catch(() => setError("Failed to load post"))
       .finally(() => setLoading(false));
   }, [slug]);
-
   const handleLike = async () => {
     if (liking) return;
     setLiking(true);
@@ -94,18 +87,15 @@ export default function BlogDetailPage() {
     } catch { toast.error("Failed to like"); }
     finally { setLiking(false); }
   };
-
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success("Link copied!");
   };
-
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <Loader2 className="h-10 w-10 animate-spin text-indigo-400" />
     </div>
   );
-
   if (error || !post) return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
       <div className="text-5xl mb-4">📰</div>
@@ -119,10 +109,8 @@ export default function BlogDetailPage() {
       </button>
     </div>
   );
-
   return (
     <div className="min-h-screen">
-
       {/* Breadcrumb */}
       <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-6">
         <div className="flex items-center gap-1.5 text-sm text-white/40 flex-wrap">
@@ -133,10 +121,8 @@ export default function BlogDetailPage() {
           <span className="text-white/70 font-bold truncate max-w-50 sm:max-w-xs">{post.title}</span>
         </div>
       </div>
-
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10 pb-20">
         <article className="space-y-6">
-
           {/* Tags */}
           {post.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -151,29 +137,28 @@ export default function BlogDetailPage() {
               ))}
             </div>
           )}
-
           {/* Title */}
           <h1 className="text-2xl sm:text-4xl font-black text-white leading-tight">
             {post.title}
           </h1>
-
           {/* Author + meta row */}
           <div className="flex items-center justify-between flex-wrap gap-3 pb-6 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="h-11 w-11 rounded-full bg-indigo-500/30 border-2 border-indigo-500/40 overflow-hidden flex items-center justify-center shrink-0">
                 {post.author_avatar && !avatarError ? (
-                <img 
-                    src={post.author_avatar} 
-                    alt={post.author_name} 
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={post.author_avatar}
+                    alt={post.author_name}
                     className="w-full h-full object-cover"
-                    onError={() => setAvatarError(true)} // <-- This triggers the fallback if the image breaks
-                />
+                    onError={() => setAvatarError(true)}
+                  />
                 ) : (
-                <span className="font-bold text-indigo-300">
+                  <span className="font-bold text-indigo-300">
                     {post.author_name?.slice(0, 2).toUpperCase() || "FD"}
-                </span>
+                  </span>
                 )}
-            </div>
+              </div>
               <div>
                 <p className="text-white font-bold text-sm">
                   {post.author_name || "FaucetDrops Team"}
@@ -223,14 +208,13 @@ export default function BlogDetailPage() {
               </button>
             </div>
           </div>
-
           {/* Cover image */}
           {post.cover_image_url && (
             <div className="aspect-video rounded-2xl overflow-hidden border border-white/10 shadow-xl shadow-black/30">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={post.cover_image_url} alt={post.title} className="w-full h-full object-cover" />
             </div>
           )}
-
           {/* Excerpt callout */}
           {post.excerpt && (
             <div className="bg-indigo-500/10 border-l-4 border-indigo-500 rounded-r-2xl px-5 py-4">
@@ -239,12 +223,10 @@ export default function BlogDetailPage() {
               </p>
             </div>
           )}
-
           {/* Body */}
           <div className="space-y-5">
             {renderContent(post.content)}
           </div>
-
           {/* Bottom actions */}
           <div className="pt-8 border-t border-white/10 flex items-center justify-between flex-wrap gap-3">
             <button

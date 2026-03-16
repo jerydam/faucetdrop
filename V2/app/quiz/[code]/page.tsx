@@ -316,7 +316,7 @@ useEffect(() => {
 const [countdownDisplay, setCountdownDisplay] = useState("");
 
 useEffect(() => {
-  if (!onChainStatus?.canClaim || onChainStatus.timeRemaining <= 0) {
+  if (!onChainStatus || onChainStatus.timeRemaining <= 0) {
     setCountdownDisplay("");
     return;
   }
@@ -472,7 +472,22 @@ useEffect(() => {
     return (
       <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
         <Confetti active={showConfetti} />
-
+        {countdownDisplay && onChainStatus?.hasReward && (
+          <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
+            <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
+              {[...Array(4)].map((_, i) => (
+                <span key={i} className="text-white text-xs font-bold flex items-center gap-2 px-12">
+                  <Clock className="h-3 w-3 shrink-0" />
+                  {onChainStatus.claimed || claimedTx
+                    ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
+                    : `Claim window expires in ${countdownDisplay}`
+                  }
+                </span>
+              ))}
+            </div>
+            <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
+          </div>
+        )}
         <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
             {leaderboard.length > 0 ? (
@@ -781,8 +796,23 @@ useEffect(() => {
   return (
     <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
       <Confetti active={showConfetti} />
+      {countdownDisplay && onChainStatus?.hasReward && (
+        <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
+          <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
+            {[...Array(4)].map((_, i) => (
+              <span key={i} className="text-white text-xs font-bold flex items-center gap-2 px-12">
+                <Clock className="h-3 w-3 shrink-0" />
+                {onChainStatus.claimed || claimedTx
+                  ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
+                  : `Claim window expires in ${countdownDisplay}`
+                }
+              </span>
+            ))}
+          </div>
+          <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
+        </div>
+      )}
       <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-24 space-y-6 sm:space-y-8">
-
         <div className="text-center space-y-2">
           <div className="text-5xl sm:text-7xl drop-shadow-md mb-3">🏆</div>
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-white">Quiz Complete!</h1>

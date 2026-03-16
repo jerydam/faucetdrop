@@ -260,6 +260,68 @@ function QuizGameOver({
     wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
     wallets?.[0];
 
+ const [claimWindowExpired, setClaimWindowExpired] = useState(false);
+ const [claimWindowChecked, setClaimWindowChecked] = useState(false);
+
+useEffect(() => {
+  if (!quizReward?.contractAddress || !isCreator) return;
+
+  const CHAIN_RPC: Record<number, string> = {
+    42220: "https://forno.celo.org",
+    1135:  "https://rpc.api.lisk.com",
+    42161: "https://arb1.arbitrum.io/rpc",
+    8453:  "https://mainnet.base.org",
+    56:    "https://bsc-dataseed.binance.org",
+  };
+
+  let cancelled = false;
+
+  const checkWindow = async () => {
+    try {
+      const rpcUrl = quizReward.chainId ? CHAIN_RPC[quizReward.chainId] : null;
+      if (!rpcUrl) return;
+
+      const provider = new JsonRpcProvider(rpcUrl);
+      const contract = new Contract(
+        quizReward.contractAddress,
+        [
+          "function claimWindowEnd() view returns (uint256)",
+          "function isClaimActive() view returns (bool)",
+        ],
+        provider
+      );
+
+      const [claimWindowEnd, isClaimActive] = await Promise.all([
+        contract.claimWindowEnd(),
+        contract.isClaimActive(),
+      ]);
+
+      const nowTs = Math.floor(Date.now() / 1000);
+      const windowEnd = Number(claimWindowEnd);
+
+      if (!cancelled) {
+        // Window expired = end time has passed AND claim is no longer active
+        // windowEnd === 0 means rewards never dispatched yet
+        const expired = windowEnd > 0 && nowTs > windowEnd && !isClaimActive;
+        setClaimWindowExpired(expired);
+        setClaimWindowChecked(true);
+
+        // Also compute remaining for display
+        if (windowEnd > 0 && isClaimActive) {
+          const remaining = windowEnd - nowTs;
+          // reuse countdownDisplay logic
+        }
+      }
+    } catch (e) {
+      console.error("Claim window check failed:", e);
+      if (!cancelled) setClaimWindowChecked(true);
+    }
+  };
+
+  checkWindow();
+  const interval = setInterval(checkWindow, 30_000);
+  return () => { cancelled = true; clearInterval(interval); };
+}, [quizReward?.contractAddress, quizReward?.chainId, isCreator]);
   // 1. Add new state variables at the top of QuizGameOver
 const [onChainStatus, setOnChainStatus] = useState<{
   hasReward: boolean;
@@ -804,9 +866,71 @@ useEffect(() => {
             <Button variant="outline" className="flex-1 h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white" onClick={handleShareResults}>
               <Share2 className="mr-2 h-4 w-4" /> Share
             </Button>
-            <Button className="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-bold" onClick={() => router.push("/quiz")}>
-              <Home className="mr-2 h-4 w-4" /> Quiz Hub
-            </Button>
+            {isCreator && quizReward && (
+               <Button
+                className={cn(
+                  "flex-1 h-12 font-bold border-0",
+                  claimWindowChecked && claimWindowExpired
+                    ? "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                )}
+                    
+                disabled={!claimWindowChecked || !claimWindowExpired}
+                onClick={async () => {
+                  if (!activeWallet || !quizReward) return;
+                  try {
+                    const requiredChainId = quizReward.chainId;
+                    if (requiredChainId) {
+                      const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0");
+                      if (currentChainId !== requiredChainId) {
+                        toast.info("Switching to the correct network...");
+                        await activeWallet.switchChain(requiredChainId);
+                        await new Promise(r => setTimeout(r, 1500));
+                      }
+                    }
+                    const privyProvider = await activeWallet.getEthereumProvider();
+                    const provider = new BrowserProvider(privyProvider);
+                    const signer = await provider.getSigner();
+                    const contract = new Contract(
+                      quizReward.contractAddress,
+                      ["function withdraw(uint256 amount) external", "function token() view returns (address)", "function isEther() view returns (bool)"],
+                      signer
+                    );
+                    toast.info("Processing withdrawal...");
+                    // Get full balance and withdraw all
+                    const { JsonRpcProvider: JRP } = await import("ethers");
+                    const readProvider = new JRP(quizReward.chainId ? ({
+                      42220: "https://forno.celo.org",
+                      1135: "https://rpc.api.lisk.com",
+                      42161: "https://arb1.arbitrum.io/rpc",
+                      8453: "https://mainnet.base.org",
+                      56: "https://bsc-dataseed.binance.org",
+                    } as Record<number, string>)[quizReward.chainId] : "https://forno.celo.org");
+                    const readContract = new Contract(
+                      quizReward.contractAddress,
+                      ["function customClaimAmounts(address) view returns (uint256)", "function token() view returns (address)"],
+                      readProvider
+                    );
+                    const tokenAddr = quizReward.tokenAddress;
+                    const erc20 = new Contract(tokenAddr, ["function balanceOf(address) view returns (uint256)"], readProvider);
+                    const bal = await erc20.balanceOf(quizReward.contractAddress);
+                    const tx = await contract.withdraw(bal);
+                    await tx.wait();
+                    toast.success("Withdrawal successful!");
+                  } catch (e: any) {
+                    toast.error(parseOnchainError(e));
+                  }
+                }}
+              >
+                 {!claimWindowChecked ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking...</>
+                ) : !claimWindowExpired ? (
+                  <><Clock className="mr-2 h-4 w-4" /> Withdraw {countdownDisplay ? `(${countdownDisplay} left)` : "(claim window open)"}</>
+                ) : (
+                  <><Wallet className="mr-2 h-4 w-4" /> Withdraw Funds</>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1023,6 +1147,73 @@ useEffect(() => {
             {isCreator && (
               <Button className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold border-0" onClick={() => router.push("/quiz/create-quiz")}>
                 <Plus className="mr-2 h-4 w-4" /> New Quiz
+              </Button>
+            )}
+            {isCreator && quizReward && (
+              <Button
+                className={cn(
+                  "flex-1 h-12 font-bold border-0",
+                  onChainStatus && onChainStatus.timeRemaining === 0
+                    ? "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                )}
+                disabled={!claimWindowChecked || !claimWindowExpired}
+                onClick={async () => {
+                  if (!activeWallet || !quizReward) return;
+                  try {
+                    const requiredChainId = quizReward.chainId;
+                    if (requiredChainId) {
+                      const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0");
+                      if (currentChainId !== requiredChainId) {
+                        toast.info("Switching to the correct network...");
+                        await activeWallet.switchChain(requiredChainId);
+                        await new Promise(r => setTimeout(r, 1500));
+                      }
+                    }
+                    const privyProvider = await activeWallet.getEthereumProvider();
+                    const provider = new BrowserProvider(privyProvider);
+                    const signer = await provider.getSigner();
+                    const contract = new Contract(
+                      quizReward.contractAddress,
+                      ["function withdraw(uint256 amount) external", "function token() view returns (address)", "function isEther() view returns (bool)"],
+                      signer
+                    );
+                    toast.info("Processing withdrawal...");
+                    // Get full balance and withdraw all
+                    const { JsonRpcProvider: JRP } = await import("ethers");
+                    const readProvider = new JRP(quizReward.chainId ? ({
+                      42220: "https://forno.celo.org",
+                      1135: "https://rpc.api.lisk.com",
+                      42161: "https://arb1.arbitrum.io/rpc",
+                      8453: "https://mainnet.base.org",
+                      56: "https://bsc-dataseed.binance.org",
+                    } as Record<number, string>)[quizReward.chainId] : "https://forno.celo.org");
+                    const readContract = new Contract(
+                      quizReward.contractAddress,
+                      ["function customClaimAmounts(address) view returns (uint256)", "function token() view returns (address)"],
+                      readProvider
+                    );
+                    const tokenAddr = quizReward.tokenAddress;
+                    const erc20 = new Contract(tokenAddr, ["function balanceOf(address) view returns (uint256)"], readProvider);
+                    const bal = await erc20.balanceOf(quizReward.contractAddress);
+                    const tx = await contract.withdraw(bal);
+                    await tx.wait();
+                    toast.success("Withdrawal successful!");
+                  } catch (e: any) {
+                    toast.error(parseOnchainError(e));
+                  }
+                }}
+              >
+                {!onChainStatus || onChainStatus.timeRemaining > 0 ? (
+                  <>
+                    <Clock className="mr-2 h-4 w-4" />
+                    {onChainStatus && onChainStatus.timeRemaining > 0 ? `Withdraw (${countdownDisplay} left)` : "Withdraw (waiting...)"}
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="mr-2 h-4 w-4" /> Withdraw Funds
+                  </>
+                )}
               </Button>
             )}
           </div>
@@ -2283,7 +2474,7 @@ if (phase === "lobby") {
         </div>
 
         {/* Answer Stack: Stacked on mobile, 2-cols on desktop */}
-        <div className="w-full max-w-5xl mx-auto px-4 pb-8 md:pb-12 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 shrink-0">
+        <div className="w-full max-w-5xl mx-auto px-4 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 shrink-0 overflow-y-auto pb-6 md:pb-10" style={{ maxHeight: "55vh" }}>
           {currentQ.options.map(opt => {
             const style = OPTION_STYLES[opt.id];
             const isSelected = selectedId === opt.id;
@@ -2296,7 +2487,7 @@ if (phase === "lobby") {
                 disabled={isSpectator || isReveal || timeLeft <= 0}
                 onClick={() => handleSelectAnswer(opt.id)}
                 className={cn(
-                  "relative w-full flex items-center justify-between px-6 py-5 sm:py-6 md:py-8 rounded-2xl",
+                  "relative w-full flex items-center justify-between px-6 py-5 sm:py-6 md:py-8 rounded-2xl last:mb-4",
                   "text-white font-bold text-lg md:text-xl transition-all duration-150",
                   "active:scale-[0.98] cursor-pointer shadow-md",
                   style.bg,

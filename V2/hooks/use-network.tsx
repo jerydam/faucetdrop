@@ -187,7 +187,7 @@ export const networks: Network[] = [
       dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
       custom: "0x587b840140321DD8002111282748acAdaa8fA206",
       quest: "0xb0B955e9B4a98A1323cE099A97632D5c4fc5d210",
-      quiz: ""
+      quiz: "0xd942A4188122D81A37FC34743b7b395C2889d049"
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
@@ -225,7 +225,7 @@ export const networks: Network[] = [
       dropcode: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
       custom: "0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36",
       quest: "0x7E8D2A012cF5356e77f9eeccdddb942E72800f76",
-      quiz: ""
+      quiz: "0xfdA2585D9Cf1AF2F079C0FC169e6914f64a2A51C"
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {

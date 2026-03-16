@@ -19,7 +19,7 @@ import {
 import { getContractFundedStatus } from "@/lib/quiz";
 import { Wallet, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { useWallets } from "@privy-io/react-auth";
-import { BrowserProvider, Contract, parseUnits,Interface, formatUnits, TransactionRequest } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, parseUnits, Interface, formatUnits, TransactionRequest } from "ethers";
 import { fundQuizReward } from "@/lib/quiz";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -89,7 +89,7 @@ function parseOnchainError(err: any): string {
   const raw: string = err?.message || "Unknown error";
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ── Safe WS URL ──
 function getWsBaseUrl(): string {
@@ -274,11 +274,32 @@ useEffect(() => {
   if (!quizReward?.contractAddress || !wallets?.[0] || !myWallet) return;
 
   let cancelled = false;
+  const CHAIN_RPC: Record<number, string> = {
+    42220: "https://forno.celo.org",
+    1135:  "https://rpc.api.lisk.com",
+    42161: "https://arb1.arbitrum.io/rpc",
+    8453:  "https://mainnet.base.org",
+    56:    "https://bsc-dataseed.binance.org",
+  };
+
   const checkOnChain = async () => {
     setCheckingChain(true);
     try {
-      const privyProvider = await wallets[0].getEthereumProvider();
-      const provider = new BrowserProvider(privyProvider);
+      // Always use the contract's chain RPC — never the user's current wallet chain
+      const contractChainId = quizReward.chainId;
+      const rpcUrl = contractChainId ? CHAIN_RPC[contractChainId] : null;
+
+      let provider;
+      if (rpcUrl) {
+        // Read-only provider on the correct chain — works regardless of user's current network
+        const { JsonRpcProvider } = await import("ethers");
+        provider = new JsonRpcProvider(rpcUrl);
+      } else {
+        // Fallback to wallet provider if chainId unknown
+        const privyProvider = await wallets[0].getEthereumProvider();
+        provider = new BrowserProvider(privyProvider);
+      }
+
       const contract = new Contract(
         quizReward.contractAddress,
         ["function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeRemaining)"],
@@ -303,20 +324,13 @@ useEffect(() => {
   };
 
   checkOnChain();
-
-  // Poll every 30s so all browsers stay in sync after a claim
-  const pollInterval = setInterval(checkOnChain, 30_000);
-
-  return () => {
-    cancelled = true;
-    clearInterval(pollInterval);
-  };
+  return () => { cancelled = true; };
 }, [quizReward?.contractAddress, wallets?.[0]?.address, myWallet, claimedTx, rewardsReady]);
 
 const [countdownDisplay, setCountdownDisplay] = useState("");
 
 useEffect(() => {
-  if (!onChainStatus || onChainStatus.timeRemaining <= 0) {
+  if (!onChainStatus?.canClaim || onChainStatus.timeRemaining <= 0) {
     setCountdownDisplay("");
     return;
   }
@@ -372,6 +386,28 @@ useEffect(() => {
     payoutsData?.payouts.forEach(p => { map[p.wallet_address.toLowerCase()] = p; });
     return map;
   }, [payoutsData]);
+
+  const handleSwitchAndClaim = async () => {
+  if (!activeWallet || !quizReward) { toast.error("Wallet not connected"); return; }
+  
+  // Get the quiz's required chain from quizReward or fallback to payouts data
+  const requiredChainId = quizReward?.chainId ?? payoutsData?.chainId;
+  
+  if (requiredChainId) {
+    const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0");
+    if (currentChainId !== requiredChainId) {
+      try {
+        toast.info("Switching to the correct network...");
+        await activeWallet.switchChain(requiredChainId);
+        await new Promise(r => setTimeout(r, 1500)); // wait for switch
+      } catch (e: any) {
+        toast.error("Please switch to the correct network in your wallet");
+        return;
+      }
+    }
+  }
+  handleClaim();
+};
 
   const handleClaim = async () => {
     if (!activeWallet) { toast.error("Wallet not connected"); return; }
@@ -472,22 +508,7 @@ useEffect(() => {
     return (
       <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
         <Confetti active={showConfetti} />
-        {countdownDisplay && onChainStatus?.hasReward && (
-          <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
-            <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
-              {[...Array(4)].map((_, i) => (
-                <span key={i} className="text-white text-xs font-bold flex items-center gap-2 px-12">
-                  <Clock className="h-3 w-3 shrink-0" />
-                  {onChainStatus.claimed || claimedTx
-                    ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
-                    : `Claim window expires in ${countdownDisplay}`
-                  }
-                </span>
-              ))}
-            </div>
-            <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
-          </div>
-        )}
+
         <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
             {leaderboard.length > 0 ? (
@@ -596,22 +617,18 @@ useEffect(() => {
         )}
 
         {/* On-chain check done */}
-        {!checkingChain && onChainStatus && (
+        {/* On-chain check done — only show anything once rewards exist on-chain */}
+        {!checkingChain && onChainStatus && (onChainStatus.hasReward || onChainStatus.claimed || claimedTx) && (
           <>
-            {hasReward && rewardAmt && (
+            {onChainStatus.hasReward && (
               <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-                {rewardAmt} {tokenSymbol}
+                {onChainStatus.rewardAmount} {quizReward?.tokenSymbol}
               </p>
             )}
-
             {!isCreator && (
-              isClaimed ? (
-                <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-                  ✓ Claimed
-                </Badge>
-              ) : onChainStatus.canClaim ? (
+              (claimedTx || onChainStatus.claimed) ? (
                         <>
-                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
+                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleSwitchAndClaim} disabled={isClaiming}>
                             {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
                             Claim Reward
                           </Button>
@@ -649,7 +666,7 @@ useEffect(() => {
                 <Button
                   size="sm"
                   className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-                  onClick={handleClaim}
+                  onClick={handleSwitchAndClaim}
                   disabled={isClaiming}
                 >
                   {isClaiming
@@ -796,23 +813,8 @@ useEffect(() => {
   return (
     <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
       <Confetti active={showConfetti} />
-      {countdownDisplay && onChainStatus?.hasReward && (
-        <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
-          <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
-            {[...Array(4)].map((_, i) => (
-              <span key={i} className="text-white text-xs font-bold flex items-center gap-2 px-12">
-                <Clock className="h-3 w-3 shrink-0" />
-                {onChainStatus.claimed || claimedTx
-                  ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
-                  : `Claim window expires in ${countdownDisplay}`
-                }
-              </span>
-            ))}
-          </div>
-          <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
-        </div>
-      )}
       <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-24 space-y-6 sm:space-y-8">
+
         <div className="text-center space-y-2">
           <div className="text-5xl sm:text-7xl drop-shadow-md mb-3">🏆</div>
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-white">Quiz Complete!</h1>
@@ -869,7 +871,7 @@ useEffect(() => {
                         </>
                       ) : onChainStatus.canClaim ? (
                         <>
-                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
+                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleSwitchAndClaim} disabled={isClaiming}>
                             {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
                             Claim Reward
                           </Button>
@@ -1180,6 +1182,7 @@ export default function QuizCodePage() {
     isNativeToken: boolean;
     poolAmount: string;
     isFunded: boolean;
+    chainId?: number;
   } | null>(null);
   
   const reconnectAttempts = useRef(0);
@@ -1326,6 +1329,7 @@ useEffect(() => {
             isNativeToken: d.quiz.reward.isNativeToken ?? false,
             poolAmount: String(d.quiz.reward.poolAmount),
             isFunded: d.quiz.reward.isFunded ?? false,
+            chainId: d.quiz.chainId ?? d.quiz.reward.chainId,
           });
           setIsFunded(d.quiz.reward.isFunded ?? false);
         }
@@ -1901,7 +1905,7 @@ if (phase === "lobby") {
             <Button
               variant="outline"
               size="sm"
-              className="border-slate-200 dark:border-white/20 text-slate-600 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 bg-transparent h-8 px-2 sm:px-3"
+              className="border-blue-800 dark:border-blue-700 text-blue-900 dark:text-blue-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 bg-transparent h-8 px-2 sm:px-3"
               onClick={() => {
                 navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
                 toast.success("Link copied!");
@@ -2068,7 +2072,7 @@ if (phase === "lobby") {
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden self-start">
 
               {/* Header */}
-              <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-4 flex items-center gap-3">
+              <div className="bg-gradient-to-r from-blue-900 to-blue-800 px-5 py-4 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
                   <Crown className="h-5 w-5 text-yellow-300" />
                 </div>
@@ -2152,7 +2156,7 @@ if (phase === "lobby") {
                         </div>
                       </div>
                       <Button
-                        className="w-full h-11 font-bold bg-amber-500 hover:bg-amber-400 text-black border-0 text-sm"
+                        className="w-full h-11 font-bold bg-blue-700 hover:bg-blue-600 text-white border-0 text-sm"
                         onClick={handleFundReward}
                         disabled={isFunding || isFundedCheckLoading}
                       >
@@ -2176,7 +2180,7 @@ if (phase === "lobby") {
                 {(isFunded || !quizReward) && (
                   <Button
                     className="w-full h-14 text-base font-black text-white border-0 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-900/30 disabled:opacity-60 disabled:scale-100"
-                    style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+                    style={{ background: "linear-gradient(135deg, #1e3a8a, #1d4ed8)" }}
                     onClick={handleStartQuiz}
                     disabled={isStarting}
                   >

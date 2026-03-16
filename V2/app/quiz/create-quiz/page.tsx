@@ -143,7 +143,7 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
     { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", name: "USD Coin", symbol: "USDC", decimals: 18, logoUrl: "/usdc.jpg", description: "Binance-Peg USD Coin" },
     { address: "0x55d398326f99059fF775485246999027B3197955", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/usdt.jpg", description: "Binance-Peg BSC-USD" },
     { address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", name: "BUSD", symbol: "BUSD", decimals: 18, logoUrl: "/busd.png", description: "Binance-Peg BUSD Token" },
-    { address: "0x33A3d962955A3862C8093D1273344719f03cA17C", name: "SPORE", symbol: "SPR", decimals: 18, logoUrl: "/spore.png", description: "Binance-Peg BUSD Token" },
+    { address: "0x33A3d962955A3862C8093D1273344719f03cA17C", name: "SPORE", symbol: "SPR", decimals: 9, logoUrl: "/spore.png", description: "Binance-Peg BUSD Token" },
   ],
 };
 

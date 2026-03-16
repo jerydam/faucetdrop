@@ -266,6 +266,7 @@ const [onChainStatus, setOnChainStatus] = useState<{
   claimed: boolean;
   rewardAmount: string;
   canClaim: boolean;
+  timeRemaining: number;
 } | null>(null);
 const [checkingChain, setCheckingChain] = useState(false);
 
@@ -283,15 +284,15 @@ useEffect(() => {
         ["function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeRemaining)"],
         provider
       );
-      const [claimed, hasRewardAmount, rewardAmount, canClaim] =
+      const [claimed, hasRewardAmount, rewardAmount, canClaim, timeRemaining] =
         await contract.getClaimStatus(myWallet);
-
       if (!cancelled) {
         setOnChainStatus({
           hasReward: hasRewardAmount,
           claimed,
           rewardAmount: formatUnits(rewardAmount, quizReward.tokenDecimals),
           canClaim,
+          timeRemaining: Number(timeRemaining),
         });
       }
     } catch (e) {
@@ -302,8 +303,49 @@ useEffect(() => {
   };
 
   checkOnChain();
-  return () => { cancelled = true; };
+
+  // Poll every 30s so all browsers stay in sync after a claim
+  const pollInterval = setInterval(checkOnChain, 30_000);
+
+  return () => {
+    cancelled = true;
+    clearInterval(pollInterval);
+  };
 }, [quizReward?.contractAddress, wallets?.[0]?.address, myWallet, claimedTx, rewardsReady]);
+
+const [countdownDisplay, setCountdownDisplay] = useState("");
+
+useEffect(() => {
+  if (!onChainStatus?.canClaim || onChainStatus.timeRemaining <= 0) {
+    setCountdownDisplay("");
+    return;
+  }
+  // timeRemaining from contract is seconds remaining
+  let secondsLeft = onChainStatus.timeRemaining;
+  const fmt = (s: number) => {
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m ${sec}s`;
+    return `${m}m ${sec}s`;
+  };
+  setCountdownDisplay(fmt(secondsLeft));
+  const interval = setInterval(() => {
+    secondsLeft -= 1;
+    if (secondsLeft <= 0) {
+      clearInterval(interval);
+      setCountdownDisplay("Expired");
+      // Re-check chain so canClaim updates
+      setOnChainStatus(prev => prev ? { ...prev, canClaim: false, timeRemaining: 0 } : prev);
+    } else {
+      setCountdownDisplay(fmt(secondsLeft));
+    }
+  }, 1000);
+  return () => clearInterval(interval);
+}, [onChainStatus?.canClaim, onChainStatus?.timeRemaining]);
+
   useEffect(() => {
     if (initialResults && !resultsData) {
       setResultsData(initialResults);
@@ -553,17 +595,17 @@ useEffect(() => {
                   ✓ Claimed
                 </Badge>
               ) : onChainStatus.canClaim ? (
-                <Button
-                  size="sm"
-                  className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-                  onClick={handleClaim}
-                  disabled={isClaiming}
-                >
-                  {isClaiming
-                    ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                    : null}
-                  Claim Reward
-                </Button>
+                        <>
+                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
+                            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                            Claim Reward
+                          </Button>
+                          {countdownDisplay && (
+                            <p className="text-slate-400 dark:text-slate-500 text-[10px] flex items-center justify-end gap-1 mt-0.5">
+                              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+                            </p>
+                          )}
+                        </>
               ) : onChainStatus.hasReward ? (
                 <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
                   Claim window not open
@@ -786,13 +828,27 @@ useEffect(() => {
                       </p>
                     )}
                     {!isCreator && (
-                      (claimedTx || onChainStatus.claimed) ? (
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">✓ Claimed</Badge>
+                     (claimedTx || onChainStatus.claimed) ? (
+                        <>
+                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">✓ Claimed</Badge>
+                          {countdownDisplay && (
+                            <p className="text-slate-400 dark:text-slate-500 text-[10px] flex items-center justify-end gap-1 mt-0.5">
+                              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+                            </p>
+                          )}
+                        </>
                       ) : onChainStatus.canClaim ? (
-                        <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
-                          {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                          Claim Reward
-                        </Button>
+                        <>
+                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
+                            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                            Claim Reward
+                          </Button>
+                          {countdownDisplay && (
+                            <p className="text-slate-400 dark:text-slate-500 text-[10px] flex items-center justify-end gap-1 mt-0.5">
+                              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+                            </p>
+                          )}
+                        </>
                       ) : onChainStatus.hasReward ? (
                         <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
                           Claim window not open

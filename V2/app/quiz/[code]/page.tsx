@@ -262,6 +262,7 @@ function QuizGameOver({
 
  const [claimWindowExpired, setClaimWindowExpired] = useState(false);
  const [claimWindowChecked, setClaimWindowChecked] = useState(false);
+ const [withdrawableBalance, setWithdrawableBalance] = useState<string>("");
 
 useEffect(() => {
   if (!quizReward?.contractAddress || !isCreator) return;
@@ -337,6 +338,47 @@ useEffect(() => {
   const interval = setInterval(checkWindow, 30_000);
   return () => { cancelled = true; clearInterval(interval); };
 }, [quizReward?.contractAddress, quizReward?.chainId, isCreator]);
+
+useEffect(() => {
+  if (!claimWindowExpired || !quizReward?.contractAddress) return;
+
+  const CHAIN_RPC: Record<number, string> = {
+    42220: "https://forno.celo.org",
+    1135:  "https://rpc.api.lisk.com",
+    42161: "https://arb1.arbitrum.io/rpc",
+    8453:  "https://mainnet.base.org",
+    56:    "https://bsc-dataseed.binance.org",
+  };
+
+  const fetchBalance = async () => {
+    try {
+      const rpcUrl = quizReward.chainId ? CHAIN_RPC[quizReward.chainId] : null;
+      if (!rpcUrl) return;
+      const provider = new JsonRpcProvider(rpcUrl);
+
+      let bal: bigint;
+      if (quizReward.isNativeToken) {
+        bal = await provider.getBalance(quizReward.contractAddress);
+      } else {
+        const erc20 = new Contract(
+          quizReward.tokenAddress,
+          ["function balanceOf(address) view returns (uint256)"],
+          provider
+        );
+        bal = await erc20.balanceOf(quizReward.contractAddress);
+      }
+
+      const human = parseFloat(formatUnits(bal, quizReward.tokenDecimals));
+      setWithdrawableBalance(
+        human > 0 ? `${human % 1 === 0 ? human.toFixed(0) : human.toFixed(4)} ${quizReward.tokenSymbol}` : ""
+      );
+    } catch (e) {
+      console.error("Failed to fetch withdrawable balance:", e);
+    }
+  };
+
+  fetchBalance();
+}, [claimWindowExpired, quizReward?.contractAddress, quizReward?.chainId]);
   // 1. Add new state variables at the top of QuizGameOver
 const [onChainStatus, setOnChainStatus] = useState<{
   hasReward: boolean;
@@ -405,6 +447,7 @@ useEffect(() => {
 }, [quizReward?.contractAddress, wallets?.[0]?.address, myWallet, claimedTx, rewardsReady]);
 
 const [countdownDisplay, setCountdownDisplay] = useState("");
+const claimWindowEndRef = useRef<number>(0);
 
 const fmt = (s: number) => {
   const d = Math.floor(s / 86400);
@@ -417,27 +460,32 @@ const fmt = (s: number) => {
 };
 
 useEffect(() => {
-  if (!onChainStatus || onChainStatus.timeRemaining <= 0) {
+  const timeRemaining = onChainStatus?.timeRemaining ?? 0;
+  if (timeRemaining <= 0) {
     setCountdownDisplay("");
     return;
   }
-  let secondsLeft = onChainStatus.timeRemaining;
-  // timeRemaining from contract is seconds remaining
-  
-  setCountdownDisplay(fmt(secondsLeft));
-  const interval = setInterval(() => {
-    secondsLeft -= 1;
+
+  // Compute absolute end time and store in ref immediately in same effect
+  const newEndTime = Math.floor(Date.now() / 1000) + timeRemaining;
+  if (Math.abs(newEndTime - claimWindowEndRef.current) > 5) {
+    claimWindowEndRef.current = newEndTime;
+  }
+
+  const tick = () => {
+    const secondsLeft = claimWindowEndRef.current - Math.floor(Date.now() / 1000);
     if (secondsLeft <= 0) {
-      clearInterval(interval);
       setCountdownDisplay("Expired");
-      // Re-check chain so canClaim updates
       setOnChainStatus(prev => prev ? { ...prev, canClaim: false, timeRemaining: 0 } : prev);
     } else {
       setCountdownDisplay(fmt(secondsLeft));
     }
-  }, 1000);
+  };
+
+  tick();
+  const interval = setInterval(tick, 1000);
   return () => clearInterval(interval);
-}, [onChainStatus?.canClaim, onChainStatus?.timeRemaining]);
+}, [onChainStatus?.timeRemaining]);
 
   useEffect(() => {
     if (initialResults && !resultsData) {
@@ -959,7 +1007,7 @@ useEffect(() => {
                 ) : !claimWindowExpired ? (
                   <><Clock className="mr-2 h-4 w-4" /> Withdraw {countdownDisplay ? `(${countdownDisplay} left)` : "(claim window open)"}</>
                 ) : (
-                  <><Wallet className="mr-2 h-4 w-4" /> Withdraw Funds</>
+                  <><Wallet className="mr-2 h-4 w-4" /> Withdraw {withdrawableBalance ? `(${withdrawableBalance})` : "Funds"}</>
                 )}
               </Button>
             )}

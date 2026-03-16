@@ -26,7 +26,7 @@
       import { createQuestReward, type Network } from "@/lib/faucet"
       import { toast } from 'sonner'
 
-      const API_BASE_URL = "http://127.0.0.1:8000"
+      const API_BASE_URL = "https://faucetdrop-backend.onrender.com"
       const BACKEND_WALLET_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
 
       // =========================================================

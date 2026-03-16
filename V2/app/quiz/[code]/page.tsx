@@ -617,16 +617,20 @@ useEffect(() => {
         )}
 
         {/* On-chain check done */}
-        {/* On-chain check done — only show anything once rewards exist on-chain */}
-        {!checkingChain && onChainStatus && (onChainStatus.hasReward || onChainStatus.claimed || claimedTx) && (
+        {!checkingChain && onChainStatus && (
           <>
-            {onChainStatus.hasReward && (
+            {hasReward && rewardAmt && (
               <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-                {onChainStatus.rewardAmount} {quizReward?.tokenSymbol}
+                {rewardAmt} {tokenSymbol}
               </p>
             )}
+
             {!isCreator && (
-              (claimedTx || onChainStatus.claimed) ? (
+              isClaimed ? (
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+                  ✓ Claimed
+                </Badge>
+              ) : onChainStatus.canClaim ? (
                         <>
                           <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleSwitchAndClaim} disabled={isClaiming}>
                             {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}

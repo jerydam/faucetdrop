@@ -111,7 +111,7 @@ export const networks: Network[] = [
       dropcode: "0xd6Cb67dF496fF739c4eBA2448C1B0B44F4Cf0a7C",
       custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7",
       quest: "0xc7889C58B51574d32C83b2e2F60d5eC145103Eb3",
-      quiz: ""  
+      quiz: "0x6D0d7DD8b5E80BfeCa9060703c3768440467D12e"  
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {

@@ -772,23 +772,40 @@ useEffect(() => {
                 <p className="font-black text-slate-900 dark:text-white">Your Result</p>
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
               </div>
-              {myPayout && (
-                <div className="text-right shrink-0 space-y-1.5">
-                  <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-                    {myPayout.amount} {myPayout.token_symbol}
-                  </p>
-                  {!isCreator && (
-                      (myPayout.status === "claimed" || claimedTx) ? (
+              <div className="text-right shrink-0 space-y-1.5">
+                {checkingChain && !onChainStatus && (
+                  <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-400 border-0 gap-1 flex items-center">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Checking…
+                  </Badge>
+                )}
+                {!checkingChain && onChainStatus && (
+                  <>
+                    {onChainStatus.hasReward && (
+                      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+                        {onChainStatus.rewardAmount} {quizReward?.tokenSymbol}
+                      </p>
+                    )}
+                    {!isCreator && (
+                      (claimedTx || onChainStatus.claimed) ? (
                         <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">✓ Claimed</Badge>
-                      ) : (
+                      ) : onChainStatus.canClaim ? (
                         <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleClaim} disabled={isClaiming}>
                           {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
                           Claim Reward
                         </Button>
+                      ) : onChainStatus.hasReward ? (
+                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
+                          Claim window not open
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-500 border-0 text-xs">
+                          Not eligible
+                        </Badge>
                       )
-                  )}
-                </div>
-              )}
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           );
         })()}

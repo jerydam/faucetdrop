@@ -306,10 +306,25 @@ useEffect(() => {
         setClaimWindowExpired(expired);
         setClaimWindowChecked(true);
 
-        // Also compute remaining for display
+        // Drive the marquee countdown for creator
         if (windowEnd > 0 && isClaimActive) {
-          const remaining = windowEnd - nowTs;
-          // reuse countdownDisplay logic
+          let secondsLeft = windowEnd - nowTs;
+          if (secondsLeft > 0) {
+            setCountdownDisplay(fmt(secondsLeft));
+            const interval = setInterval(() => {
+              secondsLeft -= 1;
+              if (secondsLeft <= 0) {
+                clearInterval(interval);
+                setCountdownDisplay("Expired");
+                setClaimWindowExpired(true);
+              } else {
+                setCountdownDisplay(fmt(secondsLeft));
+              }
+            }, 1000);
+            // cleanup handled by outer effect cleanup
+          }
+        } else if (expired) {
+          setCountdownDisplay("Expired");
         }
       }
     } catch (e) {
@@ -391,22 +406,24 @@ useEffect(() => {
 
 const [countdownDisplay, setCountdownDisplay] = useState("");
 
+const fmt = (s: number) => {
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  return `${m}m ${sec}s`;
+};
+
 useEffect(() => {
-  if (!onChainStatus?.canClaim || onChainStatus.timeRemaining <= 0) {
+  if (!onChainStatus || onChainStatus.timeRemaining <= 0) {
     setCountdownDisplay("");
     return;
   }
-  // timeRemaining from contract is seconds remaining
   let secondsLeft = onChainStatus.timeRemaining;
-  const fmt = (s: number) => {
-    const d = Math.floor(s / 86400);
-    const h = Math.floor((s % 86400) / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-    if (d > 0) return `${d}d ${h}h ${m}m`;
-    if (h > 0) return `${h}h ${m}m ${sec}s`;
-    return `${m}m ${sec}s`;
-  };
+  // timeRemaining from contract is seconds remaining
+  
   setCountdownDisplay(fmt(secondsLeft));
   const interval = setInterval(() => {
     secondsLeft -= 1;
@@ -568,11 +585,26 @@ useEffect(() => {
     };
 
     return (
-      <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
+     <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
         <Confetti active={showConfetti} />
-
+        {countdownDisplay && countdownDisplay !== "Expired" && (
+          <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
+            <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
+              {[...Array(4)].map((_, i) => (
+                <span key={i} className="text-white text-xs font-bold flex items-center gap-2 px-12">
+                  <Clock className="h-3 w-3 shrink-0" />
+                  {onChainStatus?.claimed || claimedTx
+                    ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
+                    : `Claim window expires in ${countdownDisplay}`
+                  }
+                </span>
+              ))}
+            </div>
+            <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
+          </div>
+        )}
         <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
             {leaderboard.length > 0 ? (
               <button onClick={() => setShowFullResults(false)} className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors">
                 <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Game Summary</span>
@@ -940,8 +972,24 @@ useEffect(() => {
   // ── Game Over Summary (Live View) ─────
   return (
     <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col overflow-auto">
-      <Confetti active={showConfetti} />
-      <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-24 space-y-6 sm:space-y-8">
+        <Confetti active={showConfetti} />
+        {countdownDisplay && countdownDisplay !== "Expired" && (
+          <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
+            <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
+              {[...Array(4)].map((_, i) => (
+                <span key={i} className="text-white text-xs font-bold flex items-center gap-2 px-12">
+                  <Clock className="h-3 w-3 shrink-0" />
+                  {onChainStatus?.claimed || claimedTx
+                    ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
+                    : `Claim window expires in ${countdownDisplay}`
+                  }
+                </span>
+              ))}
+            </div>
+            <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
+          </div>
+        )}
+        <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-24 space-y-6 sm:space-y-8">
 
         <div className="text-center space-y-2">
           <div className="text-5xl sm:text-7xl drop-shadow-md mb-3">🏆</div>

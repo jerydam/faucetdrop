@@ -264,6 +264,14 @@ function QuizGameOver({
  const [claimWindowChecked, setClaimWindowChecked] = useState(false);
  const [withdrawableBalance, setWithdrawableBalance] = useState<string>("");
 
+ const [viewingProfile, setViewingProfile] = useState<{
+  walletAddress: string;
+  username: string;
+  avatarUrl?: string | null;
+  points: number;
+  rank: number;
+} | null>(null);
+
 useEffect(() => {
   if (!quizReward?.contractAddress || !isCreator) return;
 
@@ -635,6 +643,70 @@ useEffect(() => {
     return (
      <div className="fixed inset-0 bg-[#080d19] flex flex-col overflow-auto">
         <Confetti active={showConfetti} />
+        {/* Profile Modal */}
+{viewingProfile && (
+  <div
+    className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+    onClick={() => setViewingProfile(null)}
+  >
+    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+    <div
+      className="relative w-full max-w-sm bg-[#0d1526] border border-blue-900/30 rounded-3xl p-6 shadow-2xl space-y-4"
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Close */}
+      <button
+        onClick={() => setViewingProfile(null)}
+        className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all"
+      >
+        <X className="h-4 w-4" />
+      </button>
+
+      {/* Avatar + name */}
+      <div className="flex flex-col items-center gap-3 pt-2">
+        <Avatar className="h-20 w-20 border-4 border-blue-500/30 shadow-xl">
+          <AvatarImage src={viewingProfile.avatarUrl ?? undefined} />
+          <AvatarFallback className="bg-blue-900/50 text-blue-200 font-black text-2xl">
+            {viewingProfile.username?.slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <div className="text-center">
+          <p className="text-white font-black text-xl">{viewingProfile.username}</p>
+          <p className="text-blue-300/50 text-xs font-mono mt-1">
+            {viewingProfile.walletAddress.slice(0, 6)}...{viewingProfile.walletAddress.slice(-4)}
+          </p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white/5 rounded-2xl px-4 py-3 text-center">
+          <p className="text-blue-300/50 text-xs font-bold uppercase tracking-widest">Rank</p>
+          <p className="text-white font-black text-2xl mt-1">
+            {viewingProfile.rank <= 3
+              ? ["🥇","🥈","🥉"][viewingProfile.rank - 1]
+              : `#${viewingProfile.rank}`}
+          </p>
+        </div>
+        <div className="bg-white/5 rounded-2xl px-4 py-3 text-center">
+          <p className="text-blue-300/50 text-xs font-bold uppercase tracking-widest">Points</p>
+          <p className="text-white font-black text-2xl mt-1">{viewingProfile.points}</p>
+        </div>
+      </div>
+
+      {/* View full profile button */}
+      <button
+        onClick={() => {
+          router.push(`/dashboard/${viewingProfile.username}`);
+          setViewingProfile(null);
+        }}
+        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all active:scale-95"
+      >
+        View Full Profile
+      </button>
+    </div>
+  </div>
+)}
         {countdownDisplay && countdownDisplay !== "Expired" && (
           <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
             <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
@@ -744,9 +816,7 @@ useEffect(() => {
 
       <div className="flex-1 min-w-0">
         <p className="font-black text-white">Your Result</p>
-        <p className="text-blue-200/60 text-sm">
-          Rank #{myEntry.rank} • {myEntry.points} points
-        </p>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
       </div>
 
       {/* Reward section — driven by on-chain status */}
@@ -903,8 +973,20 @@ useEffect(() => {
                 const payout = fullPayouts?.[entry.walletAddress?.toLowerCase()];
                 const isWinner = !!payout;
                 return (
-                  <div key={entry.walletAddress} className={cn("flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4", isMe && "bg-indigo-50 dark:bg-indigo-950/20", isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500")}>
-                    <div className={cn("w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0", entry.rank === 1 ? "bg-yellow-400 text-yellow-900" : entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" : entry.rank === 3 ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400")}>
+<div
+                    key={entry.walletAddress}
+                    onClick={() => setViewingProfile({
+                      walletAddress: entry.walletAddress,
+                      username: entry.username,
+                      avatarUrl: entry.avatarUrl,
+                      points: entry.points,
+                      rank: entry.rank,
+                    })}
+                    className={cn(
+                      "flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-blue-900/10 transition-colors",
+                      isMe && "bg-indigo-950/20",
+                      isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
+                    )}>                    <div className={cn("w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0", entry.rank === 1 ? "bg-yellow-400 text-yellow-900" : entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" : entry.rank === 3 ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400")}>
                       {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : `#${entry.rank}`}
                     </div>
                     <Avatar className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 border border-slate-200 dark:border-slate-700">
@@ -914,7 +996,7 @@ useEffect(() => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-white font-bold text-xs sm:text-sm truncate">{entry.username}</span>
-                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-indigo-600 text-white border-0 shrink-0">YOU</Badge>}
+                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
                         {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 border-0 shrink-0">🏆</Badge>}
                         {(entry.streak > 1) && <Badge className="text-[9px] h-4 px-1 bg-orange-500 text-white border-0 shrink-0">🔥{entry.streak}</Badge>}
                       </div>
@@ -1068,7 +1150,7 @@ useEffect(() => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-black text-white">Your Result</p>
-                <p className="text-blue-200/60 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
               </div>
               <div className="text-right shrink-0 space-y-1.5">
                 {checkingChain && !onChainStatus && (
@@ -1134,7 +1216,16 @@ useEffect(() => {
         {top3.length > 0 && (
           <div className="flex items-end justify-center gap-2 sm:gap-4 md:gap-6">
             {top3[1] && (
-              <div className="flex flex-col items-center gap-1.5 sm:gap-2 animate-in slide-in-from-bottom-8 duration-500 delay-200">
+              <div
+                className="flex flex-col items-center gap-1.5 sm:gap-2 animate-in slide-in-from-bottom-8 duration-500 delay-200 cursor-pointer"
+                onClick={() => setViewingProfile({
+                  walletAddress: top3[1].walletAddress,
+                  username: top3[1].username,
+                  avatarUrl: top3[1].avatarUrl,
+                  points: top3[1].points,
+                  rank: 2,
+                })}
+              >
                 <Avatar className="h-12 w-12 sm:h-16 sm:w-16 md:h-20 md:w-20 border-4 border-slate-300 dark:border-slate-600 shadow-lg">
                   <AvatarImage src={top3[1].avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-xs sm:text-base">{top3[1].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
@@ -1192,11 +1283,20 @@ useEffect(() => {
                 const payout = payoutByWallet[entry.walletAddress.toLowerCase()];
                 const isWinner = !!payout;
                 return (
-                  <div key={entry.walletAddress} className={cn(
-                    "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4",
-                    isMe && "bg-indigo-50 dark:bg-indigo-950/20",
-                    isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
-                  )}>
+                  <div
+                    key={entry.walletAddress}
+                    onClick={() => setViewingProfile({
+                      walletAddress: entry.walletAddress,
+                      username: entry.username,
+                      avatarUrl: entry.avatarUrl,
+                      points: entry.points,
+                      rank: entry.rank,
+                    })}
+                    className={cn(
+                      "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 cursor-pointer hover:bg-blue-900/10 transition-colors",
+                      isMe && "bg-indigo-950/20",
+                      isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
+                    )}>
                     <div className={cn(
                       "w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0",
                       entry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
@@ -1213,7 +1313,7 @@ useEffect(() => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-white font-bold text-xs sm:text-sm truncate">{entry.username}</span>
-                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-indigo-600 text-white border-0 shrink-0">YOU</Badge>}
+                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
                         {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 border-0 shrink-0">🏆</Badge>}
                       </div>
                     </div>
@@ -1229,7 +1329,7 @@ useEffect(() => {
 
         <div className="max-w-2xl mx-auto space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Button className="h-12 font-bold bg-indigo-600 hover:bg-indigo-700 text-white border-0" onClick={fetchResults} disabled={loadingResults}>
+            <Button className="h-12 font-bold bg-[#072474] hover:bg-indigo-700 text-white border-0" onClick={fetchResults} disabled={loadingResults}>
               {loadingResults ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</> : <><Trophy className="mr-2 h-4 w-4" />View Full Results</>}
             </Button>
             <Button variant="outline" className="h-12 bg-[#0d1526] border-blue-900/20 text-white" onClick={handleShareResults}>
@@ -1410,7 +1510,7 @@ export function FundRewardButton({
               "w-full h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all",
               isFunding
                 ? "bg-indigo-400 dark:bg-indigo-700 text-white cursor-wait"
-                : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-md shadow-indigo-500/20",
+                : "bg-[#072474] hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-md shadow-indigo-500/20",
             ].join(" ")}
           >
             {isFunding ? (
@@ -2134,7 +2234,7 @@ if (!hasJoined && !isCreator && phase === "lobby") return (
             <div className="flex items-center gap-3 bg-white/10 border border-white/15 rounded-xl px-4 py-3">
               <Avatar className="h-10 w-10 shrink-0 border-2 border-white/20">
                 <AvatarImage src={avatarUrl || undefined} />
-                <AvatarFallback className="bg-indigo-600 text-white font-bold text-sm">
+                <AvatarFallback className="bg-[#072474] text-white font-bold text-sm">
                   {username?.slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -2148,7 +2248,7 @@ if (!hasJoined && !isCreator && phase === "lobby") return (
             </div>
 
             <Button
-              className="w-full h-14 text-lg font-bold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-2xl shadow-xl shadow-indigo-900/50 border-0 transition-all active:scale-95"
+              className="w-full h-14 text-lg font-bold bg-[#072474] hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-2xl shadow-xl shadow-indigo-900/50 border-0 transition-all active:scale-95"
               onClick={handleJoin}
               disabled={isJoining}
             >
@@ -2656,7 +2756,7 @@ if (phase === "lobby") {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-white font-bold text-base truncate">{entry.username}</span>
-                    {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-indigo-600 text-white border-0 shrink-0">YOU</Badge>}
+                    {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
                     {entry.streak > 1 && <Badge className="text-[9px] h-4 px-1.5 bg-orange-500 text-white border-0 shrink-0">🔥{entry.streak}</Badge>}
                   </div>
                   {entry.pointsThisRound > 0 && <span className="text-green-600 dark:text-green-400 text-xs font-black">+{entry.pointsThisRound} pts</span>}

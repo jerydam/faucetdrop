@@ -22,7 +22,7 @@ import {
 import { buildFaucetSlug } from "@/lib/faucet-slug"
 
 import { useToast } from "@/hooks/use-toast"
-import { ProfileSettingsModal } from "@/components/profile-setting" 
+import { ProfileSettingsModal } from "@/components/profile-settings-modal" 
 import { MyCreationsModal } from "@/components/my-creations-modal" 
 import { CreateNewModal } from "@/components/create-new-modal" 
 import { usePrivy } from "@privy-io/react-auth" 
@@ -96,7 +96,7 @@ interface UserProfileData {
 }
 
 export default function DashboardPage() {
-    const backendUrl = "https://faucetdrop-backend.onrender.com"; 
+    const backendUrl = "https:faucetdrop-backend.onrender.com"; 
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();

@@ -437,7 +437,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
       );
       try {
-        await fetch("https://faucetdrop-backend.onrender.com/delete-faucet-metadata", {
+        await fetch("https:faucetdrop-backend.onrender.com/delete-faucet-metadata", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),
@@ -526,7 +526,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       setIsUpdatingParameters(true);
 
       if (isTemplateChanged) {
-        const response = await fetch("https://faucetdrop-backend.onrender.com/faucet-x-template", {
+        const response = await fetch("https:faucetdrop-backend.onrender.com/faucet-x-template", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ faucetAddress, template: customXPostTemplate, userAddress: address, chainId: Number(chainId) }),
@@ -546,7 +546,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         );
         toast.success("Blockchain parameters updated");
 
-        await fetch("https://faucetdrop-backend.onrender.com/set-claim-parameters", {
+        await fetch("https:faucetdrop-backend.onrender.com/set-claim-parameters", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -557,7 +557,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
         if (faucetType === "dropcode") {
           try {
-            const codeResponse = await fetch("https://faucetdrop-backend.onrender.com/generate-new-drop-code", {
+            const codeResponse = await fetch("https:faucetdrop-backend.onrender.com/generate-new-drop-code", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),
@@ -578,7 +578,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           .filter((link) => link.url.trim() && link.handle.trim())
           .map((link) => ({ platform: link.platform, handle: link.handle, url: link.url.trim(), action: link.action }));
 
-        await fetch("https://faucetdrop-backend.onrender.com/add-faucet-tasks", {
+        await fetch("https:faucetdrop-backend.onrender.com/add-faucet-tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ faucetAddress, tasks: formattedTasks, userAddress: address, chainId: Number(chainId) }),
@@ -682,7 +682,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     if (!isOwnerOrAdmin) { toast.error("Only owner or admins can generate a new drop code"); return; }
     try {
       setIsGeneratingNewCode(true);
-      const response = await fetch("https://faucetdrop-backend.onrender.com/generate-new-drop-code", {
+      const response = await fetch("https:faucetdrop-backend.onrender.com/generate-new-drop-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),

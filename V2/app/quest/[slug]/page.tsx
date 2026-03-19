@@ -64,7 +64,7 @@ import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 import { SubscriptionModal } from "@/components/subscribe";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "https:faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
 // ============= TYPES =============
 export type VerificationType =

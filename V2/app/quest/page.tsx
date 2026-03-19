@@ -14,7 +14,7 @@ import { Header } from "@/components/header";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "https:faucetdrop-backend.onrender.com";
 
 interface QuestOverview {
     faucetAddress: string;

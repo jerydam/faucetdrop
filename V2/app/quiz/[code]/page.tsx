@@ -89,7 +89,7 @@ function parseOnchainError(err: any): string {
   const raw: string = err?.message || "Unknown error";
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "https:faucetdrop-backend.onrender.com";
 
 // ── Safe WS URL ──
 function getWsBaseUrl(): string {
@@ -113,6 +113,15 @@ interface Player {
   streak: number;
   answeredCorrectly: boolean;
   isReady?: boolean;  // ← add this
+}
+
+interface ChatMessage {
+  wallet: string;
+  username: string;
+  avatarUrl?: string | null;
+  text: string;
+  isHost: boolean;
+  timestamp: number;
 }
 
 interface QuizOption { id: string; text: string }
@@ -1548,6 +1557,221 @@ export function FundRewardButton({
   );
 }
 export { }
+function FloatingChat({
+  messages,
+  chatInput,
+  setChatInput,
+  onSend,
+  onSendPreset,
+  myWallet,
+  chatBottomRef,
+  playerCount,
+}: {
+  messages: ChatMessage[];
+  chatInput: string;
+  setChatInput: (v: string) => void;
+  onSend: () => void;
+  onSendPreset: (text: string) => void;
+  myWallet: string;
+  chatBottomRef: React.RefObject<HTMLDivElement | null>;
+  playerCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const prevLenRef = useRef(messages.length);
+
+  // Track unread count when drawer is closed
+  useEffect(() => {
+    if (!open && messages.length > prevLenRef.current) {
+      setUnread(u => u + (messages.length - prevLenRef.current));
+    }
+    prevLenRef.current = messages.length;
+  }, [messages.length, open]);
+
+  // Clear unread on open
+  useEffect(() => {
+    if (open) setUnread(0);
+  }, [open]);
+
+  const PRESET_MESSAGES = [
+    "👋 Hey everyone!",
+    "🔥 Let's go!",
+    "😤 I'm ready!",
+    "🍀 Good luck all!",
+    "😎 Easy win",
+    "🤔 Any hints?",
+  ];
+
+  return (
+    <>
+      {/* ── Floating bubble ── */}
+      <button
+        onClick={() => setOpen(true)}
+        className={cn(
+          "fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-90",
+          open ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100",
+          "bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/30 shadow-indigo-900/50"
+        )}
+        style={{ boxShadow: "0 8px 32px rgba(79,70,229,0.5)" }}
+      >
+        {/* Chat icon */}
+        <svg viewBox="0 0 24 24" className="h-6 w-6 fill-white">
+          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+        </svg>
+        {/* Unread badge */}
+        {unread > 0 && (
+          <div className="absolute -top-1 -right-1 min-w-[20px] h-5 rounded-full bg-red-500 border-2 border-[#080d19] flex items-center justify-center px-1">
+            <span className="text-white text-[10px] font-black leading-none">{unread > 9 ? "9+" : unread}</span>
+          </div>
+        )}
+        {/* Pulse ring when new message */}
+        {unread > 0 && (
+          <div className="absolute inset-0 rounded-full bg-indigo-500 animate-ping opacity-30" />
+        )}
+      </button>
+
+      {/* ── Drawer backdrop ── */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* ── Chat drawer (slides up from bottom-right) ── */}
+      <div className={cn(
+        "fixed bottom-0 right-0 z-50 flex flex-col transition-all duration-300 ease-out",
+        // Mobile: full-width bottom sheet
+        "w-full sm:w-[420px]",
+        // Desktop: floating card above bottom-right
+        "sm:bottom-6 sm:right-6 sm:rounded-2xl sm:shadow-2xl",
+        open
+          ? "translate-y-0 opacity-100"
+          : "translate-y-full sm:translate-y-8 opacity-0 pointer-events-none"
+      )}
+        style={{ height: "min(520px, 80vh)", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}
+      >
+        <div className="flex flex-col h-full bg-[#0d1526] border border-blue-900/30 sm:rounded-2xl overflow-hidden">
+
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-[#111827] shrink-0">
+            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold text-sm">Lobby Chat</p>
+              <p className="text-white/25 text-[10px]">{playerCount} players in room</p>
+            </div>
+            <span className="text-white/20 text-xs bg-white/5 px-2 py-0.5 rounded-full">{messages.length}</span>
+            <button
+              onClick={() => setOpen(false)}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-white/30 hover:text-white hover:bg-white/10 transition-all ml-1"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                <div className="text-4xl">💬</div>
+                <div>
+                  <p className="text-white/30 text-sm font-bold">No messages yet</p>
+                  <p className="text-white/15 text-xs mt-1">Be the first to say something!</p>
+                </div>
+              </div>
+            ) : (
+              messages.map((m, i) => {
+                const isMe = m.wallet.toLowerCase() === myWallet.toLowerCase();
+                // Show avatar only on first message or if sender changes
+                const prevMsg = messages[i - 1];
+                const showMeta = !prevMsg || prevMsg.wallet !== m.wallet;
+                return (
+                  <div key={`${m.wallet}-${m.timestamp}-${i}`} className={cn("flex items-end gap-2", isMe && "flex-row-reverse")}>
+                    {/* Avatar */}
+                    <div className={cn("shrink-0 mb-0.5", !showMeta && "invisible")}>
+                      <Avatar className="h-7 w-7">
+                        <AvatarImage src={m.avatarUrl ?? undefined} />
+                        <AvatarFallback className="text-[9px] font-bold bg-slate-700 text-white">
+                          {m.username?.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                    <div className={cn("flex flex-col gap-0.5 max-w-[78%]", isMe && "items-end")}>
+                      {/* Name row */}
+                      {showMeta && (
+                        <div className={cn("flex items-center gap-1.5 px-1", isMe && "flex-row-reverse")}>
+                          <span className="text-white/35 text-[10px] font-semibold truncate max-w-[100px]">
+                            {isMe ? "You" : m.username}
+                          </span>
+                          {m.isHost && (
+                            <span className="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 px-1.5 py-px rounded-full font-bold">HOST</span>
+                          )}
+                        </div>
+                      )}
+                      {/* Bubble */}
+                      <div className={cn(
+                        "px-3.5 py-2 rounded-2xl text-sm leading-snug break-words",
+                        isMe
+                          ? "bg-indigo-600 text-white rounded-br-md"
+                          : m.isHost
+                            ? "bg-yellow-500/12 text-yellow-100 border border-yellow-500/15 rounded-bl-md"
+                            : "text-white/90 rounded-bl-md"
+                      )}
+                        style={(!isMe && !m.isHost) ? { background: "rgba(255,255,255,0.07)" } : undefined}
+                      >
+                        {m.text}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={chatBottomRef} />
+          </div>
+
+          {/* Quick replies */}
+          <div className="px-3 pt-2 border-t border-white/5 shrink-0">
+            <div className="flex gap-1.5 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
+              {PRESET_MESSAGES.map(preset => (
+                <button
+                  key={preset}
+                  onClick={() => onSendPreset(preset)}
+                  className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-full bg-white/5 hover:bg-indigo-500/20 border border-white/8 hover:border-indigo-500/30 text-white/50 hover:text-white transition-all active:scale-95 whitespace-nowrap"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Input */}
+          <div className="px-3 pb-4 shrink-0">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
+                placeholder="Say something..."
+                maxLength={200}
+                className="flex-1 bg-white/5 border border-white/8 rounded-xl px-3.5 py-2.5 text-white text-sm placeholder:text-white/20 outline-none focus:border-indigo-500/40 focus:bg-white/8 transition-all"
+              />
+              <button
+                onClick={onSend}
+                disabled={!chatInput.trim()}
+                className="h-10 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/5 disabled:text-white/15 text-white flex items-center justify-center transition-all active:scale-95 shrink-0"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" style={{ transform: "rotate(45deg)" }}>
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
 // ═══════════════════════════════════════════════════════════════
 //  Main Component (Phase router)
 // ═══════════════════════════════════════════════════════════════
@@ -1564,6 +1788,7 @@ export default function QuizCodePage() {
   wallets?.[0];
   const code = (params.code as string || "").toUpperCase();
   const sessionKeyRef = useRef<CryptoKey | null>(null);
+  const seenMessageIds = useRef<Set<string>>(new Set());
   const [quizReward, setQuizReward] = useState<{
     contractAddress: string;
     tokenAddress: string;
@@ -1575,7 +1800,10 @@ export default function QuizCodePage() {
     isFunded: boolean;
     chainId?: number;
   } | null>(null);
-  
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const chatBottomRef = useRef<HTMLDivElement>(null);
   const reconnectAttempts = useRef(0);
   const [isFunded, setIsFunded] = useState(false);
   const [contractBalance, setContractBalance] = useState("0");
@@ -1840,6 +2068,7 @@ ws.onmessage = async (ev) => {
   const amIPlaying = (msg.players || []).some((p: any) =>
     p.walletAddress.toLowerCase() === myWallet
   );
+  
   if (amIPlaying) setIsReturningPlayer(true);
 
   if (msg.isCreator) {
@@ -1889,7 +2118,34 @@ case "kicked": {
       setCountdownVal(msg.value);
       break;
     }
+    
 
+    case "chat_history": {
+  // Clear the seen set and rebuild from history
+  seenMessageIds.current.clear();
+  const messages = msg.messages as ChatMessage[];
+  messages.forEach(m => {
+    seenMessageIds.current.add(`${m.wallet}-${m.timestamp}-${m.text}`);
+  });
+  setChatMessages(messages);
+  break;
+}
+
+case "chat_message": {
+  const id = `${msg.wallet}-${msg.timestamp}-${msg.text}`;
+  if (seenMessageIds.current.has(id)) break; // already have it
+  seenMessageIds.current.add(id);
+  setChatMessages(prev => {
+    const next = [...prev, msg as ChatMessage];
+    return next.length > 100 ? next.slice(-100) : next;
+  });
+  break;
+}
+
+case "chat_error": {
+  toast.warning(msg.message);
+  break;
+}
     // ── 5. New question
     case "question": {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -2017,6 +2273,9 @@ case "kicked": {
     };
   }, [userWalletAddress, connectWS]);
 
+  useEffect(() => {
+  chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+}, [chatMessages]);
 
   // ── SOUND EFFECTS TRIGGERS ──
   useEffect(() => {
@@ -2070,6 +2329,18 @@ case "kicked": {
       setIsJoining(false); 
     }
   };
+// These both live inside QuizCodePage, near your other handlers
+const handleSendChat = () => {
+  const text = chatInput.trim();
+  if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+  wsRef.current.send(JSON.stringify({ type: "chat_message", text }));
+  setChatInput("");
+};
+
+const handleSendPreset = (text: string) => {
+  if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+  wsRef.current.send(JSON.stringify({ type: "chat_message", text }));
+};
 
 const handleFundReward = async () => {
   if (!quizReward) { toast.error("No reward configured"); return; }
@@ -2275,336 +2546,374 @@ if (phase === "lobby") {
   return (
     <div className="min-h-screen bg-[#080d19] flex flex-col">
 
-      {/* ── Sticky top bar ── */}
-      <div className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-blue-900/20 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      {/* ── Top bar ── */}
+      <div className="sticky top-0 z-20 bg-[#0d1526]/95 backdrop-blur-md border-b border-blue-900/20 shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="shrink-0">
-              <p className="text-slate-400 dark:text-white/30 text-[10px] font-bold uppercase tracking-widest leading-none">Code</p>
-              <p className="text-xl sm:text-2xl font-black tracking-widest text-white leading-tight">{code}</p>
+              <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest leading-none">Quiz Code</p>
+              <p className="text-2xl sm:text-3xl font-black tracking-[0.15em] text-white leading-tight">{code}</p>
             </div>
-            <div className="hidden sm:block w-px h-8 bg-slate-200 dark:bg-white/10" />
+            <div className="hidden sm:block w-px h-8 bg-white/10" />
             <div className="hidden sm:block min-w-0">
               <p className="text-white font-bold text-sm truncate">{quizMeta?.title}</p>
-              <p className="text-slate-400 dark:text-white/30 text-xs">{quizMeta?.totalQuestions} questions</p>
+              <p className="text-white/30 text-xs">{quizMeta?.totalQuestions} questions</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Badge className="bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-200 border-0 text-xs px-2 py-1 hidden xs:flex items-center gap-1">
-              <Users className="h-3 w-3" />{players.length}
-            </Badge>
+            {/* Live player count pill */}
+            <div className="flex items-center gap-1.5 bg-indigo-500/15 border border-indigo-500/20 rounded-full px-3 py-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-indigo-200 text-xs font-bold">{players.length} in lobby</span>
+            </div>
             <Button
               variant="outline"
               size="sm"
-              className="border-blue-800 dark:border-blue-700 text-blue-900 dark:text-blue-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 bg-transparent h-8 px-2 sm:px-3"
+              className="border-white/10 text-white/60 hover:text-white hover:bg-white/10 bg-transparent h-8 px-3"
               onClick={() => {
                 navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
                 toast.success("Link copied!");
               }}
             >
               <Share2 className="h-3.5 w-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline text-xs">Share</span>
+              <span className="hidden sm:inline text-xs">Invite</span>
             </Button>
           </div>
         </div>
       </div>
 
-      {/* ── Body ── */}
-      <div className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-4 sm:py-6 pb-24">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 sm:gap-6">
+      {/* ── MAIN BODY ── */}
+      <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 pb-32">
+        
+        {isCreator ? (
+          /* ══ CREATOR LAYOUT: 2 col ══ */
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
 
-          {/* ── Left: Players ── */}
-          <div className="space-y-4">
-
-            {/* Players card */}
-            <div className="bg-[#0d1526] border border-blue-900/20 rounded-2xl overflow-hidden shadow-sm">
-              <div className="px-4 sm:px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <h3 className="text-slate-800 dark:text-white font-bold text-sm flex items-center gap-2">
-                  <Users className="h-4 w-4 text-indigo-500" />
-                  Players
-                  <span className="text-slate-400 dark:text-white/30 font-normal">({players.length})</span>
-                </h3>
+            {/* Left: Players */}
+            <div className="space-y-4">
+              {/* Players header */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-white font-black text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-indigo-400" /> Players
+                  <span className="text-white/30 font-normal text-base">({players.length})</span>
+                </h2>
                 {totalCount > 0 && (
                   <span className={cn(
-                    "text-xs font-bold px-2 py-0.5 rounded-full",
+                    "text-xs font-bold px-3 py-1 rounded-full border",
                     allReady
-                      ? "bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400"
-                      : "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                      ? "bg-green-500/10 border-green-500/30 text-green-400"
+                      : "bg-amber-500/10 border-amber-500/30 text-amber-400"
                   )}>
-                    {allReady ? "All ready!" : `${readyCount}/${totalCount} ready`}
+                    {allReady ? "✓ All ready" : `${readyCount}/${totalCount} ready`}
                   </span>
                 )}
               </div>
 
-              {players.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 sm:py-16 text-center px-4">
-                  <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center mb-3">
-                    <Users className="h-6 w-6 text-slate-300 dark:text-white/20" />
+              {/* Player grid */}
+              <div className="bg-[#0d1526] border border-blue-900/20 rounded-2xl overflow-hidden">
+                {players.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+                      <Users className="h-7 w-7 text-white/20" />
+                    </div>
+                    <p className="text-white/30 text-sm font-medium">No players yet</p>
+                    <p className="text-white/15 text-xs mt-1">Share the code to get started</p>
                   </div>
-                  <p className="text-slate-400 dark:text-white/40 text-sm font-medium">Waiting for players...</p>
-                  <p className="text-slate-300 dark:text-white/20 text-xs mt-1">Share the code above</p>
-                </div>
-              ) : (
-                <div className="p-3 sm:p-4 grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-2.5 max-h-[55vh] overflow-y-auto">
-                  {players.map(p => {
-                    const isMe = p.walletAddress.toLowerCase() === myWallet;
-                    const isHost = p.walletAddress.toLowerCase() === creatorAddr;
-                    const ready = p.isReady ?? false;
-                    return (
-                      <div
-                        key={p.walletAddress}
-                        className={cn(
-                          "relative flex items-center gap-2.5 rounded-xl px-3 py-2.5 border transition-all",
-                          isMe
-                            ? "border-indigo-300 dark:border-indigo-400/40 bg-indigo-50 dark:bg-indigo-500/15"
-                            : isHost
-                              ? "border-yellow-300 dark:border-yellow-500/30 bg-yellow-50 dark:bg-yellow-500/10"
-                              : ready
-                                ? "border-green-300 dark:border-green-500/30 bg-green-50 dark:bg-green-500/10"
-                                : "border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5"
-                        )}
-                      >
-                        <div className="relative shrink-0">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={p.avatarUrl ?? undefined} />
-                            <AvatarFallback className={cn(
-                              "text-xs font-bold",
-                              isHost ? "bg-yellow-200 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-300" : "bg-slate-200 dark:bg-white/20 text-slate-700 dark:text-white"
-                            )}>
-                              {p.username?.slice(0, 2).toUpperCase() ?? "??"}
-                            </AvatarFallback>
-                          </Avatar>
-                          {/* Ready indicator dot */}
-                          <div className={cn(
-                            "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 transition-colors",
-                            isHost
-                              ? "bg-yellow-400"
-                              : ready
-                                ? "bg-green-500"
-                                : "bg-slate-300 dark:bg-slate-600"
-                          )} />
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <span className="text-slate-800 dark:text-white text-xs font-bold truncate leading-tight">
-                              {p.username}
-                            </span>
-                            {isMe && (
-                              <span className="text-[9px] bg-indigo-500 text-white px-1 py-0.5 rounded font-bold shrink-0 leading-none">YOU</span>
+                ) : (
+                  <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {players.map(p => {
+                      const isMe = p.walletAddress.toLowerCase() === myWallet;
+                      const isHost = p.walletAddress.toLowerCase() === creatorAddr;
+                      const ready = p.isReady ?? false;
+                      return (
+                        <div key={p.walletAddress} className={cn(
+                          "relative flex flex-col items-center gap-2 rounded-2xl p-3 border text-center transition-all",
+                          isHost
+                            ? "border-yellow-500/30 bg-yellow-500/10"
+                            : ready
+                              ? "border-green-500/20 bg-green-500/8"
+                              : "border-white/8 bg-white/3"
+                        )}>
+                          {/* Kick button */}
+                          {isCreator && !isMe && !isHost && (
+                              <button
+                                onClick={() => handleKickPlayer(p.walletAddress)}
+                                className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
                             )}
-                            {isHost && (
-                              <span className="text-[9px] bg-yellow-400 text-yellow-900 px-1 py-0.5 rounded font-bold shrink-0 leading-none">HOST</span>
-                            )}
+                          <div className="relative">
+                            <Avatar className="h-12 w-12 border-2 border-white/10">
+                              <AvatarImage src={p.avatarUrl ?? undefined} />
+                              <AvatarFallback className={cn(
+                                "font-bold text-sm",
+                                isHost ? "bg-yellow-500/20 text-yellow-300" : "bg-white/10 text-white"
+                              )}>
+                                {p.username?.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className={cn(
+                              "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#0d1526]",
+                              isHost ? "bg-yellow-400" : ready ? "bg-green-400" : "bg-white/20"
+                            )} />
                           </div>
-                          <p className={cn(
-                            "text-[10px] font-semibold mt-0.5 leading-none",
-                            isHost
-                              ? "text-yellow-600 dark:text-yellow-400"
-                              : ready
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-slate-400 dark:text-white/25"
-                          )}>
-                            {isHost ? "Host" : ready ? "Ready ✓" : "Not ready"}
-                          </p>
+                          <div className="min-w-0 w-full">
+                            <p className="text-white text-xs font-bold truncate">{p.username}</p>
+                            <p className={cn(
+                              "text-[10px] font-semibold mt-0.5",
+                              isHost ? "text-yellow-400" : ready ? "text-green-400" : "text-white/25"
+                            )}>
+                              {isHost ? "Host" : ready ? "Ready ✓" : "Waiting..."}
+                            </p>
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
 
-                        {/* Kick button */}
-                        {isCreator && !isMe && !isHost && (
-                          <button
-                            onClick={() => handleKickPlayer(p.walletAddress)}
-                            className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-slate-300 dark:text-white/20 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
-                            title={`Kick ${p.username}`}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Ready button for non-creator players */}
-              {!isCreator && hasJoined && (
-                <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-1 border-t border-slate-100 dark:border-slate-800 mt-1">
-                  <button
-                    onClick={handleToggleReady}
-                    className={cn(
-                      "w-full h-11 sm:h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95",
-                      isReady
-                        ? "bg-green-500 hover:bg-green-600 text-white shadow-md shadow-green-500/20"
-                        : "bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-700 dark:text-white border border-slate-200 dark:border-white/15"
-                    )}
-                  >
-                    {isReady ? (
-                      <><Check className="h-4 w-4 stroke-[3px]" /> Ready! (click to unready)</>
-                    ) : (
-                      <><Zap className="h-4 w-4" /> Click to Ready Up</>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* Waiting message for player after ready */}
-              {!isCreator && hasJoined && isReady && (
-                <div className="px-4 pb-4 text-center">
-                  <div className="flex items-center justify-center gap-2 text-slate-400 dark:text-white/30 text-xs">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Waiting for host to start the quiz...
+            {/* Right: Host Controls */}
+            <div className="space-y-4 lg:sticky lg:top-20 self-start">
+              
+              {/* Host card */}
+              <div className="bg-[#0d1526] border border-blue-900/20 rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-900/80 to-blue-900/80 px-5 py-4 flex items-center gap-3 border-b border-blue-900/20">
+                  <div className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center">
+                    <Crown className="h-5 w-5 text-yellow-400" />
+                  </div>
+                  <div>
+                    <p className="text-white font-black text-sm">Host Controls</p>
+                    <p className="text-indigo-300/60 text-xs">You control the quiz</p>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
+                <div className="p-4 space-y-3">
 
-          {/* ── Right: Host Panel ── */}
-          {isCreator && (
-            <div className="bg-[#0d1526] border border-blue-900/20 rounded-2xl shadow-sm overflow-hidden self-start">
-
-              {/* Header */}
-              <div className="bg-gradient-to-r from-blue-900 to-blue-800 px-5 py-4 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
-                  <Crown className="h-5 w-5 text-yellow-300" />
-                </div>
-                <div>
-                  <p className="text-white font-black text-base leading-tight">Host Controls</p>
-                  <p className="text-indigo-200 text-xs">You are the quiz host</p>
-                </div>
-              </div>
-
-              <div className="p-4 sm:p-5 space-y-4">
-
-                {/* Ready status summary */}
-                {totalCount > 0 && (
+                  {/* Ready status */}
                   <div className={cn(
-                    "rounded-xl px-4 py-3 flex items-center gap-3",
+                    "rounded-xl px-4 py-3 flex items-center gap-3 border",
                     allReady
-                      ? "bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20"
-                      : "bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20"
+                      ? "bg-green-500/8 border-green-500/20"
+                      : totalCount === 0
+                        ? "bg-white/3 border-white/8"
+                        : "bg-amber-500/8 border-amber-500/20"
                   )}>
                     <div className={cn(
                       "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                      allReady ? "bg-green-100 dark:bg-green-500/20" : "bg-amber-100 dark:bg-amber-500/20"
+                      allReady ? "bg-green-500/20" : totalCount === 0 ? "bg-white/8" : "bg-amber-500/15"
                     )}>
                       {allReady
-                        ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        : <Users className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        ? <Check className="h-4 w-4 text-green-400 stroke-[3px]" />
+                        : <Users className="h-4 w-4 text-amber-400" />
                       }
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={cn(
-                        "text-sm font-bold leading-tight",
-                        allReady ? "text-green-700 dark:text-green-400" : "text-amber-700 dark:text-amber-400"
+                        "text-sm font-bold",
+                        allReady ? "text-green-400" : totalCount === 0 ? "text-white/30" : "text-amber-400"
                       )}>
-                        {allReady ? "All players are ready!" : `${readyCount} of ${totalCount} ready`}
+                        {totalCount === 0
+                          ? "Waiting for players"
+                          : allReady
+                            ? "Everyone is ready!"
+                            : `${readyCount} of ${totalCount} ready`
+                        }
                       </p>
                       {!allReady && totalCount > 0 && (
-                        <p className="text-amber-600 dark:text-amber-500 text-xs mt-0.5 truncate">
-                          Waiting: {nonCreatorPlayers.filter(p => !p.isReady).map(p => p.username).join(", ")}
+                        <p className="text-white/30 text-xs mt-0.5 truncate">
+                          Not ready: {nonCreatorPlayers.filter(p => !p.isReady).map(p => p.username).join(", ")}
                         </p>
                       )}
                     </div>
                   </div>
-                )}
 
-                {totalCount === 0 && (
-                  <div className="bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-center">
-                    <p className="text-slate-400 dark:text-white/30 text-sm">No players yet</p>
-                    <p className="text-slate-300 dark:text-white/15 text-xs mt-0.5">Share the code to invite players</p>
-                  </div>
-                )}
-
-                {/* Funding status */}
-                {quizReward ? (
-                  isFunded ? (
-                    <div className="flex items-start gap-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-green-700 dark:text-green-400 font-bold text-sm">Reward Pool Funded ✓</p>
-                        <p className="text-green-600 dark:text-green-500 text-xs mt-0.5">
-                          {contractBalance} {quizReward.tokenSymbol} locked
-                        </p>
-                      </div>
-                      {fundTxHash && (
-                        <a href={`https://celoscan.io/tx/${fundTxHash}`} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                          <ExternalLink className="h-4 w-4 text-green-500" />
-                        </a>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3">
-                        <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-amber-700 dark:text-amber-400 font-bold text-sm">Reward Pool Required</p>
-                          <p className="text-amber-600 dark:text-amber-500 text-xs mt-0.5">
-                            Fund to unlock the Start button
-                          </p>
-                          {isFundedCheckLoading && (
-                            <p className="text-amber-400 text-[10px] mt-1 animate-pulse">Checking balance…</p>
-                          )}
+                  {/* Funding */}
+                  {quizReward ? (
+                    isFunded ? (
+                      <div className="flex items-center gap-3 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-3">
+                        <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-green-400 font-bold text-sm">Pool Funded ✓</p>
+                          <p className="text-green-500/70 text-xs mt-0.5">{contractBalance} {quizReward.tokenSymbol} locked</p>
                         </div>
                       </div>
-                      <Button
-                        className="w-full h-11 font-bold bg-blue-700 hover:bg-blue-600 text-white border-0 text-sm"
-                        onClick={handleFundReward}
-                        disabled={isFunding || isFundedCheckLoading}
-                      >
-                        {isFunding
-                          ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Confirming...</>
-                          : isFundedCheckLoading
-                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking...</>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-3 bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3">
+                          <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-amber-400 font-bold text-sm">Fund reward pool</p>
+                            <p className="text-amber-500/70 text-xs mt-0.5">Required to enable Start</p>
+                          </div>
+                        </div>
+                        <Button
+                          className="w-full h-11 font-bold bg-indigo-600 hover:bg-indigo-500 text-white border-0 text-sm"
+                          onClick={handleFundReward}
+                          disabled={isFunding || isFundedCheckLoading}
+                        >
+                          {isFunding
+                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Confirming...</>
                             : <><Wallet className="mr-2 h-4 w-4" />Fund {grossDisplayAmount} {quizReward.tokenSymbol}</>
-                        }
-                      </Button>
+                          }
+                        </Button>
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex items-center gap-2 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-3">
+                      <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+                      <p className="text-green-400 text-sm font-medium">Free quiz</p>
                     </div>
-                  )
-                ) : (
-                  <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3">
-                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                    <p className="text-green-700 dark:text-green-400 text-sm font-medium">Free quiz — no reward pool needed</p>
-                  </div>
-                )}
+                  )}
 
-                {/* Start button */}
-                {(isFunded || !quizReward) && (
-                  <Button
-                    className="w-full h-14 text-base font-black text-white border-0 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-900/30 disabled:opacity-60 disabled:scale-100"
-                    style={{ background: "linear-gradient(135deg, #1e3a8a, #1d4ed8)" }}
-                    onClick={handleStartQuiz}
-                    disabled={isStarting}
-                  >
-                    {isStarting
-                      ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Starting…</>
-                      : totalCount === 0
-                        ? <><Play className="mr-2 h-5 w-5 fill-current" />START QUIZ</>
-                        : allReady
-                          ? <><Play className="mr-2 h-5 w-5 fill-current" />START QUIZ ({players.length})</>
-                          : <><Play className="mr-2 h-5 w-5 fill-current" />START ANYWAY ({readyCount}/{totalCount} ready)</>
-                    }
-                  </Button>
-                )}
+                  {/* START button */}
+                  {(isFunded || !quizReward) && (
+                    <Button
+                      className="w-full h-14 text-base font-black text-white border-0 rounded-xl shadow-lg shadow-indigo-900/40 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      style={{ background: "linear-gradient(135deg, #1e3a8a, #4f46e5)" }}
+                      onClick={handleStartQuiz}
+                      disabled={isStarting}
+                    >
+                      {isStarting
+                        ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Starting…</>
+                        : totalCount === 0
+                          ? <><Play className="mr-2 h-5 w-5 fill-current" />START QUIZ</>
+                          : allReady
+                            ? <><Play className="mr-2 h-5 w-5 fill-current" />START · {players.length} players</>
+                            : <><Play className="mr-2 h-5 w-5 fill-current" />START ANYWAY</>
+                      }
+                    </Button>
+                  )}
 
-                {fundError && (
-                  <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-lg px-3 py-2">
-                    <p className="text-xs text-red-600 dark:text-red-400 font-medium break-words">{fundError}</p>
-                  </div>
-                )}
+                  {fundError && (
+                    <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 break-words">{fundError}</p>
+                  )}
 
-                {quizReward && (
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] text-slate-400 dark:text-white/20 shrink-0">Contract:</p>
-                    <p className="text-[10px] font-mono text-slate-500 dark:text-white/30 truncate flex-1">
+                  {quizReward && (
+                    <p className="text-[10px] font-mono text-white/15 truncate text-center">
                       {quizReward.contractAddress}
                     </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+        ) : (
+          /* ══ PLAYER LAYOUT: full width player grid ══ */
+          <div className="space-y-5">
+
+            {/* Quiz cover + info hero */}
+            {quizMeta?.coverImageUrl ? (
+              <div className="relative w-full max-w-2xl mx-auto aspect-video rounded-2xl overflow-hidden border border-white/10 shadow-xl">
+                <img src={quizMeta.coverImageUrl} alt={quizMeta.title} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                <div className="absolute bottom-4 left-4 right-4">
+                  <h1 className="text-white font-black text-xl sm:text-2xl drop-shadow">{quizMeta.title}</h1>
+                  <p className="text-white/60 text-sm">{quizMeta.totalQuestions} questions</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <h1 className="text-white font-black text-2xl sm:text-3xl">{quizMeta?.title}</h1>
+                <p className="text-white/40 text-sm mt-1">{quizMeta?.totalQuestions} questions</p>
+              </div>
+            )}
+
+            {/* Players grid */}
+            <div className="bg-[#0d1526] border border-blue-900/20 rounded-2xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between">
+                <span className="text-white font-bold text-sm flex items-center gap-2">
+                  <Users className="h-4 w-4 text-indigo-400" /> Players ({players.length})
+                </span>
+                {totalCount > 0 && (
+                  <span className={cn(
+                    "text-xs font-bold px-2.5 py-1 rounded-full border",
+                    allReady ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                  )}>
+                    {readyCount}/{totalCount} ready
+                  </span>
+                )}
+              </div>
+              <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                {players.map(p => {
+                  const isMe = p.walletAddress.toLowerCase() === myWallet;
+                  const isHost = p.walletAddress.toLowerCase() === creatorAddr;
+                  const ready = p.isReady ?? false;
+                  return (
+                    <div key={p.walletAddress} className="flex flex-col items-center gap-1.5 text-center">
+                      <div className="relative">
+                        <Avatar className={cn(
+                          "h-12 w-12 border-2",
+                          isMe ? "border-indigo-400" : isHost ? "border-yellow-400" : ready ? "border-green-400" : "border-white/10"
+                        )}>
+                          <AvatarImage src={p.avatarUrl ?? undefined} />
+                          <AvatarFallback className="bg-white/10 text-white font-bold text-sm">
+                            {p.username?.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className={cn(
+                          "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#0d1526]",
+                          isHost ? "bg-yellow-400" : ready ? "bg-green-400" : "bg-white/20"
+                        )} />
+                      </div>
+                      <p className="text-white text-[10px] font-bold truncate w-full max-w-[60px]">{p.username}</p>
+                      {isHost && <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1 py-px rounded font-bold">HOST</span>}
+                      {isMe && !isHost && <span className="text-[8px] bg-indigo-500/20 text-indigo-300 px-1 py-px rounded font-bold">YOU</span>}
+                    </div>
+                  );
+                })}
+                {players.length === 0 && (
+                  <div className="col-span-full py-10 text-center">
+                    <p className="text-white/20 text-sm">No players yet</p>
                   </div>
                 )}
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Ready button */}
+            {hasJoined && (
+              <div className="max-w-sm mx-auto">
+                <button
+                  onClick={handleToggleReady}
+                  className={cn(
+                    "w-full h-14 rounded-2xl font-black text-base flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg",
+                    isReady
+                      ? "bg-green-500 hover:bg-green-400 text-white shadow-green-900/30"
+                      : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/40"
+                  )}
+                >
+                  {isReady
+                    ? <><Check className="h-5 w-5 stroke-[3px]" /> You're Ready! (tap to undo)</>
+                    : <><Zap className="h-5 w-5 fill-current" /> Click to Ready Up</>
+                  }
+                </button>
+                {isReady && (
+                  <p className="text-center text-white/20 text-xs mt-2 flex items-center justify-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Waiting for host to start...
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* ════════════════════════════════════════
+          FLOATING CHAT BUBBLE + DRAWER
+          ════════════════════════════════════════ */}
+      {hasJoined && <FloatingChat
+        messages={chatMessages}
+        chatInput={chatInput}
+        setChatInput={setChatInput}
+        onSend={handleSendChat}
+        onSendPreset={handleSendPreset}
+        myWallet={myWallet}
+        chatBottomRef={chatBottomRef}
+        playerCount={players.length}
+      />}
+
     </div>
   );
 }

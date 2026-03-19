@@ -1,5 +1,5 @@
 
-const BACKEND = "https://faucetdrop-backend.onrender.com"
+const BACKEND = "https:faucetdrop-backend.onrender.com"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

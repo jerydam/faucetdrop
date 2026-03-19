@@ -235,6 +235,31 @@ export const networks: Network[] = [
     },
     isTestnet: false,
   },
+  {
+    name: "Solana Devnet",
+    symbol: "SOL",
+    chainId: 102, // Keep this as 101 so the backend router catches it
+    rpcUrl: [
+      "https://api.devnet.solana.com", // 👈 Devnet RPC
+    ],
+    blockExplorerUrls: "https://solscan.io/?cluster=devnet", // 👈 Appends cluster=devnet
+    color: "#14F195",
+    logoUrl: "/solana.png",
+    iconUrl: "/solana.png",
+    factoryAddresses: [],
+    factories: {
+      dropcode: "",
+      quest: "719GaXbsBWwskSVKZDykUMX6mur7BiCVjNSSWS7KMwtp", 
+      quiz: "719GaXbsBWwskSVKZDykUMX6mur7BiCVjNSSWS7KMwtp"
+    },
+    tokenAddress: "11111111111111111111111111111111", // Native SOL Mint
+    nativeCurrency: {
+      name: "Solana",
+      symbol: "SOL",
+      decimals: 9,
+    },
+    isTestnet: true, // 👈 Marks it as a testnet in your UI
+  },
 ]
 
 // =============================================

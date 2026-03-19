@@ -96,7 +96,7 @@ interface UserProfileData {
 }
 
 export default function DashboardPage() {
-    const backendUrl = "https:faucetdrop-backend.onrender.com"; 
+    const backendUrl = "https://faucetdrop-backend.onrender.com"; 
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();

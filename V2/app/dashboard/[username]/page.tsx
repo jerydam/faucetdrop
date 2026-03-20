@@ -17,7 +17,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label"
 import { 
     Settings, Search, Copy, Wallet, Loader2,
-    ScrollText, PencilRuler, Rocket, Trash2
+    ScrollText, PencilRuler, Rocket, Trash2,
+    CheckCircle,
+    Shield
 } from "lucide-react"
 import { buildFaucetSlug } from "@/lib/faucet-slug"
 
@@ -27,7 +29,8 @@ import { MyCreationsModal } from "@/components/my-creations-modal"
 import { CreateNewModal } from "@/components/create-new-modal" 
 import { usePrivy } from "@privy-io/react-auth" 
 import { EmbeddedWalletControlProduction } from "@/components/embeddedwallet"
-
+import { SelfVerificationModal } from "@/components/self-verification-modal"
+import { VerifiedAvatar, VerifyPill, VerifiedBadge } from "@/components/verified-profile-avatar"
 // --- Custom Icons ---
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -111,8 +114,9 @@ export default function DashboardPage() {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         )
+const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
+const [isVerified, setIsVerified] = useState(false);
 
-     // ─── paste these outside the component, after supabase client ───
 
 const getNativeTokenSymbol = (networkName: string): string => {
   switch (networkName) {
@@ -206,7 +210,48 @@ async function fetchOwnerFaucetsDetails(supabaseClient: any, addresses: string[]
     }
     return profile?.username || "Anonymous";
 }
+useEffect(() => {
+    if (profile?.wallet_address) {
+        const stored = localStorage.getItem(`verification_${profile.wallet_address.toLowerCase()}`);
+        if (stored) {
+            const data = JSON.parse(stored);
+            // Verify if record is less than 30 days old
+            if (data.verified && (Date.now() - data.timestamp < 30 * 24 * 60 * 60 * 1000)) {
+                setIsVerified(true);
+            }
+        }
+    }
+}, [profile]);
 
+const handleVerificationSuccess = async (data: any) => {
+    try {
+        // 1. Update the Database via your Backend
+        const response = await fetch(`${backendUrl}/api/users/${profile?.wallet_address.toLowerCase()}/verify`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                is_verified: true,
+                verification_data: data // Store the ZK-proof or timestamp
+            }),
+        });
+
+        if (response.ok) {
+            // 2. Update Local State for immediate UI feedback
+            setIsVerified(true);
+            
+            // 3. Optional: Backup in localStorage for instant loading next time
+            localStorage.setItem(`verification_${profile?.wallet_address.toLowerCase()}`, JSON.stringify(data));
+
+            toast({ 
+                title: "Identity Verified!", 
+                description: "Your status is now permanently saved to your profile." 
+            });
+        }
+    } catch (error) {
+        console.error("Failed to save verification:", error);
+        toast({ title: "Error", description: "Verification succeeded but failed to save to profile.", variant: "destructive" });
+    }
+};
     const displayAvatar = getDisplayAvatar();
     const displayName = getDisplayName();
     // --- NEW: Sync Email with Backend ---
@@ -565,27 +610,28 @@ async function fetchOwnerFaucetsDetails(supabaseClient: any, addresses: string[]
                                     <EmbeddedWalletControlProduction />
                                 </div>
                             )}
-                            
-                            <div className="relative">
-                                <Avatar className="h-24 w-24 border-4 border-background shadow-lg relative z-10">
-                                    <AvatarImage src={displayAvatar} className="object-cover" />
-                                    <AvatarFallback className="bg-primary text-white text-2xl">
-                                        {displayName.charAt(0).toUpperCase()}
-                                    </AvatarFallback>
-                                </Avatar>
+                
 
-                                {isOwner && (
-                                    <div className="absolute -bottom-2 -right-2 z-20 bg-background rounded-full shadow-md">
-                                        <ProfileSettingsModal />
-                                    </div>
-                                )}
-                            </div>
+                <VerifiedAvatar
+                displayAvatar={displayAvatar}
+                displayName={displayName}
+                isVerified={isVerified}
+                isOwner={isOwner}
+                />
 
+                <SelfVerificationModal
+                isOpen={isVerifyModalOpen}
+                onOpenChange={setIsVerifyModalOpen}
+                account={connectedAddress || ""}
+                onSuccess={handleVerificationSuccess}
+                />
                             <div className="flex-1 space-y-2">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
                                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
                                         {displayName}
                                     </h1>
+                                    {isOwner && !isVerified && <VerifyPill onClick={() => setIsVerifyModalOpen(true)} />}
+                                    {isVerified && <VerifiedBadge />}
                                     <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
                                         {/* Twitter / X */}
                                         {profile?.twitter_handle && (

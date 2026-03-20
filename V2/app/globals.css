@@ -7,7 +7,45 @@
     padding-top: env(safe-area-inset-top, 4.5rem);
   }
 
+  /* ── Light theme (default) ── */
   :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 8%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 222 47% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 8%;
+
+    --primary: 217 91% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 33% 92%;
+    --secondary-foreground: 222 47% 15%;
+
+    --muted: 217 33% 94%;
+    --muted-foreground: 215 20% 45%;
+
+    --accent: 217 33% 90%;
+    --accent-foreground: 222 47% 15%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 33% 88%;
+    --input: 217 33% 90%;
+    --ring: 217 91% 50%;
+    --radius: 0.75rem;
+
+    /* Privy modal override */
+    --privy-color-background: #ffffff !important;
+    --privy-color-background-2: #f4f6fb !important;
+    --privy-border-radius: 1rem !important;
+  }
+
+  /* ── Dark theme ── */
+  .dark {
     --background: 222 47% 4%;
     --foreground: 210 40% 96%;
 
@@ -35,35 +73,11 @@
     --border: 217 33% 14%;
     --input: 217 33% 12%;
     --ring: 217 91% 60%;
-    --radius: 0.75rem;
 
     /* Privy modal override */
     --privy-color-background: #080d19 !important;
     --privy-color-background-2: #0f1629 !important;
     --privy-border-radius: 1rem !important;
-  }
-
-  /* Keep dark as alias — same values */
-  .dark {
-    --background: 222 47% 4%;
-    --foreground: 210 40% 96%;
-    --card: 222 47% 6%;
-    --card-foreground: 210 40% 96%;
-    --popover: 222 47% 6%;
-    --popover-foreground: 210 40% 96%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 4%;
-    --secondary: 217 33% 12%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 217 33% 10%;
-    --muted-foreground: 215 20% 55%;
-    --accent: 217 33% 14%;
-    --accent-foreground: 210 40% 96%;
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 14%;
-    --input: 217 33% 12%;
-    --ring: 217 91% 60%;
   }
 }
 
@@ -73,8 +87,10 @@
   }
   body {
     @apply bg-background text-foreground;
-    background-color: #080d19;
   }
+
+  /* ── Remove the hardcoded dark background-color ──
+     This was overriding the CSS variable and locking the page to dark */
 }
 
 /* ── Quiz page surface overrides ── */

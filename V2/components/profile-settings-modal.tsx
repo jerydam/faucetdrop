@@ -333,17 +333,18 @@ export function ProfileSettingsModal() {
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="w-[95%] sm:max-w-[600px] max-h-[90vh] overflow-y-auto rounded-lg">
-        <DialogHeader>
+      <DialogContent className="w-[95%] sm:max-w-[600px] max-h-[90vh] rounded-lg flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>Edit Profile</DialogTitle>
         </DialogHeader>
 
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 pb-2">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6 py-4">
 
             {/* ── Avatar ──────────────────────────────────────────────── */}
             <div className="flex flex-col items-center gap-4 w-full">
@@ -571,13 +572,14 @@ export function ProfileSettingsModal() {
 
           </div>
         )}
-
-        <div className="sticky bottom-0 bg-background pt-2 pb-4">
-          <Button onClick={handleSave} disabled={saving || loading || !!usernameError} className="w-full">
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            {saving ? "Saving…" : "Save Profile"}
-          </Button>
         </div>
+
+        <div className="shrink-0 px-6 pt-2 pb-6 border-t bg-background">
+    <Button onClick={handleSave} disabled={saving || loading || !!usernameError} className="w-full">
+      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+      {saving ? "Saving…" : "Save Profile"}
+    </Button>
+  </div>
       </DialogContent>
     </Dialog>
   )

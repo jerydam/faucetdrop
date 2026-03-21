@@ -2554,40 +2554,52 @@ if (phase === "lobby") {
     <div className="min-h-screen bg-surface-base flex flex-col">
 
       {/* ── Top bar ── */}
-      <div className="sticky top-0 z-20  bg-surface-header backdrop-blur-md border-b border-surface shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0">
-              <p className="text-surface-secondary text-[10px] font-bold uppercase tracking-widest leading-none">Quiz Code</p>
-              <p className="text-2xl sm:text-3xl font-black tracking-[0.15em] text-surface-primary leading-tight">{code}</p>
-            </div>
-            <div className="hidden sm:block w-px h-8 bg-white/10" />
-            <div className="hidden sm:block min-w-0">
-              <p className="text-surface-primary font-bold text-sm truncate">{quizMeta?.title}</p>
-              <p className="text-surface-muted  text-xs">{quizMeta?.totalQuestions} questions</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Live player count pill */}
-            <div className="flex items-center gap-1.5 bg-indigo-500/15 border border-indigo-500/20 rounded-full px-3 py-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-indigo-700 dark:text-indigo-200 text-xs font-bold">{players.length} in lobby</span>        
-                  </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-surface text-surface-secondary hover:text-surface-primary hover:bg-white/10 bg-transparent h-8 px-3"
-              onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
-                toast.success("Link copied!");
-              }}
-            >
-              <Share2 className="h-3.5 w-3.5 sm:mr-1.5" />
-              <span className="hidden sm:inline text-xs">Invite</span>
-            </Button>
-          </div>
-        </div>
+      {/* ── Top bar ── */}
+<div className="sticky top-0 z-20 bg-surface-header backdrop-blur-md border-b border-surface shadow-sm">
+  <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+    <div className="flex items-center gap-3 min-w-0">
+
+      {/* ✅ Back button */}
+      <button
+        onClick={() => router.push("/quiz")}
+        className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg hover:bg-surface-card-2 text-surface-secondary hover:text-surface-primary transition-all"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
+
+      <div className="hidden sm:block w-px h-8 bg-surface shrink-0" />
+
+      <div className="shrink-0">
+        <p className="text-surface-secondary text-[10px] font-bold uppercase tracking-widest leading-none">Quiz Code</p>
+        <p className="text-2xl sm:text-3xl font-black tracking-[0.15em] text-surface-primary leading-tight">{code}</p>
       </div>
+      <div className="hidden sm:block w-px h-8 bg-surface shrink-0" />
+      <div className="hidden sm:block min-w-0">
+        <p className="text-surface-primary font-bold text-sm truncate">{quizMeta?.title}</p>
+        <p className="text-surface-muted text-xs">{quizMeta?.totalQuestions} questions</p>
+      </div>
+    </div>
+
+    <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 bg-indigo-500/15 border border-indigo-500/20 rounded-full px-3 py-1.5">
+        <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+        <span className="text-indigo-700 dark:text-indigo-200 text-xs font-bold">{players.length} in lobby</span>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        className="border-surface text-surface-secondary hover:text-surface-primary hover:bg-surface-card-2 bg-transparent h-8 px-3"
+        onClick={() => {
+          navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
+          toast.success("Link copied!");
+        }}
+      >
+        <Share2 className="h-3.5 w-3.5 sm:mr-1.5" />
+        <span className="hidden sm:inline text-xs">Invite</span>
+      </Button>
+    </div>
+  </div>
+</div>
 
       {/* ── MAIN BODY ── */}
       <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 pb-32">

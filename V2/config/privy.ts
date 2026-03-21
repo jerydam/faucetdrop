@@ -17,7 +17,6 @@ export const privyConfig = {
   appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID || '',
   config: {
     appearance: {
-      theme: 'system' as const, 
       accentColor: '#3b82f6',
       logo: 'https://FaucetDrops.io/favicon.png',
       landingHeader: 'Join FaucetDrops',

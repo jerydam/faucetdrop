@@ -628,10 +628,10 @@ useEffect(() => {
   if (showFullResults) {
     if (loadingInitialResults && !resultsData) {
       return (
-        <div className="fixed inset-0 bg-[#080d19] flex items-center justify-center">
+        <div className="fixed inset-0 bg-surface-base flex items-center justify-center">
           <div className="text-center space-y-3">
             <Loader2 className="h-10 w-10 animate-spin text-indigo-500 mx-auto" />
-            <p className="text-blue-200/60 text-sm">Loading results...</p>
+            <p className="text-surface-secondary text-sm">Loading results...</p>
           </div>
         </div>
       );
@@ -650,7 +650,7 @@ useEffect(() => {
     };
 
     return (
-     <div className="fixed inset-0 bg-[#080d19] flex flex-col overflow-auto">
+     <div className="fixed inset-0 bg-surface-base flex flex-col overflow-auto">
         <Confetti active={showConfetti} />
         {/* Profile Modal */}
 {viewingProfile && (
@@ -660,13 +660,13 @@ useEffect(() => {
   >
     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
     <div
-      className="relative w-full max-w-sm bg-[#0d1526] border border-blue-900/30 rounded-3xl p-6 shadow-2xl space-y-4"
+      className="relative w-full max-w-sm bg-surface-card border border-surface rounded-3xl p-6 shadow-2xl space-y-4"
       onClick={e => e.stopPropagation()}
     >
       {/* Close */}
       <button
         onClick={() => setViewingProfile(null)}
-        className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all"
+        className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-surface-primary transition-all"
       >
         <X className="h-4 w-4" />
       </button>
@@ -680,7 +680,7 @@ useEffect(() => {
           </AvatarFallback>
         </Avatar>
         <div className="text-center">
-          <p className="text-white font-black text-xl">{viewingProfile.username}</p>
+          <p className="text-surface-primary font-black text-xl">{viewingProfile.username}</p>
           <p className="text-blue-300/50 text-xs font-mono mt-1">
             {viewingProfile.walletAddress.slice(0, 6)}...{viewingProfile.walletAddress.slice(-4)}
           </p>
@@ -691,7 +691,7 @@ useEffect(() => {
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white/5 rounded-2xl px-4 py-3 text-center">
           <p className="text-blue-300/50 text-xs font-bold uppercase tracking-widest">Rank</p>
-          <p className="text-white font-black text-2xl mt-1">
+          <p className="text-surface-primary font-black text-2xl mt-1">
             {viewingProfile.rank <= 3
               ? ["🥇","🥈","🥉"][viewingProfile.rank - 1]
               : `#${viewingProfile.rank}`}
@@ -699,7 +699,7 @@ useEffect(() => {
         </div>
         <div className="bg-white/5 rounded-2xl px-4 py-3 text-center">
           <p className="text-blue-300/50 text-xs font-bold uppercase tracking-widest">Points</p>
-          <p className="text-white font-black text-2xl mt-1">{viewingProfile.points}</p>
+          <p className="text-surface-primary font-black text-2xl mt-1">{viewingProfile.points}</p>
         </div>
       </div>
 
@@ -709,7 +709,7 @@ useEffect(() => {
           router.push(`/dashboard/${viewingProfile.username}`);
           setViewingProfile(null);
         }}
-        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all active:scale-95"
+        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-surface-primary font-bold text-sm transition-all active:scale-95"
       >
         View Full Profile
       </button>
@@ -720,7 +720,7 @@ useEffect(() => {
           <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
             <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
               {[...Array(4)].map((_, i) => (
-                <span key={i} className="text-white text-xs font-bold flex items-center gap-2 px-12">
+                <span key={i} className="text-surface-primary text-xs font-bold flex items-center gap-2 px-12">
                   <Clock className="h-3 w-3 shrink-0" />
                   {onChainStatus?.claimed || claimedTx
                     ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
@@ -732,19 +732,19 @@ useEffect(() => {
             <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
           </div>
         )}
-        <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-blue-900/20 shadow-sm">
+        <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-surface shadow-sm">
          <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
             {leaderboard.length > 0 ? (
-              <button onClick={() => setShowFullResults(false)} className="flex items-center gap-2 text-blue-200/60 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors">
+              <button onClick={() => setShowFullResults(false)} className="flex items-center gap-2 text-surface-secondary hover:text-slate-900 dark:hover:text-surface-primary text-sm font-bold transition-colors">
                 <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Game Summary</span>
               </button>
             ) : (
-              <button onClick={() => router.push("/quiz")} className="flex items-center gap-2 text-blue-200/60 hover:text-slate-900 dark:hover:text-white text-sm font-bold transition-colors">
+              <button onClick={() => router.push("/quiz")} className="flex items-center gap-2 text-surface-secondary hover:text-slate-900 dark:hover:text-surface-primary text-sm font-bold transition-colors">
                 <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Quiz Hub</span>
               </button>
             )}
             <div className="flex items-center gap-2">
-              <Badge className="bg-[#111827] text-blue-200/60 border-0 font-mono text-xs">{code}</Badge>
+              <Badge className="bg-surface-card-2text-surface-secondary border-0 font-mono text-xs">{code}</Badge>
               <Badge className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-0 text-xs">Ended</Badge>
             </div>
           </div>
@@ -753,20 +753,20 @@ useEffect(() => {
         <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6 pb-20">
           <div className="text-center space-y-2">
             {rQuiz?.coverImageUrl ? (
-              <div className="relative w-full max-w-md mx-auto aspect-video rounded-2xl overflow-hidden shadow-lg border border-blue-900/20 mb-4">
+              <div className="relative w-full max-w-md mx-auto aspect-video rounded-2xl overflow-hidden shadow-lg border border-surface mb-4">
                 <img src={rQuiz.coverImageUrl} alt={rQuiz.title} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3">
-                  <h1 className="text-white font-black text-lg sm:text-2xl text-left drop-shadow">{rQuiz.title}</h1>
+                  <h1 className="text-surface-primary font-black text-lg sm:text-2xl text-left drop-shadow">{rQuiz.title}</h1>
                 </div>
               </div>
             ) : (
               <>
                 <div className="text-4xl sm:text-6xl mb-2">🏆</div>
-                <h1 className="text-2xl sm:text-3xl font-black text-white">{rQuiz?.title || quizMeta?.title}</h1>
+            <h1 className="text-2xl sm:text-3xl font-black text-surface-primary">{rQuiz?.title || quizMeta?.title}</h1>
               </>
             )}
-            <div className="flex items-center justify-center gap-3 flex-wrap text-blue-200/60 text-sm">
+            <div className="flex items-center justify-center gap-3 flex-wrap text-surface-secondary text-sm">
               <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{totalPlayers} players</span>
               <span className="text-slate-300 dark:text-slate-700">•</span>
               <span className="flex items-center gap-1.5"><Trophy className="h-3.5 w-3.5" />{rQuiz?.totalQuestions} questions</span>
@@ -810,7 +810,7 @@ useEffect(() => {
         ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30"
         : myEntry.rank <= 3
           ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30"
-          : "bg-[#0d1526] border-blue-900/20"
+          : "bg-surface-card border border-surface"
     )}>
       {/* Rank icon */}
       <div className={cn(
@@ -824,7 +824,8 @@ useEffect(() => {
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="font-black text-white">Your Result</p>
+        <p className="font-black text-surface-primary">Your Result</p>
+
         <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
       </div>
 
@@ -832,7 +833,7 @@ useEffect(() => {
       <div className="text-right shrink-0 space-y-1.5">
         {/* Still loading chain */}
         {checkingChain && !onChainStatus && (
-          <Badge className="bg-[#111827] text-slate-400 border-0 gap-1 flex items-center">
+          <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
             <Loader2 className="h-3 w-3 animate-spin" /> Checking chain…
           </Badge>
         )}
@@ -858,7 +859,7 @@ useEffect(() => {
                             Claim Reward
                           </Button>
                           {countdownDisplay && (
-                            <p className="text-blue-300/40 text-[10px] flex items-center justify-end gap-1 mt-0.5">
+                            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
                               <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
                             </p>
                           )}
@@ -868,7 +869,7 @@ useEffect(() => {
                   Claim window not open
                 </Badge>
               ) : (
-                <Badge className="bg-[#111827] text-slate-500 border-0 text-xs">
+                <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
                   Not eligible
                 </Badge>
               )
@@ -922,7 +923,7 @@ useEffect(() => {
           {/* Podium */}
           {fullTop3.length > 0 && (
             <div>
-              <p className="text-blue-300/40 text-xs font-bold uppercase tracking-widest text-center mb-4">Top 3</p>
+              <p className="text-surface-muted text-xs font-bold uppercase tracking-widest text-center mb-4">Top 3</p>
               <div className="flex items-end justify-center gap-2 sm:gap-4">
                 {fullTop3[1] && (
                   <div className="flex flex-col items-center gap-1.5 sm:gap-2">
@@ -931,8 +932,8 @@ useEffect(() => {
                       <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-sm">{fullTop3[1].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="text-center">
-                      <p className="text-white text-xs font-bold truncate max-w-[70px] sm:max-w-[90px]">{fullTop3[1].username}</p>
-                      <p className="text-blue-200/60 font-black text-xs sm:text-sm">{fullTop3[1].points} pts</p>
+                      <p className="text-surface-primary text-xs font-bold truncate max-w-[70px] sm:max-w-[90px]">{fullTop3[1].username}</p>
+                      <p className="text-surface-secondary font-black text-xs sm:text-sm">{fullTop3[1].points} pts</p>
                     </div>
                     <div className="bg-slate-300 dark:bg-slate-700 w-16 sm:w-28 h-20 sm:h-32 rounded-t-xl flex items-center justify-center text-2xl sm:text-4xl">🥈</div>
                   </div>
@@ -945,7 +946,7 @@ useEffect(() => {
                       <AvatarFallback className="bg-yellow-100 dark:bg-yellow-900/30 font-bold text-lg text-yellow-800 dark:text-yellow-300">{fullTop3[0].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="text-center">
-                      <p className="text-white text-sm font-black truncate max-w-[90px] sm:max-w-[120px]">{fullTop3[0].username}</p>
+                      <p className="text-surface-primary text-sm font-black truncate max-w-[90px] sm:max-w-[120px]">{fullTop3[0].username}</p>
                       <p className="text-yellow-600 dark:text-yellow-400 font-black text-base sm:text-xl">{fullTop3[0].points} pts</p>
                     </div>
                     <div className="bg-yellow-400 dark:bg-yellow-600 w-20 sm:w-36 h-28 sm:h-44 rounded-t-xl flex items-center justify-center text-3xl sm:text-5xl">🥇</div>
@@ -958,7 +959,7 @@ useEffect(() => {
                       <AvatarFallback className="bg-amber-100 dark:bg-amber-900/30 font-bold text-xs text-amber-800 dark:text-amber-300">{fullTop3[2].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="text-center">
-                      <p className="text-white text-xs font-bold truncate max-w-[60px] sm:max-w-[90px]">{fullTop3[2].username}</p>
+                      <p className="text-surface-primary text-xs font-bold truncate max-w-[60px] sm:max-w-[90px]">{fullTop3[2].username}</p>
                       <p className="text-amber-700 dark:text-amber-500 font-black text-xs sm:text-sm">{fullTop3[2].points} pts</p>
                     </div>
                     <div className="bg-amber-600 dark:bg-amber-800 w-14 sm:w-24 h-16 sm:h-24 rounded-t-xl flex items-center justify-center text-2xl sm:text-3xl">🥉</div>
@@ -969,14 +970,14 @@ useEffect(() => {
           )}
 
           {/* Full standings */}
-          <div className="bg-[#0d1526] rounded-2xl overflow-hidden border border-blue-900/20 shadow-sm">
+          <div className="bg-surface-card rounded-2xl overflow-hidden border border-surface shadow-sm">
             <div className="px-4 sm:px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h2 className="text-slate-800 dark:text-white font-bold text-sm flex items-center gap-2">
+              <h2 className="text-slate-800 dark:text-surface-primary font-bold text-sm flex items-center gap-2">
                 <Trophy className="h-4 w-4 text-yellow-500" /> Final Standings
               </h2>
-              <span className="text-blue-300/40 text-xs">{totalPlayers} players</span>
+              <span className="text-surface-muted text-xs">{totalPlayers} players</span>
             </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-slate-100 dark:divide-border">
               {fullLb.map((entry: any) => {
                 const isMe = entry.walletAddress?.toLowerCase() === myWallet;
                 const payout = fullPayouts?.[entry.walletAddress?.toLowerCase()];
@@ -992,8 +993,8 @@ useEffect(() => {
                       rank: entry.rank,
                     })}
                     className={cn(
-                      "flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-blue-900/10 transition-colors",
-                      isMe && "bg-indigo-950/20",
+                      "flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors",
+                      isMe && "bg-indigo-50 dark:bg-indigo-950/30",
                       isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
                     )}>                    <div className={cn("w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0", entry.rank === 1 ? "bg-yellow-400 text-yellow-900" : entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" : entry.rank === 3 ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400")}>
                       {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : `#${entry.rank}`}
@@ -1004,10 +1005,10 @@ useEffect(() => {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-white font-bold text-xs sm:text-sm truncate">{entry.username}</span>
-                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
+                        <span className="text-surface-primary font-bold text-xs sm:text-sm truncate">{entry.username}</span>
+                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-surface-primary border-0 shrink-0">YOU</Badge>}
                         {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 border-0 shrink-0">🏆</Badge>}
-                        {(entry.streak > 1) && <Badge className="text-[9px] h-4 px-1 bg-orange-500 text-white border-0 shrink-0">🔥{entry.streak}</Badge>}
+                        {(entry.streak > 1) && <Badge className="text-[9px] h-4 px-1 bg-orange-500 text-surface-primary border-0 shrink-0">🔥{entry.streak}</Badge>}
                       </div>
                       {isWinner && payout.amount > 0 && (
                         <p className="text-yellow-600 dark:text-yellow-400 text-xs font-bold mt-0.5 flex items-center gap-1.5">
@@ -1019,8 +1020,8 @@ useEffect(() => {
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-white font-black text-sm sm:text-lg leading-tight">{entry.points}</p>
-                      <p className="text-blue-300/40 text-xs">pts</p>
+                      <p className="text-surface-primary font-black text-sm sm:text-lg leading-tight">{entry.points}</p>
+                      <p className="text-surface-muted text-xs">pts</p>
                     </div>
                   </div>
                 );
@@ -1030,11 +1031,11 @@ useEffect(() => {
 
           <div className="flex flex-col sm:flex-row gap-3">
             {leaderboard.length > 0 && (
-              <Button variant="outline" className="flex-1 h-12 bg-[#0d1526] border-blue-900/20 text-white" onClick={() => setShowFullResults(false)}>
+              <Button variant="outline" className="flex-1 h-12 bg-surface-card border border-surface text-surface-primary" onClick={() => setShowFullResults(false)}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Game Summary
               </Button>
             )}
-            <Button variant="outline" className="flex-1 h-12 bg-[#0d1526] border-blue-900/20 text-white" onClick={handleShareResults}>
+            <Button variant="outline" className="flex-1 h-12 bg-surface-card border border-surface text-surface-primary" onClick={handleShareResults}>
               <Share2 className="mr-2 h-4 w-4" /> Share
             </Button>
             {isCreator && quizReward && (
@@ -1043,7 +1044,7 @@ useEffect(() => {
                   "flex-1 h-12 font-bold border-0",
                   claimWindowChecked && claimWindowExpired
                     ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-slate-200 dark:bg-slate-800 text-blue-300/40 cursor-not-allowed"
+                    : "bg-slate-200 dark:bg-slate-800 text-surface-muted cursor-not-allowed"
                 )}
                     
                 disabled={!claimWindowChecked || !claimWindowExpired}
@@ -1110,13 +1111,13 @@ useEffect(() => {
 
   // ── Game Over Summary (Live View) ─────
   return (
-    <div className="fixed inset-0 bg-[#080d19] flex flex-col overflow-auto">
+    <div className="fixed inset-0 bg-surface-base flex flex-col overflow-auto">
         <Confetti active={showConfetti} />
         {countdownDisplay && countdownDisplay !== "Expired" && (
           <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
             <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
               {[...Array(4)].map((_, i) => (
-                <span key={i} className="text-white text-xs font-bold flex items-center gap-2 px-12">
+                <span key={i} className="text-surface-primary text-xs font-bold flex items-center gap-2 px-12">
                   <Clock className="h-3 w-3 shrink-0" />
                   {onChainStatus?.claimed || claimedTx
                     ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
@@ -1132,8 +1133,8 @@ useEffect(() => {
 
         <div className="text-center space-y-2">
           <div className="text-5xl sm:text-7xl drop-shadow-md mb-3">🏆</div>
-          <h1 className="text-3xl sm:text-5xl font-black text-white">Quiz Complete!</h1>
-          <p className="text-blue-200/60 text-sm sm:text-base font-medium">{quizMeta?.title}</p>
+          <h1 className="text-3xl sm:text-5xl font-black text-surface-primary">Quiz Complete!</h1>
+          <p className="text-surface-secondary text-sm sm:text-base font-medium">{quizMeta?.title}</p>
         </div>
 
         {/* 🚀 My Result Card (With Claim Button) */}
@@ -1146,7 +1147,7 @@ useEffect(() => {
               "max-w-xl mx-auto w-full rounded-2xl p-4 border flex items-center gap-4 shadow-sm",
               myEntry.rank === 1 ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30" : 
               myEntry.rank <= 3 ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30" : 
-              "bg-[#0d1526] border-blue-900/20"
+              "bg-surface-card border border-surface"
             )}>
               <div className={cn(
                 "w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0",
@@ -1158,12 +1159,13 @@ useEffect(() => {
                 {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-black text-white">Your Result</p>
+                <p className="font-black text-surface-primary">Your Result</p>
+
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
               </div>
               <div className="text-right shrink-0 space-y-1.5">
                 {checkingChain && !onChainStatus && (
-                  <Badge className="bg-[#111827] text-slate-400 border-0 gap-1 flex items-center">
+                  <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
                     <Loader2 className="h-3 w-3 animate-spin" /> Checking…
                   </Badge>
                 )}
@@ -1179,7 +1181,7 @@ useEffect(() => {
                         <>
                           <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">✓ Claimed</Badge>
                           {countdownDisplay && (
-                            <p className="text-blue-300/40 text-[10px] flex items-center justify-end gap-1 mt-0.5">
+                            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
                               <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
                             </p>
                           )}
@@ -1191,7 +1193,7 @@ useEffect(() => {
                             Claim Reward
                           </Button>
                           {countdownDisplay && (
-                            <p className="text-blue-300/40 text-[10px] flex items-center justify-end gap-1 mt-0.5">
+                            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
                               <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
                             </p>
                           )}
@@ -1201,7 +1203,7 @@ useEffect(() => {
                           Claim window not open
                         </Badge>
                       ) : (
-                        <Badge className="bg-[#111827] text-slate-500 border-0 text-xs">
+                        <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
                           Not eligible
                         </Badge>
                       )
@@ -1240,8 +1242,8 @@ useEffect(() => {
                   <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-xs sm:text-base">{top3[1].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="text-center">
-                  <p className="text-white text-xs font-bold truncate max-w-[70px] sm:max-w-[100px]">{top3[1].username}</p>
-                  <p className="text-blue-200/60 font-black text-xs sm:text-base">{top3[1].points} pts</p>
+                  <p className="text-surface-primary text-xs font-bold truncate max-w-[70px] sm:max-w-[100px]">{top3[1].username}</p>
+                  <p className="text-surface-secondary font-black text-xs sm:text-base">{top3[1].points} pts</p>
                 </div>
                 <div className="bg-slate-300 dark:bg-slate-700 w-16 sm:w-24 md:w-32 h-20 sm:h-28 md:h-36 rounded-t-xl flex items-center justify-center text-2xl sm:text-3xl md:text-4xl shadow-inner">🥈</div>
               </div>
@@ -1254,7 +1256,7 @@ useEffect(() => {
                   <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-base sm:text-xl">{top3[0].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="text-center">
-                  <p className="text-white text-sm sm:text-base font-black truncate max-w-[90px] sm:max-w-[120px]">{top3[0].username}</p>
+                  <p className="text-surface-primary text-sm sm:text-base font-black truncate max-w-[90px] sm:max-w-[120px]">{top3[0].username}</p>
                   <p className="text-yellow-600 dark:text-yellow-400 font-black text-base sm:text-xl">{top3[0].points} pts</p>
                 </div>
                 <div className="bg-yellow-400 dark:bg-yellow-600 w-20 sm:w-32 md:w-40 h-28 sm:h-40 md:h-48 rounded-t-xl flex items-center justify-center text-3xl sm:text-4xl md:text-5xl shadow-inner">🥇</div>
@@ -1267,7 +1269,7 @@ useEffect(() => {
                   <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-xs">{top3[2].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="text-center">
-                  <p className="text-white text-xs font-bold truncate max-w-[65px] sm:max-w-[100px]">{top3[2].username}</p>
+                  <p className="text-surface-primary text-xs font-bold truncate max-w-[65px] sm:max-w-[100px]">{top3[2].username}</p>
                   <p className="text-amber-700 dark:text-amber-600 font-black text-xs sm:text-base">{top3[2].points} pts</p>
                 </div>
                 <div className="bg-amber-600 dark:bg-amber-800 w-14 sm:w-22 md:w-28 h-16 sm:h-22 md:h-28 rounded-t-xl flex items-center justify-center text-2xl sm:text-3xl md:text-4xl shadow-inner">🥉</div>
@@ -1276,9 +1278,9 @@ useEffect(() => {
           </div>
         )}
 
-        <div className="max-w-2xl mx-auto bg-[#0d1526] rounded-2xl overflow-hidden border border-blue-900/20 shadow-sm">
+        <div className="max-w-2xl mx-auto bg-surface-cardrounded-2xl overflow-hidden border border-surface shadow-sm">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
-            <span className="text-blue-200/60 text-xs font-bold uppercase tracking-widest flex items-center gap-1.5">
+            <span className="text-surface-secondary text-xs font-bold uppercase tracking-widest flex items-center gap-1.5">
               <Trophy className="h-3.5 w-3.5 text-yellow-500" /> Final Standings
             </span>
             {isCreator && <span className="text-indigo-500 font-mono text-xs">HOST VIEW</span>}
@@ -1286,7 +1288,7 @@ useEffect(() => {
           {loadingPayouts ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
           ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            <div className="divide-y divide-slate-100 dark:divide-border">
               {leaderboard.map((entry: any) => {
                 const isMe = entry.walletAddress.toLowerCase() === myWallet.toLowerCase();
                 const payout = payoutByWallet[entry.walletAddress.toLowerCase()];
@@ -1302,8 +1304,8 @@ useEffect(() => {
                       rank: entry.rank,
                     })}
                     className={cn(
-                      "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 cursor-pointer hover:bg-blue-900/10 transition-colors",
-                      isMe && "bg-indigo-950/20",
+                      "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors",
+                      isMe && "bg-indigo-50 dark:bg-indigo-950/30",
                       isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
                     )}>
                     <div className={cn(
@@ -1321,13 +1323,13 @@ useEffect(() => {
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-white font-bold text-xs sm:text-sm truncate">{entry.username}</span>
-                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
+                        <span className="text-surface-primary font-bold text-xs sm:text-sm truncate">{entry.username}</span>
+                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-surface-primary border-0 shrink-0">YOU</Badge>}
                         {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 border-0 shrink-0">🏆</Badge>}
                       </div>
                     </div>
                     <div className="text-right shrink-0 space-y-1">
-                      <div className="text-white font-black text-sm sm:text-base">{entry.points} pts</div>
+                      <div className="text-surface-primary font-black text-sm sm:text-base">{entry.points} pts</div>
                     </div>
                   </div>
                 );
@@ -1338,19 +1340,19 @@ useEffect(() => {
 
         <div className="max-w-2xl mx-auto space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Button className="h-12 font-bold bg-[#072474] hover:bg-indigo-700 text-white border-0" onClick={fetchResults} disabled={loadingResults}>
+            <Button className="h-12 font-bold bg-[#072474] hover:bg-indigo-700 text-surface-primary border-0" onClick={fetchResults} disabled={loadingResults}>
               {loadingResults ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</> : <><Trophy className="mr-2 h-4 w-4" />View Full Results</>}
             </Button>
-            <Button variant="outline" className="h-12 bg-[#0d1526] border-blue-900/20 text-white" onClick={handleShareResults}>
+            <Button variant="outline" className="h-12 bg-surface-cardborder-surface text-white" onClick={handleShareResults}>
               <Share2 className="mr-2 h-4 w-4" /> Share
             </Button>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" className="flex-1 h-12 bg-[#0d1526] border-blue-900/20 text-white" onClick={() => router.push("/quiz")}>
+            <Button variant="outline" className="flex-1 h-12 bg-surface-card border border-surface text-surface-primary" onClick={() => router.push("/quiz")}>
               <Home className="mr-2 h-4 w-4" /> Back to Hub
             </Button>
             {isCreator && (
-              <Button className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold border-0" onClick={() => router.push("/quiz/create-quiz")}>
+              <Button className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-surface-primary dark:text-slate-900 font-bold border-0" onClick={() => router.push("/quiz/create-quiz")}>
                 <Plus className="mr-2 h-4 w-4" /> New Quiz
               </Button>
             )}
@@ -1360,7 +1362,7 @@ useEffect(() => {
                   "flex-1 h-12 font-bold border-0",
                   onChainStatus && onChainStatus.timeRemaining === 0
                     ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-slate-200 dark:bg-slate-800 text-blue-300/40 cursor-not-allowed"
+                    : "bg-slate-200 dark:bg-slate-800 text-surface-muted cursor-not-allowed"
                 )}
                 disabled={!claimWindowChecked || !claimWindowExpired}
                 onClick={async () => {
@@ -1518,8 +1520,8 @@ export function FundRewardButton({
             className={[
               "w-full h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all",
               isFunding
-                ? "bg-indigo-400 dark:bg-indigo-700 text-white cursor-wait"
-                : "bg-[#072474] hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-md shadow-indigo-500/20",
+                ? "bg-indigo-400 dark:bg-indigo-700 text-surface-primary cursor-wait"
+                : "bg-[#072474] hover:bg-indigo-500 active:bg-indigo-700 text-surface-primary shadow-md shadow-indigo-500/20",
             ].join(" ")}
           >
             {isFunding ? (
@@ -1548,8 +1550,8 @@ export function FundRewardButton({
 
       {/* Contract address */}
       <div className="flex items-center gap-2 px-1">
-        <p className="text-[10px] text-blue-300/40 font-medium">Contract:</p>
-        <p className="text-[10px] font-mono text-blue-200/60 truncate flex-1">
+        <p className="text-[10px] text-surface-muted font-medium">Contract:</p>
+        <p className="text-[10px] font-mono text-surface-secondary truncate flex-1">
           {quizReward.contractAddress}
         </p>
       </div>
@@ -1620,8 +1622,8 @@ function FloatingChat({
         </svg>
         {/* Unread badge */}
         {unread > 0 && (
-          <div className="absolute -top-1 -right-1 min-w-[20px] h-5 rounded-full bg-red-500 border-2 border-[#080d19] flex items-center justify-center px-1">
-            <span className="text-white text-[10px] font-black leading-none">{unread > 9 ? "9+" : unread}</span>
+          <div className="absolute -top-1 -right-1 min-w-[20px] h-5 rounded-full bg-red-500 border-2 border-surface-base flex items-center justify-center px-1">      
+                <span className="text-surface-primary text-[10px] font-black leading-none">{unread > 9 ? "9+" : unread}</span>
           </div>
         )}
         {/* Pulse ring when new message */}
@@ -1651,19 +1653,19 @@ function FloatingChat({
       )}
         style={{ height: "min(520px, 80vh)", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}
       >
-        <div className="flex flex-col h-full bg-[#0d1526] border border-blue-900/30 sm:rounded-2xl overflow-hidden">
+        <div className="flex flex-col h-full bg-surface-card border border-surface sm:rounded-2xl overflow-hidden">
 
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-[#111827] shrink-0">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-surface bg-surface-card-2shrink-0">
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             <div className="flex-1 min-w-0">
-              <p className="text-white font-bold text-sm">Lobby Chat</p>
-              <p className="text-white/25 text-[10px]">{playerCount} players in room</p>
+              <p className="text-surface-primary font-bold text-sm">Lobby Chat</p>
+              <p className="text-surface-muted text-[10px]">{playerCount} players in room</p>
             </div>
-            <span className="text-white/20 text-xs bg-white/5 px-2 py-0.5 rounded-full">{messages.length}</span>
+            <span className="text-surface-secondary text-xs bg-white/5 px-2 py-0.5 rounded-full">{messages.length}</span>
             <button
               onClick={() => setOpen(false)}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-white/30 hover:text-white hover:bg-white/10 transition-all ml-1"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-surface-muted  hover:text-surface-primary hover:bg-white/10 transition-all ml-1"
             >
               <X className="h-4 w-4" />
             </button>
@@ -1675,8 +1677,8 @@ function FloatingChat({
               <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
                 <div className="text-4xl">💬</div>
                 <div>
-                  <p className="text-white/30 text-sm font-bold">No messages yet</p>
-                  <p className="text-white/15 text-xs mt-1">Be the first to say something!</p>
+                  <p className="text-surface-muted  text-sm font-bold">No messages yet</p>
+                  <p className="text-surface-muted text-xs mt-1">Be the first to say something!</p>
                 </div>
               </div>
             ) : (
@@ -1700,7 +1702,7 @@ function FloatingChat({
                       {/* Name row */}
                       {showMeta && (
                         <div className={cn("flex items-center gap-1.5 px-1", isMe && "flex-row-reverse")}>
-                          <span className="text-white/35 text-[10px] font-semibold truncate max-w-[100px]">
+                          <span className="text-surface-muted text-[10px] font-semibold truncate max-w-[100px]">
                             {isMe ? "You" : m.username}
                           </span>
                           {m.isHost && (
@@ -1709,15 +1711,14 @@ function FloatingChat({
                         </div>
                       )}
                       {/* Bubble */}
-                      <div className={cn(
+                     <div className={cn(
                         "px-3.5 py-2 rounded-2xl text-sm leading-snug break-words",
                         isMe
                           ? "bg-indigo-600 text-white rounded-br-md"
                           : m.isHost
-                            ? "bg-yellow-500/12 text-yellow-100 border border-yellow-500/15 rounded-bl-md"
-                            : "text-white/90 rounded-bl-md"
+                            ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-100 border border-yellow-500/20 rounded-bl-md"
+                            : "text-surface-primary rounded-bl-md bg-slate-100 dark:bg-white/7"
                       )}
-                        style={(!isMe && !m.isHost) ? { background: "rgba(255,255,255,0.07)" } : undefined}
                       >
                         {m.text}
                       </div>
@@ -1730,13 +1731,13 @@ function FloatingChat({
           </div>
 
           {/* Quick replies */}
-          <div className="px-3 pt-2 border-t border-white/5 shrink-0">
+          <div className="px-3 pt-2 border-t border-surface shrink-0">
             <div className="flex gap-1.5 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
               {PRESET_MESSAGES.map(preset => (
                 <button
                   key={preset}
                   onClick={() => onSendPreset(preset)}
-                  className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-full bg-white/5 hover:bg-indigo-500/20 border border-white/8 hover:border-indigo-500/30 text-white/50 hover:text-white transition-all active:scale-95 whitespace-nowrap"
+                  className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-full bg-surface-card-2 hover:bg-indigo-500/20 border border-surface hover:border-indigo-500/30 text-surface-secondary hover:text-surface-primary transition-all active:scale-95 whitespace-nowrap"
                 >
                   {preset}
                 </button>
@@ -1754,12 +1755,12 @@ function FloatingChat({
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
                 placeholder="Say something..."
                 maxLength={200}
-                className="flex-1 bg-white/5 border border-white/8 rounded-xl px-3.5 py-2.5 text-white text-sm placeholder:text-white/20 outline-none focus:border-indigo-500/40 focus:bg-white/8 transition-all"
+                className="flex-1 bg-white/5 border border-surfacerounded-xl px-3.5 py-2.5 text-surface-primary text-sm placeholder:text-surface-secondary outline-none focus:border-indigo-500/40 focus:bg-white/8 transition-all"
               />
               <button
                 onClick={onSend}
                 disabled={!chatInput.trim()}
-                className="h-10 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/5 disabled:text-white/15 text-white flex items-center justify-center transition-all active:scale-95 shrink-0"
+                className="h-10 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/5 disabled:text-surface-muted text-surface-primary flex items-center justify-center transition-all active:scale-95 shrink-0"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" style={{ transform: "rotate(45deg)" }}>
                   <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
@@ -2427,7 +2428,7 @@ const handleFundReward = async () => {
 
   if (phase === "loading") {
     return (
-      <div className="flex flex-col min-h-screen bg-[#080d19]">
+      <div className="flex flex-col min-h-screen bg-surface-base">
         <Header pageTitle="Quiz" />
         <div className="flex-1 flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-indigo-500" /></div>
       </div>
@@ -2454,16 +2455,18 @@ if (phase === "game_over") {
 }
 // ── Pre-Join Screen ──
 if (!hasJoined && !isCreator && phase === "lobby") return (
-  <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex flex-col items-center justify-center px-4 py-8">
+  // ✅ Keep the dark gradient — this is intentionally a dark branded screen
+  <div className="min-h-screen bg-surface-base flex flex-col items-center justify-center px-4 py-8">
+
     <div className="w-full max-w-sm space-y-6 text-center">
 
       {/* Quiz code pill */}
-      <div className="inline-flex flex-col items-center gap-1 bg-white/10 border border-white/20 rounded-2xl px-8 py-5 shadow-2xl backdrop-blur-sm">
-        <p className="text-white/50 text-xs font-bold uppercase tracking-widest">Quiz Code</p>
-        <div className="text-5xl font-black tracking-[0.15em] text-white drop-shadow">{code}</div>
+      <div className="inline-flex flex-col items-center gap-1 bg-surface-card border border-surface rounded-2xl px-8 py-5 shadow-lg">
+        <p className="text-surface-secondary text-xs font-bold uppercase tracking-widest">Quiz Code</p>
+        <div className="text-5xl font-black tracking-[0.15em] text-surface-primary drop-shadow">{code}</div>
       </div>
 
-      {/* Cover image */}
+      {/* Cover image — no changes needed */}
       {quizMeta?.coverImageUrl && (
         <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-xl border border-white/10">
           <img
@@ -2477,13 +2480,13 @@ if (!hasJoined && !isCreator && phase === "lobby") return (
 
       {/* Meta */}
       <div className="space-y-1">
-        <h2 className="text-2xl font-black text-white leading-tight">{quizMeta?.title}</h2>
-        <p className="text-white/50 text-sm">{quizMeta?.totalQuestions} questions</p>
+        <h2 className="text-2xl font-black text-surface-primary leading-tight">{quizMeta?.title}</h2>
+        <p className="text-surface-secondary text-sm">{quizMeta?.totalQuestions} questions</p>
       </div>
 
       {/* Player count preview */}
       {players.length > 0 && (
-        <div className="flex items-center justify-center gap-2 text-white/40 text-sm">
+        <div className="flex items-center justify-center gap-2 text-surface-secondary text-sm">
           <Users className="h-4 w-4" />
           <span>{players.length} player{players.length !== 1 ? "s" : ""} already joined</span>
         </div>
@@ -2493,7 +2496,8 @@ if (!hasJoined && !isCreator && phase === "lobby") return (
       <div className="space-y-3">
         {!username ? (
           <div className="space-y-2">
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-300 text-sm font-medium flex items-center gap-2">
+            {/* ✅ amber-300 is fine on dark; no change needed */}
+            <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl px-4 py-3 text-amber-700 dark:text-amber-300 text-sm   font-medium flex items-center gap-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
               Connect your profile to join
             </div>
@@ -2501,25 +2505,28 @@ if (!hasJoined && !isCreator && phase === "lobby") return (
           </div>
         ) : (
           <>
-            {/* Player preview */}
-            <div className="flex items-center gap-3 bg-white/10 border border-white/15 rounded-xl px-4 py-3">
-              <Avatar className="h-10 w-10 shrink-0 border-2 border-white/20">
-                <AvatarImage src={avatarUrl || undefined} />
-                <AvatarFallback className="bg-[#072474] text-white font-bold text-sm">
-                  {username?.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-white font-bold text-sm truncate">{username}</p>
-                <p className="text-white/40 text-xs truncate">
-                  {userWalletAddress?.slice(0, 6)}...{userWalletAddress?.slice(-4)}
-                </p>
-              </div>
-              <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
+            {/* Player preview card */}
+            {/* ✅ was: border-white/15 — Tailwind doesn't have /15, use /10 or /20 */}
+            <div className="flex items-center gap-3 bg-surface-card border border-surface rounded-xl px-4 py-3">
+            <Avatar className="h-10 w-10 shrink-0 border-2 border-surface">
+              <AvatarImage src={avatarUrl || undefined} />
+              <AvatarFallback className="bg-indigo-100 dark:bg-[#072474] text-indigo-700 dark:text-white font-bold text-sm">
+                {username?.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-surface-primary font-bold text-sm truncate">{username}</p>
+              <p className="text-surface-secondary text-xs truncate">
+                {userWalletAddress?.slice(0, 6)}...{userWalletAddress?.slice(-4)}
+              </p>
             </div>
+            <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+          </div>
 
+
+            {/* ✅ No changes needed — brand blue button is intentional */}
             <Button
-              className="w-full h-14 text-lg font-bold bg-[#072474] hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-2xl shadow-xl shadow-indigo-900/50 border-0 transition-all active:scale-95"
+              className="w-full h-14 text-lg font-bold bg-[#072474] hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-2xl shadow-xl shadow-indigo-900/20 border-0 transition-all active:scale-95"
               onClick={handleJoin}
               disabled={isJoining}
             >
@@ -2544,32 +2551,32 @@ if (phase === "lobby") {
   const allReady = readyCount === totalCount && totalCount > 0;
 
   return (
-    <div className="min-h-screen bg-[#080d19] flex flex-col">
+    <div className="min-h-screen bg-surface-base flex flex-col">
 
       {/* ── Top bar ── */}
-      <div className="sticky top-0 z-20 bg-[#0d1526]/95 backdrop-blur-md border-b border-blue-900/20 shadow-sm">
+      <div className="sticky top-0 z-20  bg-surface-header backdrop-blur-md border-b border-surface shadow-sm">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="shrink-0">
-              <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest leading-none">Quiz Code</p>
-              <p className="text-2xl sm:text-3xl font-black tracking-[0.15em] text-white leading-tight">{code}</p>
+              <p className="text-surface-secondary text-[10px] font-bold uppercase tracking-widest leading-none">Quiz Code</p>
+              <p className="text-2xl sm:text-3xl font-black tracking-[0.15em] text-surface-primary leading-tight">{code}</p>
             </div>
             <div className="hidden sm:block w-px h-8 bg-white/10" />
             <div className="hidden sm:block min-w-0">
-              <p className="text-white font-bold text-sm truncate">{quizMeta?.title}</p>
-              <p className="text-white/30 text-xs">{quizMeta?.totalQuestions} questions</p>
+              <p className="text-surface-primary font-bold text-sm truncate">{quizMeta?.title}</p>
+              <p className="text-surface-muted  text-xs">{quizMeta?.totalQuestions} questions</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {/* Live player count pill */}
             <div className="flex items-center gap-1.5 bg-indigo-500/15 border border-indigo-500/20 rounded-full px-3 py-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-indigo-200 text-xs font-bold">{players.length} in lobby</span>
-            </div>
+              <span className="text-indigo-700 dark:text-indigo-200 text-xs font-bold">{players.length} in lobby</span>        
+                  </div>
             <Button
               variant="outline"
               size="sm"
-              className="border-white/10 text-white/60 hover:text-white hover:bg-white/10 bg-transparent h-8 px-3"
+              className="border-surface text-surface-secondary hover:text-surface-primary hover:bg-white/10 bg-transparent h-8 px-3"
               onClick={() => {
                 navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
                 toast.success("Link copied!");
@@ -2593,9 +2600,9 @@ if (phase === "lobby") {
             <div className="space-y-4">
               {/* Players header */}
               <div className="flex items-center justify-between">
-                <h2 className="text-white font-black text-lg flex items-center gap-2">
+                <h2 className="text-surface-primary font-black text-lg flex items-center gap-2">
                   <Users className="h-5 w-5 text-indigo-400" /> Players
-                  <span className="text-white/30 font-normal text-base">({players.length})</span>
+                  <span className="text-surface-muted  font-normal text-base">({players.length})</span>
                 </h2>
                 {totalCount > 0 && (
                   <span className={cn(
@@ -2610,14 +2617,14 @@ if (phase === "lobby") {
               </div>
 
               {/* Player grid */}
-              <div className="bg-[#0d1526] border border-blue-900/20 rounded-2xl overflow-hidden">
+              <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
                 {players.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-                      <Users className="h-7 w-7 text-white/20" />
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-surface flex items-center justify-center mb-4">
+                      <Users className="h-7 w-7 text-surface-secondary" />
                     </div>
-                    <p className="text-white/30 text-sm font-medium">No players yet</p>
-                    <p className="text-white/15 text-xs mt-1">Share the code to get started</p>
+                    <p className="text-surface-muted  text-sm font-medium">No players yet</p>
+                    <p className="text-surface-muted text-xs mt-1">Share the code to get started</p>
                   </div>
                 ) : (
                   <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -2632,7 +2639,7 @@ if (phase === "lobby") {
                             ? "border-yellow-500/30 bg-yellow-500/10"
                             : ready
                               ? "border-green-500/20 bg-green-500/8"
-                              : "border-white/8 bg-white/3"
+                              : "border-surfacebg-white/3"
                         )}>
                           {/* Kick button */}
                           {isCreator && !isMe && !isHost && (
@@ -2644,7 +2651,7 @@ if (phase === "lobby") {
                               </button>
                             )}
                           <div className="relative">
-                            <Avatar className="h-12 w-12 border-2 border-white/10">
+                            <Avatar className="h-12 w-12 border-2 border-surface">
                               <AvatarImage src={p.avatarUrl ?? undefined} />
                               <AvatarFallback className={cn(
                                 "font-bold text-sm",
@@ -2654,15 +2661,15 @@ if (phase === "lobby") {
                               </AvatarFallback>
                             </Avatar>
                             <div className={cn(
-                              "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#0d1526]",
+                              "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-base",
                               isHost ? "bg-yellow-400" : ready ? "bg-green-400" : "bg-white/20"
                             )} />
                           </div>
                           <div className="min-w-0 w-full">
-                            <p className="text-white text-xs font-bold truncate">{p.username}</p>
+                            <p className="text-surface-primary text-xs font-bold truncate">{p.username}</p>
                             <p className={cn(
                               "text-[10px] font-semibold mt-0.5",
-                              isHost ? "text-yellow-400" : ready ? "text-green-400" : "text-white/25"
+                              isHost ? "text-yellow-400" : ready ? "text-green-400" : "text-surface-muted"
                             )}>
                               {isHost ? "Host" : ready ? "Ready ✓" : "Waiting..."}
                             </p>
@@ -2679,13 +2686,13 @@ if (phase === "lobby") {
             <div className="space-y-4 lg:sticky lg:top-20 self-start">
               
               {/* Host card */}
-              <div className="bg-[#0d1526] border border-blue-900/20 rounded-2xl overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-900/80 to-blue-900/80 px-5 py-4 flex items-center gap-3 border-b border-blue-900/20">
+              <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-900/80 to-blue-900/80 px-5 py-4 flex items-center gap-3 border-b border-surface">
                   <div className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center">
                     <Crown className="h-5 w-5 text-yellow-400" />
                   </div>
                   <div>
-                    <p className="text-white font-black text-sm">Host Controls</p>
+                    <p className="text-surface-primary font-black text-sm">Host Controls</p>
                     <p className="text-indigo-300/60 text-xs">You control the quiz</p>
                   </div>
                 </div>
@@ -2712,7 +2719,7 @@ if (phase === "lobby") {
                     <div className="flex-1 min-w-0">
                       <p className={cn(
                         "text-sm font-bold",
-                        allReady ? "text-green-400" : totalCount === 0 ? "text-white/30" : "text-amber-400"
+                        allReady ? "text-green-400" : totalCount === 0 ? "text-surface-muted " : "text-amber-400"
                       )}>
                         {totalCount === 0
                           ? "Waiting for players"
@@ -2722,7 +2729,7 @@ if (phase === "lobby") {
                         }
                       </p>
                       {!allReady && totalCount > 0 && (
-                        <p className="text-white/30 text-xs mt-0.5 truncate">
+                        <p className="text-surface-muted  text-xs mt-0.5 truncate">
                           Not ready: {nonCreatorPlayers.filter(p => !p.isReady).map(p => p.username).join(", ")}
                         </p>
                       )}
@@ -2749,7 +2756,7 @@ if (phase === "lobby") {
                           </div>
                         </div>
                         <Button
-                          className="w-full h-11 font-bold bg-indigo-600 hover:bg-indigo-500 text-white border-0 text-sm"
+                          className="w-full h-11 font-bold bg-indigo-600 hover:bg-indigo-500 text-surface-primary border-0 text-sm"
                           onClick={handleFundReward}
                           disabled={isFunding || isFundedCheckLoading}
                         >
@@ -2770,7 +2777,7 @@ if (phase === "lobby") {
                   {/* START button */}
                   {(isFunded || !quizReward) && (
                     <Button
-                      className="w-full h-14 text-base font-black text-white border-0 rounded-xl shadow-lg shadow-indigo-900/40 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      className="w-full h-14 text-base font-black text-surface-primary border-0 rounded-xl shadow-lg shadow-indigo-900/40 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
                       style={{ background: "linear-gradient(135deg, #1e3a8a, #4f46e5)" }}
                       onClick={handleStartQuiz}
                       disabled={isStarting}
@@ -2791,7 +2798,7 @@ if (phase === "lobby") {
                   )}
 
                   {quizReward && (
-                    <p className="text-[10px] font-mono text-white/15 truncate text-center">
+                    <p className="text-[10px] font-mono text-surface-muted truncate text-center">
                       {quizReward.contractAddress}
                     </p>
                   )}
@@ -2806,25 +2813,25 @@ if (phase === "lobby") {
 
             {/* Quiz cover + info hero */}
             {quizMeta?.coverImageUrl ? (
-              <div className="relative w-full max-w-2xl mx-auto aspect-video rounded-2xl overflow-hidden border border-white/10 shadow-xl">
+              <div className="relative w-full max-w-2xl mx-auto aspect-video rounded-2xl overflow-hidden border border-surface shadow-xl">
                 <img src={quizMeta.coverImageUrl} alt={quizMeta.title} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
                 <div className="absolute bottom-4 left-4 right-4">
-                  <h1 className="text-white font-black text-xl sm:text-2xl drop-shadow">{quizMeta.title}</h1>
-                  <p className="text-white/60 text-sm">{quizMeta.totalQuestions} questions</p>
+                  <h1 className="text-surface-primary font-black text-xl sm:text-2xl drop-shadow">{quizMeta.title}</h1>
+                  <p className="text-surface-secondary text-sm">{quizMeta.totalQuestions} questions</p>
                 </div>
               </div>
             ) : (
               <div className="text-center py-4">
-                <h1 className="text-white font-black text-2xl sm:text-3xl">{quizMeta?.title}</h1>
-                <p className="text-white/40 text-sm mt-1">{quizMeta?.totalQuestions} questions</p>
+                <h1 className="text-surface-primary font-black text-2xl sm:text-3xl">{quizMeta?.title}</h1>
+                <p className="text-surface-secondary text-sm mt-1">{quizMeta?.totalQuestions} questions</p>
               </div>
             )}
 
             {/* Players grid */}
-            <div className="bg-[#0d1526] border border-blue-900/20 rounded-2xl overflow-hidden">
-              <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between">
-                <span className="text-white font-bold text-sm flex items-center gap-2">
+            <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-surface flex items-center justify-between">
+                <span className="text-surface-primary font-bold text-sm flex items-center gap-2">
                   <Users className="h-4 w-4 text-indigo-400" /> Players ({players.length})
                 </span>
                 {totalCount > 0 && (
@@ -2846,19 +2853,19 @@ if (phase === "lobby") {
                       <div className="relative">
                         <Avatar className={cn(
                           "h-12 w-12 border-2",
-                          isMe ? "border-indigo-400" : isHost ? "border-yellow-400" : ready ? "border-green-400" : "border-white/10"
+                          isMe ? "border-indigo-400" : isHost ? "border-yellow-400" : ready ? "border-green-400" : "border-surface"
                         )}>
                           <AvatarImage src={p.avatarUrl ?? undefined} />
-                          <AvatarFallback className="bg-white/10 text-white font-bold text-sm">
+                          <AvatarFallback className="bg-white/10 text-surface-primary font-bold text-sm">
                             {p.username?.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div className={cn(
-                          "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#0d1526]",
+                          "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-base",
                           isHost ? "bg-yellow-400" : ready ? "bg-green-400" : "bg-white/20"
                         )} />
                       </div>
-                      <p className="text-white text-[10px] font-bold truncate w-full max-w-[60px]">{p.username}</p>
+                      <p className="text-surface-primary text-[10px] font-bold truncate w-full max-w-[60px]">{p.username}</p>
                       {isHost && <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1 py-px rounded font-bold">HOST</span>}
                       {isMe && !isHost && <span className="text-[8px] bg-indigo-500/20 text-indigo-300 px-1 py-px rounded font-bold">YOU</span>}
                     </div>
@@ -2866,7 +2873,7 @@ if (phase === "lobby") {
                 })}
                 {players.length === 0 && (
                   <div className="col-span-full py-10 text-center">
-                    <p className="text-white/20 text-sm">No players yet</p>
+                    <p className="text-surface-secondary text-sm">No players yet</p>
                   </div>
                 )}
               </div>
@@ -2880,8 +2887,8 @@ if (phase === "lobby") {
                   className={cn(
                     "w-full h-14 rounded-2xl font-black text-base flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg",
                     isReady
-                      ? "bg-green-500 hover:bg-green-400 text-white shadow-green-900/30"
-                      : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/40"
+                      ? "bg-green-500 hover:bg-green-400 text-surface-primary shadow-green-900/30"
+                      : "bg-indigo-600 hover:bg-indigo-500 text-surface-primary shadow-indigo-900/40"
                   )}
                 >
                   {isReady
@@ -2890,7 +2897,7 @@ if (phase === "lobby") {
                   }
                 </button>
                 {isReady && (
-                  <p className="text-center text-white/20 text-xs mt-2 flex items-center justify-center gap-1.5">
+                  <p className="text-center text-surface-secondary text-xs mt-2 flex items-center justify-center gap-1.5">
                     <Loader2 className="h-3 w-3 animate-spin" /> Waiting for host to start...
                   </p>
                 )}
@@ -2921,9 +2928,9 @@ if (phase === "lobby") {
   // Countdown
   if (phase === "countdown") {
     return (
-      <div className="fixed inset-0 bg-[#080d19] flex items-center justify-center select-none z-50">
+      <div className="fixed inset-0 bg-surface-base flex items-center justify-center select-none z-50">
         <div className="text-center space-y-4">
-          <p className="text-blue-200/60 text-xl uppercase tracking-widest font-black">Get ready!</p>
+          <p className="text-surface-secondary text-xl uppercase tracking-widest font-black">Get ready!</p>
           <div key={countdownVal} className="text-[10rem] md:text-[15rem] font-black text-indigo-600 dark:text-indigo-400 leading-none drop-shadow-sm" style={{ animation: "zoomFade 0.9s ease-out forwards" }}>
             {countdownVal}
           </div>
@@ -2937,13 +2944,13 @@ if (phase === "lobby") {
   if ((phase === "question" || phase === "reveal") && currentQ) {
     const isReveal = phase === "reveal";
     return (
-      <div className="fixed inset-0 bg-[#080d19] flex flex-col overflow-hidden select-none z-50">
+      <div className="fixed inset-0 bg-surface-base flex flex-col overflow-hidden select-none z-50">
         {/* Header & Horizontal Timer */}
-        <div className="w-full shrink-0 bg-[#0d1526] border-b border-blue-900/20 shadow-sm">
+        <div className="w-full shrink-0 bg-surface-card border-b border-surface shadow-sm">
           {!isReveal && <LinearTimer seconds={timeLeft} total={currentQ.timeLimit} />}
           {isSpectator && <div className="bg-amber-100 dark:bg-amber-500/10 border-b border-amber-200 dark:border-amber-500 text-amber-800 dark:text-amber-400 py-1.5 px-4 text-center text-xs font-bold uppercase tracking-wider">👁️ Spectator Mode</div>}
           <div className="flex items-center justify-between px-4 sm:px-6 py-3 max-w-5xl mx-auto w-full">
-            <Badge variant="outline" className="bg-[#111827] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 rounded-full font-bold">
+            <Badge variant="outline" className="bg-surface-card-2 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 rounded-full font-bold">
               Q{currentQ.index + 1} / {currentQ.total}
             </Badge>
             <div className="font-black text-slate-800 dark:text-white/80 italic tracking-tighter text-lg truncate max-w-[40%] text-center">{quizMeta?.title}</div>
@@ -2956,7 +2963,7 @@ if (phase === "lobby") {
         {/* Question Area */}
         <div className="flex-1 flex flex-col items-center justify-center px-4 py-6 text-center max-w-5xl mx-auto w-full">
           {/* CLEAN READABLE TEXT */}
-          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white leading-snug">
+          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-surface-primary leading-snug">
             {currentQ.question}
           </h2>
 
@@ -2969,7 +2976,7 @@ if (phase === "lobby") {
               {personalResult.isCorrect ? (
                 <span className="flex items-center gap-2">
                   <Check className="h-7 w-7" /> CORRECT +{personalResult.pointsEarned}
-                  {personalResult.streak > 1 && <span className="ml-2 bg-orange-500 text-white px-2.5 py-0.5 rounded-full text-sm shadow-sm">🔥 {personalResult.streak}</span>}
+                  {personalResult.streak > 1 && <span className="ml-2 bg-orange-500 text-surface-primary px-2.5 py-0.5 rounded-full text-sm shadow-sm">🔥 {personalResult.streak}</span>}
                 </span>
               ) : (
                 <span className="flex items-center gap-2"><X className="h-7 w-7" /> INCORRECT</span>
@@ -2993,7 +3000,7 @@ if (phase === "lobby") {
                 onClick={() => handleSelectAnswer(opt.id)}
                 className={cn(
                   "relative w-full flex items-center justify-between px-6 py-5 sm:py-6 md:py-8 rounded-2xl last:mb-4",
-                  "text-white font-bold text-lg md:text-xl transition-all duration-150",
+                  "text-surface-primary font-bold text-lg md:text-xl transition-all duration-150",
                   "active:scale-[0.98] cursor-pointer shadow-md",
                   style.bg,
 
@@ -3024,15 +3031,15 @@ if (phase === "lobby") {
   // Leaderboard
   if (phase === "leaderboard") {
     return (
-      <div className="fixed inset-0 bg-[#080d19] flex flex-col overflow-hidden z-50">
+      <div className="fixed inset-0 bg-surface-base flex flex-col overflow-hidden z-50">
         <Confetti active={showConfetti} />
         <RankReaction change={myRankChange} />
 
-        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-blue-900/20 bg-[#0d1526] shadow-sm z-10">
-          <h2 className="text-white font-black text-xl flex items-center gap-2">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-surface bg-surface-card shadow-sm z-10">
+          <h2 className="text-surface-primary font-black text-xl flex items-center gap-2">
             <Trophy className="h-5 w-5 text-yellow-500" /> Leaderboard
           </h2>
-          <Badge variant="outline" className="bg-[#111827] text-slate-700 dark:text-slate-300 font-bold border-slate-200 dark:border-slate-700">
+          <Badge variant="outline" className="bg-surface-card-2 text-slate-700 dark:text-slate-300 font-bold border-slate-200 dark:border-slate-700">
             {isLastQuestion ? "Final Results!" : `Q${(currentQ?.index ?? 0) + 1}/${currentQ?.total ?? "?"} done`}
           </Badge>
         </div>
@@ -3045,7 +3052,7 @@ if (phase === "lobby") {
                 key={entry.walletAddress}
                 className={cn(
                   "flex items-center gap-3 sm:gap-4 rounded-2xl px-4 py-3 sm:py-4 transition-all duration-500 animate-in slide-in-from-bottom-4 shadow-sm",
-                  isMe ? "bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-300 dark:border-indigo-500/50 shadow-indigo-100 dark:shadow-none" : "bg-[#0d1526] border border-blue-900/20",
+                  isMe ? "bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-300 dark:border-indigo-500/50 shadow-indigo-100 dark:shadow-none" : "bg-surface-card border border-surface",
                 )}
                 style={{ animationDelay: `${i * 50}ms` }}
               >
@@ -3053,25 +3060,25 @@ if (phase === "lobby") {
                   "w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0",
                   entry.rank === 1 ? "bg-yellow-400 text-yellow-900 dark:bg-yellow-500 dark:text-black shadow-inner" :
                     entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-300 dark:text-black" :
-                      entry.rank === 3 ? "bg-amber-600 text-white dark:bg-amber-600" :
+                      entry.rank === 3 ? "bg-amber-600 text-surface-primary dark:bg-amber-600" :
                         "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                 )}>
                   {entry.rank <= 3 ? ["🥇", "🥈", "🥉"][entry.rank - 1] : entry.rank}
                 </div>
                 <Avatar className="h-10 w-10 sm:h-12 sm:w-12 shrink-0 border border-slate-200 dark:border-slate-700">
                   <AvatarImage src={entry.avatarUrl ?? undefined} />
-                  <AvatarFallback className="bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-white font-bold">{entry.username?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback className="bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-surface-primary font-bold">{entry.username?.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-white font-bold text-base truncate">{entry.username}</span>
-                    {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
-                    {entry.streak > 1 && <Badge className="text-[9px] h-4 px-1.5 bg-orange-500 text-white border-0 shrink-0">🔥{entry.streak}</Badge>}
+                    <span className="text-surface-primary font-bold text-base truncate">{entry.username}</span>
+                    {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-[#072474] text-surface-primary border-0 shrink-0">YOU</Badge>}
+                    {entry.streak > 1 && <Badge className="text-[9px] h-4 px-1.5 bg-orange-500 text-surface-primary border-0 shrink-0">🔥{entry.streak}</Badge>}
                   </div>
                   {entry.pointsThisRound > 0 && <span className="text-green-600 dark:text-green-400 text-xs font-black">+{entry.pointsThisRound} pts</span>}
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-white font-black text-xl">{entry.points}</div>
+                  <div className="text-surface-primary font-black text-xl">{entry.points}</div>
                   <div className="flex items-center justify-end"><RankBadge change={entry.rankChange} /></div>
                 </div>
               </div>
@@ -3079,8 +3086,8 @@ if (phase === "lobby") {
           })}
         </div>
 
-        <div className="bg-[#0d1526] border-t border-blue-900/20 p-4 text-center z-10">
-          <span className="inline-flex items-center gap-2 text-blue-200/60 text-xs font-bold uppercase tracking-widest animate-pulse">
+        <div className="bg-surface-card border-t border-surface p-4 text-center z-10">
+          <span className="inline-flex items-center gap-2 text-surface-secondary text-xs font-bold uppercase tracking-widest animate-pulse">
             {isLastQuestion ? "Finalizing results..." : "Next question coming up..."}
           </span>
         </div>

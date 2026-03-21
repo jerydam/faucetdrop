@@ -7,7 +7,9 @@
     padding-top: env(safe-area-inset-top, 4.5rem);
   }
 
-  /* ── Light theme (default) ── */
+  /* ══════════════════════════════════════
+     LIGHT THEME  (default / :root)
+     ══════════════════════════════════════ */
   :root {
     --background: 0 0% 100%;
     --foreground: 222 47% 8%;
@@ -38,13 +40,28 @@
     --ring: 217 91% 50%;
     --radius: 0.75rem;
 
-    /* Privy modal override */
+    /* ── Semantic surface tokens (used by quiz / lobby / game pages) ── */
+    --surface-base:   255 255 255;      /* page background  */
+    --surface-card:   248 250 252;      /* card / panel bg  */
+    --surface-card-2: 241 245 249;      /* nested card bg   */
+    --surface-header: 248 250 252;      /* sticky header bg */
+    --surface-header-opacity: 0.97;
+    --text-primary:   15 23 42;         /* slate-900         */
+    --text-secondary: 100 116 139;      /* slate-500         */
+    --text-muted:     148 163 184;      /* slate-400         */
+    --border-subtle:  226 232 240;      /* slate-200         */
+
+    /* ── Privy modal ── */
     --privy-color-background: #ffffff !important;
     --privy-color-background-2: #f4f6fb !important;
+    --privy-color-foreground: #0f172a !important;
+    --privy-color-foreground-2: #334155 !important;
     --privy-border-radius: 1rem !important;
   }
 
-  /* ── Dark theme ── */
+  /* ══════════════════════════════════════
+     DARK THEME  (.dark)
+     ══════════════════════════════════════ */
   .dark {
     --background: 222 47% 4%;
     --foreground: 210 40% 96%;
@@ -74,43 +91,100 @@
     --input: 217 33% 12%;
     --ring: 217 91% 60%;
 
-    /* Privy modal override */
+    /* ── Semantic surface tokens (dark) ── */
+    --surface-base:   8 13 25;          /* #080d19            */
+    --surface-card:   13 21 38;         /* #0d1526            */
+    --surface-card-2: 17 24 39;         /* #111827            */
+    --surface-header: 13 21 38;
+    --surface-header-opacity: 0.95;
+    --text-primary:   248 250 252;      /* slate-50           */
+    --text-secondary: 148 163 184;      /* slate-400          */
+    --text-muted:     100 116 139;      /* slate-500          */
+    --border-subtle:  30 41 59;         /* slate-800          */
+
+    /* ── Privy modal ── */
     --privy-color-background: #080d19 !important;
     --privy-color-background-2: #0f1629 !important;
+    --privy-color-foreground: #f8fafc !important;
+    --privy-color-foreground-2: #94a3b8 !important;
     --privy-border-radius: 1rem !important;
   }
 }
 
+/* ══════════════════════════════════════
+   BASE BODY — uses CSS variables, never
+   a hardcoded hex colour
+   ══════════════════════════════════════ */
 @layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
+    /* DO NOT add background-color: #hex here — it overrides the variable */
   }
-
-  /* ── Remove the hardcoded dark background-color ──
-     This was overriding the CSS variable and locking the page to dark */
 }
 
-/* ── Quiz page surface overrides ── */
-.quiz-surface {
-  background-color: #0a1020;
-  border-color: rgba(59, 130, 246, 0.15);
+/* ══════════════════════════════════════
+   SEMANTIC SURFACE UTILITY CLASSES
+   Replace every hardcoded hex in the quiz
+   page with these.
+   ══════════════════════════════════════ */
+
+/* Full-page background */
+.bg-surface-base {
+  background-color: rgb(var(--surface-base));
 }
 
-.quiz-card {
-  background-color: #0d1526;
-  border: 1px solid rgba(59, 130, 246, 0.12);
+/* Card / panel */
+.bg-surface-card {
+  background-color: rgb(var(--surface-card));
 }
 
-.quiz-header {
-  background-color: rgba(8, 13, 25, 0.95);
-  border-bottom: 1px solid rgba(59, 130, 246, 0.15);
+/* Nested card (darker in dark, lighter in light) */
+.bg-surface-card-2 {
+  background-color: rgb(var(--surface-card-2));
+}
+
+/* Sticky headers with blur */
+.bg-surface-header {
+  background-color: rgba(var(--surface-header), var(--surface-header-opacity));
   backdrop-filter: blur(12px);
 }
 
-/* ── Marquee ── */
+/* Borders */
+.border-surface {
+  border-color: rgb(var(--border-subtle));
+}
+
+/* Text helpers */
+.text-surface-primary   { color: rgb(var(--text-primary)); }
+.text-surface-secondary { color: rgb(var(--text-secondary)); }
+.text-surface-muted     { color: rgb(var(--text-muted)); }
+
+/* ══════════════════════════════════════
+   QUIZ PAGE OVERRIDES (theme-aware)
+   These replace the old hardcoded classes.
+   ══════════════════════════════════════ */
+.quiz-surface {
+  background-color: rgb(var(--surface-base));
+  border-color: rgb(var(--border-subtle));
+}
+
+.quiz-card {
+  background-color: rgb(var(--surface-card));
+  border: 1px solid rgb(var(--border-subtle));
+}
+
+.quiz-header {
+  background-color: rgba(var(--surface-header), var(--surface-header-opacity));
+  border-bottom: 1px solid rgb(var(--border-subtle));
+  backdrop-filter: blur(12px);
+}
+
+/* ══════════════════════════════════════
+   MARQUEE ANIMATIONS
+   ══════════════════════════════════════ */
 @keyframes marquee {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }

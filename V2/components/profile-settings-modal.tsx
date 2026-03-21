@@ -80,11 +80,11 @@ export function ProfileSettingsModal() {
   const hasPrefilledRef = useRef(false)
 
   const [formData, setFormData] = useState<UserProfile>({
-    wallet_address: address || "",
-    username: "",
-    bio: "",
-    avatar_url: ""
-  })
+  wallet_address: "",
+  username: "",
+  bio: "",
+  avatar_url: "",
+})
 
   // ── EVM wallet details ─────────────────────────────────────────────────
   const linkedWallets = user?.linkedAccounts.filter((acc) => acc.type === "wallet") || []
@@ -117,31 +117,66 @@ export function ProfileSettingsModal() {
   }, [user])
 
   // ── Data fetching ──────────────────────────────────────────────────────
-  const fetchProfile = useCallback(async () => {
-    if (!address) return
-    setLoading(true)
-    try {
-      const res  = await fetch(`${API_BASE_URL}/api/profile/${address}`)
-      const data = await res.json()
-      setFormData({
-        wallet_address: address || "",
-        username: data.profile?.username  || getFallbackUsername(),
-        bio:      data.profile?.bio       || "",
-        avatar_url: data.profile?.avatar_url || getFallbackAvatar()
-      })
-    } catch {
-      console.error("Failed to fetch profile")
-    } finally {
-      setLoading(false)
-    }
-  }, [address, getFallbackUsername, getFallbackAvatar])
+  const fetchProfile = useCallback(async (signal?: AbortSignal) => {
+  if (!address) return
+  setFormData({ wallet_address: address, username: "", bio: "", avatar_url: "" })
+  setLoading(true)
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/profile/${address}`, { signal })
+    if (signal?.aborted) return  // discard if cancelled
+    const data = await res.json()
+    setFormData({
+      wallet_address: address,
+      username:   data.profile?.username   || getFallbackUsername(),
+      bio:        data.profile?.bio        || "",
+      avatar_url: data.profile?.avatar_url || getFallbackAvatar(),
+    })
+  } catch (err: any) {
+    if (err.name === "AbortError") return  // ignore cancelled requests
+    console.error("Failed to fetch profile")
+  } finally {
+    if (!signal?.aborted) setLoading(false)
+  }
+}, [address, getFallbackUsername, getFallbackAvatar])
 
   useEffect(() => {
-    if (isOpen && address) {
-      fetchProfile()
-      setUsernameError(null)
-    }
-  }, [isOpen, address, fetchProfile])
+  if (isOpen && address) {
+    // Reset prefill guard so new wallet gets its own fallback prefill
+    hasPrefilledRef.current = false
+    fetchProfile()
+    setUsernameError(null)
+  }
+}, [isOpen, address, fetchProfile])
+
+useEffect(() => {
+  if (!isOpen || !address) return
+
+  hasPrefilledRef.current = false
+  setUsernameError(null)
+
+  const controller = new AbortController()
+  fetchProfile(controller.signal)
+  return () => controller.abort()  // cancel if modal closes mid-fetch
+}, [isOpen, address, fetchProfile])
+
+useEffect(() => {
+  if (!address) {
+    setFormData({ wallet_address: "", username: "", bio: "", avatar_url: "" })
+    setUsernameError(null)
+    hasPrefilledRef.current = false
+    return
+  }
+
+  setFormData({ wallet_address: address, username: "", bio: "", avatar_url: "" })
+  setUsernameError(null)
+  hasPrefilledRef.current = false
+
+  if (!isOpen) return
+
+  const controller = new AbortController()
+  fetchProfile(controller.signal)
+  return () => controller.abort()  // cancel if address changes again before fetch completes
+}, [address, isOpen, fetchProfile])  // ✅ fetchProfile now in deps
 
   useEffect(() => {
     if (!isOpen) hasPrefilledRef.current = false

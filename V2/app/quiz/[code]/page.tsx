@@ -9,8 +9,9 @@ import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { QRCodeSVG } from "qrcode.react";
 import {
-  Loader2, Users, Trophy, Crown, Zap, Check, X,
+  Loader2, Users, Trophy, Crown, Zap, Check, X,Copy,
   ArrowUp, ArrowDown, Minus, Home, Share2, Play,
   Plus,
   Clock,
@@ -24,6 +25,7 @@ import { fundQuizReward } from "@/lib/quiz";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { WalletConnectButton } from "@/components/wallet-connect";
+
 // ── On-chain error parser ──────────────────────────────────────
 function parseOnchainError(err: any): string {
   // User rejected the transaction in their wallet
@@ -112,7 +114,7 @@ interface Player {
   rankChange: number;
   streak: number;
   answeredCorrectly: boolean;
-  isReady?: boolean;  // ← add this
+  isReady?: boolean;
 }
 
 interface ChatMessage {
@@ -251,8 +253,8 @@ interface PayoutsData { success: boolean; faucetAddress: string; chainId: number
 function QuizGameOver({
   quizMeta, code, leaderboard, myWallet, isCreator, showConfetti, router,
   initialResults, loadingInitialResults, rewardsReady,
-  quizReward,   // ← add
-        // ← add
+  quizReward,
+  wallets
 }: any) {
   const [payoutsData, setPayoutsData] = useState<PayoutsData | null>(null);
   const { address: userWalletAddress } = useWallet();
@@ -262,11 +264,10 @@ function QuizGameOver({
   const [showFullResults, setShowFullResults] = useState(!!initialResults);
   const [resultsData, setResultsData] = useState<any>(initialResults ?? null);
   const [loadingResults, setLoadingResults] = useState(false);
-  const { wallets } = useWallets();
   
   const activeWallet =
-    wallets.find((w) => w.walletClientType === "privy") ||
-    wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
+    wallets.find((w: any) => w.walletClientType === "privy") ||
+    wallets.find((w: any) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
     wallets?.[0];
 
  const [claimWindowExpired, setClaimWindowExpired] = useState(false);
@@ -396,7 +397,7 @@ useEffect(() => {
 
   fetchBalance();
 }, [claimWindowExpired, quizReward?.contractAddress, quizReward?.chainId]);
-  // 1. Add new state variables at the top of QuizGameOver
+
 const [onChainStatus, setOnChainStatus] = useState<{
   hasReward: boolean;
   claimed: boolean;
@@ -461,7 +462,7 @@ useEffect(() => {
 
   checkOnChain();
   return () => { cancelled = true; };
-}, [quizReward?.contractAddress, wallets?.[0]?.address, myWallet, claimedTx, rewardsReady]);
+}, [quizReward?.contractAddress, wallets, myWallet, claimedTx, rewardsReady]);
 
 const [countdownDisplay, setCountdownDisplay] = useState("");
 const claimWindowEndRef = useRef<number>(0);
@@ -610,10 +611,6 @@ useEffect(() => {
     }
   };
 
-  const handleShareResults = () => {
-    navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}/results`);
-    toast.success("Results link copied!");
-  };
 
   const top3 = leaderboard.slice(0, 3);
   const EXPLORER_BASE: Record<number, string> = {
@@ -630,7 +627,7 @@ useEffect(() => {
       return (
         <div className="fixed inset-0 bg-surface-base flex items-center justify-center">
           <div className="text-center space-y-3">
-            <Loader2 className="h-10 w-10 animate-spin text-indigo-500 mx-auto" />
+            <Loader2 className="h-10 w-10 animate-spin text-[#072474] dark:text-blue-400 mx-auto" />
             <p className="text-surface-secondary text-sm">Loading results...</p>
           </div>
         </div>
@@ -709,7 +706,7 @@ useEffect(() => {
           router.push(`/dashboard/${viewingProfile.username}`);
           setViewingProfile(null);
         }}
-        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-surface-primary font-bold text-sm transition-all active:scale-95"
+        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all active:scale-95"
       >
         View Full Profile
       </button>
@@ -809,7 +806,7 @@ useEffect(() => {
       myEntry.rank === 1
         ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30"
         : myEntry.rank <= 3
-          ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30"
+          ? "bg-blue-50 dark:bg-[#072474]/20 border-blue-200 dark:border-[#072474]/30"
           : "bg-surface-card border border-surface"
     )}>
       {/* Rank icon */}
@@ -818,7 +815,7 @@ useEffect(() => {
         myEntry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
         myEntry.rank === 2 ? "bg-slate-300 text-slate-800" :
         myEntry.rank === 3 ? "bg-amber-600 text-white" :
-        "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400"
+        "bg-blue-100 dark:bg-[#072474]/40 text-[#072474] dark:text-blue-400"
       )}>
         {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
       </div>
@@ -832,14 +829,15 @@ useEffect(() => {
       {/* Reward section — driven by on-chain status */}
       <div className="text-right shrink-0 space-y-1.5">
         {/* Still loading chain */}
-        {checkingChain && !onChainStatus && (
+        {!rewardsReady && quizReward ? (
+          <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
+            <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
+          </Badge>
+        ) : checkingChain && !onChainStatus ? (
           <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
             <Loader2 className="h-3 w-3 animate-spin" /> Checking chain…
           </Badge>
-        )}
-
-        {/* On-chain check done */}
-        {!checkingChain && onChainStatus && (
+        ) : !checkingChain && onChainStatus ? (
           <>
             {hasReward && rewardAmt && (
               <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
@@ -875,10 +873,7 @@ useEffect(() => {
               )
             )}
           </>
-        )}
-
-        {/* Chain check failed / no wallet — fall back to backend data */}
-        {!checkingChain && !onChainStatus && myFullPayout && (
+        ) : rewardsReady && !checkingChain && !onChainStatus && myFullPayout ? (
           <>
             <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
               {myFullPayout.amount} {tokenSymbol}
@@ -903,7 +898,7 @@ useEffect(() => {
               )
             )}
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -994,7 +989,7 @@ useEffect(() => {
                     })}
                     className={cn(
                       "flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors",
-                      isMe && "bg-indigo-50 dark:bg-indigo-950/30",
+                      isMe && "bg-blue-50 dark:bg-[#072474]/30",
                       isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
                     )}>                    <div className={cn("w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0", entry.rank === 1 ? "bg-yellow-400 text-yellow-900" : entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" : entry.rank === 3 ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400")}>
                       {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : `#${entry.rank}`}
@@ -1006,9 +1001,9 @@ useEffect(() => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-surface-primary font-bold text-xs sm:text-sm truncate">{entry.username}</span>
-                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-surface-primary border-0 shrink-0">YOU</Badge>}
+                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
                         {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 border-0 shrink-0">🏆</Badge>}
-                        {(entry.streak > 1) && <Badge className="text-[9px] h-4 px-1 bg-orange-500 text-surface-primary border-0 shrink-0">🔥{entry.streak}</Badge>}
+                        {(entry.streak > 1) && <Badge className="text-[9px] h-4 px-1 bg-orange-500 text-white border-0 shrink-0">🔥{entry.streak}</Badge>}
                       </div>
                       {isWinner && payout.amount > 0 && (
                         <p className="text-yellow-600 dark:text-yellow-400 text-xs font-bold mt-0.5 flex items-center gap-1.5">
@@ -1035,9 +1030,7 @@ useEffect(() => {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Game Summary
               </Button>
             )}
-            <Button variant="outline" className="flex-1 h-12 bg-surface-card border border-surface text-surface-primary" onClick={handleShareResults}>
-              <Share2 className="mr-2 h-4 w-4" /> Share
-            </Button>
+            
             {isCreator && quizReward && (
                <Button
                 className={cn(
@@ -1146,7 +1139,7 @@ useEffect(() => {
             <div className={cn(
               "max-w-xl mx-auto w-full rounded-2xl p-4 border flex items-center gap-4 shadow-sm",
               myEntry.rank === 1 ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30" : 
-              myEntry.rank <= 3 ? "bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-700/30" : 
+              myEntry.rank <= 3 ? "bg-blue-50 dark:bg-[#072474]/20 border-blue-200 dark:border-[#072474]/30" : 
               "bg-surface-card border border-surface"
             )}>
               <div className={cn(
@@ -1154,7 +1147,7 @@ useEffect(() => {
                 myEntry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
                 myEntry.rank === 2 ? "bg-slate-300 text-slate-800" :
                 myEntry.rank === 3 ? "bg-amber-600 text-white" :
-                "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400"
+                "bg-blue-100 dark:bg-[#072474]/40 text-[#072474] dark:text-blue-400"
               )}>
                 {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
               </div>
@@ -1164,12 +1157,15 @@ useEffect(() => {
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
               </div>
               <div className="text-right shrink-0 space-y-1.5">
-                {checkingChain && !onChainStatus && (
+                {!rewardsReady && quizReward ? (
+                  <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
+                  </Badge>
+                ) : checkingChain && !onChainStatus ? (
                   <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
                     <Loader2 className="h-3 w-3 animate-spin" /> Checking…
                   </Badge>
-                )}
-                {!checkingChain && onChainStatus && (
+                ) : !checkingChain && onChainStatus ? (
                   <>
                     {onChainStatus.hasReward && (
                       <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
@@ -1209,7 +1205,7 @@ useEffect(() => {
                       )
                     )}
                   </>
-                )}
+                ) : null}
               </div>
             </div>
           );
@@ -1283,7 +1279,7 @@ useEffect(() => {
             <span className="text-surface-secondary text-xs font-bold uppercase tracking-widest flex items-center gap-1.5">
               <Trophy className="h-3.5 w-3.5 text-yellow-500" /> Final Standings
             </span>
-            {isCreator && <span className="text-indigo-500 font-mono text-xs">HOST VIEW</span>}
+            {isCreator && <span className="text-[#072474] font-mono text-xs">HOST VIEW</span>}
           </div>
           {loadingPayouts ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-slate-400" /></div>
@@ -1305,7 +1301,7 @@ useEffect(() => {
                     })}
                     className={cn(
                       "flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors",
-                      isMe && "bg-indigo-50 dark:bg-indigo-950/30",
+                      isMe && "bg-blue-50 dark:bg-[#072474]/30",
                       isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
                     )}>
                     <div className={cn(
@@ -1324,7 +1320,7 @@ useEffect(() => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-surface-primary font-bold text-xs sm:text-sm truncate">{entry.username}</span>
-                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-surface-primary border-0 shrink-0">YOU</Badge>}
+                        {isMe && <Badge className="text-[9px] h-4 px-1 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
                         {isWinner && <Badge className="text-[9px] h-4 px-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 border-0 shrink-0">🏆</Badge>}
                       </div>
                     </div>
@@ -1340,19 +1336,17 @@ useEffect(() => {
 
         <div className="max-w-2xl mx-auto space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Button className="h-12 font-bold bg-[#072474] hover:bg-indigo-700 text-surface-primary border-0" onClick={fetchResults} disabled={loadingResults}>
+            <Button className="h-12 font-bold bg-[#072474] hover:bg-[#0a32a0] text-white border-0" onClick={fetchResults} disabled={loadingResults}>
               {loadingResults ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</> : <><Trophy className="mr-2 h-4 w-4" />View Full Results</>}
             </Button>
-            <Button variant="outline" className="h-12 bg-surface-cardborder-surface text-white" onClick={handleShareResults}>
-              <Share2 className="mr-2 h-4 w-4" /> Share
-            </Button>
+            
           </div>
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1 h-12 bg-surface-card border border-surface text-surface-primary" onClick={() => router.push("/quiz")}>
               <Home className="mr-2 h-4 w-4" /> Back to Hub
             </Button>
             {isCreator && (
-              <Button className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-surface-primary dark:text-slate-900 font-bold border-0" onClick={() => router.push("/quiz/create-quiz")}>
+              <Button className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold border-0" onClick={() => router.push("/quiz/create-quiz")}>
                 <Plus className="mr-2 h-4 w-4" /> New Quiz
               </Button>
             )}
@@ -1429,6 +1423,7 @@ useEffect(() => {
     </div>
   );
 }
+
 interface FundRewardButtonProps {
   quizReward: {
     contractAddress: string;
@@ -1520,8 +1515,8 @@ export function FundRewardButton({
             className={[
               "w-full h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all",
               isFunding
-                ? "bg-indigo-400 dark:bg-indigo-700 text-surface-primary cursor-wait"
-                : "bg-[#072474] hover:bg-indigo-500 active:bg-indigo-700 text-surface-primary shadow-md shadow-indigo-500/20",
+                ? "bg-blue-400 dark:bg-[#072474] text-white cursor-wait"
+                : "bg-[#072474] hover:bg-[#0a32a0] active:bg-[#05184d] text-white shadow-md shadow-[#072474]/20",
             ].join(" ")}
           >
             {isFunding ? (
@@ -1558,7 +1553,7 @@ export function FundRewardButton({
     </div>
   );
 }
-export { }
+
 function FloatingChat({
   messages,
   chatInput,
@@ -1612,9 +1607,9 @@ function FloatingChat({
         className={cn(
           "fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all active:scale-90",
           open ? "scale-0 opacity-0 pointer-events-none" : "scale-100 opacity-100",
-          "bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/30 shadow-indigo-900/50"
+          "bg-[#072474] hover:bg-[#0a32a0] border border-[#072474]/30 shadow-[#072474]/50"
         )}
-        style={{ boxShadow: "0 8px 32px rgba(79,70,229,0.5)" }}
+        style={{ boxShadow: "0 8px 32px rgba(7,36,116,0.5)" }}
       >
         {/* Chat icon */}
         <svg viewBox="0 0 24 24" className="h-6 w-6 fill-white">
@@ -1623,12 +1618,12 @@ function FloatingChat({
         {/* Unread badge */}
         {unread > 0 && (
           <div className="absolute -top-1 -right-1 min-w-[20px] h-5 rounded-full bg-red-500 border-2 border-surface-base flex items-center justify-center px-1">      
-                <span className="text-surface-primary text-[10px] font-black leading-none">{unread > 9 ? "9+" : unread}</span>
+                <span className="text-white text-[10px] font-black leading-none">{unread > 9 ? "9+" : unread}</span>
           </div>
         )}
         {/* Pulse ring when new message */}
         {unread > 0 && (
-          <div className="absolute inset-0 rounded-full bg-indigo-500 animate-ping opacity-30" />
+          <div className="absolute inset-0 rounded-full bg-[#072474] animate-ping opacity-30" />
         )}
       </button>
 
@@ -1656,7 +1651,7 @@ function FloatingChat({
         <div className="flex flex-col h-full bg-surface-card border border-surface sm:rounded-2xl overflow-hidden">
 
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-surface bg-surface-card-2shrink-0">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-surface bg-surface-card-2 shrink-0">
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             <div className="flex-1 min-w-0">
               <p className="text-surface-primary font-bold text-sm">Lobby Chat</p>
@@ -1665,7 +1660,7 @@ function FloatingChat({
             <span className="text-surface-secondary text-xs bg-white/5 px-2 py-0.5 rounded-full">{messages.length}</span>
             <button
               onClick={() => setOpen(false)}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-surface-muted  hover:text-surface-primary hover:bg-white/10 transition-all ml-1"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-surface-muted hover:text-surface-primary hover:bg-white/10 transition-all ml-1"
             >
               <X className="h-4 w-4" />
             </button>
@@ -1677,7 +1672,7 @@ function FloatingChat({
               <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
                 <div className="text-4xl">💬</div>
                 <div>
-                  <p className="text-surface-muted  text-sm font-bold">No messages yet</p>
+                  <p className="text-surface-muted text-sm font-bold">No messages yet</p>
                   <p className="text-surface-muted text-xs mt-1">Be the first to say something!</p>
                 </div>
               </div>
@@ -1711,13 +1706,13 @@ function FloatingChat({
                         </div>
                       )}
                       {/* Bubble */}
-                     <div className={cn(
+                      <div className={cn(
                         "px-3.5 py-2 rounded-2xl text-sm leading-snug break-words",
                         isMe
-                          ? "bg-indigo-600 text-white rounded-br-md"
+                          ? "bg-[#072474] text-white rounded-br-md"
                           : m.isHost
                             ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-100 border border-yellow-500/20 rounded-bl-md"
-                            : "text-surface-primary rounded-bl-md bg-slate-100 dark:bg-white/7"
+                            : "text-slate-800 dark:text-white rounded-bl-md bg-slate-200 dark:bg-slate-700 border border-transparent dark:border-slate-600"
                       )}
                       >
                         {m.text}
@@ -1737,7 +1732,7 @@ function FloatingChat({
                 <button
                   key={preset}
                   onClick={() => onSendPreset(preset)}
-                  className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-full bg-surface-card-2 hover:bg-indigo-500/20 border border-surface hover:border-indigo-500/30 text-surface-secondary hover:text-surface-primary transition-all active:scale-95 whitespace-nowrap"
+                  className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-full bg-surface-card-2 hover:bg-[#072474]/20 border border-surface hover:border-[#072474]/30 text-surface-secondary hover:text-surface-primary transition-all active:scale-95 whitespace-nowrap"
                 >
                   {preset}
                 </button>
@@ -1755,12 +1750,12 @@ function FloatingChat({
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
                 placeholder="Say something..."
                 maxLength={200}
-                className="flex-1 bg-white/5 border border-surfacerounded-xl px-3.5 py-2.5 text-surface-primary text-sm placeholder:text-surface-secondary outline-none focus:border-indigo-500/40 focus:bg-white/8 transition-all"
+                className="flex-1 bg-white/5 border border-surface rounded-xl px-3.5 py-2.5 text-surface-primary text-sm placeholder:text-surface-secondary outline-none focus:border-[#072474]/40 focus:bg-white/8 transition-all"
               />
               <button
                 onClick={onSend}
                 disabled={!chatInput.trim()}
-                className="h-10 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-white/5 disabled:text-surface-muted text-surface-primary flex items-center justify-center transition-all active:scale-95 shrink-0"
+                className="h-10 w-10 rounded-xl bg-[#072474] hover:bg-[#0a32a0] disabled:bg-white/5 disabled:text-surface-muted text-white flex items-center justify-center transition-all active:scale-95 shrink-0"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" style={{ transform: "rotate(45deg)" }}>
                   <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
@@ -1773,6 +1768,7 @@ function FloatingChat({
     </>
   );
 }
+
 // ═══════════════════════════════════════════════════════════════
 //  Main Component (Phase router)
 // ═══════════════════════════════════════════════════════════════
@@ -1781,12 +1777,13 @@ export default function QuizCodePage() {
   const [loadingInitialResults, setLoadingInitialResults] = useState(false);
   const params = useParams();
   const router = useRouter();
+  const [showShareModal, setShowShareModal] = useState(false);
   const { address: userWalletAddress } = useWallet();
   const { wallets } = useWallets();
-   const activeWallet = 
-  wallets.find((w) => w.walletClientType === 'privy') || 
-  wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) || 
-  wallets?.[0];
+  const activeWallet = 
+    wallets.find((w) => w.walletClientType === 'privy') || 
+    wallets.find((w) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) || 
+    wallets?.[0];
   const code = (params.code as string || "").toUpperCase();
   const sessionKeyRef = useRef<CryptoKey | null>(null);
   const seenMessageIds = useRef<Set<string>>(new Set());
@@ -1816,8 +1813,8 @@ export default function QuizCodePage() {
   const [phase, setPhase] = useState<GamePhase>("loading");
   const [quizMeta, setQuizMeta] = useState<{ title: string; totalQuestions: number; creatorAddress: string; coverImageUrl?: string | null } | null>(null);
   const grossDisplayAmount = quizReward
-  ? (parseFloat(quizReward.poolAmount) * 100 / 95).toFixed(4)
-  : "0";
+    ? (parseFloat(quizReward.poolAmount) * 100 / 95).toFixed(4)
+    : "0";
   const [players, setPlayers] = useState<Player[]>([]);
   const [countdownVal, setCountdownVal] = useState(3);
   const [rewardsReady, setRewardsReady] = useState(false);
@@ -1847,10 +1844,11 @@ export default function QuizCodePage() {
   const [isJoining, setIsJoining] = useState(false);
   const hasSubmittedOnChain = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
-const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
+  const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
   const chainId = activeWallet
     ? parseInt(activeWallet.chainId.split(":")[1] ?? "0")
     : 0;
+
   // ── Load profile ──
   useEffect(() => {
     if (!userWalletAddress) return;
@@ -1861,7 +1859,7 @@ const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWall
   }, [userWalletAddress]);
 
 
-// ── Smart Funding Check & Auto-Heal ──
+  // ── Smart Funding Check & Auto-Heal ──
   useEffect(() => {
     // Only run if the user is the creator, the contract is known, and a wallet is connected
     if (!isCreator || !quizReward?.contractAddress || !wallets[0]) return;
@@ -1924,85 +1922,94 @@ const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWall
       clearInterval(intervalId);
     };
   // Re-run this effect ONLY if the contract address or connected wallet changes
-  }, [isCreator, quizReward?.contractAddress, wallets[0]?.address, code]);
+  }, [isCreator, quizReward?.contractAddress, wallets, code]);
 
   // ── Load quiz meta ──
-useEffect(() => {
-  if (!code) return;
-  fetch(`${API_BASE_URL}/api/quiz/${code}`)
-    .then(r => r.json())
-    .then(async d => {
-      if (d.success) {
-        setQuizMeta({
-          title: d.quiz.title,
-          totalQuestions: d.quiz.totalQuestions,
-          creatorAddress: d.quiz.creatorAddress,
-          coverImageUrl: d.quiz.coverImageUrl ?? null,
-        });
-        if (d.quiz.reward?.isOnChain && d.quiz.reward?.contractAddress) {
-          setQuizReward({
-            contractAddress: d.quiz.reward.contractAddress,
-            tokenAddress: d.quiz.reward.tokenAddress,
-            tokenSymbol: d.quiz.reward.tokenSymbol,
-            tokenDecimals: d.quiz.reward.tokenDecimals,
-            tokenLogoUrl: d.quiz.reward.tokenLogoUrl,
-            isNativeToken: d.quiz.reward.isNativeToken ?? false,
-            poolAmount: String(d.quiz.reward.poolAmount),
-            isFunded: d.quiz.reward.isFunded ?? false,
-            chainId: d.quiz.chainId ?? d.quiz.reward.chainId,
+  useEffect(() => {
+    if (!code) return;
+    fetch(`${API_BASE_URL}/api/quiz/${code}`)
+      .then(r => r.json())
+      .then(async d => {
+        if (d.success) {
+          setQuizMeta({
+            title: d.quiz.title,
+            totalQuestions: d.quiz.totalQuestions,
+            creatorAddress: d.quiz.creatorAddress,
+            coverImageUrl: d.quiz.coverImageUrl ?? null,
           });
-          setIsFunded(d.quiz.reward.isFunded ?? false);
-        }
-        if (
-          userWalletAddress &&
-          d.quiz.creatorAddress?.toLowerCase() === userWalletAddress.toLowerCase()
-        ) {
-          setIsCreator(true);
-          setIsSpectator(true);
-          setHasJoined(true);
-        }
-
-        if (d.quiz.status === "finished") {
-          // Fetch results immediately — don't wait for a button click
-          setLoadingInitialResults(true);
-          try {
-            const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/results`);
-            const rd = await res.json();
-            if (rd.success) setInitialResults(rd);
-          } catch (e) {
-            console.error("Failed to load results:", e);
-          } finally {
-            setLoadingInitialResults(false);
+          if (d.quiz.reward?.isOnChain && d.quiz.reward?.contractAddress) {
+            setQuizReward({
+              contractAddress: d.quiz.reward.contractAddress,
+              tokenAddress: d.quiz.reward.tokenAddress,
+              tokenSymbol: d.quiz.reward.tokenSymbol,
+              tokenDecimals: d.quiz.reward.tokenDecimals,
+              tokenLogoUrl: d.quiz.reward.tokenLogoUrl,
+              isNativeToken: d.quiz.reward.isNativeToken ?? false,
+              poolAmount: String(d.quiz.reward.poolAmount),
+              isFunded: d.quiz.reward.isFunded ?? false,
+              chainId: d.quiz.chainId ?? d.quiz.reward.chainId,
+            });
+            setIsFunded(d.quiz.reward.isFunded ?? false);
           }
-          setPhase("game_over");
+          if (
+            userWalletAddress &&
+            d.quiz.creatorAddress?.toLowerCase() === userWalletAddress.toLowerCase()
+          ) {
+            setIsCreator(true);
+            setIsSpectator(true);
+            setHasJoined(true);
+          }
+
+          if (d.quiz.status === "finished") {
+            // Fetch results immediately — don't wait for a button click
+            setLoadingInitialResults(true);
+            try {
+              const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/results`);
+              const rd = await res.json();
+              if (rd.success) setInitialResults(rd);
+            } catch (e) {
+              console.error("Failed to load results:", e);
+            } finally {
+              setLoadingInitialResults(false);
+            }
+            setPhase("game_over");
+          } else {
+            setPhase(d.quiz.status === "finished" ? "game_over" : "lobby");
+          }
         } else {
-          setPhase(d.quiz.status === "finished" ? "game_over" : "lobby");
+          toast.error("Quiz not found");
+          router.push("/quiz");
         }
-      } else {
-        toast.error("Quiz not found");
-        router.push("/quiz");
-      }
-    })
-    .catch(() => toast.error("Failed to load quiz"));
-}, [code, userWalletAddress, router]);
+      })
+      .catch(() => toast.error("Failed to load quiz"));
+  }, [code, userWalletAddress, router]);
 
   const handleToggleReady = () => {
-  const newState = !isReady;
-  setIsReady(newState);
-  wsRef.current?.send(JSON.stringify({
-    type: "set_ready",
-    walletAddress: userWalletAddress,
-    isReady: newState,
-  }));
-};
+    const newState = !isReady;
+    setIsReady(newState);
+    
+    // Optimistically update the player list so it reflects instantly for the user
+    setPlayers(prev => prev.map(p => 
+      p.walletAddress.toLowerCase() === myWallet.toLowerCase() 
+        ? { ...p, isReady: newState } 
+        : p
+    ));
 
-const handleKickPlayer = (targetWallet: string) => {
-  wsRef.current?.send(JSON.stringify({
-    type: "kick_player",
-    walletAddress: userWalletAddress,
-    targetWallet,
-  }));
-};
+    wsRef.current?.send(JSON.stringify({
+      type: "set_ready",
+      walletAddress: userWalletAddress,
+      isReady: newState,
+    }));
+  };
+
+  const handleKickPlayer = (targetWallet: string) => {
+    wsRef.current?.send(JSON.stringify({
+      type: "kick_player",
+      walletAddress: userWalletAddress,
+      targetWallet,
+    }));
+  };
+  
   // ── Timer ──
   const startTimer = useCallback((startedAt: number, timeLimit: number) => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -2015,22 +2022,22 @@ const handleKickPlayer = (targetWallet: string) => {
     timerRef.current = setInterval(tick, 250);
   }, []);
 
-async function decryptMessage(keyMaterial: CryptoKey, b64: string): Promise<any> {
-  const raw    = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-  const nonce  = raw.slice(0, 12);
-  const ct     = raw.slice(12);
-  const plain  = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, keyMaterial, ct);
-  return JSON.parse(new TextDecoder().decode(plain));
-}
+  async function decryptMessage(keyMaterial: CryptoKey, b64: string): Promise<any> {
+    const raw    = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const nonce  = raw.slice(0, 12);
+    const ct     = raw.slice(12);
+    const plain  = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, keyMaterial, ct);
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
 
-async function importKey(b64Key: string): Promise<CryptoKey> {
-  const raw = Uint8Array.from(atob(b64Key), c => c.charCodeAt(0));
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
-}
+  async function importKey(b64Key: string): Promise<CryptoKey> {
+    const raw = Uint8Array.from(atob(b64Key), c => c.charCodeAt(0));
+    return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+  }
 
-const connectWS = useCallback(() => {
+  const connectWS = useCallback(() => {
     if (!code || !userWalletAddress) return;
-     if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return; 
+    if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return; 
     const ws = new WebSocket(`${getWsBaseUrl()}/ws/quiz/${code}`);
     wsRef.current = ws;
 
@@ -2039,204 +2046,222 @@ const connectWS = useCallback(() => {
       ws.send(JSON.stringify({ type: "identify", walletAddress: userWalletAddress }));
     };
 
-ws.onmessage = async (ev) => {
-  console.log("[WS RAW]", ev.data);
-  let msg: any;
-  try {
-    if (sessionKeyRef.current) {
-      msg = await decryptMessage(sessionKeyRef.current, ev.data);
-    } else {
-      msg = JSON.parse(ev.data);
-      if (msg.type === "session_key") {
-        sessionKeyRef.current = await importKey(msg.key);
-        console.log("[WS] Session key imported");
+    ws.onmessage = async (ev) => {
+      console.log("[WS RAW]", ev.data);
+      let msg: any;
+      try {
+        if (sessionKeyRef.current) {
+          msg = await decryptMessage(sessionKeyRef.current, ev.data);
+        } else {
+          msg = JSON.parse(ev.data);
+          if (msg.type === "session_key") {
+            sessionKeyRef.current = await importKey(msg.key);
+            console.log("[WS] Session key imported");
+            return;
+          }
+        }
+        console.log("[WS DECODED]", msg);
+      } catch (e) {
+        console.warn("Failed to parse/decrypt WS message", e);
         return;
       }
-    }
-    console.log("[WS DECODED]", msg);
-  } catch (e) {
-    console.warn("Failed to parse/decrypt WS message", e);
-    return;
-  }
 
-  switch (msg.type) {
+      switch (msg.type) {
 
-    // ── 1. Initial state sync
-    case "state_sync": {
-  setQuizMeta(prev => prev ?? msg.quiz);
-  setPlayers(msg.players || []);
+        // ── 1. Initial state sync
+        case "state_sync": {
+          setQuizMeta(prev => prev ?? msg.quiz);
+          setPlayers(prev => {
+            const incoming = msg.players || [];
+            // FIX: Add (p: Player) here 👇
+            return incoming.map((p: Player) => {
+              const existing = prev.find(e => e.walletAddress === p.walletAddress);
+              // Keep isReady true if it was already true (counteract buggy backend resets)
+              const mergedReady = (existing?.isReady && p.isReady === false) ? true : p.isReady;
+              return { ...p, isReady: mergedReady };
+            });
+          });
 
-  const amIPlaying = (msg.players || []).some((p: any) =>
-    p.walletAddress.toLowerCase() === myWallet
-  );
-  
-  if (amIPlaying) setIsReturningPlayer(true);
+          const amIPlaying = (msg.players || []).some((p: any) =>
+            p.walletAddress.toLowerCase() === myWallet
+          );
+          
+          if (amIPlaying) setIsReturningPlayer(true);
 
-  if (msg.isCreator) {
-    setHasJoined(true);
-    setIsSpectator(true);
-  }
+          if (msg.isCreator) {
+            setHasJoined(true);
+            setIsSpectator(true);
+          }
 
-  // If quiz is already active on connect, jump straight into the game.
-  // The backend loop will broadcast a "question" message within seconds
-  // which will populate currentQ and start the timer.
-  if (msg.status === "active") {
-    setHasJoined(true);
-    setPhase("question"); // show loading state until "question" msg arrives
-  }
+          // If quiz is already active on connect, jump straight into the game.
+          if (msg.status === "active") {
+            setHasJoined(true);
+            setPhase("question"); 
+          }
 
-  if (msg.status === "finished") setPhase("game_over");
-  break;
-}
-
-    // ── 2. Player list update
-    case "player_list": {
-      setPlayers(msg.players || []);
-      break;
-    }
-
-    // ── 3. Creator clicked START → game is about to begin
-    case "game_starting": {
-      toast.success(msg.message || "Quiz starting in 3 seconds...");
-      setIsStarting(false);
-      setPhase("countdown");
-      setCountdownVal(3);
-      break;
-    }
-  case "waiting_for_ready": {
-    toast.warning(msg.message || "Some players are not ready yet!");
-    break;
-  }
-
-case "kicked": {
-  toast.error(msg.message || "You were removed from this quiz.");
-  router.push("/quiz");
-  break;
-}
-    // ── 4. Countdown tick (3 → 2 → 1)
-    case "countdown": {
-      setPhase("countdown");
-      setCountdownVal(msg.value);
-      break;
-    }
-    
-
-    case "chat_history": {
-  // Clear the seen set and rebuild from history
-  seenMessageIds.current.clear();
-  const messages = msg.messages as ChatMessage[];
-  messages.forEach(m => {
-    seenMessageIds.current.add(`${m.wallet}-${m.timestamp}-${m.text}`);
-  });
-  setChatMessages(messages);
-  break;
-}
-
-case "chat_message": {
-  const id = `${msg.wallet}-${msg.timestamp}-${msg.text}`;
-  if (seenMessageIds.current.has(id)) break; // already have it
-  seenMessageIds.current.add(id);
-  setChatMessages(prev => {
-    const next = [...prev, msg as ChatMessage];
-    return next.length > 100 ? next.slice(-100) : next;
-  });
-  break;
-}
-
-case "chat_error": {
-  toast.warning(msg.message);
-  break;
-}
-    // ── 5. New question
-    case "question": {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setCurrentQ({
-        index: msg.index,
-        total: msg.total,
-        question: msg.question,
-        options: msg.options,
-        timeLimit: msg.timeLimit,
-        startedAt: msg.startedAt,
-      });
-      setSelectedId(null);
-      setHasSubmitted(false);
-      setRevealCorrectId(null);
-      setPersonalResult(null);
-      setPhase("question");
-      startTimer(msg.startedAt, msg.timeLimit);
-      break;
-    }
-
-    // ── 6. Personal answer feedback
-    case "answer_result": {
-      setPersonalResult({
-        isCorrect: msg.isCorrect,
-        pointsEarned: msg.pointsEarned,
-        streak: msg.streak,
-      });
-      break;
-    }
-
-    // ── 7. Question ended — reveal correct answer
-    case "question_end": {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setTimeLeft(0);
-      setRevealCorrectId(msg.correctId);
-      setPhase("reveal");
-      break;
-    }
-
-    // ── 8. Leaderboard after each question
-    case "leaderboard": {
-      setLeaderboard(msg.entries || []);
-      setIsLastQuestion(!!msg.isLast);
-      const me = (msg.entries || []).find((e: any) =>
-        e.walletAddress.toLowerCase() === myWallet
-      );
-      if (me) {
-        setMyRankChange(me.rankChange);
-        if (me.rankChange > 0) {
-          setShowConfetti(true);
-          setTimeout(() => setShowConfetti(false), 4000);
+          if (msg.status === "finished") setPhase("game_over");
+          break;
         }
+
+        // ── 2. Player list update
+        case "player_list": {
+          setPlayers(prev => {
+            const incoming = msg.players || [];
+            // FIX: Add (p: Player) here 👇
+            return incoming.map((p: Player) => {
+              const existing = prev.find(e => e.walletAddress === p.walletAddress);
+              // Keep isReady true if it was already true (counteract buggy backend resets)
+              const mergedReady = (existing?.isReady && p.isReady === false) ? true : p.isReady;
+              return { ...p, isReady: mergedReady };
+            });
+          });
+          break;
+        }
+
+        // ── 3. Creator clicked START → game is about to begin
+        case "game_starting": {
+          toast.success(msg.message || "Quiz starting in 3 seconds...");
+          setIsStarting(false);
+          setPhase("countdown");
+          setCountdownVal(3);
+          break;
+        }
+        
+        case "waiting_for_ready": {
+          toast.warning(msg.message || "Some players are not ready yet!");
+          break;
+        }
+
+        case "kicked": {
+          toast.error(msg.message || "You were removed from this quiz.");
+          router.push("/quiz");
+          break;
+        }
+        
+        // ── 4. Countdown tick (3 → 2 → 1)
+        case "countdown": {
+          setPhase("countdown");
+          setCountdownVal(msg.value);
+          break;
+        }
+        
+        case "chat_history": {
+          // Clear the seen set and rebuild from history
+          seenMessageIds.current.clear();
+          const messages = msg.messages as ChatMessage[];
+          messages.forEach(m => {
+            seenMessageIds.current.add(`${m.wallet}-${m.timestamp}-${m.text}`);
+          });
+          setChatMessages(messages);
+          break;
+        }
+
+        case "chat_message": {
+          const id = `${msg.wallet}-${msg.timestamp}-${msg.text}`;
+          if (seenMessageIds.current.has(id)) break; // already have it
+          seenMessageIds.current.add(id);
+          setChatMessages(prev => {
+            const next = [...prev, msg as ChatMessage];
+            return next.length > 100 ? next.slice(-100) : next;
+          });
+          break;
+        }
+
+        case "chat_error": {
+          toast.warning(msg.message);
+          break;
+        }
+        
+        // ── 5. New question
+        case "question": {
+          if (timerRef.current) clearInterval(timerRef.current);
+          setCurrentQ({
+            index: msg.index,
+            total: msg.total,
+            question: msg.question,
+            options: msg.options,
+            timeLimit: msg.timeLimit,
+            startedAt: msg.startedAt,
+          });
+          setSelectedId(null);
+          setHasSubmitted(false);
+          setRevealCorrectId(null);
+          setPersonalResult(null);
+          setPhase("question");
+          startTimer(msg.startedAt, msg.timeLimit);
+          break;
+        }
+
+        // ── 6. Personal answer feedback
+        case "answer_result": {
+          setPersonalResult({
+            isCorrect: msg.isCorrect,
+            pointsEarned: msg.pointsEarned,
+            streak: msg.streak,
+          });
+          break;
+        }
+
+        // ── 7. Question ended — reveal correct answer
+        case "question_end": {
+          if (timerRef.current) clearInterval(timerRef.current);
+          setTimeLeft(0);
+          setRevealCorrectId(msg.correctId);
+          setPhase("reveal");
+          break;
+        }
+
+        // ── 8. Leaderboard after each question
+        case "leaderboard": {
+          setLeaderboard(msg.entries || []);
+          setIsLastQuestion(!!msg.isLast);
+          const me = (msg.entries || []).find((e: any) =>
+            e.walletAddress.toLowerCase() === myWallet
+          );
+          if (me) {
+            setMyRankChange(me.rankChange);
+            if (me.rankChange > 0) {
+              setShowConfetti(true);
+              setTimeout(() => setShowConfetti(false), 4000);
+            }
+          }
+          setPhase("leaderboard");
+          break;
+        }
+
+        // ── 9. Game over
+        case "game_over": {
+          setLeaderboard(msg.finalLeaderboard || []);
+          setPhase("game_over");
+          const me = (msg.finalLeaderboard || []).find((e: any) =>
+            e.walletAddress.toLowerCase() === myWallet
+          );
+          if (me?.rank === 1) {
+            setShowConfetti(true);
+            setTimeout(() => setShowConfetti(false), 6000);
+          }
+          break;
+        }
+
+        // ── 10. Rewards dispatched after game ends
+        case "rewards_dispatched": {
+          toast.success("🏆 Winners have been whitelisted! Claim window is now open.");
+          setRewardsReady(true);
+          break;
+        }
+
+        // ── 11. Server error message
+        case "error": {
+          console.error("[WS ERROR]", msg.message);
+          toast.error(msg.message || "Something went wrong");
+          setIsStarting(false);
+          break;
+        }
+
+        default:
+          console.log("[WS] Unhandled message type:", msg.type, msg);
       }
-      setPhase("leaderboard");
-      break;
-    }
-
-    // ── 9. Game over
-    case "game_over": {
-      setLeaderboard(msg.finalLeaderboard || []);
-      setPhase("game_over");
-      const me = (msg.finalLeaderboard || []).find((e: any) =>
-        e.walletAddress.toLowerCase() === myWallet
-      );
-      if (me?.rank === 1) {
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 6000);
-      }
-      break;
-    }
-
-    // ── 10. Rewards dispatched after game ends
-    case "rewards_dispatched": {
-      toast.success("🏆 Winners have been whitelisted! Claim window is now open.");
-      setRewardsReady(true);
-      break;
-    }
-
-    // ── 11. Server error message
-    case "error": {
-      console.error("[WS ERROR]", msg.message);
-      toast.error(msg.message || "Something went wrong");
-      setIsStarting(false);
-      break;
-    }
-
-    default:
-      console.log("[WS] Unhandled message type:", msg.type, msg);
-  }
-};
+    };
 
     ws.onclose = (event) => {
       sessionKeyRef.current = null;
@@ -2258,7 +2283,7 @@ case "chat_error": {
         if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); 
       }, delay);
     };
-  }, [code, userWalletAddress, startTimer]);
+  }, [code, userWalletAddress, startTimer, myWallet]);
 
   // ── Connect WS instantly to restore session state ──
   useEffect(() => {
@@ -2275,8 +2300,8 @@ case "chat_error": {
   }, [userWalletAddress, connectWS]);
 
   useEffect(() => {
-  chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-}, [chatMessages]);
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
   // ── SOUND EFFECTS TRIGGERS ──
   useEffect(() => {
@@ -2330,56 +2355,57 @@ case "chat_error": {
       setIsJoining(false); 
     }
   };
-// These both live inside QuizCodePage, near your other handlers
-const handleSendChat = () => {
-  const text = chatInput.trim();
-  if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-  wsRef.current.send(JSON.stringify({ type: "chat_message", text }));
-  setChatInput("");
-};
 
-const handleSendPreset = (text: string) => {
-  if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-  wsRef.current.send(JSON.stringify({ type: "chat_message", text }));
-};
+  const handleSendChat = () => {
+    const text = chatInput.trim();
+    if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "chat_message", text }));
+    setChatInput("");
+  };
 
-const handleFundReward = async () => {
-  if (!quizReward) { toast.error("No reward configured"); return; }
-  if (!activeWallet) { toast.error("Wallet not ready"); return; }
+  const handleSendPreset = (text: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "chat_message", text }));
+  };
 
-  setIsFunding(true);
-  setFundError("");
+  const handleFundReward = async () => {
+    if (!quizReward) { toast.error("No reward configured"); return; }
+    if (!activeWallet) { toast.error("Wallet not ready"); return; }
 
-  try {
-    const privyProvider = await activeWallet.getEthereumProvider();
-    const provider = new BrowserProvider(privyProvider);
+    setIsFunding(true);
+    setFundError("");
 
-    const { txHash } = await fundQuizReward(provider, chainId, quizReward.contractAddress, {
-      tokenAddress: quizReward.tokenAddress,
-      tokenDecimals: quizReward.tokenDecimals,
-      isNativeToken: quizReward.isNativeToken,
-      poolAmount: quizReward.poolAmount,
-    });
+    try {
+      const privyProvider = await activeWallet.getEthereumProvider();
+      const provider = new BrowserProvider(privyProvider);
 
-    setFundTxHash(txHash);
-    setIsFunded(true);
-    toast.success("Reward pool funded! 🎉");
+      const { txHash } = await fundQuizReward(provider, chainId, quizReward.contractAddress, {
+        tokenAddress: quizReward.tokenAddress,
+        tokenDecimals: quizReward.tokenDecimals,
+        isNativeToken: quizReward.isNativeToken,
+        poolAmount: quizReward.poolAmount,
+      });
 
-    await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ txHash, contractAddress: quizReward.contractAddress }),
-    }).catch(() => {});
+      setFundTxHash(txHash);
+      setIsFunded(true);
+      toast.success("Reward pool funded! 🎉");
 
-  } catch (err: any) {
-    console.error("Funding Error:", err);
-    const msg = parseOnchainError(err);
-    setFundError(msg);
-    toast.error(msg);
-  } finally {
-    setIsFunding(false);
-  }
-};
+      await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txHash, contractAddress: quizReward.contractAddress }),
+      }).catch(() => {});
+
+    } catch (err: any) {
+      console.error("Funding Error:", err);
+      const msg = parseOnchainError(err);
+      setFundError(msg);
+      toast.error(msg);
+    } finally {
+      setIsFunding(false);
+    }
+  };
+
   const handleSelectAnswer = (optId: string) => {
     if (!currentQ || timeLeft <= 0 || isSpectator) return;
     
@@ -2403,22 +2429,22 @@ const handleFundReward = async () => {
     }
   };
 
- const handleStartQuiz = () => {
-  if (!userWalletAddress) return;
-  console.log("[START] Creator clicked start", { code, userWalletAddress, wsState: wsRef.current?.readyState });
-  setIsStarting(true);
+  const handleStartQuiz = () => {
+    if (!userWalletAddress) return;
+    console.log("[START] Creator clicked start", { code, userWalletAddress, wsState: wsRef.current?.readyState });
+    setIsStarting(true);
 
-  const msg = JSON.stringify({ type: "start_quiz", walletAddress: userWalletAddress });
-  console.log("[START] Sending WS message:", msg);
-  wsRef.current?.send(msg);
-  console.log("[START] WS message sent, ws readyState:", wsRef.current?.readyState);
+    const msg = JSON.stringify({ type: "start_quiz", walletAddress: userWalletAddress });
+    console.log("[START] Sending WS message:", msg);
+    wsRef.current?.send(msg);
+    console.log("[START] WS message sent, ws readyState:", wsRef.current?.readyState);
 
-  fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-start`, { method: "POST" })
-    .then(r => { console.log("[START] on-chain-start response status:", r.status); return r.json(); })
-    .then(d => console.log("[START] on-chain-start response body:", d))
-    .catch(err => console.warn("[START] on-chain-start fetch failed:", err.message))
-    .finally(() => { console.log("[START] fetch done, clearing isStarting"); setIsStarting(false); });
-};
+    fetch(`${API_BASE_URL}/api/quiz/${code}/on-chain-start`, { method: "POST" })
+      .then(r => { console.log("[START] on-chain-start response status:", r.status); return r.json(); })
+      .then(d => console.log("[START] on-chain-start response body:", d))
+      .catch(err => console.warn("[START] on-chain-start fetch failed:", err.message))
+      .finally(() => { console.log("[START] fetch done, clearing isStarting"); setIsStarting(false); });
+  };
 
   const myEntry = leaderboard.find(e => e.walletAddress.toLowerCase() === myWallet);
 
@@ -2430,512 +2456,555 @@ const handleFundReward = async () => {
     return (
       <div className="flex flex-col min-h-screen bg-surface-base">
         <Header pageTitle="Quiz" />
-        <div className="flex-1 flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-indigo-500" /></div>
+        <div className="flex-1 flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-[#072474] dark:text-blue-400" /></div>
       </div>
     );
   }
 
-if (phase === "game_over") {
-  return (
-    <QuizGameOver
-      quizMeta={quizMeta}
-      code={code}
-      leaderboard={leaderboard}
-      myWallet={myWallet}
-      isCreator={isCreator}
-      showConfetti={showConfetti}
-      router={router}
-      initialResults={initialResults}
-      loadingInitialResults={loadingInitialResults}
-      rewardsReady={rewardsReady}
-      quizReward={quizReward}        // ← add this
-      wallets={wallets}              // ← add this (needed for the provider)
-    />
-  );
-}
-// ── Pre-Join Screen ──
-if (!hasJoined && !isCreator && phase === "lobby") return (
-  // ✅ Keep the dark gradient — this is intentionally a dark branded screen
-  <div className="min-h-screen bg-surface-base flex flex-col items-center justify-center px-4 py-8">
+  if (phase === "game_over") {
+    return (
+      <QuizGameOver
+        quizMeta={quizMeta}
+        code={code}
+        leaderboard={leaderboard}
+        myWallet={myWallet}
+        isCreator={isCreator}
+        showConfetti={showConfetti}
+        router={router}
+        initialResults={initialResults}
+        loadingInitialResults={loadingInitialResults}
+        rewardsReady={rewardsReady}
+        quizReward={quizReward}
+        wallets={wallets}
+      />
+    );
+  }
 
-    <div className="w-full max-w-sm space-y-6 text-center">
+  // ── Pre-Join Screen ──
+  if (!hasJoined && !isCreator && phase === "lobby") return (
+    <div className="min-h-screen bg-surface-base flex flex-col items-center justify-center px-4 py-8">
+      <div className="w-full max-w-sm space-y-6 text-center">
 
-      {/* Quiz code pill */}
-      <div className="inline-flex flex-col items-center gap-1 bg-surface-card border border-surface rounded-2xl px-8 py-5 shadow-lg">
-        <p className="text-surface-secondary text-xs font-bold uppercase tracking-widest">Quiz Code</p>
-        <div className="text-5xl font-black tracking-[0.15em] text-surface-primary drop-shadow">{code}</div>
-      </div>
-
-      {/* Cover image — no changes needed */}
-      {quizMeta?.coverImageUrl && (
-        <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-xl border border-white/10">
-          <img
-            src={quizMeta.coverImageUrl}
-            alt={quizMeta.title}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        {/* Quiz code pill */}
+        <div className="inline-flex flex-col items-center gap-1 bg-surface-card border border-surface rounded-2xl px-8 py-5 shadow-lg">
+          <p className="text-surface-secondary text-xs font-bold uppercase tracking-widest">Quiz Code</p>
+          <div className="text-5xl font-black tracking-[0.15em] text-surface-primary drop-shadow">{code}</div>
         </div>
-      )}
 
-      {/* Meta */}
-      <div className="space-y-1">
-        <h2 className="text-2xl font-black text-surface-primary leading-tight">{quizMeta?.title}</h2>
-        <p className="text-surface-secondary text-sm">{quizMeta?.totalQuestions} questions</p>
-      </div>
-
-      {/* Player count preview */}
-      {players.length > 0 && (
-        <div className="flex items-center justify-center gap-2 text-surface-secondary text-sm">
-          <Users className="h-4 w-4" />
-          <span>{players.length} player{players.length !== 1 ? "s" : ""} already joined</span>
-        </div>
-      )}
-
-      {/* Join / wallet connect */}
-      <div className="space-y-3">
-        {!username ? (
-          <div className="space-y-2">
-            {/* ✅ amber-300 is fine on dark; no change needed */}
-            <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl px-4 py-3 text-amber-700 dark:text-amber-300 text-sm   font-medium flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              Connect your profile to join
-            </div>
-            <WalletConnectButton />
+        {/* Cover image */}
+        {quizMeta?.coverImageUrl && (
+          <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-xl border border-white/10">
+            <img
+              src={quizMeta.coverImageUrl}
+              alt={quizMeta.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           </div>
-        ) : (
-          <>
-            {/* Player preview card */}
-            {/* ✅ was: border-white/15 — Tailwind doesn't have /15, use /10 or /20 */}
-            <div className="flex items-center gap-3 bg-surface-card border border-surface rounded-xl px-4 py-3">
-            <Avatar className="h-10 w-10 shrink-0 border-2 border-surface">
-              <AvatarImage src={avatarUrl || undefined} />
-              <AvatarFallback className="bg-indigo-100 dark:bg-[#072474] text-indigo-700 dark:text-white font-bold text-sm">
-                {username?.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-surface-primary font-bold text-sm truncate">{username}</p>
-              <p className="text-surface-secondary text-xs truncate">
-                {userWalletAddress?.slice(0, 6)}...{userWalletAddress?.slice(-4)}
-              </p>
-            </div>
-            <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-          </div>
-
-
-            {/* ✅ No changes needed — brand blue button is intentional */}
-            <Button
-              className="w-full h-14 text-lg font-bold bg-[#072474] hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-2xl shadow-xl shadow-indigo-900/20 border-0 transition-all active:scale-95"
-              onClick={handleJoin}
-              disabled={isJoining}
-            >
-              {isJoining
-                ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Joining...</>
-                : <><Zap className="mr-2 h-5 w-5" />{isReturningPlayer ? "Rejoin Quiz" : "Join Quiz"}</>
-              }
-            </Button>
-          </>
         )}
+
+        {/* Meta */}
+        <div className="space-y-1">
+          <h2 className="text-2xl font-black text-surface-primary leading-tight">{quizMeta?.title}</h2>
+          <p className="text-surface-secondary text-sm">{quizMeta?.totalQuestions} questions</p>
+        </div>
+
+        {/* Player count preview */}
+        {players.length > 0 && (
+          <div className="flex items-center justify-center gap-2 text-surface-secondary text-sm">
+            <Users className="h-4 w-4" />
+            <span>{players.length} player{players.length !== 1 ? "s" : ""} already joined</span>
+          </div>
+        )}
+
+        {/* Join / wallet connect */}
+        <div className="space-y-3">
+          {!username ? (
+            <div className="space-y-2">
+              <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl px-4 py-3 text-amber-700 dark:text-amber-300 text-sm font-medium flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Connect your profile to join
+              </div>
+              <WalletConnectButton />
+            </div>
+          ) : (
+            <>
+              {/* Player preview card */}
+              <div className="flex items-center gap-3 bg-surface-card border border-surface rounded-xl px-4 py-3">
+              <Avatar className="h-10 w-10 shrink-0 border-2 border-surface">
+                <AvatarImage src={avatarUrl || undefined} />
+                <AvatarFallback className="bg-blue-100 dark:bg-[#072474] text-[#072474] dark:text-white font-bold text-sm">
+                  {username?.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-surface-primary font-bold text-sm truncate">{username}</p>
+                <p className="text-surface-secondary text-xs truncate">
+                  {userWalletAddress?.slice(0, 6)}...{userWalletAddress?.slice(-4)}
+                </p>
+              </div>
+              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+            </div>
+
+              <Button
+                className="w-full h-14 text-lg font-bold bg-[#072474] hover:bg-[#0a32a0] active:bg-[#05184d] text-white rounded-2xl shadow-xl shadow-[#072474]/20 border-0 transition-all active:scale-95"
+                onClick={handleJoin}
+                disabled={isJoining}
+              >
+                {isJoining
+                  ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Joining...</>
+                  : <><Zap className="mr-2 h-5 w-5" />{isReturningPlayer ? "Rejoin Quiz" : "Join Quiz"}</>
+                }
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 
-// ── Lobby Waiting Room ──
-if (phase === "lobby") {
-  const creatorAddr = quizMeta?.creatorAddress?.toLowerCase() ?? "";
-  const nonCreatorPlayers = players.filter(p => p.walletAddress.toLowerCase() !== creatorAddr);
-  const readyCount = nonCreatorPlayers.filter(p => p.isReady).length;
-  const totalCount = nonCreatorPlayers.length;
-  const allReady = readyCount === totalCount && totalCount > 0;
+  // ── Lobby Waiting Room ──
+  if (phase === "lobby") {
+    const creatorAddr = quizMeta?.creatorAddress?.toLowerCase() ?? "";
+    const nonCreatorPlayers = players.filter(p => p.walletAddress.toLowerCase() !== creatorAddr);
+    const readyCount = nonCreatorPlayers.filter(p => p.isReady).length;
+    const totalCount = nonCreatorPlayers.length;
+    const allReady = readyCount === totalCount && totalCount > 0;
 
-  return (
-    <div className="min-h-screen bg-surface-base flex flex-col">
+    return (
+      <div className="min-h-screen bg-surface-base flex flex-col">
 
-      {/* ── Top bar ── */}
-      {/* ── Top bar ── */}
-<div className="sticky top-0 z-20 bg-surface-header backdrop-blur-md border-b border-surface shadow-sm">
-  <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-    <div className="flex items-center gap-3 min-w-0">
+        {/* ── Top bar ── */}
+        <div className="sticky top-0 z-20 bg-surface-header backdrop-blur-md border-b border-surface shadow-sm">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
 
-      {/* ✅ Back button */}
-      <button
-        onClick={() => router.push("/quiz")}
-        className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg hover:bg-surface-card-2 text-surface-secondary hover:text-surface-primary transition-all"
-      >
-        <ArrowLeft className="h-4 w-4" />
-      </button>
+              <button
+                onClick={() => router.push("/quiz")}
+                className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg hover:bg-surface-card-2 text-surface-secondary hover:text-surface-primary transition-all"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
 
-      <div className="hidden sm:block w-px h-8 bg-surface shrink-0" />
+              <div className="hidden sm:block w-px h-8 bg-surface shrink-0" />
 
-      <div className="shrink-0">
-        <p className="text-surface-secondary text-[10px] font-bold uppercase tracking-widest leading-none">Quiz Code</p>
-        <p className="text-2xl sm:text-3xl font-black tracking-[0.15em] text-surface-primary leading-tight">{code}</p>
-      </div>
-      <div className="hidden sm:block w-px h-8 bg-surface shrink-0" />
-      <div className="hidden sm:block min-w-0">
-        <p className="text-surface-primary font-bold text-sm truncate">{quizMeta?.title}</p>
-        <p className="text-surface-muted text-xs">{quizMeta?.totalQuestions} questions</p>
-      </div>
-    </div>
+              <div className="shrink-0">
+                <p className="text-surface-secondary text-[10px] font-bold uppercase tracking-widest leading-none">Quiz Code</p>
+                <p className="text-2xl sm:text-3xl font-black tracking-[0.15em] text-surface-primary leading-tight">{code}</p>
+              </div>
+              <div className="hidden sm:block w-px h-8 bg-surface shrink-0" />
+              <div className="hidden sm:block min-w-0">
+                <p className="text-surface-primary font-bold text-sm truncate">{quizMeta?.title}</p>
+                <p className="text-surface-muted text-xs">{quizMeta?.totalQuestions} questions</p>
+              </div>
+            </div>
 
-    <div className="flex items-center gap-2 shrink-0">
-      <div className="flex items-center gap-1.5 bg-indigo-500/15 border border-indigo-500/20 rounded-full px-3 py-1.5">
-        <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-        <span className="text-indigo-700 dark:text-indigo-200 text-xs font-bold">{players.length} in lobby</span>
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        className="border-surface text-surface-secondary hover:text-surface-primary hover:bg-surface-card-2 bg-transparent h-8 px-3"
-        onClick={() => {
-          navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
-          toast.success("Link copied!");
-        }}
-      >
-        <Share2 className="h-3.5 w-3.5 sm:mr-1.5" />
-        <span className="hidden sm:inline text-xs">Invite</span>
-      </Button>
-    </div>
-  </div>
-</div>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 bg-[#072474]/15 border border-[#072474]/20 rounded-full px-3 py-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-[#072474] dark:text-blue-200 text-xs font-bold">{players.length} in lobby</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-surface text-surface-secondary hover:text-surface-primary hover:bg-surface-card-2 bg-transparent h-8 px-3"
+                onClick={() => setShowShareModal(true)} // <-- Changed this line
+              >
+                <Share2 className="h-3.5 w-3.5 sm:mr-1.5" />
+                <span className="hidden sm:inline text-xs">Invite</span>
+              </Button>
+            </div>
+          </div>
+        </div>
 
-      {/* ── MAIN BODY ── */}
-      <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 pb-32">
-        
-        {isCreator ? (
-          /* ══ CREATOR LAYOUT: 2 col ══ */
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
+        {/* ── MAIN BODY ── */}
+        <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 pb-32">
+          
+          {isCreator ? (
+            /* ══ CREATOR LAYOUT: 2 col ══ */
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5">
 
-            {/* Left: Players */}
-            <div className="space-y-4">
-              {/* Players header */}
-              <div className="flex items-center justify-between">
-                <h2 className="text-surface-primary font-black text-lg flex items-center gap-2">
-                  <Users className="h-5 w-5 text-indigo-400" /> Players
-                  <span className="text-surface-muted  font-normal text-base">({players.length})</span>
-                </h2>
-                {totalCount > 0 && (
-                  <span className={cn(
-                    "text-xs font-bold px-3 py-1 rounded-full border",
-                    allReady
-                      ? "bg-green-500/10 border-green-500/30 text-green-400"
-                      : "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                  )}>
-                    {allReady ? "✓ All ready" : `${readyCount}/${totalCount} ready`}
-                  </span>
-                )}
+              {/* Left: Players */}
+              <div className="space-y-4">
+                {/* Players header */}
+                <div className="flex items-center justify-between">
+                  <h2 className="text-surface-primary font-black text-lg flex items-center gap-2">
+                    <Users className="h-5 w-5 text-blue-400" /> Players
+                    <span className="text-surface-muted font-normal text-base">({players.length})</span>
+                  </h2>
+                  {totalCount > 0 && (
+                    <span className={cn(
+                      "text-xs font-bold px-3 py-1 rounded-full border",
+                      allReady
+                        ? "bg-green-500/10 border-green-500/30 text-green-400"
+                        : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                    )}>
+                      {allReady ? "✓ All ready" : `${readyCount}/${totalCount} ready`}
+                    </span>
+                  )}
+                </div>
+
+                {/* Player grid */}
+                <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
+                  {players.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+                      <div className="w-16 h-16 rounded-2xl bg-white/5 border border-surface flex items-center justify-center mb-4">
+                        <Users className="h-7 w-7 text-surface-secondary" />
+                      </div>
+                      <p className="text-surface-muted text-sm font-medium">No players yet</p>
+                      <p className="text-surface-muted text-xs mt-1">Share the code to get started</p>
+                    </div>
+                  ) : (
+                    <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {players.map(p => {
+                        const isMe = p.walletAddress.toLowerCase() === myWallet;
+                        const isHost = p.walletAddress.toLowerCase() === creatorAddr;
+                        const ready = p.isReady ?? false;
+                        return (
+                          <div key={p.walletAddress} className={cn(
+                            "relative flex flex-col items-center gap-2 rounded-2xl p-3 border text-center transition-all",
+                            isHost
+                              ? "border-yellow-500/30 bg-yellow-500/10"
+                              : ready
+                                ? "border-green-500/20 bg-green-500/8"
+                                : "border-surface bg-white/3"
+                          )}>
+                            {/* Kick button */}
+                            {isCreator && !isMe && !isHost && (
+                                <button
+                                  onClick={() => handleKickPlayer(p.walletAddress)}
+                                  className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            <div className="relative">
+                              <Avatar className="h-12 w-12 border-2 border-surface">
+                                <AvatarImage src={p.avatarUrl ?? undefined} />
+                                <AvatarFallback className={cn(
+                                  "font-bold text-sm",
+                                  isHost ? "bg-yellow-500/20 text-yellow-300" : "bg-white/10 text-white"
+                                )}>
+                                  {p.username?.slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className={cn(
+                                "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-base",
+                                isHost ? "bg-yellow-400" : ready ? "bg-green-400" : "bg-white/20"
+                              )} />
+                            </div>
+                            <div className="min-w-0 w-full">
+                              <p className="text-surface-primary text-xs font-bold truncate">{p.username}</p>
+                              <p className={cn(
+                                "text-[10px] font-semibold mt-0.5",
+                                isHost ? "text-yellow-400" : ready ? "text-green-400" : "text-surface-muted"
+                              )}>
+                                {isHost ? "Host" : ready ? "Ready ✓" : "Waiting..."}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Player grid */}
-              <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
-                {players.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-surface flex items-center justify-center mb-4">
-                      <Users className="h-7 w-7 text-surface-secondary" />
+              {/* Right: Host Controls */}
+              <div className="space-y-4 lg:sticky lg:top-20 self-start">
+                
+                {/* Host card */}
+                <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
+                  <div className="bg-gradient-to-r from-[#072474]/80 to-blue-900/80 px-5 py-4 flex items-center gap-3 border-b border-surface">
+                    <div className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center">
+                      <Crown className="h-5 w-5 text-yellow-400" />
                     </div>
-                    <p className="text-surface-muted  text-sm font-medium">No players yet</p>
-                    <p className="text-surface-muted text-xs mt-1">Share the code to get started</p>
+                    <div>
+                      <p className="text-surface-primary font-black text-sm">Host Controls</p>
+                      <p className="text-blue-300/60 text-xs">You control the quiz</p>
+                    </div>
                   </div>
-                ) : (
-                  <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {players.map(p => {
-                      const isMe = p.walletAddress.toLowerCase() === myWallet;
-                      const isHost = p.walletAddress.toLowerCase() === creatorAddr;
-                      const ready = p.isReady ?? false;
-                      return (
-                        <div key={p.walletAddress} className={cn(
-                          "relative flex flex-col items-center gap-2 rounded-2xl p-3 border text-center transition-all",
-                          isHost
-                            ? "border-yellow-500/30 bg-yellow-500/10"
-                            : ready
-                              ? "border-green-500/20 bg-green-500/8"
-                              : "border-surfacebg-white/3"
+                  <div className="p-4 space-y-3">
+
+                    {/* Ready status */}
+                    <div className={cn(
+                      "rounded-xl px-4 py-3 flex items-center gap-3 border",
+                      allReady
+                        ? "bg-green-500/8 border-green-500/20"
+                        : totalCount === 0
+                          ? "bg-white/3 border-white/8"
+                          : "bg-amber-500/8 border-amber-500/20"
+                    )}>
+                      <div className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                        allReady ? "bg-green-500/20" : totalCount === 0 ? "bg-white/8" : "bg-amber-500/15"
+                      )}>
+                        {allReady
+                          ? <Check className="h-4 w-4 text-green-400 stroke-[3px]" />
+                          : <Users className="h-4 w-4 text-amber-400" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn(
+                          "text-sm font-bold",
+                          allReady ? "text-green-400" : totalCount === 0 ? "text-surface-muted " : "text-amber-400"
                         )}>
-                          {/* Kick button */}
-                          {isCreator && !isMe && !isHost && (
-                              <button
-                                onClick={() => handleKickPlayer(p.walletAddress)}
-                                className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            )}
-                          <div className="relative">
-                            <Avatar className="h-12 w-12 border-2 border-surface">
-                              <AvatarImage src={p.avatarUrl ?? undefined} />
-                              <AvatarFallback className={cn(
-                                "font-bold text-sm",
-                                isHost ? "bg-yellow-500/20 text-yellow-300" : "bg-white/10 text-white"
-                              )}>
-                                {p.username?.slice(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className={cn(
-                              "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-base",
-                              isHost ? "bg-yellow-400" : ready ? "bg-green-400" : "bg-white/20"
-                            )} />
-                          </div>
-                          <div className="min-w-0 w-full">
-                            <p className="text-surface-primary text-xs font-bold truncate">{p.username}</p>
-                            <p className={cn(
-                              "text-[10px] font-semibold mt-0.5",
-                              isHost ? "text-yellow-400" : ready ? "text-green-400" : "text-surface-muted"
-                            )}>
-                              {isHost ? "Host" : ready ? "Ready ✓" : "Waiting..."}
-                            </p>
+                          {totalCount === 0
+                            ? "Waiting for players"
+                            : allReady
+                              ? "Everyone is ready!"
+                              : `${readyCount} of ${totalCount} ready`
+                          }
+                        </p>
+                        {!allReady && totalCount > 0 && (
+                          <p className="text-surface-muted text-xs mt-0.5 truncate">
+                            Not ready: {nonCreatorPlayers.filter(p => !p.isReady).map(p => p.username).join(", ")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Funding */}
+                    {quizReward ? (
+                      isFunded ? (
+                        <div className="flex items-center gap-3 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-3">
+                          <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-green-400 font-bold text-sm">Pool Funded ✓</p>
+                            <p className="text-green-500/70 text-xs mt-0.5">{contractBalance} {quizReward.tokenSymbol} locked</p>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-3 bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3">
+                            <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-amber-400 font-bold text-sm">Fund reward pool</p>
+                              <p className="text-amber-500/70 text-xs mt-0.5">Required to enable Start</p>
+                            </div>
+                          </div>
+                          <Button
+                            className="w-full h-11 font-bold bg-[#072474] hover:bg-[#0a32a0] text-white border-0 text-sm"
+                            onClick={handleFundReward}
+                            disabled={isFunding || isFundedCheckLoading}
+                          >
+                            {isFunding
+                              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Confirming...</>
+                              : <><Wallet className="mr-2 h-4 w-4" />Fund {grossDisplayAmount} {quizReward.tokenSymbol}</>
+                            }
+                          </Button>
+                        </div>
+                      )
+                    ) : (
+                      <div className="flex items-center gap-2 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-3">
+                        <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+                        <p className="text-green-400 text-sm font-medium">Free quiz</p>
+                      </div>
+                    )}
 
-            {/* Right: Host Controls */}
-            <div className="space-y-4 lg:sticky lg:top-20 self-start">
-              
-              {/* Host card */}
-              <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-900/80 to-blue-900/80 px-5 py-4 flex items-center gap-3 border-b border-surface">
-                  <div className="w-10 h-10 rounded-xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center">
-                    <Crown className="h-5 w-5 text-yellow-400" />
-                  </div>
-                  <div>
-                    <p className="text-surface-primary font-black text-sm">Host Controls</p>
-                    <p className="text-indigo-300/60 text-xs">You control the quiz</p>
+                    {/* START button */}
+                    {(isFunded || !quizReward) && (
+                      <Button
+                        className="w-full h-14 text-base font-black text-white border-0 rounded-xl shadow-lg shadow-[#072474]/40 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98] bg-[#072474] hover:bg-[#0a32a0]"
+                        onClick={handleStartQuiz}
+                        disabled={isStarting}
+                      >
+                        {isStarting
+                          ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Starting…</>
+                          : totalCount === 0
+                            ? <><Play className="mr-2 h-5 w-5 fill-current" />START QUIZ</>
+                            : allReady
+                              ? <><Play className="mr-2 h-5 w-5 fill-current" />START · {players.length} players</>
+                              : <><Play className="mr-2 h-5 w-5 fill-current" />START ANYWAY</>
+                        }
+                      </Button>
+                    )}
+
+                    {fundError && (
+                      <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 break-words">{fundError}</p>
+                    )}
+
+                    {quizReward && (
+                      <p className="text-[10px] font-mono text-surface-muted truncate text-center">
+                        {quizReward.contractAddress}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <div className="p-4 space-y-3">
+              </div>
+            </div>
 
-                  {/* Ready status */}
-                  <div className={cn(
-                    "rounded-xl px-4 py-3 flex items-center gap-3 border",
-                    allReady
-                      ? "bg-green-500/8 border-green-500/20"
-                      : totalCount === 0
-                        ? "bg-white/3 border-white/8"
-                        : "bg-amber-500/8 border-amber-500/20"
-                  )}>
-                    <div className={cn(
-                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                      allReady ? "bg-green-500/20" : totalCount === 0 ? "bg-white/8" : "bg-amber-500/15"
-                    )}>
-                      {allReady
-                        ? <Check className="h-4 w-4 text-green-400 stroke-[3px]" />
-                        : <Users className="h-4 w-4 text-amber-400" />
-                      }
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={cn(
-                        "text-sm font-bold",
-                        allReady ? "text-green-400" : totalCount === 0 ? "text-surface-muted " : "text-amber-400"
-                      )}>
-                        {totalCount === 0
-                          ? "Waiting for players"
-                          : allReady
-                            ? "Everyone is ready!"
-                            : `${readyCount} of ${totalCount} ready`
-                        }
-                      </p>
-                      {!allReady && totalCount > 0 && (
-                        <p className="text-surface-muted  text-xs mt-0.5 truncate">
-                          Not ready: {nonCreatorPlayers.filter(p => !p.isReady).map(p => p.username).join(", ")}
-                        </p>
-                      )}
-                    </div>
+          ) : (
+            /* ══ PLAYER LAYOUT: full width player grid ══ */
+            <div className="space-y-5">
+
+              {/* Quiz cover + info hero */}
+              {quizMeta?.coverImageUrl ? (
+                <div className="relative w-full max-w-2xl mx-auto aspect-video rounded-2xl overflow-hidden border border-surface shadow-xl">
+                  <img src={quizMeta.coverImageUrl} alt={quizMeta.title} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <h1 className="text-surface-primary font-black text-xl sm:text-2xl drop-shadow">{quizMeta.title}</h1>
+                    <p className="text-surface-secondary text-sm">{quizMeta.totalQuestions} questions</p>
                   </div>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <h1 className="text-surface-primary font-black text-2xl sm:text-3xl">{quizMeta?.title}</h1>
+                  <p className="text-surface-secondary text-sm mt-1">{quizMeta?.totalQuestions} questions</p>
+                </div>
+              )}
 
-                  {/* Funding */}
-                  {quizReward ? (
-                    isFunded ? (
-                      <div className="flex items-center gap-3 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-3">
-                        <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-green-400 font-bold text-sm">Pool Funded ✓</p>
-                          <p className="text-green-500/70 text-xs mt-0.5">{contractBalance} {quizReward.tokenSymbol} locked</p>
+              {/* Players grid */}
+              <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
+                <div className="px-5 py-3 border-b border-surface flex items-center justify-between">
+                  <span className="text-surface-primary font-bold text-sm flex items-center gap-2">
+                    <Users className="h-4 w-4 text-blue-400" /> Players ({players.length})
+                  </span>
+                  {totalCount > 0 && (
+                    <span className={cn(
+                      "text-xs font-bold px-2.5 py-1 rounded-full border",
+                      allReady ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                    )}>
+                      {readyCount}/{totalCount} ready
+                    </span>
+                  )}
+                </div>
+                <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                  {players.map(p => {
+                    const isMe = p.walletAddress.toLowerCase() === myWallet;
+                    const isHost = p.walletAddress.toLowerCase() === creatorAddr;
+                    const ready = p.isReady ?? false;
+                    return (
+                      <div key={p.walletAddress} className="flex flex-col items-center gap-1.5 text-center">
+                        <div className="relative">
+                          <Avatar className={cn(
+                            "h-12 w-12 border-2",
+                            isMe ? "border-blue-400" : isHost ? "border-yellow-400" : ready ? "border-green-400" : "border-surface"
+                          )}>
+                            <AvatarImage src={p.avatarUrl ?? undefined} />
+                            <AvatarFallback className="bg-white/10 text-surface-primary font-bold text-sm">
+                              {p.username?.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className={cn(
+                            "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-base",
+                            isHost ? "bg-yellow-400" : ready ? "bg-green-400" : "bg-white/20"
+                          )} />
                         </div>
+                        <p className="text-surface-primary text-[10px] font-bold truncate w-full max-w-[60px]">{p.username}</p>
+                        {isHost && <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1 py-px rounded font-bold">HOST</span>}
+                        {isMe && !isHost && <span className="text-[8px] bg-[#072474]/20 text-blue-300 px-1 py-px rounded font-bold">YOU</span>}
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex items-start gap-3 bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3">
-                          <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-amber-400 font-bold text-sm">Fund reward pool</p>
-                            <p className="text-amber-500/70 text-xs mt-0.5">Required to enable Start</p>
-                          </div>
-                        </div>
-                        <Button
-                          className="w-full h-11 font-bold bg-indigo-600 hover:bg-indigo-500 text-surface-primary border-0 text-sm"
-                          onClick={handleFundReward}
-                          disabled={isFunding || isFundedCheckLoading}
-                        >
-                          {isFunding
-                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Confirming...</>
-                            : <><Wallet className="mr-2 h-4 w-4" />Fund {grossDisplayAmount} {quizReward.tokenSymbol}</>
-                          }
-                        </Button>
-                      </div>
-                    )
-                  ) : (
-                    <div className="flex items-center gap-2 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-3">
-                      <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
-                      <p className="text-green-400 text-sm font-medium">Free quiz</p>
+                    );
+                  })}
+                  {players.length === 0 && (
+                    <div className="col-span-full py-10 text-center">
+                      <p className="text-surface-secondary text-sm">No players yet</p>
                     </div>
                   )}
+                </div>
+              </div>
 
-                  {/* START button */}
-                  {(isFunded || !quizReward) && (
-                    <Button
-                      className="w-full h-14 text-base font-black text-surface-primary border-0 rounded-xl shadow-lg shadow-indigo-900/40 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                      style={{ background: "linear-gradient(135deg, #1e3a8a, #4f46e5)" }}
-                      onClick={handleStartQuiz}
-                      disabled={isStarting}
-                    >
-                      {isStarting
-                        ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Starting…</>
-                        : totalCount === 0
-                          ? <><Play className="mr-2 h-5 w-5 fill-current" />START QUIZ</>
-                          : allReady
-                            ? <><Play className="mr-2 h-5 w-5 fill-current" />START · {players.length} players</>
-                            : <><Play className="mr-2 h-5 w-5 fill-current" />START ANYWAY</>
-                      }
-                    </Button>
-                  )}
-
-                  {fundError && (
-                    <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 break-words">{fundError}</p>
-                  )}
-
-                  {quizReward && (
-                    <p className="text-[10px] font-mono text-surface-muted truncate text-center">
-                      {quizReward.contractAddress}
+              {/* Ready button */}
+              {hasJoined && (
+                <div className="max-w-sm mx-auto">
+                  <button
+                    onClick={handleToggleReady}
+                    className={cn(
+                      "w-full h-14 rounded-2xl font-black text-base flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg",
+                      isReady
+                        ? "bg-green-500 hover:bg-green-400 text-white shadow-green-900/30"
+                        : "bg-[#072474] hover:bg-[#0a32a0] text-white shadow-[#072474]/40"
+                    )}
+                  >
+                    {isReady
+                      ? <><Check className="h-5 w-5 stroke-[3px]" /> You're Ready! (tap to undo)</>
+                      : <><Zap className="h-5 w-5 fill-current" /> Click to Ready Up</>
+                    }
+                  </button>
+                  {isReady && (
+                    <p className="text-center text-surface-secondary text-xs mt-2 flex items-center justify-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Waiting for host to start...
                     </p>
                   )}
                 </div>
-              </div>
+              )}
             </div>
-          </div>
-
-        ) : (
-          /* ══ PLAYER LAYOUT: full width player grid ══ */
-          <div className="space-y-5">
-
-            {/* Quiz cover + info hero */}
-            {quizMeta?.coverImageUrl ? (
-              <div className="relative w-full max-w-2xl mx-auto aspect-video rounded-2xl overflow-hidden border border-surface shadow-xl">
-                <img src={quizMeta.coverImageUrl} alt={quizMeta.title} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                <div className="absolute bottom-4 left-4 right-4">
-                  <h1 className="text-surface-primary font-black text-xl sm:text-2xl drop-shadow">{quizMeta.title}</h1>
-                  <p className="text-surface-secondary text-sm">{quizMeta.totalQuestions} questions</p>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <h1 className="text-surface-primary font-black text-2xl sm:text-3xl">{quizMeta?.title}</h1>
-                <p className="text-surface-secondary text-sm mt-1">{quizMeta?.totalQuestions} questions</p>
-              </div>
-            )}
-
-            {/* Players grid */}
-            <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">
-              <div className="px-5 py-3 border-b border-surface flex items-center justify-between">
-                <span className="text-surface-primary font-bold text-sm flex items-center gap-2">
-                  <Users className="h-4 w-4 text-indigo-400" /> Players ({players.length})
-                </span>
-                {totalCount > 0 && (
-                  <span className={cn(
-                    "text-xs font-bold px-2.5 py-1 rounded-full border",
-                    allReady ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                  )}>
-                    {readyCount}/{totalCount} ready
-                  </span>
-                )}
-              </div>
-              <div className="p-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                {players.map(p => {
-                  const isMe = p.walletAddress.toLowerCase() === myWallet;
-                  const isHost = p.walletAddress.toLowerCase() === creatorAddr;
-                  const ready = p.isReady ?? false;
-                  return (
-                    <div key={p.walletAddress} className="flex flex-col items-center gap-1.5 text-center">
-                      <div className="relative">
-                        <Avatar className={cn(
-                          "h-12 w-12 border-2",
-                          isMe ? "border-indigo-400" : isHost ? "border-yellow-400" : ready ? "border-green-400" : "border-surface"
-                        )}>
-                          <AvatarImage src={p.avatarUrl ?? undefined} />
-                          <AvatarFallback className="bg-white/10 text-surface-primary font-bold text-sm">
-                            {p.username?.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className={cn(
-                          "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface-base",
-                          isHost ? "bg-yellow-400" : ready ? "bg-green-400" : "bg-white/20"
-                        )} />
-                      </div>
-                      <p className="text-surface-primary text-[10px] font-bold truncate w-full max-w-[60px]">{p.username}</p>
-                      {isHost && <span className="text-[8px] bg-yellow-500/20 text-yellow-400 px-1 py-px rounded font-bold">HOST</span>}
-                      {isMe && !isHost && <span className="text-[8px] bg-indigo-500/20 text-indigo-300 px-1 py-px rounded font-bold">YOU</span>}
-                    </div>
-                  );
-                })}
-                {players.length === 0 && (
-                  <div className="col-span-full py-10 text-center">
-                    <p className="text-surface-secondary text-sm">No players yet</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Ready button */}
-            {hasJoined && (
-              <div className="max-w-sm mx-auto">
-                <button
-                  onClick={handleToggleReady}
-                  className={cn(
-                    "w-full h-14 rounded-2xl font-black text-base flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg",
-                    isReady
-                      ? "bg-green-500 hover:bg-green-400 text-surface-primary shadow-green-900/30"
-                      : "bg-indigo-600 hover:bg-indigo-500 text-surface-primary shadow-indigo-900/40"
-                  )}
-                >
-                  {isReady
-                    ? <><Check className="h-5 w-5 stroke-[3px]" /> You're Ready! (tap to undo)</>
-                    : <><Zap className="h-5 w-5 fill-current" /> Click to Ready Up</>
-                  }
-                </button>
-                {isReady && (
-                  <p className="text-center text-surface-secondary text-xs mt-2 flex items-center justify-center gap-1.5">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Waiting for host to start...
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ════════════════════════════════════════
-          FLOATING CHAT BUBBLE + DRAWER
+          )}
+        </div>
+        {/* ════════════════════════════════════════
+          SHARE MODAL (Dynamic QR Code + Text)
           ════════════════════════════════════════ */}
-      {hasJoined && <FloatingChat
-        messages={chatMessages}
-        chatInput={chatInput}
-        setChatInput={setChatInput}
-        onSend={handleSendChat}
-        onSendPreset={handleSendPreset}
-        myWallet={myWallet}
-        chatBottomRef={chatBottomRef}
-        playerCount={players.length}
-      />}
+      {showShareModal && (
+        <div 
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" 
+          onClick={() => setShowShareModal(false)}
+        >
+          <div 
+            className="bg-surface-card border border-surface rounded-3xl p-6 sm:p-8 shadow-2xl max-w-sm w-full text-center space-y-6" 
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-surface-primary font-black text-xl">Invite Players</h3>
+              <button 
+                onClick={() => setShowShareModal(false)} 
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-surface-muted hover:text-surface-primary transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
-    </div>
-  );
-}
+            {/* ONLY show QR Code if the user is the creator */}
+            {isCreator && (
+              <div className="bg-white p-4 rounded-2xl mx-auto w-max shadow-inner">
+                <QRCodeSVG 
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/quiz/${code}`} 
+                  size={200} 
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <p className="text-surface-secondary text-xs font-bold uppercase tracking-widest">Quiz Code</p>
+              <div className="text-4xl font-black tracking-widest text-[#072474] dark:text-blue-400 bg-[#072474]/5 dark:bg-[#072474]/20 py-3 rounded-xl border border-[#072474]/20">
+                {code}
+              </div>
+            </div>
+
+            <Button
+              className="w-full h-12 font-bold bg-[#072474] hover:bg-[#0a32a0] text-white rounded-xl shadow-md border-0 transition-all active:scale-95"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/quiz/${code}`);
+                toast.success("Link copied to clipboard!");
+                setShowShareModal(false);
+              }}
+            >
+              <Copy className="mr-2 h-4 w-4" /> Copy Invite Link
+            </Button>
+          </div>
+        </div>
+      )}
+
+        {/* ════════════════════════════════════════
+            FLOATING CHAT BUBBLE + DRAWER
+            ════════════════════════════════════════ */}
+        {hasJoined && <FloatingChat
+          messages={chatMessages}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          onSend={handleSendChat}
+          onSendPreset={handleSendPreset}
+          myWallet={myWallet}
+          chatBottomRef={chatBottomRef}
+          playerCount={players.length}
+        />}
+
+      </div>
+    );
+  }
 
   // Countdown
   if (phase === "countdown") {
@@ -2943,7 +3012,7 @@ if (phase === "lobby") {
       <div className="fixed inset-0 bg-surface-base flex items-center justify-center select-none z-50">
         <div className="text-center space-y-4">
           <p className="text-surface-secondary text-xl uppercase tracking-widest font-black">Get ready!</p>
-          <div key={countdownVal} className="text-[10rem] md:text-[15rem] font-black text-indigo-600 dark:text-indigo-400 leading-none drop-shadow-sm" style={{ animation: "zoomFade 0.9s ease-out forwards" }}>
+          <div key={countdownVal} className="text-[10rem] md:text-[15rem] font-black text-[#072474] dark:text-blue-400 leading-none drop-shadow-sm" style={{ animation: "zoomFade 0.9s ease-out forwards" }}>
             {countdownVal}
           </div>
         </div>
@@ -2966,7 +3035,7 @@ if (phase === "lobby") {
               Q{currentQ.index + 1} / {currentQ.total}
             </Badge>
             <div className="font-black text-slate-800 dark:text-white/80 italic tracking-tighter text-lg truncate max-w-[40%] text-center">{quizMeta?.title}</div>
-            <div className="flex items-center gap-1 font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-500/20 px-3 py-1 rounded-full">
+            <div className="flex items-center gap-1 font-bold text-[#072474] dark:text-blue-300 bg-blue-100 dark:bg-[#072474]/20 px-3 py-1 rounded-full">
               <Zap className="h-4 w-4 fill-current" /> {myEntry?.points || 0}
             </div>
           </div>
@@ -2988,7 +3057,7 @@ if (phase === "lobby") {
               {personalResult.isCorrect ? (
                 <span className="flex items-center gap-2">
                   <Check className="h-7 w-7" /> CORRECT +{personalResult.pointsEarned}
-                  {personalResult.streak > 1 && <span className="ml-2 bg-orange-500 text-surface-primary px-2.5 py-0.5 rounded-full text-sm shadow-sm">🔥 {personalResult.streak}</span>}
+                  {personalResult.streak > 1 && <span className="ml-2 bg-orange-500 text-white px-2.5 py-0.5 rounded-full text-sm shadow-sm">🔥 {personalResult.streak}</span>}
                 </span>
               ) : (
                 <span className="flex items-center gap-2"><X className="h-7 w-7" /> INCORRECT</span>
@@ -3064,7 +3133,7 @@ if (phase === "lobby") {
                 key={entry.walletAddress}
                 className={cn(
                   "flex items-center gap-3 sm:gap-4 rounded-2xl px-4 py-3 sm:py-4 transition-all duration-500 animate-in slide-in-from-bottom-4 shadow-sm",
-                  isMe ? "bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-300 dark:border-indigo-500/50 shadow-indigo-100 dark:shadow-none" : "bg-surface-card border border-surface",
+                  isMe ? "bg-blue-50 dark:bg-[#072474]/30 border-2 border-blue-300 dark:border-[#072474]/50 shadow-blue-100 dark:shadow-none" : "bg-surface-card border border-surface",
                 )}
                 style={{ animationDelay: `${i * 50}ms` }}
               >
@@ -3072,7 +3141,7 @@ if (phase === "lobby") {
                   "w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0",
                   entry.rank === 1 ? "bg-yellow-400 text-yellow-900 dark:bg-yellow-500 dark:text-black shadow-inner" :
                     entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-300 dark:text-black" :
-                      entry.rank === 3 ? "bg-amber-600 text-surface-primary dark:bg-amber-600" :
+                      entry.rank === 3 ? "bg-amber-600 text-white dark:bg-amber-600" :
                         "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                 )}>
                   {entry.rank <= 3 ? ["🥇", "🥈", "🥉"][entry.rank - 1] : entry.rank}
@@ -3084,8 +3153,8 @@ if (phase === "lobby") {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-surface-primary font-bold text-base truncate">{entry.username}</span>
-                    {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-[#072474] text-surface-primary border-0 shrink-0">YOU</Badge>}
-                    {entry.streak > 1 && <Badge className="text-[9px] h-4 px-1.5 bg-orange-500 text-surface-primary border-0 shrink-0">🔥{entry.streak}</Badge>}
+                    {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-[#072474] text-white border-0 shrink-0">YOU</Badge>}
+                    {entry.streak > 1 && <Badge className="text-[9px] h-4 px-1.5 bg-orange-500 text-white border-0 shrink-0">🔥{entry.streak}</Badge>}
                   </div>
                   {entry.pointsThisRound > 0 && <span className="text-green-600 dark:text-green-400 text-xs font-black">+{entry.pointsThisRound} pts</span>}
                 </div>

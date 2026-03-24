@@ -115,6 +115,7 @@ export default function BlogDetailPage() {
       .catch(() => setError("Failed to load post"))
       .finally(() => setLoading(false));
   }, [slug]);
+
   const handleLike = async () => {
     if (liking) return;
     setLiking(true);
@@ -124,7 +125,7 @@ export default function BlogDetailPage() {
       const data = await res.json();
       if (data.success) {
         setLiked(data.liked);
-        setLikesCount(prev => data.liked ? prev + 1 : prev - 1);
+        setLikesCount(data.likes_count); // ← use real count, not prev ± 1
         const likedSlugs: string[] = JSON.parse(localStorage.getItem("blog_liked") || "[]");
         const updated = data.liked ? [...likedSlugs, slug] : likedSlugs.filter(s => s !== slug);
         localStorage.setItem("blog_liked", JSON.stringify(updated));
@@ -132,6 +133,7 @@ export default function BlogDetailPage() {
     } catch { toast.error("Failed to like"); }
     finally { setLiking(false); }
   };
+  
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success("Link copied!");

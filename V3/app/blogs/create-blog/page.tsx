@@ -563,9 +563,20 @@ export default function CreateBlogPage() {
       .then(r => r.json())
       .then(d => {
         if (d.success) setAuthed(true);
-        else { clearSession(); router.replace("/blogs/login"); }
+        else {
+          // Only redirect if form is empty — don't lose work
+          const formIsEmpty = !form.title.trim() && !form.content.trim();
+          if (formIsEmpty) {
+            clearSession();
+            router.replace("/blogs/login");
+          } else {
+            // Session expired but user has content — warn instead of redirect
+            toast.error("Session expired. Copy your content before refreshing.");
+            setAuthed(true); // let them keep editing
+          }
+        }
       })
-      .catch(() => { clearSession(); router.replace("/blogs/login"); })
+      .catch(() => setChecking(false)) // network error — don't redirect
       .finally(() => setChecking(false));
   }, [router]);
 

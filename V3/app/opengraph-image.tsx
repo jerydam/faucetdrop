@@ -1,22 +1,16 @@
 import { ImageResponse } from 'next/og'
 
-// Route segment config
 export const runtime = 'edge'
-
-// Image metadata
-export const alt = 'FaucetDrops - Automated onchain reward and engagement platform 💧'
+export const alt = 'FaucetDrops - Automated Onchain Reward and Engagement Platform 💧'
 export const size = {
   width: 1200,
   height: 630,
 }
+export const contentType = 'image/jpeg'
 
-export const contentType = '/default/jpeg'
-
-// Image generation
 export default async function Image() {
   return new ImageResponse(
     (
-      // ImageResponse JSX element
       <div
         style={{
           height: '100%',
@@ -25,32 +19,32 @@ export default async function Image() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#020817', // Dark slate background matching standard shadcn/ui theme
+          backgroundColor: '#020817',
           backgroundImage: 'radial-gradient(circle at 25px 25px, #1e293b 2%, transparent 0%), radial-gradient(circle at 75px 75px, #1e293b 2%, transparent 0%)',
           backgroundSize: '100px 100px',
         }}
       >
-        {/* Glow Effect behind text */}
+        {/* Glowing Orb Background Effect */}
         <div
           style={{
             position: 'absolute',
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: '600px',
-            height: '600px',
-            background: 'radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, rgba(2, 8, 23, 0) 70%)',
+            width: '800px',
+            height: '800px',
+            background: 'radial-gradient(circle, rgba(56, 189, 248, 0.12) 0%, rgba(2, 8, 23, 0) 70%)',
             borderRadius: '50%',
           }}
         />
 
-        {/* Main Title */}
+        {/* Main Brand Title */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 80,
+            fontSize: 90,
             fontWeight: 800,
             color: 'white',
             letterSpacing: '-0.02em',
@@ -61,13 +55,15 @@ export default async function Image() {
           FaucetDrops
         </div>
 
-        {/* Subtitle */}
+        {/* Subtitle / Tagline */}
         <div
           style={{
             marginTop: 20,
-            fontSize: 32,
+            fontSize: 34,
             fontWeight: 500,
-            color: '#94a3b8', // Slate-400
+            color: '#94a3b8',
+            textAlign: 'center',
+            maxWidth: '80%',
             zIndex: 10,
           }}
         >
@@ -77,23 +73,20 @@ export default async function Image() {
         {/* URL Pill */}
         <div
           style={{
-            marginTop: 50,
-            padding: '10px 30px',
-            backgroundColor: 'rgba(56, 189, 248, 0.1)', // Light blue tint
+            marginTop: 40,
+            padding: '12px 32px',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
             border: '1px solid rgba(56, 189, 248, 0.2)',
             borderRadius: '50px',
-            fontSize: 20,
-            color: '#38bdf8', // Sky-400
+            fontSize: 22,
+            color: '#38bdf8',
             zIndex: 10,
           }}
         >
-          FaucetDrops.io
+          faucetdrops.io
         </div>
       </div>
     ),
-    // ImageResponse options
-    {
-      ...size,
-    }
+    { ...size }
   )
 }

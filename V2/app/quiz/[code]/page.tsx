@@ -2301,20 +2301,27 @@ export default function QuizCodePage() {
         // ── 5. New question
         case "question": {
           if (timerRef.current) clearInterval(timerRef.current);
+          
+          // 🚀 FIX: Grab the local device time the exact moment the message arrives
+          const localStartTime = Date.now(); 
+
           setCurrentQ({
             index: msg.index,
             total: msg.total,
             question: msg.question,
             options: msg.options,
             timeLimit: msg.timeLimit,
-            startedAt: msg.startedAt,
+            startedAt: localStartTime, // <-- Use local time here!
           });
+          
           setSelectedId(null);
           setHasSubmitted(false);
           setRevealCorrectId(null);
           setPersonalResult(null);
           setPhase("question");
-          startTimer(msg.startedAt, msg.timeLimit);
+          
+          // 🚀 FIX: Pass the local time into your timer
+          startTimer(localStartTime, msg.timeLimit);
           break;
         }
 

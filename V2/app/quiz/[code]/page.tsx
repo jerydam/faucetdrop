@@ -91,7 +91,7 @@ function parseOnchainError(err: any): string {
   const raw: string = err?.message || "Unknown error";
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ── Safe WS URL ──
 function getWsBaseUrl(): string {
@@ -408,9 +408,10 @@ const [onChainStatus, setOnChainStatus] = useState<{
 const [checkingChain, setCheckingChain] = useState(false);
 
 useEffect(() => {
-  if (!quizReward?.contractAddress || !wallets?.[0] || !myWallet) return;
+  if (!quizReward?.contractAddress || !myWallet) return;
 
   let cancelled = false;
+  // Move RPC mapping outside or use a constant
   const CHAIN_RPC: Record<number, string> = {
     42220: "https://forno.celo.org",
     1135:  "https://rpc.api.lisk.com",
@@ -420,19 +421,19 @@ useEffect(() => {
   };
 
   const checkOnChain = async () => {
-    setCheckingChain(true);
+    // Only show "Checking chain..." loader on the very first execution
+    // to prevent the UI from flickering every 5 seconds.
+    if (!onChainStatus) setCheckingChain(true); 
+
     try {
-      // Always use the contract's chain RPC — never the user's current wallet chain
       const contractChainId = quizReward.chainId;
       const rpcUrl = contractChainId ? CHAIN_RPC[contractChainId] : null;
 
       let provider;
       if (rpcUrl) {
-        // Read-only provider on the correct chain — works regardless of user's current network
         const { JsonRpcProvider } = await import("ethers");
         provider = new JsonRpcProvider(rpcUrl);
       } else {
-        // Fallback to wallet provider if chainId unknown
         const privyProvider = await wallets[0].getEthereumProvider();
         provider = new BrowserProvider(privyProvider);
       }
@@ -442,8 +443,10 @@ useEffect(() => {
         ["function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeRemaining)"],
         provider
       );
+
       const [claimed, hasRewardAmount, rewardAmount, canClaim, timeRemaining] =
         await contract.getClaimStatus(myWallet);
+
       if (!cancelled) {
         setOnChainStatus({
           hasReward: hasRewardAmount,
@@ -454,15 +457,28 @@ useEffect(() => {
         });
       }
     } catch (e) {
-      console.error("On-chain claim status check failed:", e);
+      console.error("On-chain check failed:", e);
     } finally {
       if (!cancelled) setCheckingChain(false);
     }
   };
 
+  // Initial check
   checkOnChain();
-  return () => { cancelled = true; };
-}, [quizReward?.contractAddress, wallets, myWallet, claimedTx, rewardsReady]);
+
+  // 🚀 Start Polling: Check every 5 seconds
+  const interval = setInterval(() => {
+    // Optimization: stop polling if already claimed or can claim
+    if (!onChainStatus?.canClaim && !onChainStatus?.claimed) {
+      checkOnChain();
+    }
+  }, 5000);
+
+  return () => { 
+    cancelled = true; 
+    clearInterval(interval); 
+  };
+}, [quizReward?.contractAddress, myWallet, claimedTx]); 
 
 const [countdownDisplay, setCountdownDisplay] = useState("");
 const claimWindowEndRef = useRef<number>(0);
@@ -504,6 +520,14 @@ useEffect(() => {
   const interval = setInterval(tick, 1000);
   return () => clearInterval(interval);
 }, [onChainStatus?.timeRemaining]);
+
+// Force refresh on-chain status when rewards become ready
+useEffect(() => {
+  if (rewardsReady && myWallet && quizReward?.contractAddress) {
+    setOnChainStatus(null);        // Clear old status
+    setCheckingChain(true);        // Trigger re-check
+  }
+}, [rewardsReady, myWallet, quizReward?.contractAddress]);
 
   useEffect(() => {
     if (initialResults && !resultsData) {
@@ -827,79 +851,119 @@ useEffect(() => {
       </div>
 
       {/* Reward section — driven by on-chain status */}
-      <div className="text-right shrink-0 space-y-1.5">
-        {/* Still loading chain */}
-        {!rewardsReady && quizReward ? (
-          <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
-            <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
-          </Badge>
-        ) : checkingChain && !onChainStatus ? (
-          <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
-            <Loader2 className="h-3 w-3 animate-spin" /> Checking chain…
-          </Badge>
-        ) : !checkingChain && onChainStatus ? (
-          <>
-            {hasReward && rewardAmt && (
-              <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-                {rewardAmt} {tokenSymbol}
-              </p>
-            )}
+<div className="text-right shrink-0 space-y-1.5">
+  {/* 🚀 PRIORITY 1: Check On-Chain Reality First */}
+  {onChainStatus ? (
+    <>
+      {/* Show reward amount if they are whitelisted on-chain */}
+      {onChainStatus.hasReward && onChainStatus.rewardAmount && (
+        <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+          {onChainStatus.rewardAmount} {quizReward?.tokenSymbol ?? myPayout?.token_symbol ?? ""}
+        </p>
+      )}
 
-            {!isCreator && (
-              isClaimed ? (
-                <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-                  ✓ Claimed
-                </Badge>
-              ) : onChainStatus.canClaim ? (
-                        <>
-                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleSwitchAndClaim} disabled={isClaiming}>
-                            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                            Claim Reward
-                          </Button>
-                          {countdownDisplay && (
-                            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-                              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-                            </p>
-                          )}
-                        </>
-              ) : onChainStatus.hasReward ? (
-                <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
-                  Claim window not open
-                </Badge>
-              ) : (
-                <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
-                  Not eligible
-                </Badge>
-              )
-            )}
-          </>
-        ) : rewardsReady && !checkingChain && !onChainStatus && myFullPayout ? (
-          <>
-            <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-              {myFullPayout.amount} {tokenSymbol}
-            </p>
-            {!isCreator && (
-              isClaimed ? (
-                <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-                  ✓ Claimed
-                </Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-                  onClick={handleSwitchAndClaim}
-                  disabled={isClaiming}
-                >
-                  {isClaiming
-                    ? <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                    : null}
-                  Claim Reward
-                </Button>
-              )
-            )}
-          </>
-        ) : null}
-      </div>
+      {/* Claim logic for non-creators */}
+      {!isCreator && (() => {
+        const isClaimed = claimedTx || onChainStatus.claimed || myPayout?.status === "claimed";
+
+        if (isClaimed) {
+          return (
+            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+              ✓ Claimed
+            </Badge>
+          );
+        }
+        
+        if (onChainStatus.canClaim) {
+          return (
+            <>
+              <Button
+                size="sm"
+                className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
+                onClick={handleSwitchAndClaim}
+                disabled={isClaiming}
+              >
+                {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Claim Reward
+              </Button>
+              {countdownDisplay && (
+                <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
+                  <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+                </p>
+              )}
+            </>
+          );
+        }
+
+        if (onChainStatus.hasReward) {
+          return (
+            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
+              Claim window not open
+            </Badge>
+          );
+        }
+
+        // If on-chain says no reward, but backend hasn't finished whitelisting yet:
+        if (!rewardsReady && quizReward) {
+          return (
+            <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
+              <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
+            </Badge>
+          );
+        }
+
+        // Both on-chain and backend confirm no reward
+        return (
+          <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
+            Not eligible
+          </Badge>
+        );
+      })()}
+    </>
+  ) : 
+  /* ⏳ PRIORITY 2: Loading States (Before On-Chain Data is Ready) */
+  checkingChain ? (
+    <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
+      <Loader2 className="h-3 w-3 animate-spin" /> Checking chain…
+    </Badge>
+  ) : loadingPayouts || (!rewardsReady && quizReward) ? (
+    <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
+      <Loader2 className="h-3 w-3 animate-spin" />
+      {loadingPayouts ? "Loading payouts..." : "Processing rewards..."}
+    </Badge>
+  ) : 
+  /* 🏁 PRIORITY 3: Fallback to Backend Data (If Chain Check Failed or is delayed) */
+  myPayout ? (
+    <>
+      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+        {myPayout.amount} {myPayout.token_symbol}
+      </p>
+      {!isCreator && (
+        myPayout.status === "claimed" || claimedTx ? (
+          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+            ✓ Claimed
+          </Badge>
+        ) : (
+          <Button
+            size="sm"
+            className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0"
+            onClick={handleSwitchAndClaim}
+            disabled={isClaiming}
+          >
+            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Claim Reward
+          </Button>
+        )
+      )}
+    </>
+  ) : 
+  /* ❌ PRIORITY 4: Definitively Not Eligible */
+  (
+    <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
+      Not eligible
+    </Badge>
+  )}
+</div>
     </div>
   );
 })()}
@@ -1156,57 +1220,119 @@ useEffect(() => {
 
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
               </div>
-              <div className="text-right shrink-0 space-y-1.5">
-                {!rewardsReady && quizReward ? (
-                  <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
-                  </Badge>
-                ) : checkingChain && !onChainStatus ? (
-                  <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Checking…
-                  </Badge>
-                ) : !checkingChain && onChainStatus ? (
-                  <>
-                    {onChainStatus.hasReward && (
-                      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-                        {onChainStatus.rewardAmount} {quizReward?.tokenSymbol}
-                      </p>
-                    )}
-                    {!isCreator && (
-                     (claimedTx || onChainStatus.claimed) ? (
-                        <>
-                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">✓ Claimed</Badge>
-                          {countdownDisplay && (
-                            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-                              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-                            </p>
-                          )}
-                        </>
-                      ) : onChainStatus.canClaim ? (
-                        <>
-                          <Button size="sm" className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm" onClick={handleSwitchAndClaim} disabled={isClaiming}>
-                            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                            Claim Reward
-                          </Button>
-                          {countdownDisplay && (
-                            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-                              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-                            </p>
-                          )}
-                        </>
-                      ) : onChainStatus.hasReward ? (
-                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
-                          Claim window not open
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
-                          Not eligible
-                        </Badge>
-                      )
-                    )}
-                  </>
-                ) : null}
-              </div>
+  <div className="text-right shrink-0 space-y-1.5">
+  {/* 🚀 PRIORITY 1: Check On-Chain Reality First */}
+  {onChainStatus ? (
+    <>
+      {/* Show reward amount if they are whitelisted on-chain */}
+      {onChainStatus.hasReward && onChainStatus.rewardAmount && (
+        <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+          {onChainStatus.rewardAmount} {quizReward?.tokenSymbol ?? myPayout?.token_symbol ?? ""}
+        </p>
+      )}
+
+      {/* Claim logic for non-creators */}
+      {!isCreator && (() => {
+        const isClaimed = claimedTx || onChainStatus.claimed || myPayout?.status === "claimed";
+
+        if (isClaimed) {
+          return (
+            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+              ✓ Claimed
+            </Badge>
+          );
+        }
+        
+        if (onChainStatus.canClaim) {
+          return (
+            <>
+              <Button
+                size="sm"
+                className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
+                onClick={handleSwitchAndClaim}
+                disabled={isClaiming}
+              >
+                {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Claim Reward
+              </Button>
+              {countdownDisplay && (
+                <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
+                  <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+                </p>
+              )}
+            </>
+          );
+        }
+
+        if (onChainStatus.hasReward) {
+          return (
+            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
+              Claim window not open
+            </Badge>
+          );
+        }
+
+        // If on-chain says no reward, but backend hasn't finished whitelisting yet:
+        if (!rewardsReady && quizReward) {
+          return (
+            <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
+              <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
+            </Badge>
+          );
+        }
+
+        // Both on-chain and backend confirm no reward
+        return (
+          <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
+            Not eligible
+          </Badge>
+        );
+      })()}
+    </>
+  ) : 
+  /* ⏳ PRIORITY 2: Loading States (Before On-Chain Data is Ready) */
+  checkingChain ? (
+    <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
+      <Loader2 className="h-3 w-3 animate-spin" /> Checking chain…
+    </Badge>
+  ) : loadingPayouts || (!rewardsReady && quizReward) ? (
+    <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
+      <Loader2 className="h-3 w-3 animate-spin" />
+      {loadingPayouts ? "Loading payouts..." : "Processing rewards..."}
+    </Badge>
+  ) : 
+  /* 🏁 PRIORITY 3: Fallback to Backend Data (If Chain Check Failed or is delayed) */
+  myPayout ? (
+    <>
+      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
+        {myPayout.amount} {myPayout.token_symbol}
+      </p>
+      {!isCreator && (
+        myPayout.status === "claimed" || claimedTx ? (
+          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+            ✓ Claimed
+          </Badge>
+        ) : (
+          <Button
+            size="sm"
+            className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0"
+            onClick={handleSwitchAndClaim}
+            disabled={isClaiming}
+          >
+            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            Claim Reward
+          </Button>
+        )
+      )}
+    </>
+  ) : 
+  /* ❌ PRIORITY 4: Definitively Not Eligible */
+  (
+    <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
+      Not eligible
+    </Badge>
+  )}
+</div>
             </div>
           );
         })()}

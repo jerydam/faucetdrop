@@ -34,10 +34,11 @@ const POINTS_CONTRACT_ADDRESSES: Record<number, string> = {
   
 };
 
-const API_BASE_URL= "https://faucetdrop-backend.onrender.com"
+const API_BASE_URL= "http://127.0.0.1:8000"
 
 const POINTS_ABI = [
-  "function claim(uint256 amount, uint256 timestamp, bytes signature) external"
+  "function claim(uint256 amount, uint256 timestamp, bytes signature) external",
+  "function canClaim(address user) view returns (bool)"
 ];
 
 const CAMPAIGNS = [
@@ -243,11 +244,7 @@ function HomeContent() {
   
   const { data: dashData, loading: dashLoading } = useDashboard();
 
-  // --- FETCH USER DASHBOARD BALANCE ---
-useEffect(() => {
-    if (!address) return;
-    
-    const fetchBalance = async () => {
+ const fetchBalance = async () => {
       try {
         // ✅ Prefixed with API_BASE_URL
         const res = await fetch(`${API_BASE_URL}/api/droplist/dashboard/${address}`);
@@ -264,12 +261,18 @@ useEffect(() => {
         console.error("Failed to fetch dashboard data:", err);
       }
     };
-
+useEffect(() => {
     fetchBalance();
   }, [address]);
 
   // --- HANDLE DAILY CLAIM FLOW ---
   const handleClaimPoints = async () => {
+    // 1. Strict UI Guard: Do not proceed if cooldown is active
+    if (!canClaim) {
+      toast.error(`You have already claimed today. Come back in ${countdown}`);
+      return;
+    }
+
     if (!isConnected || !address || !signer || !chainId) {
       toast.warning("Please connect your wallet to claim points");
       return;
@@ -281,12 +284,36 @@ useEffect(() => {
       return;
     }
 
-    setIsClaiming(true);
+    // 🛡️ NEW: ON-CHAIN COOLDOWN CHECK 🛡️
+    // Ask the blockchain directly if this user is allowed to claim
     try {
-      // 1. Get Cryptographic Signature from Backend
+      const readContract = new Contract(contractAddress, POINTS_ABI, signer);
+      const isEligibleToClaim = await readContract.canClaim(address);
+      
+      if (!isEligibleToClaim) {
+        toast.error("Blockchain verification: You must wait 24 hours between claims.");
+        setCanClaim(false); // Force UI update just in case the DB was out of sync
+        return; // Stop the flow immediately
+      }
+    } catch (err) {
+      console.warn("Could not verify on-chain status, proceeding to backend check...", err);
+    }
+
+    // 🛡️ FRONTEND RACE-CONDITION LOCK 🛡️
+    const lockKey = `pending_claim_${address}`;
+    const pendingTime = localStorage.getItem(lockKey);
+    if (pendingTime && (Date.now() - parseInt(pendingTime) < 120000)) { // 2 minute lock
+      toast.error("You already have a claim in progress. Please wait for it to confirm.");
+      return;
+    }
+
+    setIsClaiming(true);
+    localStorage.setItem(lockKey, Date.now().toString());
+
+    try {
+      // 2. Get Cryptographic Signature from Backend
       toast.loading("Generating secure signature...", { id: "claim-tx" });
       
-      // ✅ Prefixed with API_BASE_URL
       const claimRes = await fetch(`${API_BASE_URL}/api/droplist/generate-signature`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -298,18 +325,22 @@ useEffect(() => {
          throw new Error(claimData.detail || "Failed to generate signature");
       }
 
-      // 2. Execute On-Chain Transaction
+      // 3. Execute On-Chain Transaction
       toast.loading("Please sign the transaction...", { id: "claim-tx" });
       const contract = new Contract(contractAddress, POINTS_ABI, signer);
-      const tx = await contract.claim(claimData.amount, claimData.timestamp, claimData.signature);
+      
+      const validSignature = claimData.signature.startsWith("0x") 
+        ? claimData.signature 
+        : `0x${claimData.signature}`;
+
+      const tx = await contract.claim(claimData.amount, claimData.timestamp, validSignature);
       
       toast.loading("Transaction sent, awaiting confirmation...", { id: "claim-tx" });
       const receipt = await tx.wait();
 
-      // 3. Verify Claim and Update Database
+      // 4. Verify Claim and Update Database
       toast.loading("Verifying block...", { id: "claim-tx" });
       
-      // ✅ Prefixed with API_BASE_URL
       const verifyRes = await fetch(`${API_BASE_URL}/api/droplist/verify-claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -321,19 +352,30 @@ useEffect(() => {
         throw new Error(verifyData.detail || "Verification failed");
       }
 
-      // Success! Update local state
-      setDropBalance(verifyData.new_balance);
-      setLastClaimAt(new Date().toISOString());
+      // 5. Success! Re-fetch the global state from backend to set the exact timestamp
+      await fetchBalance();
       toast.success("Successfully claimed Daily Drop Points!", { id: "claim-tx" });
+      
+      // Clear the local lock since the backend cooldown is now active
+      localStorage.removeItem(lockKey);
 
     } catch (error: any) {
       console.error(error);
-      toast.error(error.reason || error.message || "Failed to claim points", { id: "claim-tx" });
+      const errorMessage = error.reason || error.message || "Failed to claim points";
+      
+      // If the transaction fails or they reject it, lift the lock so they can try again
+      localStorage.removeItem(lockKey);
+      
+      if (errorMessage.includes("already used") || errorMessage.includes("Cooldown")) {
+         toast.error("You've already claimed your points for today.", { id: "claim-tx" });
+         fetchBalance();
+      } else {
+         toast.error(errorMessage, { id: "claim-tx" });
+      }
     } finally {
       setIsClaiming(false);
     }
   };
-
   // --- COOLDOWN TIMER LOGIC ---
   useEffect(() => {
     if (!lastClaimAt) {

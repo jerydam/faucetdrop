@@ -34,7 +34,7 @@ const POINTS_CONTRACT_ADDRESSES: Record<number, string> = {
   
 };
 
-const API_BASE_URL= "http://127.0.0.1:8000"
+const API_BASE_URL= "https://faucetdrop-backend.onrender.com"
 
 const POINTS_ABI = [
   "function claim(uint256 amount, uint256 timestamp, bytes signature) external",

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { useSearchParams, useRouter } from "next/navigation"; // <-- ADDED
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from 'framer-motion';
 import { Contract } from "ethers";
 import { 
@@ -14,10 +14,8 @@ import {
   ChartLine,
   User
 } from 'lucide-react';
-import { CHECKIN_ABI } from '@/lib/abis';
 import { toast } from 'sonner';
 import { useWallet } from "@/hooks/use-wallet";
-import { appendDivviReferralData, reportTransactionToDivvi } from "@/lib/divvi-integration";
 import { usePrivy } from "@privy-io/react-auth";
 import Image from 'next/image';
 import { MiniNetworkIndicator, NetworkSelector } from "@/components/network-selector";
@@ -26,7 +24,21 @@ import Link from 'next/link';
 import { ThemeToggle } from '@/components/theme';
 import { useDashboard } from '@/hooks/useDashboard';
 
-const DROPLIST_CONTRACT_ADDRESS = "0xB8De8f37B263324C44FD4874a7FB7A0C59D8C58E";
+
+const POINTS_CONTRACT_ADDRESSES: Record<number, string> = {
+  42220: "0xf2743C3f64420b5337e76e7A5aE70E5506F0eb1e",
+  8453:  "0x42fcB7C4D4a36D772c430ee8C7d026f627365BcB",
+  56:    "0x2179Ab1d45d2ca92BCb029f3d7A997B9E1687792",
+  1135:  "0xceeC8Fc27467AD2d60dFd917877F2f303C3501fD",
+  42161: "0x6898d71Ed9B0E80573f723B26AF1cc0dd4F434d5"
+  
+};
+
+const API_BASE_URL= "http://127.0.0.1:8000"
+
+const POINTS_ABI = [
+  "function claim(uint256 amount, uint256 timestamp, bytes signature) external"
+];
 
 const CAMPAIGNS = [
   { 
@@ -62,7 +74,6 @@ const CAMPAIGNS = [
 ];  
 
 // --- THEME-AWARE LOGO COMPONENTS ---
-
 export const LayerZeroLogo = ({ className = "" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="12" cy="12" r="12" className="fill-foreground"/>
@@ -212,80 +223,184 @@ const HOT_SPACES = [
 
 // --- MAIN CLIENT COMPONENT ---
 function HomeContent() {
-const { address, isConnected, signer, chainId, ensureCorrectNetwork } = useWallet();
+  const { address, isConnected, signer, chainId } = useWallet();
   const searchParams = useSearchParams();
   const router = useRouter();
   
   const { login, ready } = usePrivy();
-  const [isJoining, setIsJoining] = useState(false);
   const [showScrollHint, setShowScrollHint] = useState(true);
+  
+  // -- NEW: DROP POINTS STATE --
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [dropBalance, setDropBalance] = useState<number | null>(null);
+  const [lastClaimAt, setLastClaimAt] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<string>("");
+  const [canClaim, setCanClaim] = useState<boolean>(true);
+
   const hasPromptedLogin = useRef(false);
   const hasTriggeredTx = useRef(false);
   const hasToastedLoading = useRef(false);
   
   const { data: dashData, loading: dashLoading } = useDashboard();
 
-  const handleJoinDroplist = async () => {
-    if (!isConnected || !address || !signer) {
-      toast.warning("Please connect your wallet to join the Droplist");
+  // --- FETCH USER DASHBOARD BALANCE ---
+useEffect(() => {
+    if (!address) return;
+    
+    const fetchBalance = async () => {
+      try {
+        // ✅ Prefixed with API_BASE_URL
+        const res = await fetch(`${API_BASE_URL}/api/droplist/dashboard/${address}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.total_points !== undefined) {
+          setDropBalance(data.total_points);
+        }
+        if (data.last_claim_at) {
+          setLastClaimAt(data.last_claim_at);
+        }
+      } catch (err) {
+        console.error("Failed to fetch dashboard data:", err);
+      }
+    };
+
+    fetchBalance();
+  }, [address]);
+
+  // --- HANDLE DAILY CLAIM FLOW ---
+  const handleClaimPoints = async () => {
+    if (!isConnected || !address || !signer || !chainId) {
+      toast.warning("Please connect your wallet to claim points");
       return;
     }
-    const isCorrectNetwork = await ensureCorrectNetwork(42220); 
-    if (!isCorrectNetwork) return;
-    
-    setIsJoining(true);
+
+    const contractAddress = POINTS_CONTRACT_ADDRESSES[chainId];
+    if (!contractAddress) {
+      toast.error("Points claiming is not supported on this network yet.");
+      return;
+    }
+
+    setIsClaiming(true);
     try {
-      const contract = new Contract(DROPLIST_CONTRACT_ADDRESS, CHECKIN_ABI, signer);
-      const txData = contract.interface.encodeFunctionData("droplist", []);
-      const enhancedData = appendDivviReferralData(txData, address as `0x${string}`);
-      const tx = await signer.sendTransaction({ to: DROPLIST_CONTRACT_ADDRESS, data: enhancedData });
-      toast.info("Transaction sent, awaiting confirmation...");
-      await tx.wait();
-      await reportTransactionToDivvi(tx.hash as `0x${string}`, chainId!);
-      toast.success("Successfully joined the Droplist!");
+      // 1. Get Cryptographic Signature from Backend
+      toast.loading("Generating secure signature...", { id: "claim-tx" });
+      
+      // ✅ Prefixed with API_BASE_URL
+      const claimRes = await fetch(`${API_BASE_URL}/api/droplist/generate-signature`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: address, chainId: chainId }) 
+      });
+      
+      const claimData = await claimRes.json();
+      if (!claimRes.ok) {
+         throw new Error(claimData.detail || "Failed to generate signature");
+      }
+
+      // 2. Execute On-Chain Transaction
+      toast.loading("Please sign the transaction...", { id: "claim-tx" });
+      const contract = new Contract(contractAddress, POINTS_ABI, signer);
+      const tx = await contract.claim(claimData.amount, claimData.timestamp, claimData.signature);
+      
+      toast.loading("Transaction sent, awaiting confirmation...", { id: "claim-tx" });
+      const receipt = await tx.wait();
+
+      // 3. Verify Claim and Update Database
+      toast.loading("Verifying block...", { id: "claim-tx" });
+      
+      // ✅ Prefixed with API_BASE_URL
+      const verifyRes = await fetch(`${API_BASE_URL}/api/droplist/verify-claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txHash: receipt.hash, chainId: chainId, walletAddress: address }) 
+      });
+      
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok) {
+        throw new Error(verifyData.detail || "Verification failed");
+      }
+
+      // Success! Update local state
+      setDropBalance(verifyData.new_balance);
+      setLastClaimAt(new Date().toISOString());
+      toast.success("Successfully claimed Daily Drop Points!", { id: "claim-tx" });
+
     } catch (error: any) {
-      toast.error(`Failed to join: ${error.reason || error.message}`);
+      console.error(error);
+      toast.error(error.reason || error.message || "Failed to claim points", { id: "claim-tx" });
     } finally {
-      setIsJoining(false);
+      setIsClaiming(false);
     }
   };
 
-useEffect(() => {
+  // --- COOLDOWN TIMER LOGIC ---
+  useEffect(() => {
+    if (!lastClaimAt) {
+      setCanClaim(true);
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = new Date().getTime();
+      const lastClaimTime = new Date(lastClaimAt).getTime();
+      const diff = now - lastClaimTime;
+      const cooldownMs = 24 * 60 * 60 * 1000; // 24 hours
+
+      if (diff < cooldownMs) {
+        setCanClaim(false);
+        const remaining = cooldownMs - diff;
+        const hours = Math.floor(remaining / 3600000);
+        const mins = Math.floor((remaining % 3600000) / 60000);
+        setCountdown(`${hours}h ${mins}m`);
+      } else {
+        setCanClaim(true);
+        setCountdown("");
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [lastClaimAt]);
+
+ 
+
+  // --- AUTOMATIC URL ACTION TRIGGER ---
+  useEffect(() => {
     const action = searchParams?.get("action");
 
-    if (action === "join-droplist" && !hasTriggeredTx.current) {
-      
-      // A. Immediate feedback while Privy initializes
+    // Changed from "join-droplist" to "claim-points" to match new architecture
+    if (action === "claim-points" && !hasTriggeredTx.current) {
       if (!ready) {
         if (!hasToastedLoading.current) {
           hasToastedLoading.current = true;
-          // Show a loading toast with an ID so we can dismiss it later
-          toast.loading("Preparing to join Droplist...", { id: "droplist-loading" });
+          toast.loading("Preparing to claim points...", { id: "action-loading" });
         }
-        return; // Wait for Privy
+        return; 
       }
 
-      // B. Privy is ready! Dismiss the loading toast
-      toast.dismiss("droplist-loading");
+      toast.dismiss("action-loading");
 
-      // C. If not connected, prompt login exactly ONCE
       if (!isConnected) {
         if (!hasPromptedLogin.current) {
           hasPromptedLogin.current = true; 
-          toast.info("Please sign in or connect your wallet to join.");
+          toast.info("Please sign in or connect your wallet to claim.");
           login(); 
         }
-        return; // Wait for them to finish logging in
+        return; 
       }
 
-      // D. They are connected! Fire the transaction
-      hasTriggeredTx.current = true; // Mark tx as triggered
-      handleJoinDroplist();
+      hasTriggeredTx.current = true;
+      if (canClaim) {
+         handleClaimPoints();
+      } else {
+         toast.info(`You have already claimed today. Come back in ${countdown}`);
+      }
 
-      // E. Clean the URL so refreshing doesn't loop
       router.replace("/", { scroll: false });
     }
-  }, [ready, searchParams, isConnected, address, login, router]);
+  }, [ready, searchParams, isConnected, address, login, router, canClaim, countdown]);
   
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (e.currentTarget.scrollLeft > 20) {
@@ -382,27 +497,46 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* MY ASSETS CARD */}
-          <div className="w-full lg:w-[320px] flex flex-col justify-end" id="join-droplist">
+          {/* --- MY ASSETS CARD (UPDATED FOR DAILY DROP POINTS) --- */}
+          <div className="w-full lg:w-[320px] flex flex-col justify-end" id="claim-points">
             <div className="bg-card bg-gradient-to-b from-card to-accent/20 dark:to-transparent rounded-2xl border border-border p-6 h-auto min-h-[144px] lg:h-72 flex flex-col justify-between shadow-sm">
               <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">My Assets</h4>
               
               <div className="flex flex-col gap-6">
                 <div className="flex items-center gap-3">
-                   <div className="p-2 bg-primary/10 rounded-lg text-primary"><DropletIcon size={18}/></div>
-                   <div className="flex flex-col">
-                      <span className="text-xs font-bold">Earn Drop Points</span>
-                      <span className="text-[10px] text-muted-foreground">Coming Soon</span>
-                   </div>
+                <div className="relative w-12 h-12 shrink-0 drop-shadow-md hover:scale-105 transition-transform">
+                  <Image 
+                    src="/drop-token.png" 
+                    alt="Drop Points" 
+                    fill 
+                    className="object-contain"
+                  />
                 </div>
+                
+                <div className="flex flex-col">
+                    <span className="text-xs font-bold text-muted-foreground">Total Drop Token Earn</span>
+                    <span className="text-3xl font-black tracking-tight">
+                      {dropBalance !== null ? dropBalance.toLocaleString() : "---"}
+                    </span>
+                </div>
+              </div>
               </div>
 
               <button 
-                onClick={handleJoinDroplist}
-                disabled={isJoining}
-                className="w-full text-[11px] font-bold text-primary border border-primary/30 px-4 py-3 rounded-xl hover:bg-primary/10 transition-colors disabled:opacity-50 shadow-sm"
+                onClick={handleClaimPoints}
+                disabled={isClaiming || !canClaim}
+                className={`w-full text-[11px] font-bold px-4 py-3 rounded-xl transition-all shadow-sm ${
+                  !canClaim 
+                    ? "bg-accent text-muted-foreground cursor-not-allowed border border-border"
+                    : "text-primary border border-primary/30 hover:bg-primary/10"
+                }`}
               >
-                {isJoining ? "Joining..." : "Join Droplist"}
+                {isClaiming 
+                  ? "Claiming..." 
+                  : canClaim 
+                    ? "Claim Drop Token" 
+                    : `Come back in ${countdown}`
+                }
               </button>
             </div>
           </div>

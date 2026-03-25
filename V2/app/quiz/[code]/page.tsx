@@ -91,7 +91,7 @@ function parseOnchainError(err: any): string {
   const raw: string = err?.message || "Unknown error";
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ── Safe WS URL ──
 function getWsBaseUrl(): string {

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import Loading from "../loading/page";
 
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
@@ -393,10 +394,7 @@ export default function QuizListPage() {
         {/* ── Grid ── */}
         {isLoading ? (
           <div className="flex items-center justify-center py-32">
-            <div className="text-center space-y-4">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto" />
-              <p className="text-slate-400 dark:text-slate-500 text-sm">Loading quizzes...</p>
-            </div>
+            <Loading/>
           </div>
         ) : filtered.length === 0 ? (
           <div className="border border-dashed border-slate-200 dark:border-white/[0.07] rounded-2xl flex flex-col items-center justify-center py-24 space-y-4">

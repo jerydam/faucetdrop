@@ -25,6 +25,7 @@ import { fundQuizReward } from "@/lib/quiz";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { WalletConnectButton } from "@/components/wallet-connect";
+import Loading from "@/app/loading";
 
 // ── On-chain error parser ──────────────────────────────────────
 function parseOnchainError(err: any): string {
@@ -2589,7 +2590,7 @@ export default function QuizCodePage() {
     return (
       <div className="flex flex-col min-h-screen bg-surface-base">
         <Header pageTitle="Quiz" />
-        <div className="flex-1 flex items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-[#072474] dark:text-blue-400" /></div>
+      <Loading/>
       </div>
     );
   }

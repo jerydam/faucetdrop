@@ -63,6 +63,7 @@ import { Contract, BrowserProvider, parseEther, ZeroAddress } from "ethers";
 import { Header } from "@/components/header";
 import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 import { SubscriptionModal } from "@/components/subscribe";
+import Loading from "@/app/loading";
 
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
@@ -1615,8 +1616,7 @@ export default function QuestDetailsPage() {
       <div className="flex flex-col min-h-screen">
         <Header pageTitle="Loading..." />
         <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <p className="text-muted-foreground animate-pulse">Loading Quest...</p>
+          <Loading/>
         </div>
       </div>
     );

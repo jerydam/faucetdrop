@@ -31,6 +31,7 @@ import { usePrivy } from "@privy-io/react-auth"
 import { EmbeddedWalletControlProduction } from "@/components/embeddedwallet"
 import { SelfVerificationModal } from "@/components/self-verification-modal"
 import { VerifiedAvatar, VerifyPill, VerifiedBadge } from "@/components/verified-profile-avatar"
+import Loading from "@/app/loading"
 // --- Custom Icons ---
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -571,8 +572,7 @@ const handleVerificationSuccess = async (data: any) => {
     if (loading && !initialLoadComplete) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-                <p className="text-muted-foreground">Loading dashboard...</p>
+               <Loading/>
             </div>
         );
     }

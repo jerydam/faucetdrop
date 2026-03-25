@@ -21,6 +21,7 @@ import Phase2TimingTasksFinalize, {
 } from '@/components/quest/questAdvance'
 
 import { useWallet } from "@/hooks/use-wallet"
+import Loading from '@/app/loading'
 
 interface UserProfile {
     wallet_address: string;
@@ -529,8 +530,7 @@ const { openSubscriptionModal } = useSubscriptionModal()
     if (isLoadingDraft) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
-                <p className="text-muted-foreground">Loading draft...</p>
+                <Loading/>
             </div>
         )
     }

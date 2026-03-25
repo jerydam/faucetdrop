@@ -13,6 +13,7 @@ import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import Loading from '../loading/page';
 
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
@@ -529,10 +530,7 @@ export default function QuestHomePage() {
 
                 {/* Content */}
                 {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                        <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
-                        <p>Loading Active Campaigns...</p>
-                    </div>
+                    <Loading />
                 ) : error ? (
                     <Card className="p-6 border-red-200 bg-red-50 text-red-800 flex flex-col items-center text-center">
                         <p className="font-semibold text-lg mb-2">Unable to load quests</p>

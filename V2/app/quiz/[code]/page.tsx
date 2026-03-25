@@ -853,117 +853,103 @@ useEffect(() => {
 
       {/* Reward section — driven by on-chain status */}
 <div className="text-right shrink-0 space-y-1.5">
-  {/* 🚀 PRIORITY 1: Check On-Chain Reality First */}
-  {onChainStatus ? (
-    <>
-      {/* Show reward amount if they are whitelisted on-chain */}
-      {onChainStatus.hasReward && onChainStatus.rewardAmount && (
-        <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-          {onChainStatus.rewardAmount} {quizReward?.tokenSymbol ?? myPayout?.token_symbol ?? ""}
-        </p>
-      )}
+  {(() => {
+    // 1. Unified Truth: You are a winner if EITHER the backend or the blockchain says so.
+    const isWinner = !!myPayout || onChainStatus?.hasReward;
+    const isClaimed = claimedTx || onChainStatus?.claimed || myPayout?.status === "claimed";
+    
+    const rewardAmt = onChainStatus?.rewardAmount || myPayout?.amount || "";
+    const tokenSym = quizReward?.tokenSymbol || myPayout?.token_symbol || "";
 
-      {/* Claim logic for non-creators */}
-      {!isCreator && (() => {
-        const isClaimed = claimedTx || onChainStatus.claimed || myPayout?.status === "claimed";
+    // 2. Creators don't claim rewards
+    if (isCreator) return null;
 
-        if (isClaimed) {
-          return (
-            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-              ✓ Claimed
-            </Badge>
-          );
-        }
-        
-        if (onChainStatus.canClaim) {
-          return (
-            <>
-              <Button
-                size="sm"
-                className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-                onClick={handleSwitchAndClaim}
-                disabled={isClaiming}
-              >
-                {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                Claim Reward
-              </Button>
-              {countdownDisplay && (
-                <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-                  <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-                </p>
-              )}
-            </>
-          );
-        }
+    // 3. Still fetching initial data
+    if (loadingPayouts || (checkingChain && !onChainStatus && !myPayout)) {
+      return (
+        <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
+          <Loader2 className="h-3 w-3 animate-spin" /> Checking status...
+        </Badge>
+      );
+    }
 
-        if (onChainStatus.hasReward) {
-          return (
-            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
-              Claim window not open
-            </Badge>
-          );
-        }
-
-        // If on-chain says no reward, but backend hasn't finished whitelisting yet:
-        if (!rewardsReady && quizReward) {
-          return (
-            <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
-              <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
-            </Badge>
-          );
-        }
-
-        // Both on-chain and backend confirm no reward
+    // 4. Definitively NOT a winner
+    if (!isWinner) {
+      if (!rewardsReady && quizReward) {
         return (
-          <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
-            Not eligible
+          <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center text-xs">
+            <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
           </Badge>
         );
-      })()}
-    </>
-  ) : 
-  /* ⏳ PRIORITY 2: Loading States (Before On-Chain Data is Ready) */
-  checkingChain ? (
-    <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
-      <Loader2 className="h-3 w-3 animate-spin" /> Checking chain…
-    </Badge>
-  ) : loadingPayouts || (!rewardsReady && quizReward) ? (
-    <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
-      <Loader2 className="h-3 w-3 animate-spin" />
-      {loadingPayouts ? "Loading payouts..." : "Processing rewards..."}
-    </Badge>
-  ) : 
-  /* 🏁 PRIORITY 3: Fallback to Backend Data (If Chain Check Failed or is delayed) */
-  myPayout ? (
-    <>
-      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-        {myPayout.amount} {myPayout.token_symbol}
+      }
+      return <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">Not eligible</Badge>;
+    }
+
+    // 5. UI Element for the Reward Amount
+    const amountDisplay = (
+      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm mb-1.5">
+        {rewardAmt} {tokenSym}
       </p>
-      {!isCreator && (
-        myPayout.status === "claimed" || claimedTx ? (
+    );
+
+    // 6. Already Claimed
+    if (isClaimed) {
+      return (
+        <>
+          {amountDisplay}
           <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
             ✓ Claimed
           </Badge>
-        ) : (
+        </>
+      );
+    }
+
+    // 7. Ready to Claim on Blockchain
+    if (onChainStatus?.canClaim) {
+      return (
+        <>
+          {amountDisplay}
           <Button
             size="sm"
-            className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0"
+            className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
             onClick={handleSwitchAndClaim}
             disabled={isClaiming}
           >
-            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            {isClaiming && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
             Claim Reward
           </Button>
-        )
-      )}
-    </>
-  ) : 
-  /* ❌ PRIORITY 4: Definitively Not Eligible */
-  (
-    <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
-      Not eligible
-    </Badge>
-  )}
+          {countdownDisplay && countdownDisplay !== "Expired" && (
+            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
+              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+            </p>
+          )}
+        </>
+      );
+    }
+
+    // 8. On-Chain, but the time window hasn't started
+    if (onChainStatus?.hasReward && !onChainStatus?.canClaim) {
+      return (
+        <>
+          {amountDisplay}
+          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
+            Claim window not open
+          </Badge>
+        </>
+      );
+    }
+
+    // 9. THE FIX: Backend says Winner, but Blockchain hasn't synced yet
+    return (
+      <>
+        {amountDisplay}
+        <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0 gap-1 flex items-center text-xs">
+          <Loader2 className="h-3 w-3 animate-spin" /> Syncing to blockchain...
+        </Badge>
+      </>
+    );
+
+  })()}
 </div>
     </div>
   );
@@ -1221,118 +1207,104 @@ useEffect(() => {
 
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
               </div>
-  <div className="text-right shrink-0 space-y-1.5">
-  {/* 🚀 PRIORITY 1: Check On-Chain Reality First */}
-  {onChainStatus ? (
-    <>
-      {/* Show reward amount if they are whitelisted on-chain */}
-      {onChainStatus.hasReward && onChainStatus.rewardAmount && (
-        <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-          {onChainStatus.rewardAmount} {quizReward?.tokenSymbol ?? myPayout?.token_symbol ?? ""}
-        </p>
-      )}
+ <div className="text-right shrink-0 space-y-1.5">
+  {(() => {
+    // 1. Unified Truth: You are a winner if EITHER the backend or the blockchain says so.
+    const isWinner = !!myPayout || onChainStatus?.hasReward;
+    const isClaimed = claimedTx || onChainStatus?.claimed || myPayout?.status === "claimed";
+    
+    const rewardAmt = onChainStatus?.rewardAmount || myPayout?.amount || "";
+    const tokenSym = quizReward?.tokenSymbol || myPayout?.token_symbol || "";
 
-      {/* Claim logic for non-creators */}
-      {!isCreator && (() => {
-        const isClaimed = claimedTx || onChainStatus.claimed || myPayout?.status === "claimed";
+    // 2. Creators don't claim rewards
+    if (isCreator) return null;
 
-        if (isClaimed) {
-          return (
-            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-              ✓ Claimed
-            </Badge>
-          );
-        }
-        
-        if (onChainStatus.canClaim) {
-          return (
-            <>
-              <Button
-                size="sm"
-                className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-                onClick={handleSwitchAndClaim}
-                disabled={isClaiming}
-              >
-                {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                Claim Reward
-              </Button>
-              {countdownDisplay && (
-                <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-                  <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-                </p>
-              )}
-            </>
-          );
-        }
+    // 3. Still fetching initial data
+    if (loadingPayouts || (checkingChain && !onChainStatus && !myPayout)) {
+      return (
+        <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
+          <Loader2 className="h-3 w-3 animate-spin" /> Checking status...
+        </Badge>
+      );
+    }
 
-        if (onChainStatus.hasReward) {
-          return (
-            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
-              Claim window not open
-            </Badge>
-          );
-        }
-
-        // If on-chain says no reward, but backend hasn't finished whitelisting yet:
-        if (!rewardsReady && quizReward) {
-          return (
-            <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
-              <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
-            </Badge>
-          );
-        }
-
-        // Both on-chain and backend confirm no reward
+    // 4. Definitively NOT a winner
+    if (!isWinner) {
+      if (!rewardsReady && quizReward) {
         return (
-          <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
-            Not eligible
+          <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center text-xs">
+            <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
           </Badge>
         );
-      })()}
-    </>
-  ) : 
-  /* ⏳ PRIORITY 2: Loading States (Before On-Chain Data is Ready) */
-  checkingChain ? (
-    <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
-      <Loader2 className="h-3 w-3 animate-spin" /> Checking chain…
-    </Badge>
-  ) : loadingPayouts || (!rewardsReady && quizReward) ? (
-    <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center">
-      <Loader2 className="h-3 w-3 animate-spin" />
-      {loadingPayouts ? "Loading payouts..." : "Processing rewards..."}
-    </Badge>
-  ) : 
-  /* 🏁 PRIORITY 3: Fallback to Backend Data (If Chain Check Failed or is delayed) */
-  myPayout ? (
-    <>
-      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm">
-        {myPayout.amount} {myPayout.token_symbol}
+      }
+      return <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">Not eligible</Badge>;
+    }
+
+    // 5. UI Element for the Reward Amount
+    const amountDisplay = (
+      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm mb-1.5">
+        {rewardAmt} {tokenSym}
       </p>
-      {!isCreator && (
-        myPayout.status === "claimed" || claimedTx ? (
+    );
+
+    // 6. Already Claimed
+    if (isClaimed) {
+      return (
+        <>
+          {amountDisplay}
           <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
             ✓ Claimed
           </Badge>
-        ) : (
+        </>
+      );
+    }
+
+    // 7. Ready to Claim on Blockchain
+    if (onChainStatus?.canClaim) {
+      return (
+        <>
+          {amountDisplay}
           <Button
             size="sm"
-            className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0"
+            className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
             onClick={handleSwitchAndClaim}
             disabled={isClaiming}
           >
-            {isClaiming ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+            {isClaiming && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
             Claim Reward
           </Button>
-        )
-      )}
-    </>
-  ) : 
-  /* ❌ PRIORITY 4: Definitively Not Eligible */
-  (
-    <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
-      Not eligible
-    </Badge>
-  )}
+          {countdownDisplay && countdownDisplay !== "Expired" && (
+            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
+              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+            </p>
+          )}
+        </>
+      );
+    }
+
+    // 8. On-Chain, but the time window hasn't started
+    if (onChainStatus?.hasReward && !onChainStatus?.canClaim) {
+      return (
+        <>
+          {amountDisplay}
+          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
+            Claim window not open
+          </Badge>
+        </>
+      );
+    }
+
+    // 9. THE FIX: Backend says Winner, but Blockchain hasn't synced yet
+    return (
+      <>
+        {amountDisplay}
+        <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0 gap-1 flex items-center text-xs">
+          <Loader2 className="h-3 w-3 animate-spin" /> Syncing to blockchain...
+        </Badge>
+      </>
+    );
+
+  })()}
 </div>
             </div>
           );

@@ -96,7 +96,7 @@ const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 // ── Safe WS URL ──
 function getWsBaseUrl(): string {
-  if (typeof window === "undefined") return "ws://127.0.0.1:8000";
+  if (typeof window === "undefined") return "wss://faucetdrop-backend.onrender.com";
   return window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
     ? "ws://127.0.0.1:8000"
     : "wss://faucetdrop-backend.onrender.com";
@@ -254,7 +254,6 @@ interface PayoutsData { success: boolean; faucetAddress: string; chainId: number
 function QuizGameOver({
   quizMeta, code, leaderboard, myWallet, isCreator, showConfetti, router,
   initialResults, loadingInitialResults, rewardsReady,
-  quizReward,
   wallets
 }: any) {
   const [payoutsData, setPayoutsData] = useState<PayoutsData | null>(null);
@@ -265,279 +264,197 @@ function QuizGameOver({
   const [showFullResults, setShowFullResults] = useState(!!initialResults);
   const [resultsData, setResultsData] = useState<any>(initialResults ?? null);
   const [loadingResults, setLoadingResults] = useState(false);
-  
+
+  // ── New clean claim state ──
+  const [claimStatus, setClaimStatus] = useState<"loading" | "not_eligible" | "pending" | "claim" | "claimed" | "expired">("loading");
+  const [rewardAmount, setRewardAmount] = useState<string>("");
+  const [contractInfo, setContractInfo] = useState<{
+    address: string;
+    chainId: number;
+    tokenSymbol: string;
+    tokenDecimals: number;
+  } | null>(null);
+
+  const CHAIN_RPC: Record<number, string> = {
+    42220: "https://forno.celo.org",
+    1135:  "https://rpc.api.lisk.com",
+    42161: "https://arb1.arbitrum.io/rpc",
+    8453:  "https://mainnet.base.org",
+    56:    "https://bsc-dataseed.binance.org",
+  };
+
   const activeWallet =
     wallets.find((w: any) => w.walletClientType === "privy") ||
     wallets.find((w: any) => w.address.toLowerCase() === userWalletAddress?.toLowerCase()) ||
     wallets?.[0];
 
- const [claimWindowExpired, setClaimWindowExpired] = useState(false);
- const [claimWindowChecked, setClaimWindowChecked] = useState(false);
- const [withdrawableBalance, setWithdrawableBalance] = useState<string>("");
-
- const [viewingProfile, setViewingProfile] = useState<{
-  walletAddress: string;
-  username: string;
-  avatarUrl?: string | null;
-  points: number;
-  rank: number;
-} | null>(null);
-
-useEffect(() => {
-  if (!quizReward?.contractAddress || !isCreator) return;
-
-  const CHAIN_RPC: Record<number, string> = {
-    42220: "https://forno.celo.org",
-    1135:  "https://rpc.api.lisk.com",
-    42161: "https://arb1.arbitrum.io/rpc",
-    8453:  "https://mainnet.base.org",
-    56:    "https://bsc-dataseed.binance.org",
-  };
-
-  let cancelled = false;
-
-  const checkWindow = async () => {
-    try {
-      const rpcUrl = quizReward.chainId ? CHAIN_RPC[quizReward.chainId] : null;
-      if (!rpcUrl) return;
-
-      const provider = new JsonRpcProvider(rpcUrl);
-      const contract = new Contract(
-        quizReward.contractAddress,
-        [
-          "function claimWindowEnd() view returns (uint256)",
-          "function isClaimActive() view returns (bool)",
-        ],
-        provider
-      );
-
-      const [claimWindowEnd, isClaimActive] = await Promise.all([
-        contract.claimWindowEnd(),
-        contract.isClaimActive(),
-      ]);
-
-      const nowTs = Math.floor(Date.now() / 1000);
-      const windowEnd = Number(claimWindowEnd);
-
-      if (!cancelled) {
-        // Window expired = end time has passed AND claim is no longer active
-        // windowEnd === 0 means rewards never dispatched yet
-        const expired = windowEnd > 0 && nowTs > windowEnd && !isClaimActive;
-        setClaimWindowExpired(expired);
-        setClaimWindowChecked(true);
-
-        // Drive the marquee countdown for creator
-        if (windowEnd > 0 && isClaimActive) {
-          let secondsLeft = windowEnd - nowTs;
-          if (secondsLeft > 0) {
-            setCountdownDisplay(fmt(secondsLeft));
-            const interval = setInterval(() => {
-              secondsLeft -= 1;
-              if (secondsLeft <= 0) {
-                clearInterval(interval);
-                setCountdownDisplay("Expired");
-                setClaimWindowExpired(true);
-              } else {
-                setCountdownDisplay(fmt(secondsLeft));
-              }
-            }, 1000);
-            // cleanup handled by outer effect cleanup
-          }
-        } else if (expired) {
-          setCountdownDisplay("Expired");
-        }
-      }
-    } catch (e) {
-      console.error("Claim window check failed:", e);
-      if (!cancelled) setClaimWindowChecked(true);
-    }
-  };
-
-  checkWindow();
-  const interval = setInterval(checkWindow, 30_000);
-  return () => { cancelled = true; clearInterval(interval); };
-}, [quizReward?.contractAddress, quizReward?.chainId, isCreator]);
-
-useEffect(() => {
-  if (!claimWindowExpired || !quizReward?.contractAddress) return;
-
-  const CHAIN_RPC: Record<number, string> = {
-    42220: "https://forno.celo.org",
-    1135:  "https://rpc.api.lisk.com",
-    42161: "https://arb1.arbitrum.io/rpc",
-    8453:  "https://mainnet.base.org",
-    56:    "https://bsc-dataseed.binance.org",
-  };
-
-  const fetchBalance = async () => {
-    try {
-      const rpcUrl = quizReward.chainId ? CHAIN_RPC[quizReward.chainId] : null;
-      if (!rpcUrl) return;
-      const provider = new JsonRpcProvider(rpcUrl);
-
-      let bal: bigint;
-      if (quizReward.isNativeToken) {
-        bal = await provider.getBalance(quizReward.contractAddress);
-      } else {
-        const erc20 = new Contract(
-          quizReward.tokenAddress,
-          ["function balanceOf(address) view returns (uint256)"],
-          provider
-        );
-        bal = await erc20.balanceOf(quizReward.contractAddress);
-      }
-
-      const human = parseFloat(formatUnits(bal, quizReward.tokenDecimals));
-      setWithdrawableBalance(
-        human > 0 ? `${human % 1 === 0 ? human.toFixed(0) : human.toFixed(4)} ${quizReward.tokenSymbol}` : ""
-      );
-    } catch (e) {
-      console.error("Failed to fetch withdrawable balance:", e);
-    }
-  };
-
-  fetchBalance();
-}, [claimWindowExpired, quizReward?.contractAddress, quizReward?.chainId]);
-
-const [onChainStatus, setOnChainStatus] = useState<{
-    hasReward: boolean;
-    claimed: boolean;
-    rewardAmount: string;
-    canClaim: boolean;
-    timeRemaining: number;
+  const [viewingProfile, setViewingProfile] = useState<{
+    walletAddress: string;
+    username: string;
+    avatarUrl?: string | null;
+    points: number;
+    rank: number;
   } | null>(null);
-  const [checkingChain, setCheckingChain] = useState(true); // Start true so it doesn't flash "Not eligible"
-  const [countdownDisplay, setCountdownDisplay] = useState("");
-  const claimWindowEndRef = useRef<number>(0);
 
-useEffect(() => {
-    // Abort early if no contract or no wallet is present
-    if (!quizReward?.contractAddress || !wallets?.[0] || !myWallet) {
-      setCheckingChain(false);
-      return;
-    }
+  // ── Single contract check effect ──
+  useEffect(() => {
+    if (!myWallet || isCreator) return;
 
     let cancelled = false;
-    const CHAIN_RPC: Record<number, string> = {
-      42220: "https://forno.celo.org",
-      1135:  "https://rpc.api.lisk.com",
-      42161: "https://arb1.arbitrum.io/rpc",
-      8453:  "https://mainnet.base.org",
-      56:    "https://bsc-dataseed.binance.org",
-    };
+    let intervalId: ReturnType<typeof setInterval>;
 
-    const checkOnChain = async () => {
-      // Only set to true on the very first load to avoid UI flickering during polling
-      if (!onChainStatus) setCheckingChain(true); 
-      
-      try {
-        const contractChainId = quizReward.chainId;
-        const rpcUrl = contractChainId ? CHAIN_RPC[contractChainId] : null;
+    const checkContract = async (
+  contractAddress: string,
+  chainId: number,
+  tokenDecimals: number,
+  tokenSymbol: string
+) => {
+  const rpcUrl = CHAIN_RPC[chainId];
+  if (!rpcUrl) {
+    console.warn("❌ [ClaimCheck] No RPC for chainId:", chainId);
+    return;
+  }
 
-        let provider;
-        if (rpcUrl) {
-          const { JsonRpcProvider } = await import("ethers");
-          provider = new JsonRpcProvider(rpcUrl);
-        } else {
-          const privyProvider = await wallets[0].getEthereumProvider();
-          provider = new BrowserProvider(privyProvider);
-        }
+  try {
+    const { JsonRpcProvider, Contract, formatUnits } = await import("ethers");
+    const provider = new JsonRpcProvider(rpcUrl);
+    const contract = new Contract(
+      contractAddress,
+      ["function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeRemaining)"],
+      provider
+    );
 
-        const contract = new Contract(
-          quizReward.contractAddress,
-          ["function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeRemaining)"],
-          provider
-        );
-        
-        const [claimed, hasRewardAmount, rewardAmount, canClaim, timeRemaining] = await contract.getClaimStatus(myWallet);
+    console.log("🔍 [ClaimCheck] Calling getClaimStatus for:", {
+      user: myWallet,
+      contract: contractAddress,
+      chainId,
+      tokenDecimals,
+      tokenSymbol,
+      rpcUrl,
+    });
 
-        if (!cancelled) {
-          setOnChainStatus({
-            hasReward: hasRewardAmount,
-            claimed,
-            rewardAmount: formatUnits(rewardAmount, quizReward.tokenDecimals),
-            canClaim,
-            timeRemaining: Number(timeRemaining),
-          });
-        }
-      } catch (e) {
-        console.error("On-chain claim status check failed:", e);
-      } finally {
-        if (!cancelled) setCheckingChain(false);
-      }
-    };
+    const result = await contract.getClaimStatus(myWallet);
 
-    // Run immediately
-    checkOnChain();
+    const claimed      = result[0];
+    const hasReward    = result[1];
+    const rewardRaw    = result[2];
+    const canClaim     = result[3];
+    const timeRemaining = result[4];
 
-    // Poll every 10 seconds to catch changes (like window opening) automatically
-    const interval = setInterval(() => {
-      // Stop polling if they already claimed
-      if (!onChainStatus?.claimed && !claimedTx) {
-        checkOnChain();
-      }
-    }, 10000);
+    console.log("📦 [ClaimCheck] Raw contract result:", result);
+    console.log("📊 [ClaimCheck] Parsed values:", {
+      claimed,
+      hasReward,
+      rewardRaw: rewardRaw?.toString(),
+      canClaim,
+      timeRemaining: timeRemaining?.toString(),
+      rewardsReady,
+      claimedTx,
+      myWallet,
+    });
 
-    return () => { 
-      cancelled = true; 
-      clearInterval(interval); 
-    };
-  }, [quizReward?.contractAddress, quizReward?.chainId, myWallet, wallets, claimedTx, rewardsReady]);
-
-const fmt = (s: number) => {
-  const d = Math.floor(s / 86400);
-  const h = Math.floor((s % 86400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m ${sec}s`;
-  return `${m}m ${sec}s`;
-};
-
-useEffect(() => {
-    const timeRemaining = onChainStatus?.timeRemaining ?? 0;
-    if (timeRemaining <= 0) {
-      setCountdownDisplay("");
+    if (cancelled) {
+      console.log("🚫 [ClaimCheck] Cancelled, skipping state update");
       return;
     }
 
-    const newEndTime = Math.floor(Date.now() / 1000) + timeRemaining;
-    if (Math.abs(newEndTime - claimWindowEndRef.current) > 5) {
-      claimWindowEndRef.current = newEndTime;
+    const fmt = hasReward
+      ? parseFloat(formatUnits(rewardRaw, tokenDecimals)).toFixed(4) + " " + tokenSymbol
+      : "";
+
+    console.log("💰 [ClaimCheck] Formatted reward:", fmt || "(none)");
+
+    if (claimedTx || claimed) {
+      console.log("✅ [ClaimCheck] → STATUS: claimed", { claimedTx, claimed });
+      setClaimStatus("claimed");
+      if (fmt) setRewardAmount(fmt);
+      clearInterval(intervalId);
+      return;
+    }
+    if (hasReward && canClaim) {
+      console.log("🟢 [ClaimCheck] → STATUS: claim (eligible, not yet claimed)");
+      setClaimStatus("claim");
+      setRewardAmount(fmt);
+      clearInterval(intervalId);
+      return;
+    }
+    if (hasReward && !canClaim) {
+  const timeRemainingNum = Number(timeRemaining);
+  if (timeRemainingNum === 0) {
+    console.log("🔴 [ClaimCheck] → STATUS: expired (has reward, canClaim=false, timeRemaining=0)");
+    setClaimStatus("expired");
+    setRewardAmount(fmt);
+    clearInterval(intervalId);
+    return;
+  }
+  console.log("🟡 [ClaimCheck] → STATUS: pending (has reward but canClaim=false)", {
+    timeRemaining: timeRemaining?.toString(),
+  });
+  setClaimStatus("pending");
+  setRewardAmount(fmt);
+  return;
+}
+
+    // hasReward is false
+    console.log("⚪ [ClaimCheck] → STATUS: not_eligible", {
+      reason: "hasReward is false",
+      rewardsReady,
+      hasReward,
+      canClaim,
+    });
+    setClaimStatus(rewardsReady ? "pending" : "not_eligible");
+  } catch (e) {
+    console.error("💥 [ClaimCheck] Contract call failed:", e);
+  }
+};
+const init = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/results`);
+    const data = await res.json();
+
+    console.log("📋 [ClaimCheck] /results response:", JSON.stringify(data, null, 2));
+
+    if (!data.success) {
+      console.warn("❌ [ClaimCheck] results not success, setting not_eligible");
+      setClaimStatus("not_eligible");
+      return;
     }
 
-    const fmt = (s: number) => {
-      const d = Math.floor(s / 86400);
-      const h = Math.floor((s % 86400) / 3600);
-      const m = Math.floor((s % 3600) / 60);
-      const sec = s % 60;
-      if (d > 0) return `${d}d ${h}h ${m}m`;
-      if (h > 0) return `${h}h ${m}m ${sec}s`;
-      return `${m}m ${sec}s`;
-    };
+    const contractAddress = data.quiz?.reward?.contractAddress || data.quiz?.faucetAddress;
+    const chainId = data.quiz?.chainId;
+    const tokenDecimals = data.quiz?.reward?.tokenDecimals ?? 18;
+    const tokenSymbol = data.quiz?.reward?.tokenSymbol ?? "";
 
-    const tick = () => {
-      const secondsLeft = claimWindowEndRef.current - Math.floor(Date.now() / 1000);
-      if (secondsLeft <= 0) {
-        setCountdownDisplay("Expired");
-        setOnChainStatus(prev => prev ? { ...prev, canClaim: false, timeRemaining: 0 } : prev);
-      } else {
-        setCountdownDisplay(fmt(secondsLeft));
-      }
-    };
+    console.log("🏗️ [ClaimCheck] Extracted contract info:", {
+      contractAddress,
+      chainId,
+      tokenDecimals,
+      tokenSymbol,
+      myWallet,
+      rewardsReady,
+    });
 
-    tick();
-    const interval = setInterval(tick, 1000);
-    
-    return () => clearInterval(interval);
-  }, [onChainStatus?.timeRemaining]);
-// Force refresh on-chain status when rewards become ready
-useEffect(() => {
-  if (rewardsReady && myWallet && quizReward?.contractAddress) {
-    setOnChainStatus(null);        // Clear old status
-    setCheckingChain(true);        // Trigger re-check
+    if (!contractAddress || !chainId) {
+      console.warn("❌ [ClaimCheck] Missing contractAddress or chainId, setting not_eligible");
+      setClaimStatus("not_eligible");
+      return;
+    }
+
+    setContractInfo({ address: contractAddress, chainId, tokenDecimals, tokenSymbol });
+    await checkContract(contractAddress, chainId, tokenDecimals, tokenSymbol);
+
+    intervalId = setInterval(() => {
+      if (!cancelled) checkContract(contractAddress, chainId, tokenDecimals, tokenSymbol);
+    }, 5000);
+  } catch (e) {
+    console.error("💥 [ClaimCheck] init failed:", e);
+    setClaimStatus("not_eligible");
   }
-}, [rewardsReady, myWallet, quizReward?.contractAddress]);
+};
+
+    init();
+    return () => { cancelled = true; clearInterval(intervalId); };
+  }, [myWallet, isCreator, code, rewardsReady, claimedTx]);
 
   useEffect(() => {
     if (initialResults && !resultsData) {
@@ -546,7 +463,6 @@ useEffect(() => {
     }
   }, [initialResults]);
 
-  // 🚀 Re-fetches instantly when rewardsReady turns true!
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/quiz/${code}/payouts`)
       .then(r => r.json())
@@ -557,7 +473,6 @@ useEffect(() => {
   const myPayout = payoutsData?.payouts.find(
     p => p.wallet_address.toLowerCase() === myWallet.toLowerCase()
   );
-  const hasAlreadyClaimed = myPayout?.status === "claimed" || !!claimedTx;
   const totalWinners = payoutsData?.payouts.length ?? 0;
 
   const payoutByWallet = useMemo(() => {
@@ -567,26 +482,20 @@ useEffect(() => {
   }, [payoutsData]);
 
   const handleSwitchAndClaim = async () => {
-  if (!activeWallet || !quizReward) { toast.error("Wallet not connected"); return; }
-  
-  // Get the quiz's required chain from quizReward or fallback to payouts data
-  const requiredChainId = quizReward?.chainId ?? payoutsData?.chainId;
-  
-  if (requiredChainId) {
+    if (!activeWallet || !contractInfo) { toast.error("Wallet not connected"); return; }
     const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0");
-    if (currentChainId !== requiredChainId) {
+    if (currentChainId !== contractInfo.chainId) {
       try {
         toast.info("Switching to the correct network...");
-        await activeWallet.switchChain(requiredChainId);
-        await new Promise(r => setTimeout(r, 1500)); // wait for switch
-      } catch (e: any) {
+        await activeWallet.switchChain(contractInfo.chainId);
+        await new Promise(r => setTimeout(r, 1500));
+      } catch {
         toast.error("Please switch to the correct network in your wallet");
         return;
       }
     }
-  }
-  handleClaim();
-};
+    handleClaim();
+  };
 
   const handleClaim = async () => {
     if (!activeWallet) { toast.error("Wallet not connected"); return; }
@@ -601,7 +510,7 @@ useEffect(() => {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.detail || data.message || "Claim failed");
       setClaimedTx(data.txHash);
-      setOnChainStatus(null);
+      setClaimStatus("claimed");
       toast.success("Reward claimed! It is now in your wallet.");
       setPayoutsData(prev => {
         if (!prev) return prev;
@@ -646,8 +555,8 @@ useEffect(() => {
     }
   };
 
-
   const top3 = leaderboard.slice(0, 3);
+
   const EXPLORER_BASE: Record<number, string> = {
     42220: "https://celoscan.io/tx/",
     1135:  "https://blockscout.lisk.com/tx/",
@@ -656,7 +565,66 @@ useEffect(() => {
     56:    "https://bscscan.com/tx/",
   };
 
-  // ── Full Results View ──────────────────────────────────────
+  // ── Reusable claim status badge ──
+  const ClaimStatusUI = () => {
+    if (isCreator) return null;
+
+    if (claimStatus === "loading") {
+      return (
+        <div className="flex items-center gap-2 text-sm text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Checking...</span>
+        </div>
+      );
+    }
+    if (claimStatus === "claimed") {
+      return (
+        <div className="text-right">
+          {rewardAmount && <p className="text-yellow-600 font-bold text-sm">{rewardAmount}</p>}
+          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+            ✓ Claimed
+          </Badge>
+        </div>
+      );
+    }
+    if (claimStatus === "claim") {
+      return (
+        <div className="text-right space-y-1">
+          {rewardAmount && <p className="text-yellow-600 font-bold text-sm">{rewardAmount}</p>}
+          <Button size="sm" onClick={handleSwitchAndClaim} disabled={isClaiming}>
+            {isClaiming ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Claiming...</> : "Claim Reward"}
+          </Button>
+        </div>
+      );
+    }
+    if (claimStatus === "pending") {
+      return (
+        <div className="text-right">
+          {rewardAmount && <p className="text-yellow-600 font-bold text-sm">{rewardAmount}</p>}
+          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+            ⏳ Pending
+          </Badge>
+        </div>
+      );
+    }
+    if (claimStatus === "expired") {
+  return (
+    <div className="text-right">
+      {rewardAmount && <p className="text-slate-400 font-bold text-sm line-through">{rewardAmount}</p>}
+      <Badge className="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400">
+        ⏰ Claim Expired
+      </Badge>
+    </div>
+  );
+}
+    return (
+      <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+        Not eligible
+      </Badge>
+    );
+  };
+
+  // ── Full Results View ──
   if (showFullResults) {
     if (loadingInitialResults && !resultsData) {
       return (
@@ -678,94 +646,76 @@ useEffect(() => {
 
     const formatDate = (iso: string | null) => {
       if (!iso) return "";
-      return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      return new Date(iso).toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "2-digit", minute: "2-digit"
+      });
     };
 
     return (
-     <div className="fixed inset-0 bg-surface-base flex flex-col overflow-auto">
+      <div className="fixed inset-0 bg-surface-base flex flex-col overflow-auto">
         <Confetti active={showConfetti} />
+
         {/* Profile Modal */}
-{viewingProfile && (
-  <div
-    className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
-    onClick={() => setViewingProfile(null)}
-  >
-    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-    <div
-      className="relative w-full max-w-sm bg-surface-card border border-surface rounded-3xl p-6 shadow-2xl space-y-4"
-      onClick={e => e.stopPropagation()}
-    >
-      {/* Close */}
-      <button
-        onClick={() => setViewingProfile(null)}
-        className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-surface-primary transition-all"
-      >
-        <X className="h-4 w-4" />
-      </button>
-
-      {/* Avatar + name */}
-      <div className="flex flex-col items-center gap-3 pt-2">
-        <Avatar className="h-20 w-20 border-4 border-blue-500/30 shadow-xl">
-          <AvatarImage src={viewingProfile.avatarUrl ?? undefined} />
-          <AvatarFallback className="bg-blue-900/50 text-blue-200 font-black text-2xl">
-            {viewingProfile.username?.slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
-        <div className="text-center">
-          <p className="text-surface-primary font-black text-xl">{viewingProfile.username}</p>
-          <p className="text-blue-300/50 text-xs font-mono mt-1">
-            {viewingProfile.walletAddress.slice(0, 6)}...{viewingProfile.walletAddress.slice(-4)}
-          </p>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white/5 rounded-2xl px-4 py-3 text-center">
-          <p className="text-blue-300/50 text-xs font-bold uppercase tracking-widest">Rank</p>
-          <p className="text-surface-primary font-black text-2xl mt-1">
-            {viewingProfile.rank <= 3
-              ? ["🥇","🥈","🥉"][viewingProfile.rank - 1]
-              : `#${viewingProfile.rank}`}
-          </p>
-        </div>
-        <div className="bg-white/5 rounded-2xl px-4 py-3 text-center">
-          <p className="text-blue-300/50 text-xs font-bold uppercase tracking-widest">Points</p>
-          <p className="text-surface-primary font-black text-2xl mt-1">{viewingProfile.points}</p>
-        </div>
-      </div>
-
-      {/* View full profile button */}
-      <button
-        onClick={() => {
-          router.push(`/dashboard/${viewingProfile.username}`);
-          setViewingProfile(null);
-        }}
-        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all active:scale-95"
-      >
-        View Full Profile
-      </button>
-    </div>
-  </div>
-)}
-        {countdownDisplay && countdownDisplay !== "Expired" && (
-          <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
-            <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
-              {[...Array(4)].map((_, i) => (
-                <span key={i} className="text-surface-primary text-xs font-bold flex items-center gap-2 px-12">
-                  <Clock className="h-3 w-3 shrink-0" />
-                  {onChainStatus?.claimed || claimedTx
-                    ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
-                    : `Claim window expires in ${countdownDisplay}`
-                  }
-                </span>
-              ))}
+        {viewingProfile && (
+          <div
+            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+            onClick={() => setViewingProfile(null)}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div
+              className="relative w-full max-w-sm bg-surface-card border border-surface rounded-3xl p-6 shadow-2xl space-y-4"
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setViewingProfile(null)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-surface-primary transition-all"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="flex flex-col items-center gap-3 pt-2">
+                <Avatar className="h-20 w-20 border-4 border-blue-500/30 shadow-xl">
+                  <AvatarImage src={viewingProfile.avatarUrl ?? undefined} />
+                  <AvatarFallback className="bg-blue-900/50 text-blue-200 font-black text-2xl">
+                    {viewingProfile.username?.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="text-center">
+                  <p className="text-surface-primary font-black text-xl">{viewingProfile.username}</p>
+                  <p className="text-blue-300/50 text-xs font-mono mt-1">
+                    {viewingProfile.walletAddress.slice(0, 6)}...{viewingProfile.walletAddress.slice(-4)}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white/5 rounded-2xl px-4 py-3 text-center">
+                  <p className="text-blue-300/50 text-xs font-bold uppercase tracking-widest">Rank</p>
+                  <p className="text-surface-primary font-black text-2xl mt-1">
+                    {viewingProfile.rank <= 3
+                      ? ["🥇", "🥈", "🥉"][viewingProfile.rank - 1]
+                      : `#${viewingProfile.rank}`}
+                  </p>
+                </div>
+                <div className="bg-white/5 rounded-2xl px-4 py-3 text-center">
+                  <p className="text-blue-300/50 text-xs font-bold uppercase tracking-widest">Points</p>
+                  <p className="text-surface-primary font-black text-2xl mt-1">{viewingProfile.points}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  router.push(`/dashboard/${viewingProfile.username}`);
+                  setViewingProfile(null);
+                }}
+                className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-all active:scale-95"
+              >
+                View Full Profile
+              </button>
             </div>
-            <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
           </div>
         )}
+
         <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-surface shadow-sm">
-         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
             {leaderboard.length > 0 ? (
               <button onClick={() => setShowFullResults(false)} className="flex items-center gap-2 text-surface-secondary hover:text-slate-900 dark:hover:text-surface-primary text-sm font-bold transition-colors">
                 <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">Game Summary</span>
@@ -776,7 +726,7 @@ useEffect(() => {
               </button>
             )}
             <div className="flex items-center gap-2">
-              <Badge className="bg-surface-card-2text-surface-secondary border-0 font-mono text-xs">{code}</Badge>
+              <Badge className="bg-surface-card-2 text-surface-secondary border-0 font-mono text-xs">{code}</Badge>
               <Badge className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-0 text-xs">Ended</Badge>
             </div>
           </div>
@@ -795,7 +745,7 @@ useEffect(() => {
             ) : (
               <>
                 <div className="text-4xl sm:text-6xl mb-2">🏆</div>
-            <h1 className="text-2xl sm:text-3xl font-black text-surface-primary">{rQuiz?.title || quizMeta?.title}</h1>
+                <h1 className="text-2xl sm:text-3xl font-black text-surface-primary">{rQuiz?.title || quizMeta?.title}</h1>
               </>
             )}
             <div className="flex items-center justify-center gap-3 flex-wrap text-surface-secondary text-sm">
@@ -811,140 +761,38 @@ useEffect(() => {
             </div>
           </div>
 
-{myWallet && (() => {
-  const myEntry = fullLb.find((e: any) => e.walletAddress?.toLowerCase() === myWallet);
-  if (!myEntry) return null;
-
-  const myFullPayout = fullPayouts?.[myWallet];
-
-  // ── Merge backend + on-chain truth ──
-  const isClaimed =
-    claimedTx ||
-    onChainStatus?.claimed ||
-    myFullPayout?.status === "claimed";
-
-  const hasReward = onChainStatus?.hasReward || !!myFullPayout;
-
-  const rewardAmt =
-    onChainStatus?.rewardAmount ||
-    (myFullPayout ? String(myFullPayout.amount) : null);
-
-  const tokenSymbol =
-    quizReward?.tokenSymbol ||
-    myFullPayout?.tokenSymbol ||
-    myFullPayout?.token_symbol ||
-    "";
-
-  return (
-    <div className={cn(
-      "rounded-2xl p-4 border flex items-center gap-4",
-      myEntry.rank === 1
-        ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30"
-        : myEntry.rank <= 3
-          ? "bg-blue-50 dark:bg-[#072474]/20 border-blue-200 dark:border-[#072474]/30"
-          : "bg-surface-card border border-surface"
-    )}>
-      {/* Rank icon */}
-      <div className={cn(
-        "w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0",
-        myEntry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
-        myEntry.rank === 2 ? "bg-slate-300 text-slate-800" :
-        myEntry.rank === 3 ? "bg-amber-600 text-white" :
-        "bg-blue-100 dark:bg-[#072474]/40 text-[#072474] dark:text-blue-400"
-      )}>
-        {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="font-black text-surface-primary">Your Result</p>
-
-        <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
-      </div>
-
-      {/* Reward section — driven by on-chain status */}
-<div className="text-right shrink-0 space-y-1.5">
-
-{(() => {
-  if (isCreator) return null;
-
-  // No contract = no on-chain rewards for this quiz
-  if (!quizReward?.contractAddress) return null;
-
-  // Still waiting for the FIRST contract check to complete
-  // (covers both: checkingChain=true AND the brief moment before it starts)
-  if (!onChainStatus) {
-    return (
-      <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
-        <Loader2 className="h-3 w-3 animate-spin" /> Checking contract...
-      </Badge>
-    );
-  }
-
-  // Contract says no reward for this wallet
-  if (!onChainStatus.hasReward) {
-    return (
-      <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
-        Not eligible
-      </Badge>
-    );
-  }
-
-  const amountDisplay = (
-    <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm mb-1.5">
-      {onChainStatus.rewardAmount} {quizReward.tokenSymbol}
-    </p>
-  );
-
-  // Already claimed
-  if (onChainStatus.claimed || claimedTx) {
-    return (
-      <>
-        {amountDisplay}
-        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-          ✓ Claimed
-        </Badge>
-      </>
-    );
-  }
-
-  // Ready to claim
-  if (onChainStatus.canClaim) {
-    return (
-      <>
-        {amountDisplay}
-        <Button
-          size="sm"
-          className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-          onClick={handleSwitchAndClaim}
-          disabled={isClaiming}
-        >
-          {isClaiming && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-          Claim Reward
-        </Button>
-        {countdownDisplay && countdownDisplay !== "Expired" && (
-          <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-            <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-          </p>
-        )}
-      </>
-    );
-  }
-
-  // Has reward but window not open yet
-  return (
-    <>
-      {amountDisplay}
-      <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
-        Claim window not open
-      </Badge>
-    </>
-  );
-})()}
-</div>
-    </div>
-  );
-})()}
-
+          {/* My result card */}
+          {myWallet && (() => {
+            const myEntry = fullLb.find((e: any) => e.walletAddress?.toLowerCase() === myWallet);
+            if (!myEntry) return null;
+            return (
+              <div className={cn(
+                "rounded-2xl p-4 border flex items-center gap-4",
+                myEntry.rank === 1
+                  ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30"
+                  : myEntry.rank <= 3
+                    ? "bg-blue-50 dark:bg-[#072474]/20 border-blue-200 dark:border-[#072474]/30"
+                    : "bg-surface-card border border-surface"
+              )}>
+                <div className={cn(
+                  "w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl shrink-0",
+                  myEntry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
+                  myEntry.rank === 2 ? "bg-slate-300 text-slate-800" :
+                  myEntry.rank === 3 ? "bg-amber-600 text-white" :
+                  "bg-blue-100 dark:bg-[#072474]/40 text-[#072474] dark:text-blue-400"
+                )}>
+                  {myEntry.rank <= 3 ? ["🥇", "🥈", "🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-surface-primary">Your Result</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
+                </div>
+                <div className="text-right shrink-0 space-y-1.5">
+                  <ClaimStatusUI />
+                </div>
+              </div>
+            );
+          })()}
 
           {rQuiz?.reward && (
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/30 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
@@ -1019,7 +867,7 @@ useEffect(() => {
                 const payout = fullPayouts?.[entry.walletAddress?.toLowerCase()];
                 const isWinner = !!payout;
                 return (
-<div
+                  <div
                     key={entry.walletAddress}
                     onClick={() => setViewingProfile({
                       walletAddress: entry.walletAddress,
@@ -1032,8 +880,15 @@ useEffect(() => {
                       "flex items-center gap-3 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors",
                       isMe && "bg-blue-50 dark:bg-[#072474]/30",
                       isWinner && "border-l-4 border-l-yellow-400 dark:border-l-yellow-500"
-                    )}>                    <div className={cn("w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0", entry.rank === 1 ? "bg-yellow-400 text-yellow-900" : entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" : entry.rank === 3 ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400")}>
-                      {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : `#${entry.rank}`}
+                    )}>
+                    <div className={cn(
+                      "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center font-black text-xs sm:text-sm shrink-0",
+                      entry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
+                      entry.rank === 2 ? "bg-slate-300 text-slate-800 dark:bg-slate-600 dark:text-white" :
+                      entry.rank === 3 ? "bg-amber-600 text-white" :
+                      "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                    )}>
+                      {entry.rank <= 3 ? ["🥇", "🥈", "🥉"][entry.rank - 1] : `#${entry.rank}`}
                     </div>
                     <Avatar className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 border border-slate-200 dark:border-slate-700">
                       <AvatarImage src={entry.avatarUrl ?? undefined} />
@@ -1071,116 +926,33 @@ useEffect(() => {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Game Summary
               </Button>
             )}
-            
-            {isCreator && quizReward && (
-               <Button
-                className={cn(
-                  "flex-1 h-12 font-bold border-0",
-                  claimWindowChecked && claimWindowExpired
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-slate-200 dark:bg-slate-800 text-surface-muted cursor-not-allowed"
-                )}
-                    
-                disabled={!claimWindowChecked || !claimWindowExpired}
-                onClick={async () => {
-                  if (!activeWallet || !quizReward) return;
-                  try {
-                    const requiredChainId = quizReward.chainId;
-                    if (requiredChainId) {
-                      const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0");
-                      if (currentChainId !== requiredChainId) {
-                        toast.info("Switching to the correct network...");
-                        await activeWallet.switchChain(requiredChainId);
-                        await new Promise(r => setTimeout(r, 1500));
-                      }
-                    }
-                    const privyProvider = await activeWallet.getEthereumProvider();
-                    const provider = new BrowserProvider(privyProvider);
-                    const signer = await provider.getSigner();
-                    const contract = new Contract(
-                      quizReward.contractAddress,
-                      ["function withdraw(uint256 amount) external", "function token() view returns (address)", "function isEther() view returns (bool)"],
-                      signer
-                    );
-                    toast.info("Processing withdrawal...");
-                    // Get full balance and withdraw all
-                    const { JsonRpcProvider: JRP } = await import("ethers");
-                    const readProvider = new JRP(quizReward.chainId ? ({
-                      42220: "https://forno.celo.org",
-                      1135: "https://rpc.api.lisk.com",
-                      42161: "https://arb1.arbitrum.io/rpc",
-                      8453: "https://mainnet.base.org",
-                      56: "https://bsc-dataseed.binance.org",
-                    } as Record<number, string>)[quizReward.chainId] : "https://forno.celo.org");
-                    const readContract = new Contract(
-                      quizReward.contractAddress,
-                      ["function customClaimAmounts(address) view returns (uint256)", "function token() view returns (address)"],
-                      readProvider
-                    );
-                    const tokenAddr = quizReward.tokenAddress;
-                    const erc20 = new Contract(tokenAddr, ["function balanceOf(address) view returns (uint256)"], readProvider);
-                    const bal = await erc20.balanceOf(quizReward.contractAddress);
-                    const tx = await contract.withdraw(bal);
-                    await tx.wait();
-                    toast.success("Withdrawal successful!");
-                  } catch (e: any) {
-                    toast.error(parseOnchainError(e));
-                  }
-                }}
-              >
-                 {!claimWindowChecked ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Checking...</>
-                ) : !claimWindowExpired ? (
-                  <><Clock className="mr-2 h-4 w-4" /> Withdraw {countdownDisplay ? `(${countdownDisplay} left)` : "(claim window open)"}</>
-                ) : (
-                  <><Wallet className="mr-2 h-4 w-4" /> Withdraw {withdrawableBalance ? `(${withdrawableBalance})` : "Funds"}</>
-                )}
-              </Button>
-            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // ── Game Over Summary (Live View) ─────
+  // ── Game Over Summary (Live View) ──
   return (
     <div className="fixed inset-0 bg-surface-base flex flex-col overflow-auto">
-        <Confetti active={showConfetti} />
-        {countdownDisplay && countdownDisplay !== "Expired" && (
-          <div className="w-full bg-amber-500 dark:bg-amber-600 overflow-hidden shrink-0">
-            <div className="py-1.5 flex whitespace-nowrap" style={{ animation: "marqueeScroll 18s linear infinite" }}>
-              {[...Array(4)].map((_, i) => (
-                <span key={i} className="text-surface-primary text-xs font-bold flex items-center gap-2 px-12">
-                  <Clock className="h-3 w-3 shrink-0" />
-                  {onChainStatus?.claimed || claimedTx
-                    ? `✓ Claimed — Claim window expires in ${countdownDisplay}`
-                    : `Claim window expires in ${countdownDisplay}`
-                  }
-                </span>
-              ))}
-            </div>
-            <style>{`@keyframes marqueeScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
-          </div>
-        )}
-        <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-24 space-y-6 sm:space-y-8">
+      <Confetti active={showConfetti} />
 
+      <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 pt-8 sm:pt-12 pb-24 space-y-6 sm:space-y-8">
         <div className="text-center space-y-2">
           <div className="text-5xl sm:text-7xl drop-shadow-md mb-3">🏆</div>
           <h1 className="text-3xl sm:text-5xl font-black text-surface-primary">Quiz Complete!</h1>
           <p className="text-surface-secondary text-sm sm:text-base font-medium">{quizMeta?.title}</p>
         </div>
 
-        {/* 🚀 My Result Card (With Claim Button) */}
+        {/* My Result Card */}
         {myWallet && (() => {
           const myEntry = leaderboard.find((e: any) => e.walletAddress?.toLowerCase() === myWallet);
           if (!myEntry) return null;
-          const myPayout = payoutByWallet[myWallet];
           return (
             <div className={cn(
               "max-w-xl mx-auto w-full rounded-2xl p-4 border flex items-center gap-4 shadow-sm",
-              myEntry.rank === 1 ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30" : 
-              myEntry.rank <= 3 ? "bg-blue-50 dark:bg-[#072474]/20 border-blue-200 dark:border-[#072474]/30" : 
+              myEntry.rank === 1 ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700/30" :
+              myEntry.rank <= 3 ? "bg-blue-50 dark:bg-[#072474]/20 border-blue-200 dark:border-[#072474]/30" :
               "bg-surface-card border border-surface"
             )}>
               <div className={cn(
@@ -1190,92 +962,15 @@ useEffect(() => {
                 myEntry.rank === 3 ? "bg-amber-600 text-white" :
                 "bg-blue-100 dark:bg-[#072474]/40 text-[#072474] dark:text-blue-400"
               )}>
-                {myEntry.rank <= 3 ? ["🥇","🥈","🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
+                {myEntry.rank <= 3 ? ["🥇", "🥈", "🥉"][myEntry.rank - 1] : `#${myEntry.rank}`}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-black text-surface-primary">Your Result</p>
-
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
               </div>
- <div className="text-right shrink-0 space-y-1.5">
-  
-{(() => {
-  if (isCreator) return null;
-
-  // No contract = no on-chain rewards for this quiz
-  if (!quizReward?.contractAddress) return null;
-
-  // Still waiting for the FIRST contract check to complete
-  // (covers both: checkingChain=true AND the brief moment before it starts)
-  if (!onChainStatus) {
-    return (
-      <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
-        <Loader2 className="h-3 w-3 animate-spin" /> Checking contract...
-      </Badge>
-    );
-  }
-
-  // Contract says no reward for this wallet
-  if (!onChainStatus.hasReward) {
-    return (
-      <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
-        Not eligible
-      </Badge>
-    );
-  }
-
-  const amountDisplay = (
-    <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm mb-1.5">
-      {onChainStatus.rewardAmount} {quizReward.tokenSymbol}
-    </p>
-  );
-
-  // Already claimed
-  if (onChainStatus.claimed || claimedTx) {
-    return (
-      <>
-        {amountDisplay}
-        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-          ✓ Claimed
-        </Badge>
-      </>
-    );
-  }
-
-  // Ready to claim
-  if (onChainStatus.canClaim) {
-    return (
-      <>
-        {amountDisplay}
-        <Button
-          size="sm"
-          className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-          onClick={handleSwitchAndClaim}
-          disabled={isClaiming}
-        >
-          {isClaiming && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-          Claim Reward
-        </Button>
-        {countdownDisplay && countdownDisplay !== "Expired" && (
-          <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-            <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-          </p>
-        )}
-      </>
-    );
-  }
-
-  // Has reward but window not open yet
-  return (
-    <>
-      {amountDisplay}
-      <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
-        Claim window not open
-      </Badge>
-    </>
-  );
-})()}
-</div>
+              <div className="text-right shrink-0 space-y-1.5">
+                <ClaimStatusUI />
+              </div>
             </div>
           );
         })()}
@@ -1289,19 +984,12 @@ useEffect(() => {
           </div>
         )}
 
+        {/* Podium */}
         {top3.length > 0 && (
           <div className="flex items-end justify-center gap-2 sm:gap-4 md:gap-6">
             {top3[1] && (
-              <div
-                className="flex flex-col items-center gap-1.5 sm:gap-2 animate-in slide-in-from-bottom-8 duration-500 delay-200 cursor-pointer"
-                onClick={() => setViewingProfile({
-                  walletAddress: top3[1].walletAddress,
-                  username: top3[1].username,
-                  avatarUrl: top3[1].avatarUrl,
-                  points: top3[1].points,
-                  rank: 2,
-                })}
-              >
+              <div className="flex flex-col items-center gap-1.5 sm:gap-2 animate-in slide-in-from-bottom-8 duration-500 delay-200 cursor-pointer"
+                onClick={() => setViewingProfile({ walletAddress: top3[1].walletAddress, username: top3[1].username, avatarUrl: top3[1].avatarUrl, points: top3[1].points, rank: 2 })}>
                 <Avatar className="h-12 w-12 sm:h-16 sm:w-16 md:h-20 md:w-20 border-4 border-slate-300 dark:border-slate-600 shadow-lg">
                   <AvatarImage src={top3[1].avatarUrl ?? undefined} />
                   <AvatarFallback className="bg-slate-200 dark:bg-slate-700 font-bold text-xs sm:text-base">{top3[1].username?.slice(0, 2).toUpperCase()}</AvatarFallback>
@@ -1343,7 +1031,8 @@ useEffect(() => {
           </div>
         )}
 
-        <div className="max-w-2xl mx-auto bg-surface-cardrounded-2xl overflow-hidden border border-surface shadow-sm">
+        {/* Standings */}
+        <div className="max-w-2xl mx-auto bg-surface-card rounded-2xl overflow-hidden border border-surface shadow-sm">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
             <span className="text-surface-secondary text-xs font-bold uppercase tracking-widest flex items-center gap-1.5">
               <Trophy className="h-3.5 w-3.5 text-yellow-500" /> Final Standings
@@ -1380,7 +1069,7 @@ useEffect(() => {
                       entry.rank === 3 ? "bg-amber-600 text-white" :
                       "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                     )}>
-                      {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : entry.rank}
+                      {entry.rank <= 3 ? ["🥇", "🥈", "🥉"][entry.rank - 1] : entry.rank}
                     </div>
                     <Avatar className="h-8 w-8 sm:h-10 sm:w-10 shrink-0">
                       <AvatarImage src={entry.avatarUrl ?? undefined} />
@@ -1408,7 +1097,6 @@ useEffect(() => {
             <Button className="h-12 font-bold bg-[#072474] hover:bg-[#0a32a0] text-white border-0" onClick={fetchResults} disabled={loadingResults}>
               {loadingResults ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</> : <><Trophy className="mr-2 h-4 w-4" />View Full Results</>}
             </Button>
-            
           </div>
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1 h-12 bg-surface-card border border-surface text-surface-primary" onClick={() => router.push("/quiz")}>
@@ -1417,73 +1105,6 @@ useEffect(() => {
             {isCreator && (
               <Button className="flex-1 h-12 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold border-0" onClick={() => router.push("/quiz/create-quiz")}>
                 <Plus className="mr-2 h-4 w-4" /> New Quiz
-              </Button>
-            )}
-            {isCreator && quizReward && (
-              <Button
-                className={cn(
-                  "flex-1 h-12 font-bold border-0",
-                  onChainStatus && onChainStatus.timeRemaining === 0
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-slate-200 dark:bg-slate-800 text-surface-muted cursor-not-allowed"
-                )}
-                disabled={!claimWindowChecked || !claimWindowExpired}
-                onClick={async () => {
-                  if (!activeWallet || !quizReward) return;
-                  try {
-                    const requiredChainId = quizReward.chainId;
-                    if (requiredChainId) {
-                      const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0");
-                      if (currentChainId !== requiredChainId) {
-                        toast.info("Switching to the correct network...");
-                        await activeWallet.switchChain(requiredChainId);
-                        await new Promise(r => setTimeout(r, 1500));
-                      }
-                    }
-                    const privyProvider = await activeWallet.getEthereumProvider();
-                    const provider = new BrowserProvider(privyProvider);
-                    const signer = await provider.getSigner();
-                    const contract = new Contract(
-                      quizReward.contractAddress,
-                      ["function withdraw(uint256 amount) external", "function token() view returns (address)", "function isEther() view returns (bool)"],
-                      signer
-                    );
-                    toast.info("Processing withdrawal...");
-                    // Get full balance and withdraw all
-                    const { JsonRpcProvider: JRP } = await import("ethers");
-                    const readProvider = new JRP(quizReward.chainId ? ({
-                      42220: "https://forno.celo.org",
-                      1135: "https://rpc.api.lisk.com",
-                      42161: "https://arb1.arbitrum.io/rpc",
-                      8453: "https://mainnet.base.org",
-                      56: "https://bsc-dataseed.binance.org",
-                    } as Record<number, string>)[quizReward.chainId] : "https://forno.celo.org");
-                    const readContract = new Contract(
-                      quizReward.contractAddress,
-                      ["function customClaimAmounts(address) view returns (uint256)", "function token() view returns (address)"],
-                      readProvider
-                    );
-                    const tokenAddr = quizReward.tokenAddress;
-                    const erc20 = new Contract(tokenAddr, ["function balanceOf(address) view returns (uint256)"], readProvider);
-                    const bal = await erc20.balanceOf(quizReward.contractAddress);
-                    const tx = await contract.withdraw(bal);
-                    await tx.wait();
-                    toast.success("Withdrawal successful!");
-                  } catch (e: any) {
-                    toast.error(parseOnchainError(e));
-                  }
-                }}
-              >
-                {!onChainStatus || onChainStatus.timeRemaining > 0 ? (
-                  <>
-                    <Clock className="mr-2 h-4 w-4" />
-                    {onChainStatus && onChainStatus.timeRemaining > 0 ? `Withdraw (${countdownDisplay} left)` : "Withdraw (waiting...)"}
-                  </>
-                ) : (
-                  <>
-                    <Wallet className="mr-2 h-4 w-4" /> Withdraw Funds
-                  </>
-                )}
               </Button>
             )}
           </div>
@@ -2000,6 +1621,11 @@ export default function QuizCodePage() {
       .then(r => r.json())
       .then(async d => {
         if (d.success) {
+          console.log("📦 [QuizMeta] Full API response:", JSON.stringify(d.quiz, null, 2));
+          console.log("📦 [QuizMeta] reward field:", d.quiz.reward);
+          console.log("📦 [QuizMeta] isOnChain:", d.quiz.reward?.isOnChain);
+          console.log("📦 [QuizMeta] contractAddress:", d.quiz.reward?.contractAddress);
+          console.log("📦 [QuizMeta] chainId:", d.quiz.chainId, "or", d.quiz.reward?.chainId);
           setQuizMeta({
             title: d.quiz.title,
             totalQuestions: d.quiz.totalQuestions,

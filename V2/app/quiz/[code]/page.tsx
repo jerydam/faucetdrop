@@ -400,89 +400,89 @@ useEffect(() => {
 }, [claimWindowExpired, quizReward?.contractAddress, quizReward?.chainId]);
 
 const [onChainStatus, setOnChainStatus] = useState<{
-  hasReward: boolean;
-  claimed: boolean;
-  rewardAmount: string;
-  canClaim: boolean;
-  timeRemaining: number;
-} | null>(null);
-const [checkingChain, setCheckingChain] = useState(false);
+    hasReward: boolean;
+    claimed: boolean;
+    rewardAmount: string;
+    canClaim: boolean;
+    timeRemaining: number;
+  } | null>(null);
+  const [checkingChain, setCheckingChain] = useState(true); // Start true so it doesn't flash "Not eligible"
+  const [countdownDisplay, setCountdownDisplay] = useState("");
+  const claimWindowEndRef = useRef<number>(0);
 
 useEffect(() => {
-  if (!quizReward?.contractAddress || !myWallet) return;
-
-  let cancelled = false;
-  // Move RPC mapping outside or use a constant
-  const CHAIN_RPC: Record<number, string> = {
-    42220: "https://forno.celo.org",
-    1135:  "https://rpc.api.lisk.com",
-    42161: "https://arb1.arbitrum.io/rpc",
-    8453:  "https://mainnet.base.org",
-    56:    "https://bsc-dataseed.binance.org",
-  };
-
-  const checkOnChain = async () => {
-    // Only show "Checking chain..." loader on the very first execution
-    // to prevent the UI from flickering every 5 seconds.
-    if (!onChainStatus) setCheckingChain(true); 
-
-    try {
-      const contractChainId = quizReward.chainId;
-      const rpcUrl = contractChainId ? CHAIN_RPC[contractChainId] : null;
-
-      let provider;
-      if (rpcUrl) {
-        const { JsonRpcProvider } = await import("ethers");
-        provider = new JsonRpcProvider(rpcUrl);
-      } else {
-        const privyProvider = await wallets[0].getEthereumProvider();
-        provider = new BrowserProvider(privyProvider);
-      }
-
-      const contract = new Contract(
-        quizReward.contractAddress,
-        ["function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeRemaining)"],
-        provider
-      );
-
-      const [claimed, hasRewardAmount, rewardAmount, canClaim, timeRemaining] =
-        await contract.getClaimStatus(myWallet);
-
-      if (!cancelled) {
-        setOnChainStatus({
-          hasReward: hasRewardAmount,
-          claimed,
-          rewardAmount: formatUnits(rewardAmount, quizReward.tokenDecimals),
-          canClaim,
-          timeRemaining: Number(timeRemaining),
-        });
-      }
-    } catch (e) {
-      console.error("On-chain check failed:", e);
-    } finally {
-      if (!cancelled) setCheckingChain(false);
+    // Abort early if no contract or no wallet is present
+    if (!quizReward?.contractAddress || !wallets?.[0] || !myWallet) {
+      setCheckingChain(false);
+      return;
     }
-  };
 
-  // Initial check
-  checkOnChain();
+    let cancelled = false;
+    const CHAIN_RPC: Record<number, string> = {
+      42220: "https://forno.celo.org",
+      1135:  "https://rpc.api.lisk.com",
+      42161: "https://arb1.arbitrum.io/rpc",
+      8453:  "https://mainnet.base.org",
+      56:    "https://bsc-dataseed.binance.org",
+    };
 
-  // 🚀 Start Polling: Check every 5 seconds
-  const interval = setInterval(() => {
-    // Optimization: stop polling if already claimed or can claim
-    if (!onChainStatus?.canClaim && !onChainStatus?.claimed) {
-      checkOnChain();
-    }
-  }, 5000);
+    const checkOnChain = async () => {
+      // Only set to true on the very first load to avoid UI flickering during polling
+      if (!onChainStatus) setCheckingChain(true); 
+      
+      try {
+        const contractChainId = quizReward.chainId;
+        const rpcUrl = contractChainId ? CHAIN_RPC[contractChainId] : null;
 
-  return () => { 
-    cancelled = true; 
-    clearInterval(interval); 
-  };
-}, [quizReward?.contractAddress, myWallet, claimedTx]); 
+        let provider;
+        if (rpcUrl) {
+          const { JsonRpcProvider } = await import("ethers");
+          provider = new JsonRpcProvider(rpcUrl);
+        } else {
+          const privyProvider = await wallets[0].getEthereumProvider();
+          provider = new BrowserProvider(privyProvider);
+        }
 
-const [countdownDisplay, setCountdownDisplay] = useState("");
-const claimWindowEndRef = useRef<number>(0);
+        const contract = new Contract(
+          quizReward.contractAddress,
+          ["function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeRemaining)"],
+          provider
+        );
+        
+        const [claimed, hasRewardAmount, rewardAmount, canClaim, timeRemaining] = await contract.getClaimStatus(myWallet);
+
+        if (!cancelled) {
+          setOnChainStatus({
+            hasReward: hasRewardAmount,
+            claimed,
+            rewardAmount: formatUnits(rewardAmount, quizReward.tokenDecimals),
+            canClaim,
+            timeRemaining: Number(timeRemaining),
+          });
+        }
+      } catch (e) {
+        console.error("On-chain claim status check failed:", e);
+      } finally {
+        if (!cancelled) setCheckingChain(false);
+      }
+    };
+
+    // Run immediately
+    checkOnChain();
+
+    // Poll every 10 seconds to catch changes (like window opening) automatically
+    const interval = setInterval(() => {
+      // Stop polling if they already claimed
+      if (!onChainStatus?.claimed && !claimedTx) {
+        checkOnChain();
+      }
+    }, 10000);
+
+    return () => { 
+      cancelled = true; 
+      clearInterval(interval); 
+    };
+  }, [quizReward?.contractAddress, quizReward?.chainId, myWallet, wallets, claimedTx, rewardsReady]);
 
 const fmt = (s: number) => {
   const d = Math.floor(s / 86400);
@@ -495,33 +495,42 @@ const fmt = (s: number) => {
 };
 
 useEffect(() => {
-  const timeRemaining = onChainStatus?.timeRemaining ?? 0;
-  if (timeRemaining <= 0) {
-    setCountdownDisplay("");
-    return;
-  }
-
-  // Compute absolute end time and store in ref immediately in same effect
-  const newEndTime = Math.floor(Date.now() / 1000) + timeRemaining;
-  if (Math.abs(newEndTime - claimWindowEndRef.current) > 5) {
-    claimWindowEndRef.current = newEndTime;
-  }
-
-  const tick = () => {
-    const secondsLeft = claimWindowEndRef.current - Math.floor(Date.now() / 1000);
-    if (secondsLeft <= 0) {
-      setCountdownDisplay("Expired");
-      setOnChainStatus(prev => prev ? { ...prev, canClaim: false, timeRemaining: 0 } : prev);
-    } else {
-      setCountdownDisplay(fmt(secondsLeft));
+    const timeRemaining = onChainStatus?.timeRemaining ?? 0;
+    if (timeRemaining <= 0) {
+      setCountdownDisplay("");
+      return;
     }
-  };
 
-  tick();
-  const interval = setInterval(tick, 1000);
-  return () => clearInterval(interval);
-}, [onChainStatus?.timeRemaining]);
+    const newEndTime = Math.floor(Date.now() / 1000) + timeRemaining;
+    if (Math.abs(newEndTime - claimWindowEndRef.current) > 5) {
+      claimWindowEndRef.current = newEndTime;
+    }
 
+    const fmt = (s: number) => {
+      const d = Math.floor(s / 86400);
+      const h = Math.floor((s % 86400) / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (d > 0) return `${d}d ${h}h ${m}m`;
+      if (h > 0) return `${h}h ${m}m ${sec}s`;
+      return `${m}m ${sec}s`;
+    };
+
+    const tick = () => {
+      const secondsLeft = claimWindowEndRef.current - Math.floor(Date.now() / 1000);
+      if (secondsLeft <= 0) {
+        setCountdownDisplay("Expired");
+        setOnChainStatus(prev => prev ? { ...prev, canClaim: false, timeRemaining: 0 } : prev);
+      } else {
+        setCountdownDisplay(fmt(secondsLeft));
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    
+    return () => clearInterval(interval);
+  }, [onChainStatus?.timeRemaining]);
 // Force refresh on-chain status when rewards become ready
 useEffect(() => {
   if (rewardsReady && myWallet && quizReward?.contractAddress) {
@@ -592,6 +601,7 @@ useEffect(() => {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.detail || data.message || "Claim failed");
       setClaimedTx(data.txHash);
+      setOnChainStatus(null);
       toast.success("Reward claimed! It is now in your wallet.");
       setPayoutsData(prev => {
         if (!prev) return prev;
@@ -853,103 +863,83 @@ useEffect(() => {
 
       {/* Reward section — driven by on-chain status */}
 <div className="text-right shrink-0 space-y-1.5">
-  {(() => {
-    // 1. Unified Truth: You are a winner if EITHER the backend or the blockchain says so.
-    const isWinner = !!myPayout || onChainStatus?.hasReward;
-    const isClaimed = claimedTx || onChainStatus?.claimed || myPayout?.status === "claimed";
-    
-    const rewardAmt = onChainStatus?.rewardAmount || myPayout?.amount || "";
-    const tokenSym = quizReward?.tokenSymbol || myPayout?.token_symbol || "";
 
-    // 2. Creators don't claim rewards
-    if (isCreator) return null;
+{(() => {
+  if (isCreator) return null;
 
-    // 3. Still fetching initial data
-    if (loadingPayouts || (checkingChain && !onChainStatus && !myPayout)) {
-      return (
-        <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
-          <Loader2 className="h-3 w-3 animate-spin" /> Checking status...
-        </Badge>
-      );
-    }
+  // No contract = no on-chain rewards for this quiz
+  if (!quizReward?.contractAddress) return null;
 
-    // 4. Definitively NOT a winner
-    if (!isWinner) {
-      if (!rewardsReady && quizReward) {
-        return (
-          <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center text-xs">
-            <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
-          </Badge>
-        );
-      }
-      return <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">Not eligible</Badge>;
-    }
-
-    // 5. UI Element for the Reward Amount
-    const amountDisplay = (
-      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm mb-1.5">
-        {rewardAmt} {tokenSym}
-      </p>
+  // Still waiting for the FIRST contract check to complete
+  // (covers both: checkingChain=true AND the brief moment before it starts)
+  if (!onChainStatus) {
+    return (
+      <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
+        <Loader2 className="h-3 w-3 animate-spin" /> Checking contract...
+      </Badge>
     );
+  }
 
-    // 6. Already Claimed
-    if (isClaimed) {
-      return (
-        <>
-          {amountDisplay}
-          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-            ✓ Claimed
-          </Badge>
-        </>
-      );
-    }
+  // Contract says no reward for this wallet
+  if (!onChainStatus.hasReward) {
+    return (
+      <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
+        Not eligible
+      </Badge>
+    );
+  }
 
-    // 7. Ready to Claim on Blockchain
-    if (onChainStatus?.canClaim) {
-      return (
-        <>
-          {amountDisplay}
-          <Button
-            size="sm"
-            className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-            onClick={handleSwitchAndClaim}
-            disabled={isClaiming}
-          >
-            {isClaiming && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-            Claim Reward
-          </Button>
-          {countdownDisplay && countdownDisplay !== "Expired" && (
-            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-            </p>
-          )}
-        </>
-      );
-    }
+  const amountDisplay = (
+    <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm mb-1.5">
+      {onChainStatus.rewardAmount} {quizReward.tokenSymbol}
+    </p>
+  );
 
-    // 8. On-Chain, but the time window hasn't started
-    if (onChainStatus?.hasReward && !onChainStatus?.canClaim) {
-      return (
-        <>
-          {amountDisplay}
-          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
-            Claim window not open
-          </Badge>
-        </>
-      );
-    }
-
-    // 9. THE FIX: Backend says Winner, but Blockchain hasn't synced yet
+  // Already claimed
+  if (onChainStatus.claimed || claimedTx) {
     return (
       <>
         {amountDisplay}
-        <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0 gap-1 flex items-center text-xs">
-          <Loader2 className="h-3 w-3 animate-spin" /> Syncing to blockchain...
+        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+          ✓ Claimed
         </Badge>
       </>
     );
+  }
 
-  })()}
+  // Ready to claim
+  if (onChainStatus.canClaim) {
+    return (
+      <>
+        {amountDisplay}
+        <Button
+          size="sm"
+          className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
+          onClick={handleSwitchAndClaim}
+          disabled={isClaiming}
+        >
+          {isClaiming && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+          Claim Reward
+        </Button>
+        {countdownDisplay && countdownDisplay !== "Expired" && (
+          <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
+            <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+          </p>
+        )}
+      </>
+    );
+  }
+
+  // Has reward but window not open yet
+  return (
+    <>
+      {amountDisplay}
+      <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
+        Claim window not open
+      </Badge>
+    </>
+  );
+})()}
 </div>
     </div>
   );
@@ -1208,103 +1198,83 @@ useEffect(() => {
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Rank #{myEntry.rank} • {myEntry.points} points</p>
               </div>
  <div className="text-right shrink-0 space-y-1.5">
-  {(() => {
-    // 1. Unified Truth: You are a winner if EITHER the backend or the blockchain says so.
-    const isWinner = !!myPayout || onChainStatus?.hasReward;
-    const isClaimed = claimedTx || onChainStatus?.claimed || myPayout?.status === "claimed";
-    
-    const rewardAmt = onChainStatus?.rewardAmount || myPayout?.amount || "";
-    const tokenSym = quizReward?.tokenSymbol || myPayout?.token_symbol || "";
+  
+{(() => {
+  if (isCreator) return null;
 
-    // 2. Creators don't claim rewards
-    if (isCreator) return null;
+  // No contract = no on-chain rewards for this quiz
+  if (!quizReward?.contractAddress) return null;
 
-    // 3. Still fetching initial data
-    if (loadingPayouts || (checkingChain && !onChainStatus && !myPayout)) {
-      return (
-        <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
-          <Loader2 className="h-3 w-3 animate-spin" /> Checking status...
-        </Badge>
-      );
-    }
-
-    // 4. Definitively NOT a winner
-    if (!isWinner) {
-      if (!rewardsReady && quizReward) {
-        return (
-          <Badge className="bg-[#072474]/10 text-[#072474] dark:bg-[#072474]/30 dark:text-blue-400 border-0 gap-1 flex items-center text-xs">
-            <Loader2 className="h-3 w-3 animate-spin" /> Processing rewards...
-          </Badge>
-        );
-      }
-      return <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">Not eligible</Badge>;
-    }
-
-    // 5. UI Element for the Reward Amount
-    const amountDisplay = (
-      <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm mb-1.5">
-        {rewardAmt} {tokenSym}
-      </p>
+  // Still waiting for the FIRST contract check to complete
+  // (covers both: checkingChain=true AND the brief moment before it starts)
+  if (!onChainStatus) {
+    return (
+      <Badge className="bg-surface-card-2 text-slate-400 border-0 gap-1 flex items-center">
+        <Loader2 className="h-3 w-3 animate-spin" /> Checking contract...
+      </Badge>
     );
+  }
 
-    // 6. Already Claimed
-    if (isClaimed) {
-      return (
-        <>
-          {amountDisplay}
-          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
-            ✓ Claimed
-          </Badge>
-        </>
-      );
-    }
+  // Contract says no reward for this wallet
+  if (!onChainStatus.hasReward) {
+    return (
+      <Badge className="bg-surface-card-2 text-slate-500 border-0 text-xs">
+        Not eligible
+      </Badge>
+    );
+  }
 
-    // 7. Ready to Claim on Blockchain
-    if (onChainStatus?.canClaim) {
-      return (
-        <>
-          {amountDisplay}
-          <Button
-            size="sm"
-            className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
-            onClick={handleSwitchAndClaim}
-            disabled={isClaiming}
-          >
-            {isClaiming && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-            Claim Reward
-          </Button>
-          {countdownDisplay && countdownDisplay !== "Expired" && (
-            <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
-              <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
-            </p>
-          )}
-        </>
-      );
-    }
+  const amountDisplay = (
+    <p className="text-yellow-600 dark:text-yellow-400 font-black text-sm mb-1.5">
+      {onChainStatus.rewardAmount} {quizReward.tokenSymbol}
+    </p>
+  );
 
-    // 8. On-Chain, but the time window hasn't started
-    if (onChainStatus?.hasReward && !onChainStatus?.canClaim) {
-      return (
-        <>
-          {amountDisplay}
-          <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
-            Claim window not open
-          </Badge>
-        </>
-      );
-    }
-
-    // 9. THE FIX: Backend says Winner, but Blockchain hasn't synced yet
+  // Already claimed
+  if (onChainStatus.claimed || claimedTx) {
     return (
       <>
         {amountDisplay}
-        <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-0 gap-1 flex items-center text-xs">
-          <Loader2 className="h-3 w-3 animate-spin" /> Syncing to blockchain...
+        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0">
+          ✓ Claimed
         </Badge>
       </>
     );
+  }
 
-  })()}
+  // Ready to claim
+  if (onChainStatus.canClaim) {
+    return (
+      <>
+        {amountDisplay}
+        <Button
+          size="sm"
+          className="h-7 px-3 text-xs font-bold bg-yellow-400 hover:bg-yellow-500 text-black border-0 shadow-sm"
+          onClick={handleSwitchAndClaim}
+          disabled={isClaiming}
+        >
+          {isClaiming && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
+          Claim Reward
+        </Button>
+        {countdownDisplay && countdownDisplay !== "Expired" && (
+          <p className="text-surface-muted text-[10px] flex items-center justify-end gap-1 mt-0.5">
+            <Clock className="h-2.5 w-2.5" /> {countdownDisplay} left
+          </p>
+        )}
+      </>
+    );
+  }
+
+  // Has reward but window not open yet
+  return (
+    <>
+      {amountDisplay}
+      <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-0 text-xs">
+        Claim window not open
+      </Badge>
+    </>
+  );
+})()}
 </div>
             </div>
           );

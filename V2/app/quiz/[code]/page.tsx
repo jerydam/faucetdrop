@@ -1767,17 +1767,25 @@
 
           // ── 1. Initial state sync
           case "state_sync": {
-            setQuizMeta(prev => prev ?? msg.quiz);
-            setPlayers(prev => {
-              const incoming = msg.players || [];
-              // FIX: Add (p: Player) here 👇
-              return incoming.map((p: Player) => {
-                const existing = prev.find(e => e.walletAddress === p.walletAddress);
-                // Keep isReady true if it was already true (counteract buggy backend resets)
-                const mergedReady = (existing?.isReady && p.isReady === false) ? true : p.isReady;
-                return { ...p, isReady: mergedReady };
-              });
-            });
+  setQuizMeta(prev => prev ?? msg.quiz);
+
+  if (msg.isCreator) {
+    setIsCreator(true);       // ← ADD THIS
+    setHasJoined(true);
+    setIsSpectator(true);
+  }
+
+  setPlayers(prev => {
+    const incoming = msg.players || [];
+    const creatorAddr = msg.quiz?.creatorAddress?.toLowerCase() ?? "";
+    return incoming
+      .filter((p: Player) => p.walletAddress.toLowerCase() !== creatorAddr) // ← filter creator out
+      .map((p: Player) => {
+        const existing = prev.find(e => e.walletAddress === p.walletAddress);
+        const mergedReady = (existing?.isReady && p.isReady === false) ? true : p.isReady;
+        return { ...p, isReady: mergedReady };
+      });
+  });
 
             const amIPlaying = (msg.players || []).some((p: any) =>
               p.walletAddress.toLowerCase() === myWallet
@@ -1805,13 +1813,14 @@
           case "player_list": {
             setPlayers(prev => {
               const incoming = msg.players || [];
-              // FIX: Add (p: Player) here 👇
-              return incoming.map((p: Player) => {
-                const existing = prev.find(e => e.walletAddress === p.walletAddress);
-                // Keep isReady true if it was already true (counteract buggy backend resets)
-                const mergedReady = (existing?.isReady && p.isReady === false) ? true : p.isReady;
-                return { ...p, isReady: mergedReady };
-              });
+              const creatorAddr = quizMeta?.creatorAddress?.toLowerCase() ?? "";
+              return incoming
+                .filter((p: Player) => p.walletAddress.toLowerCase() !== creatorAddr) // ← filter creator out
+                .map((p: Player) => {
+                  const existing = prev.find(e => e.walletAddress === p.walletAddress);
+                  const mergedReady = (existing?.isReady && p.isReady === false) ? true : p.isReady;
+                  return { ...p, isReady: mergedReady };
+                });
             });
             break;
           }
@@ -2469,7 +2478,8 @@
                         </div>
                       </div>
 
-                      {/* Funding */}
+                      
+                     {/* Funding */}
                       {quizReward ? (
                         isFunded ? (
                           <div className="flex items-center gap-3 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-3">
@@ -2484,8 +2494,10 @@
                             <div className="flex items-start gap-3 bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3">
                               <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
                               <div>
-                                <p className="text-amber-400 font-bold text-sm">Fund reward pool</p>
-                                <p className="text-amber-500/70 text-xs mt-0.5">Required to enable Start</p>
+                                <p className="text-amber-400 font-bold text-sm">Fund reward pool to start</p>
+                                <p className="text-amber-500/70 text-xs mt-0.5">
+                                  The quiz cannot start until the reward pool is funded
+                                </p>
                               </div>
                             </div>
                             <Button
@@ -2501,14 +2513,18 @@
                           </div>
                         )
                       ) : (
-                        <div className="flex items-center gap-2 bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-3">
-                          <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
-                          <p className="text-green-400 text-sm font-medium">Free quiz</p>
+                        <div className="flex items-start gap-3 bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3">
+                          <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-amber-400 font-bold text-sm">No reward contract found</p>
+                            <p className="text-amber-500/70 text-xs mt-0.5">
+                              A funded reward pool is required to start this quiz
+                            </p>
+                          </div>
                         </div>
                       )}
 
-                      {/* START button */}
-                      {(isFunded || !quizReward) && (
+                      {isFunded && (
                         <Button
                           className="w-full h-14 text-base font-black text-white border-0 rounded-xl shadow-lg shadow-[#072474]/40 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98] bg-[#072474] hover:bg-[#0a32a0]"
                           onClick={handleStartQuiz}

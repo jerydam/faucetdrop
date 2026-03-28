@@ -599,7 +599,9 @@ export function QRCodeShareDialog({
     farcaster: { dark: "#7c3aed", light: "#ffffff" },
   };
 
-  const webUrl       = typeof window !== "undefined" ? `${window.location.origin}/faucet/${faucetAddress}` : "";
+  const slug = faucetDetails?.slug || faucetAddress;
+
+  const webUrl       = typeof window !== "undefined" ? `${window.location.origin}/faucet/${slug}` : "";
   const farcasterUrl = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
 
   // ── Fixed square QR generation ────────────────────────────────────────────

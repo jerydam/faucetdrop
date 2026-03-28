@@ -599,9 +599,14 @@ export function QRCodeShareDialog({
     farcaster: { dark: "#7c3aed", light: "#ffffff" },
   };
 
-  const slug = faucetDetails?.slug || faucetAddress;
+ const [webUrl, setWebUrl] = useState<string>("");
 
-  const webUrl       = typeof window !== "undefined" ? `${window.location.origin}/faucet/${slug}` : "";
+useEffect(() => {
+  // Captures the exact current link safely on the client
+  if (typeof window !== "undefined") {
+    setWebUrl(window.location.href);
+  }
+}, []);
   const farcasterUrl = `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
 
   // ── Fixed square QR generation ────────────────────────────────────────────
@@ -616,13 +621,16 @@ export function QRCodeShareDialog({
   };
 
   useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => {
-      generateQR(webCanvasRef.current,       webUrl,       qrColors.web);
-      generateQR(farcasterCanvasRef.current, farcasterUrl, qrColors.farcaster);
-    }, 200);
-    return () => clearTimeout(t);
-  }, [open, resolvedTheme, activeTab]);
+  // Added !webUrl check so it waits until the link is captured
+  if (!open || !webUrl) return; 
+  
+  const t = setTimeout(() => {
+    generateQR(webCanvasRef.current, webUrl, qrColors.web);
+    generateQR(farcasterCanvasRef.current, farcasterUrl, qrColors.farcaster);
+  }, 200);
+  
+  return () => clearTimeout(t);
+}, [open, resolvedTheme, activeTab, webUrl]); // <-- Added webUrl to dependencies
 
   const getQRCanvas = (type: "web" | "farcaster") =>
     type === "web" ? webCanvasRef.current : farcasterCanvasRef.current;

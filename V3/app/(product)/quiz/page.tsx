@@ -24,8 +24,8 @@ export default function QuizDocsPage() {
           <section className="space-y-6" id="hero">
             <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="flex-1 space-y-6">
-                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl bg-linear-to-r from-purple-400 to-[#0052FF] bg-clip-text text-transparent">
-                  Real-Time Quizzes
+                <h1 className="text-4xl font-bold tracking-tight sm:text-5xl bg-linear-to-r from-blue-400 to-[#0052FF] bg-clip-text text-transparent">
+                  Quiz
                 </h1>
                 <p className="text-2xl text-gray-300">Compete, Learn, and Earn onchain.</p>
                 <p className="text-lg text-gray-400">
@@ -33,7 +33,7 @@ export default function QuizDocsPage() {
                 </p>
                 <div className="relative aspect-video bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
                   <Image
-                    src="/quizShot.png" // Ensure you have this asset
+                    src="/quizshot.png" // Ensure you have this asset
                     alt="Quiz Platform Interface"
                     width={1000}
                     height={1000}
@@ -51,8 +51,8 @@ export default function QuizDocsPage() {
 
           {/* How Quizzes Work */}
           <section className="space-y-6" id="how-it-works">
-            <h2 className="text-2xl font-bold text-white border-l-4 border-purple-500 pl-4">
-              How Quizzes Work
+             <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
+              How Quiz Work
             </h2>
             <ol className="space-y-6">
               {[
@@ -74,7 +74,7 @@ export default function QuizDocsPage() {
                 },
               ].map((item, index) => (
                 <li key={index} className="flex gap-4">
-                  <div className="shrink-0 w-8 h-8 rounded-full bg-purple-900 flex items-center justify-center text-purple-300 font-bold">
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-blue-900 flex items-center justify-center text-blue-300 font-bold">
                     {index + 1}
                   </div>
                   <div>
@@ -88,7 +88,7 @@ export default function QuizDocsPage() {
 
           {/* Scoring Mechanics */}
           <section className="space-y-6" id="scoring">
-            <h2 className="text-2xl font-bold text-white border-l-4 border-purple-500 pl-4">
+            <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
               Scoring Mechanics
             </h2>
             <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700 space-y-4">
@@ -111,7 +111,7 @@ export default function QuizDocsPage() {
 
           {/* Reward Models */}
           <section className="space-y-6" id="reward-models">
-            <h2 className="text-2xl font-bold text-white border-l-4 border-purple-500 pl-4">
+            <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
               Reward Distribution
             </h2>
             <p className="text-gray-300">Quizzes support various payout strategies defined at creation:</p>
@@ -131,7 +131,7 @@ export default function QuizDocsPage() {
 
           {/* Create Section */}
           <section className="space-y-6" id="creation">
-            <h2 className="text-2xl font-bold text-white border-l-4 border-purple-500 pl-4">
+            <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
               Creation Tools
             </h2>
             <div className="grid gap-6 md:grid-cols-2">
@@ -150,14 +150,14 @@ export default function QuizDocsPage() {
 
           {/* FAQ */}
           <section id="faq" className="space-y-6">
-            <h2 className="text-2xl font-bold text-white border-l-4 border-purple-500 pl-4">
+            <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
               Frequently Asked Questions
             </h2>
             <QuizFaq />
           </section>
 
           {/* Final CTA */}
-          <section className="bg-linear-to-r from-purple-900/30 to-blue-900/30 rounded-2xl p-8 md:p-12 my-12 text-center">
+          <section className="bg-linear-to-r from-blue-900/30 to-blue-900/30 rounded-2xl p-8 md:p-12 my-12 text-center">
             <h2 className="text-3xl font-bold text-white mb-4">Host Your Own Quiz</h2>
             <p className="text-gray-300 mb-8 text-lg max-w-2xl mx-auto">
               Engage your community with a live event. Create a quiz in minutes and distribute tokens to your top contributors.

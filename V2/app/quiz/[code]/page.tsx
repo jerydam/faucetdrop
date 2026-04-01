@@ -739,9 +739,11 @@
               {rQuiz?.coverImageUrl ? (
                 <div className="relative w-full max-w-md mx-auto aspect-video rounded-2xl overflow-hidden shadow-lg border border-surface mb-4">
                   <img src={rQuiz.coverImageUrl} alt={rQuiz.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                   <div className="absolute bottom-3 left-3 right-3">
-                    <h1 className="text-surface-primary font-black text-lg sm:text-2xl text-left drop-shadow">{rQuiz.title}</h1>
+                    <h1 className="text-white font-black text-lg sm:text-2xl text-left [text-shadow:0_2px_8px_rgba(0,0,0,0.9),0_1px_3px_rgba(0,0,0,1)]">
+                      {rQuiz.title}
+                    </h1>
                   </div>
                 </div>
               ) : (

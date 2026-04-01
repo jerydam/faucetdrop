@@ -9,7 +9,7 @@ const sections = [
   { id: "how-it-works", title: "How Quizzes Work" },
   { id: "scoring", title: "Scoring Mechanics" },
   { id: "reward-models", title: "Reward Distribution" },
-  { id: "creation", title: "Creating a Quiz" },
+  { id: "creation", title: "Creation & Interactive Tools" },
   { id: "faq", title: "FAQ" },
 ];
 
@@ -33,7 +33,7 @@ export default function QuizDocsPage() {
                 </p>
                 <div className="relative aspect-video bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
                   <Image
-                    src="/quizshot.png" // Ensure you have this asset
+                    src="/quizshot.png" 
                     alt="Quiz Platform Interface"
                     width={1000}
                     height={1000}
@@ -129,10 +129,10 @@ export default function QuizDocsPage() {
             </div>
           </section>
 
-          {/* Create Section */}
+          {/* Creation & Interactive Tools */}
           <section className="space-y-6" id="creation">
             <h2 className="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">
-              Creation Tools
+              Creation & Interactive Tools
             </h2>
             <div className="grid gap-6 md:grid-cols-2">
               <div className="p-6 bg-linear-to-br from-gray-800 to-gray-900 rounded-xl border border-gray-700">
@@ -144,6 +144,16 @@ export default function QuizDocsPage() {
                 <span className="text-3xl mb-4 block">📄</span>
                 <h3 className="text-xl font-bold mb-2">PDF-to-Quiz</h3>
                 <p className="text-gray-400 text-sm">Upload a project whitepaper or document. The system extracts key facts to create a study-based competition.</p>
+              </div>
+              <div className="p-6 bg-linear-to-br from-gray-800 to-gray-900 rounded-xl border border-gray-700">
+                <span className="text-3xl mb-4 block">✍️</span>
+                <h3 className="text-xl font-bold mb-2">Manual Creation</h3>
+                <p className="text-gray-400 text-sm">Craft custom questions, define exact answers, and tweak time limits to tailor the quiz perfectly to your community.</p>
+              </div>
+              <div className="p-6 bg-linear-to-br from-gray-800 to-gray-900 rounded-xl border border-gray-700">
+                <span className="text-3xl mb-4 block">💬</span>
+                <h3 className="text-xl font-bold mb-2">Live Lobby Chat</h3>
+                <p className="text-gray-400 text-sm">Keep participants engaged while they wait. Real-time chat allows hosts and players to interact before the countdown begins.</p>
               </div>
             </div>
           </section>

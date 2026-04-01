@@ -21,7 +21,7 @@ export function QuizFaq() {
         <AccordionTrigger className="text-xl">How is the score calculated?</AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 text-lg">
           <p>
-            Scoring is based on two factors: **Accuracy** and **Speed**. A correct answer grants a base of 1,000 points, plus a bonus of up to 1,000 points based on how quickly you submitted your answer compared to the time limit.
+            Scoring is based on two factors: <strong>Accuracy</strong> and <strong>Speed</strong>. A correct answer grants a base of 1,000 points, plus a bonus of up to 1,000 points based on how quickly you submitted your answer compared to the time limit.
           </p>
         </AccordionContent>
       </AccordionItem>
@@ -39,7 +39,7 @@ export function QuizFaq() {
         <AccordionTrigger className="text-xl">How do rewards work for Quizzes?</AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 text-lg">
           <p>
-            Creators fund a reward pool before the quiz starts. Once the quiz ends, the backend automatically calculates winners based on the distribution model (Equal, Quadratic, or Custom) and whitelists them for onchain claims.
+            Creators fund a reward pool before the quiz starts. Once the quiz ends, the System automatically calculates winners based on the distribution model (Equal, Quadratic, or Custom) and whitelists them for onchain claims.
           </p>
         </AccordionContent>
       </AccordionItem>

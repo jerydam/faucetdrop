@@ -269,7 +269,7 @@ export default function FaucetDetails() {
     const triggerForceSync = async (addressToSync: string) => {
         try {
             console.log(`Triggering force sync for ${addressToSync}...`);
-            const res = await fetch(`http://127.0.0.1:8000/force-sync-faucet/${addressToSync}`, {
+            const res = await fetch(`https://faucetdrops-indexer.onrender.com/force-sync-faucet/${addressToSync}`, {
                 method: "POST",
             });
             const data = await res.json();

@@ -13,7 +13,7 @@ const Footer = () => {
       links: [
         { name: 'Faucets', href: 'https://app.faucetdrops.io/faucet/create-faucet', external: true },
         { name: 'Quests', href: '/quest', external: false },
-        { name: 'Quizzes', href: '/coming-soon' },
+        { name: 'Quizzes', href: '/quiz' },
         { name: 'Enterprise', href: '/coming-soon' },
       ],
     },

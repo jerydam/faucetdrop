@@ -85,7 +85,7 @@ export interface QuizItem {
 type Tab = "faucet" | "quest" | "quiz";
 
 // ─── API config ────────────────────────────────────────────────────────────────
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetdrops-indexer.onrender.com";
 
 // ─── Mock / fallback data ──────────────────────────────────────────────────────
 const EMPTY_FAUCET: FaucetAnalytics = {

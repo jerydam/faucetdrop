@@ -41,6 +41,32 @@ export interface QuizAnalytics {
   dailyAttempts:     { day: string; value: number }[];
   categories:        { name: string; value: number }[];
 }
+
+// Types for direct lists
+export interface QuestItem {
+  faucetAddress: string;
+  title: string;
+  isActive: boolean;
+  isDraft: boolean;
+  isFunded: boolean;
+  totalParticipants: number;
+  tasksCount: number;
+  rewardPool: string;
+  tokenSymbol: string;
+}
+
+export interface QuizItem {
+  code: string;
+  title: string;
+  status: string; // waiting, active, finished
+  playerCount: number;
+  totalQuestions: number;
+  reward?: {
+    poolAmount: number;
+    tokenSymbol: string;
+  };
+}
+
 type Tab = "faucet" | "quest" | "quiz";
 
 // ─── API config ────────────────────────────────────────────────────────────────
@@ -111,7 +137,7 @@ function ChartCard({ title, sub, children, className = "" }: {
   return (
     <div className={`bg-card border border-border/60 rounded-xl p-5 flex flex-col gap-1 ${className}`}>
       <span className="text-sm font-semibold text-foreground">{title}</span>
-      {sub && <span className="text-xs text-muted-foreground mb-2">{sub}</span>}
+      {sub && <span className="text-xs text-muted-foreground mb-4">{sub}</span>}
       {children}
     </div>
   );
@@ -151,10 +177,10 @@ function RankedList({ items, color }: { items: { name: string; value: number }[]
 function ActivityFeed({ items }: { items: FaucetAnalytics["recentActivity"] }) {
   return (
     <div className="flex flex-col gap-2 mt-2">
-      {items.map((item) => {
+      {items.map((item, idx) => {
         const pill = TYPE_PILL[item.type] || { bg: "#F1EFE8", text: "#5F5E5A" };
         return (
-          <div key={item.name} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border/40 bg-muted/20 text-xs">
+          <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border/40 bg-muted/20 text-xs">
             <div className="h-8 w-8 rounded-full flex items-center justify-center text-[10px] font-semibold flex-shrink-0"
               style={{ background: pill.bg, color: pill.text }}>
               {item.name.slice(0, 2).toUpperCase()}
@@ -182,8 +208,6 @@ function EmptyState({ message }: { message: string }) {
 
 // ─── Tab panels ────────────────────────────────────────────────────────────────
 function FaucetPanel({ data }: { data: FaucetAnalytics }) {
-  const typeSplitLabels = data.typeSplit.map((t) => `${t.name} ${t.value}%`);
-
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -206,7 +230,7 @@ function FaucetPanel({ data }: { data: FaucetAnalytics }) {
                 <CartesianGrid vertical={false} stroke={GRID_STROKE} />
                 <XAxis dataKey="month" tick={TICK_STYLE} axisLine={false} tickLine={false} />
                 <YAxis tick={TICK_STYLE} axisLine={false} tickLine={false} tickFormatter={fmt} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "0.5px solid var(--border)" }} formatter={(v: number) => [fmt(v)]} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "0.5px solid var(--border)", backgroundColor: "var(--background)" }} formatter={(v: number) => [fmt(v)]} />
                 <Bar dataKey="dropcode" stackId="a" fill={FAUCET_COLORS.dropcode} />
                 <Bar dataKey="droplist" stackId="a" fill={FAUCET_COLORS.droplist} />
                 <Bar dataKey="custom"   stackId="a" fill={FAUCET_COLORS.custom} radius={[3,3,0,0]} />
@@ -224,7 +248,7 @@ function FaucetPanel({ data }: { data: FaucetAnalytics }) {
                   <Pie data={data.typeSplit} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="value" paddingAngle={2}>
                     {data.typeSplit.map((_, idx) => <Cell key={idx} fill={FAUCET_COLORS.donut[idx]} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => [`${v}%`]} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: "var(--background)" }} formatter={(v: number) => [`${v}%`]} />
                 </PieChart>
               </ResponsiveContainer>
             </>
@@ -248,7 +272,7 @@ function FaucetPanel({ data }: { data: FaucetAnalytics }) {
   );
 }
 
-function QuestPanel({ data }: { data: QuestAnalytics }) {
+function QuestPanel({ data, questsList }: { data: QuestAnalytics, questsList: QuestItem[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -269,7 +293,7 @@ function QuestPanel({ data }: { data: QuestAnalytics }) {
               <CartesianGrid vertical={false} stroke={GRID_STROKE} />
               <XAxis dataKey="week" tick={TICK_STYLE} axisLine={false} tickLine={false} />
               <YAxis tick={TICK_STYLE} axisLine={false} tickLine={false} tickFormatter={fmt} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => [fmt(v)]} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: "var(--background)" }} formatter={(v: number) => [fmt(v)]} />
               <Line type="monotone" dataKey="completions" stroke={QUEST_COLORS.completions} strokeWidth={2} dot={{ r: 3, fill: QUEST_COLORS.completions }} activeDot={{ r: 5 }} />
               <Line type="monotone" dataKey="dropoffs"    stroke={QUEST_COLORS.dropoffs}    strokeWidth={2} strokeDasharray="4 3" dot={{ r: 3, fill: QUEST_COLORS.dropoffs }} activeDot={{ r: 5 }} />
             </LineChart>
@@ -285,7 +309,7 @@ function QuestPanel({ data }: { data: QuestAnalytics }) {
                 <CartesianGrid horizontal={false} stroke={GRID_STROKE} />
                 <XAxis type="number" tick={TICK_STYLE} axisLine={false} tickLine={false} />
                 <YAxis dataKey="name" type="category" tick={TICK_STYLE} axisLine={false} tickLine={false} width={70} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => [v]} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: "var(--background)" }} formatter={(v: number) => [v]} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {data.taskTypes.map((_, idx) => <Cell key={idx} fill={QUEST_COLORS.bars[idx % QUEST_COLORS.bars.length]} />)}
                 </Bar>
@@ -299,11 +323,52 @@ function QuestPanel({ data }: { data: QuestAnalytics }) {
             : <EmptyState message="No quest data yet" />}
         </ChartCard>
       </div>
+
+      {/* Direct Backend Data Table */}
+      <ChartCard title="All Platform Quests" sub="Direct index of all campaigns">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs text-muted-foreground uppercase border-b border-border/40">
+              <tr>
+                <th className="px-4 py-3 font-medium">Title</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Participants</th>
+                <th className="px-4 py-3 font-medium">Tasks</th>
+                <th className="px-4 py-3 font-medium">Reward Pool</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {questsList.length > 0 ? (
+                questsList.map((quest, idx) => (
+                  <tr key={idx} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3 font-medium text-foreground">{quest.title || "Untitled Quest"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${
+                        quest.isDraft ? "bg-gray-500/20 text-gray-400" :
+                        quest.isActive ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                      }`}>
+                        {quest.isDraft ? "Draft" : quest.isActive ? "Active" : "Ended"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{fmt(quest.totalParticipants)}</td>
+                    <td className="px-4 py-3">{quest.tasksCount}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{quest.rewardPool} {quest.tokenSymbol}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">No quests found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </ChartCard>
     </div>
   );
 }
 
-function QuizPanel({ data }: { data: QuizAnalytics }) {
+function QuizPanel({ data, quizzesList }: { data: QuizAnalytics, quizzesList: QuizItem[] }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -325,7 +390,7 @@ function QuizPanel({ data }: { data: QuizAnalytics }) {
               <CartesianGrid vertical={false} stroke={GRID_STROKE} />
               <XAxis dataKey="score" tick={TICK_STYLE} axisLine={false} tickLine={false} />
               <YAxis tick={TICK_STYLE} axisLine={false} tickLine={false} tickFormatter={fmt} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => [fmt(v), "Participants"]} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: "var(--background)" }} formatter={(v: number) => [fmt(v), "Participants"]} />
               <Bar dataKey="count" radius={[3, 3, 0, 0]}>
                 {data.scoreDistribution.map((entry, idx) => <Cell key={idx} fill={SCORE_BAND_COLOR[entry.band] ?? QUIZ_COLORS.pass} />)}
               </Bar>
@@ -348,7 +413,7 @@ function QuizPanel({ data }: { data: QuizAnalytics }) {
                 <CartesianGrid vertical={false} stroke={GRID_STROKE} />
                 <XAxis dataKey="day" tick={TICK_STYLE} axisLine={false} tickLine={false} />
                 <YAxis tick={TICK_STYLE} axisLine={false} tickLine={false} tickFormatter={fmt} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => [fmt(v), "Attempts"]} />
+                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, backgroundColor: "var(--background)" }} formatter={(v: number) => [fmt(v), "Attempts"]} />
                 <Area type="monotone" dataKey="value" stroke={QUIZ_COLORS.line} strokeWidth={2} fill="url(#quizGrad)" dot={{ r: 3, fill: QUIZ_COLORS.line }} activeDot={{ r: 5 }} />
               </AreaChart>
             </ResponsiveContainer>
@@ -360,6 +425,51 @@ function QuizPanel({ data }: { data: QuizAnalytics }) {
             : <EmptyState message="No category data yet" />}
         </ChartCard>
       </div>
+
+      {/* Direct Backend Data Table */}
+      <ChartCard title="All Platform Quizzes" sub="Direct index of all game rooms">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs text-muted-foreground uppercase border-b border-border/40">
+              <tr>
+                <th className="px-4 py-3 font-medium">Code</th>
+                <th className="px-4 py-3 font-medium">Title</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Players</th>
+                <th className="px-4 py-3 font-medium">Questions</th>
+                <th className="px-4 py-3 font-medium">Reward Pool</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {quizzesList.length > 0 ? (
+                quizzesList.map((quiz, idx) => (
+                  <tr key={idx} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3 font-mono font-bold text-foreground">{quiz.code}</td>
+                    <td className="px-4 py-3 font-medium text-foreground truncate max-w-[200px]">{quiz.title || "Untitled"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-semibold capitalize ${
+                        quiz.status === "waiting" ? "bg-yellow-500/20 text-yellow-500" :
+                        quiz.status === "active" ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"
+                      }`}>
+                        {quiz.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{fmt(quiz.playerCount)}</td>
+                    <td className="px-4 py-3">{quiz.totalQuestions}</td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {quiz.reward ? `${quiz.reward.poolAmount} ${quiz.reward.tokenSymbol}` : "None"}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">No quizzes found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </ChartCard>
     </div>
   );
 }
@@ -390,6 +500,9 @@ const TAB_CONFIG: { id: Tab; label: string; icon: React.ElementType }[] = [
 export default function AnalyticsDashboard() {
   const [activeTab, setActiveTab]   = useState<Tab>("faucet");
   const [data, setData]             = useState<AnalyticsData>(EMPTY_DATA);
+  const [questsList, setQuestsList] = useState<QuestItem[]>([]);
+  const [quizzesList, setQuizzesList] = useState<QuizItem[]>([]);
+  
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -400,14 +513,20 @@ export default function AnalyticsDashboard() {
       isManual ? setRefreshing(true) : setLoading(true);
       setError(null);
 
-      const res = await fetch(`${API_BASE}/api/analytics`, {
-        // Don't block on a cold Render.com boot indefinitely
-        signal: AbortSignal.timeout(30_000),
-      });
+      // Fetch aggregated analytics and direct lists simultaneously
+      const [analyticsRes, questsRes, quizzesRes] = await Promise.all([
+        fetch(`${API_BASE}/api/analytics`, { signal: AbortSignal.timeout(30_000) }),
+        fetch(`${API_BASE}/api/quests`, { signal: AbortSignal.timeout(15_000) }).catch(() => null),
+        fetch(`${API_BASE}/api/quiz/list`, { signal: AbortSignal.timeout(15_000) }).catch(() => null)
+      ]);
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      if (!analyticsRes.ok) throw new Error(`HTTP ${analyticsRes.status}: ${analyticsRes.statusText}`);
 
-      const json = await res.json();
+      const json = await analyticsRes.json();
+      
+      // Parse lists safely (they might be null if the fetch failed)
+      const questsJson = questsRes?.ok ? await questsRes.json() : { quests: [] };
+      const quizzesJson = quizzesRes?.ok ? await quizzesRes.json() : { quizzes: [] };
 
       // Merge with empty defaults so the UI never crashes on missing fields
       setData({
@@ -415,7 +534,11 @@ export default function AnalyticsDashboard() {
         quest:  { ...EMPTY_QUEST,  ...(json.quest  ?? {}) },
         quiz:   { ...EMPTY_QUIZ,   ...(json.quiz   ?? {}) },
       });
+      
+      setQuestsList(questsJson.quests || []);
+      setQuizzesList(quizzesJson.quizzes || []);
       setLastUpdated(json.last_updated ?? null);
+
     } catch (err: any) {
       const msg = err?.name === "TimeoutError"
         ? "Request timed out — the backend may be waking up. Try again in a moment."
@@ -499,8 +622,8 @@ export default function AnalyticsDashboard() {
       ) : (
         <div className={refreshing ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}>
           {activeTab === "faucet" && <FaucetPanel data={data.faucet} />}
-          {activeTab === "quest"  && <QuestPanel  data={data.quest}  />}
-          {activeTab === "quiz"   && <QuizPanel   data={data.quiz}   />}
+          {activeTab === "quest"  && <QuestPanel  data={data.quest}  questsList={questsList} />}
+          {activeTab === "quiz"   && <QuizPanel   data={data.quiz}   quizzesList={quizzesList} />}
         </div>
       )}
     </section>

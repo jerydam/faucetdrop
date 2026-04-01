@@ -348,20 +348,32 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   };
 
   const loadTransactionHistory = useCallback(async () => {
-    if (!selectedNetwork || !provider) return;
-    try {
-      const txs = await getFaucetTransactionHistory(
-        provider as BrowserProvider,
-        faucetAddress,
-        selectedNetwork,
-        faucetType || undefined
-      );
-      setTransactions(txs.sort((a, b) => b.timestamp - a.timestamp));
-    } catch (error: any) {
-      toast.error("Failed to load Activity Log");
-    }
-  }, [provider, faucetAddress, selectedNetwork, faucetType, setTransactions]);
+  if (!selectedNetwork || !faucetAddress) return;
+  try {
+    // Use a stable RPC provider instead of the wallet BrowserProvider
+    // so history loads regardless of which chain the wallet is on
+    const { JsonRpcProvider } = await import("ethers");
+    const safeRpc = Array.isArray(selectedNetwork.rpcUrl)
+      ? selectedNetwork.rpcUrl[0]
+      : selectedNetwork.rpcUrl;
+    const rpcProvider = new JsonRpcProvider(safeRpc);
 
+    const txs = await getFaucetTransactionHistory(
+      rpcProvider as any,
+      faucetAddress,
+      selectedNetwork,
+      faucetType || undefined
+    );
+    setTransactions(txs.sort((a, b) => b.timestamp - a.timestamp));
+  } catch (error: any) {
+    toast.error(`Failed to load Activity Log: ${error.message}`);
+  }
+}, [faucetAddress, selectedNetwork, faucetType, setTransactions]);
+
+
+useEffect(() => {
+  if (activeTab === "history" && selectedNetwork) loadTransactionHistory();
+}, [activeTab, selectedNetwork, loadTransactionHistory]);
   useEffect(() => {
     if (activeTab === "history" && selectedNetwork) loadTransactionHistory();
   }, [activeTab, selectedNetwork, loadTransactionHistory]);
@@ -503,97 +515,172 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const isOverLimit = charCount > 280;
 
   const handleUpdateClaimParameters = async () => {
-    if (!address || !provider || !chainId || !checkNetwork()) return;
+  if (!address || !provider || !chainId || !checkNetwork()) return;
 
-    const hasTaskChanges = newSocialLinks.length > 0;
-    const isTemplateChanged = customXPostTemplate !== faucetDetails.customXPostTemplate;
-    const currentClaimAmountStr = faucetType !== "custom"
-      ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0";
-    const currentStartTimeStr = faucetDetails.startTime
-      ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16) : "";
-    const currentEndTimeStr = faucetDetails.endTime
-      ? new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16) : "";
-    const hasBlockchainChanges =
-      (faucetType !== "custom" && claimAmount !== currentClaimAmountStr) ||
-      startTime !== currentStartTimeStr || endTime !== currentEndTimeStr;
+  const hasTaskChanges = newSocialLinks.length > 0;
+  const isTemplateChanged = customXPostTemplate !== faucetDetails.customXPostTemplate;
+  const currentClaimAmountStr =
+    faucetType !== "custom"
+      ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
+      : "0";
+  const currentStartTimeStr = faucetDetails.startTime
+    ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16)
+    : "";
+  const currentEndTimeStr = faucetDetails.endTime
+    ? new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16)
+    : "";
+  const hasBlockchainChanges =
+    (faucetType !== "custom" && claimAmount !== currentClaimAmountStr) ||
+    startTime !== currentStartTimeStr ||
+    endTime !== currentEndTimeStr;
 
-    if (!hasTaskChanges && !hasBlockchainChanges && !isTemplateChanged) {
-      toast.warning("No changes made");
-      return;
-    }
+  if (!hasTaskChanges && !hasBlockchainChanges && !isTemplateChanged) {
+    toast.warning("No changes made");
+    return;
+  }
 
-    try {
-      setIsUpdatingParameters(true);
+  try {
+    setIsUpdatingParameters(true);
+    const results: string[] = [];
 
-      if (isTemplateChanged) {
-        const response = await fetch("https://faucetdrop-backend.onrender.com/faucet-x-template", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ faucetAddress, template: customXPostTemplate, userAddress: address, chainId: Number(chainId) }),
-        });
-        if (!response.ok) throw new Error("Failed to save X template");
-        if (!hasBlockchainChanges && !hasTaskChanges) toast.success("Share post template updated!");
-      }
-
-      if (hasBlockchainChanges) {
-        const claimAmountBN = faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
-        const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
-        const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
-
-        await setClaimParameters(
-          provider as BrowserProvider, faucetAddress, claimAmountBN, startTimestamp, endTimestamp,
-          BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-        );
-        toast.success("Blockchain parameters updated");
-
-        await fetch("https://faucetdrop-backend.onrender.com/set-claim-parameters", {
+    // 1. Save X post template independently
+    if (isTemplateChanged) {
+      const response = await fetch(
+        "https://faucetdrop-backend.onrender.com/faucet-x-template",
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            faucetAddress, claimAmount: claimAmountBN.toString(),
-            startTime: startTimestamp, endTime: endTimestamp, chainId: Number(chainId),
+            faucetAddress,
+            template: customXPostTemplate,
+            userAddress: address,
+            chainId: Number(chainId),
           }),
-        });
-
-        if (faucetType === "dropcode") {
-          try {
-            const codeResponse = await fetch("https://faucetdrop-backend.onrender.com/generate-new-drop-code", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),
-            });
-            if (codeResponse.ok) {
-              const result = await codeResponse.json();
-              setNewlyGeneratedCode(result.secretCode);
-              setShowNewCodeDialog(true);
-            } else {
-              toast.error("Parameters updated, but failed to generate new drop code.");
-            }
-          } catch { toast.error("Failed to generate code automatically."); }
         }
+      );
+      if (!response.ok) throw new Error("Failed to save X post template");
+      results.push("share post template");
+    }
+
+    // 2. Save social tasks independently
+    if (hasTaskChanges) {
+      const formattedTasks = newSocialLinks
+        .filter((link) => link.url.trim() && link.handle.trim())
+        .map((link) => ({
+          platform: link.platform,
+          handle: link.handle,
+          url: link.url.trim(),
+          action: link.action,
+        }));
+
+      if (formattedTasks.length > 0) {
+        const taskResponse = await fetch(
+          "https://faucetdrop-backend.onrender.com/add-faucet-tasks",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              faucetAddress,
+              tasks: formattedTasks,
+              userAddress: address,
+              chainId: Number(chainId),
+            }),
+          }
+        );
+        if (!taskResponse.ok) throw new Error("Failed to save social tasks");
+        results.push("social tasks");
+      } else {
+        toast.warning(
+          "No valid tasks to save — make sure handle and URL are filled in."
+        );
       }
+    }
 
-      if (hasTaskChanges) {
-        const formattedTasks = newSocialLinks
-          .filter((link) => link.url.trim() && link.handle.trim())
-          .map((link) => ({ platform: link.platform, handle: link.handle, url: link.url.trim(), action: link.action }));
+    // 3. Save blockchain parameters independently
+    if (hasBlockchainChanges) {
+      const claimAmountBN =
+        faucetType === "custom"
+          ? BigInt(0)
+          : parseUnits(claimAmount, tokenDecimals);
+      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
+      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
 
-        await fetch("https://faucetdrop-backend.onrender.com/add-faucet-tasks", {
+      await setClaimParameters(
+        provider as BrowserProvider,
+        faucetAddress,
+        claimAmountBN,
+        startTimestamp,
+        endTimestamp,
+        BigInt(chainId),
+        BigInt(Number(selectedNetwork.chainId)),
+        faucetType || undefined
+      );
+
+      // Sync parameters to backend
+      await fetch(
+        "https://faucetdrop-backend.onrender.com/set-claim-parameters",
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ faucetAddress, tasks: formattedTasks, userAddress: address, chainId: Number(chainId) }),
-        });
-        if (!hasBlockchainChanges) toast.success("Social tasks updated!");
-      }
+          body: JSON.stringify({
+            faucetAddress,
+            claimAmount: claimAmountBN.toString(),
+            startTime: startTimestamp,
+            endTime: endTimestamp,
+            chainId: Number(chainId),
+          }),
+        }
+      );
 
-      setNewSocialLinks([]);
-      if (!(faucetType === "dropcode" && hasBlockchainChanges)) await loadFaucetDetails();
-    } catch (error: any) {
-      toast.error("Failed to save changes: Nothing to update");
-    } finally {
-      setIsUpdatingParameters(false);
+      results.push("drip parameters");
+
+      // Generate new drop code automatically for dropcode faucets
+      if (faucetType === "dropcode") {
+        try {
+          const codeResponse = await fetch(
+            "https://faucetdrop-backend.onrender.com/generate-new-drop-code",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                faucetAddress,
+                userAddress: address,
+                chainId: Number(chainId),
+              }),
+            }
+          );
+          if (codeResponse.ok) {
+            const result = await codeResponse.json();
+            setNewlyGeneratedCode(result.secretCode);
+            setShowNewCodeDialog(true);
+          } else {
+            toast.warning(
+              "Parameters saved, but failed to auto-generate a new drop code. Please generate one manually."
+            );
+          }
+        } catch {
+          toast.warning(
+            "Parameters saved, but failed to auto-generate a new drop code. Please generate one manually."
+          );
+        }
+      }
     }
-  };
+
+    if (results.length > 0) {
+      toast.success(
+        `Successfully updated: ${results.join(", ")}.`
+      );
+    }
+
+    setNewSocialLinks([]);
+    // Always refresh so tasks, template, and params are all reflected in UI
+    await loadFaucetDetails();
+  } catch (error: any) {
+    toast.error(`Failed to save changes: ${error.message}`);
+  } finally {
+    setIsUpdatingParameters(false);
+  }
+};
 
   const handleUpdateWhitelist = async () => {
     if (!address || !provider || !whitelistAddresses.trim() || !chainId || !checkNetwork()) return;

@@ -467,46 +467,109 @@ export default function FaucetDetails() {
 
     // ── Claim handler ──────────────────────────────────────────────────────
 
-    async function handleBackendClaim(): Promise<void> {
-        if (!isConnected || !address || !faucetDetails) { toast.warning("Wallet not connected"); return }
-        if (!checkNetwork()) return
-        if (faucetType === "dropcode" && backendMode && !isSecretCodeValid) {
-            toast.error("Invalid Drop code — 6 alphanumeric characters required"); return
-        }
-        if (faucetType === "droplist" && !userIsWhitelisted) { toast.error("Not Drop-listed"); return }
-        if (faucetType === "custom" && !hasCustomAmount) { toast.error("No Custom Allocation"); return }
-        if (!allAccountsVerified) { toast.error("Please complete all required tasks first"); return }
+    // Replace handleBackendClaim — remove setShowClaimPopup(true) from inside it,
+// and let the effect below handle opening the popup once txHash is confirmed set.
+async function handleBackendClaim(): Promise<void> {
+  if (!isConnected || !address || !faucetDetails) {
+    toast.warning("Wallet not connected");
+    return;
+  }
+  if (!checkNetwork()) return;
+  if (
+    faucetType === "dropcode" &&
+    backendMode &&
+    !isSecretCodeValid
+  ) {
+    toast.error("Invalid Drop code — 6 alphanumeric characters required");
+    return;
+  }
+  if (faucetType === "droplist" && !userIsWhitelisted) {
+    toast.error("Not Drop-listed");
+    return;
+  }
+  if (faucetType === "custom" && !hasCustomAmount) {
+    toast.error("No Custom Allocation");
+    return;
+  }
+  if (!allAccountsVerified) {
+    toast.error("Please complete all required tasks first");
+    return;
+  }
 
-        try {
-            setIsVerifying(true)
-            const prov = provider as BrowserProvider
-            let result: any
-            if (faucetType === "custom")
-                result = await claimCustomViaBackend(address, faucetAddress, prov)
-            else if (faucetType === "dropcode" && backendMode)
-                result = await claimViaBackend(address, faucetAddress, prov, secretCode)
-            else
-                result = await claimNoCodeViaBackend(address, faucetAddress, prov)
+  try {
+    setIsVerifying(true);
+    const prov = provider as BrowserProvider;
+    let result: any;
 
-            setTxHash(result.txHash)
-
-            const claimedAmt =
-                faucetType === "custom" && hasCustomAmount
-                    ? formatUnits(userCustomClaimAmount, tokenDecimals)
-                    : faucetDetails.claimAmount
-                    ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
-                    : "tokens"
-
-            toast.success(`You have dripped ${claimedAmt} ${tokenSymbol}.`)
-            setShowClaimPopup(true)
-            setSecretCode("")
-            await refreshFaucetDetails()
-        } catch (err: any) {
-            toast.error(err.message)
-        } finally {
-            setIsVerifying(false)
-        }
+    if (faucetType === "custom") {
+      result = await claimCustomViaBackend(address, faucetAddress, prov);
+    } else if (faucetType === "dropcode" && backendMode) {
+      result = await claimViaBackend(address, faucetAddress, prov, secretCode);
+    } else {
+      result = await claimNoCodeViaBackend(address, faucetAddress, prov);
     }
+
+    // Set txHash first — the useEffect below will open the popup
+    // only after txHash is confirmed in state, ensuring generateXPostContent
+    // has the hash available when the share button is pressed.
+    setTxHash(result.txHash);
+
+    const claimedAmt =
+      faucetType === "custom" && hasCustomAmount
+        ? formatUnits(userCustomClaimAmount, tokenDecimals)
+        : faucetDetails.claimAmount
+        ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
+        : "tokens";
+
+    toast.success(`You have dripped ${claimedAmt} ${tokenSymbol}.`);
+    setSecretCode("");
+    await refreshFaucetDetails();
+  } catch (err: any) {
+    toast.error(err.message);
+  } finally {
+    setIsVerifying(false);
+  }
+}
+
+// Add this effect directly below handleBackendClaim.
+// Opens the success popup only after txHash has been written to state,
+// preventing generateXPostContent from seeing a null hash.
+useEffect(() => {
+  if (txHash) {
+    setShowClaimPopup(true);
+  }
+}, [txHash]);
+
+// Updated generateXPostContent — produces an empty string for {explorer}
+// when txHash is not yet available, rather than the misleading fallback text.
+const generateXPostContent = (amount: string): string => {
+  const isEmpty = !customXPostTemplate?.trim();
+  const isDefault = customXPostTemplate === DEFAULT_X_POST_TEMPLATE;
+  const template =
+    isEmpty || isDefault
+      ? CONSTANT_X_POST
+      : `${FIXED_TWEET_PREFIX} ${customXPostTemplate}`;
+
+  let baseUrl = Array.isArray(selectedNetwork?.blockExplorerUrls)
+    ? selectedNetwork.blockExplorerUrls[0]
+    : selectedNetwork?.blockExplorerUrls;
+  if (baseUrl?.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
+
+  // Only produce the explorer link when both txHash and baseUrl are present.
+  // Fall back to an empty string so the post doesn't include broken placeholder text.
+  const explorerLink =
+    txHash && baseUrl ? `${baseUrl}/tx/${txHash}` : "";
+
+  return template
+    .replace(/\{amount\}/g, amount)
+    .replace(/\{token\}/g, tokenSymbol)
+    .replace(/\{network\}/g, selectedNetwork?.name || "the network")
+    .replace(/\{faucet\}/g, faucetDetails?.name || "this faucet")
+    .replace(/\{explorer\}/g, explorerLink)
+    .replace(/\{@handle\}/g, "")
+    .replace(/\{#hashtag\}/g, "")
+    .trim();
+};
 
     // ── Verification handler ───────────────────────────────────────────────
 
@@ -539,31 +602,7 @@ export default function FaucetDetails() {
         }, 3000)
     }
 
-    // ── X post ─────────────────────────────────────────────────────────────
-
-    const generateXPostContent = (amount: string): string => {
-        const isEmpty = !customXPostTemplate?.trim()
-        const isDefault = customXPostTemplate === DEFAULT_X_POST_TEMPLATE
-        const template =
-            isEmpty || isDefault
-                ? CONSTANT_X_POST
-                : `${FIXED_TWEET_PREFIX} ${customXPostTemplate}`
-
-        let baseUrl = Array.isArray(selectedNetwork?.blockExplorerUrls)
-            ? selectedNetwork.blockExplorerUrls[0]
-            : selectedNetwork?.blockExplorerUrls
-        if (baseUrl?.endsWith("/")) baseUrl = baseUrl.slice(0, -1)
-
-        return template
-            .replace(/\{amount\}/g, amount)
-            .replace(/\{token\}/g, tokenSymbol)
-            .replace(/\{network\}/g, selectedNetwork?.name || "the network")
-            .replace(/\{faucet\}/g, faucetDetails?.name || "this faucet")
-            .replace(/\{explorer\}/g, txHash && baseUrl ? `${baseUrl}/tx/${txHash}` : "Transaction on-chain")
-            .replace(/\{@handle\}/g, "")
-            .replace(/\{#hashtag\}/g, "")
-            .trim()
-    }
+   
 
     // ── Admin popup ────────────────────────────────────────────────────────
 

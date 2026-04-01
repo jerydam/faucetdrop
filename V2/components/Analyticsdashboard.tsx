@@ -31,7 +31,10 @@ export interface QuestAnalytics {
   weeklyCompletions: { week: string; completions: number; dropoffs: number }[];
   taskTypes:         { name: string; value: number }[];
   topQuests:         { name: string; value: number }[];
+  // ADD THIS
+  allQuests:         { address: string; name: string; network: string; chainId: number; participants: number; tasks: number; isActive: boolean }[];
 }
+
 export interface QuizAnalytics {
   totalQuizzes:      number;
   attempts:          number;
@@ -40,7 +43,19 @@ export interface QuizAnalytics {
   scoreDistribution: { score: string; count: number; band: string }[];
   dailyAttempts:     { day: string; value: number }[];
   categories:        { name: string; value: number }[];
+  // ADD THIS
+  allQuizzes:        { address: string; name: string; network: string; chainId: number; attempts: number }[];
 }
+
+// Update the fallbacks so the UI doesn't crash on boot
+const EMPTY_QUEST: QuestAnalytics = {
+  activeQuests: 0, completions: 0, participants: 0, avgTasksPerQuest: 0,
+  weeklyCompletions: [], taskTypes: [], topQuests: [], allQuests: [], // Added
+};
+const EMPTY_QUIZ: QuizAnalytics = {
+  totalQuizzes: 0, attempts: 0, passRate: 0, avgScore: 0,
+  scoreDistribution: [], dailyAttempts: [], categories: [], allQuizzes: [], // Added
+};
 
 // Types for direct lists
 export interface QuestItem {
@@ -77,14 +92,7 @@ const EMPTY_FAUCET: FaucetAnalytics = {
   totalFaucets: 0, totalDrops: 0, uniqueUsers: 0, avgDropPerUser: 0,
   monthlyVolume: [], typeSplit: [], topNetworks: [], recentActivity: [],
 };
-const EMPTY_QUEST: QuestAnalytics = {
-  activeQuests: 0, completions: 0, participants: 0, avgTasksPerQuest: 0,
-  weeklyCompletions: [], taskTypes: [], topQuests: [],
-};
-const EMPTY_QUIZ: QuizAnalytics = {
-  totalQuizzes: 0, attempts: 0, passRate: 0, avgScore: 0,
-  scoreDistribution: [], dailyAttempts: [], categories: [],
-};
+
 const EMPTY_DATA: AnalyticsData = { faucet: EMPTY_FAUCET, quest: EMPTY_QUEST, quiz: EMPTY_QUIZ };
 
 // ─── Colour palettes ───────────────────────────────────────────────────────────

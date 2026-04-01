@@ -12,7 +12,7 @@ export function QuizFaq() {
         <AccordionTrigger className="text-xl">How do I join a live quiz?</AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 text-lg">
           <p>
-            Browse active or upcoming quizzes. If a quiz is in the "Waiting" status, you can enter the lobby. Once the creator starts the game, you'll be prompted to answer questions in real-time.
+            Browse active or upcoming quizzes. If a quiz is in the &quot;Waiting&quot; status, you can enter the lobby. Once the creator starts the game, you&apos;ll be prompted to answer questions in real-time.
           </p>
         </AccordionContent>
       </AccordionItem>
@@ -27,10 +27,10 @@ export function QuizFaq() {
       </AccordionItem>
 
       <AccordionItem value="item-3">
-        <AccordionTrigger className="text-xl">What is "Ready" status in the lobby?</AccordionTrigger>
+        <AccordionTrigger className="text-xl">What is &quot;Ready&quot; status in the lobby?</AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 text-lg">
           <p>
-            To ensure a fair start, creators may require all participants to click "Ready." The quiz cannot begin until everyone in the lobby has confirmed they are present.
+            To ensure a fair start, creators may require all participants to click &quot;Ready.&quot; The quiz cannot begin until everyone in the lobby has confirmed they are present.
           </p>
         </AccordionContent>
       </AccordionItem>

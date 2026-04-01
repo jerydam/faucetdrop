@@ -1147,7 +1147,7 @@
                                 <Input 
                                   className="bg-background" 
                                   placeholder="e.g. 104239849202392"
-                                  value={""} 
+                                  value={newTask.targetHandle || ""}
                                   onChange={e => setNewTask((p: any) => ({ ...p, targetHandle: e.target.value }))} 
                                 />
                                 <p className="text-[10px] text-muted-foreground">Right-click the Role in server settings, and select "Copy Role ID".</p>

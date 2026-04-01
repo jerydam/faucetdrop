@@ -74,8 +74,8 @@ export const networks: Network[] = [
       droplist: "0xF8707b53a2bEc818E96471DDdb34a09F28E0dE6D",
       dropcode: "0x8D1306b3970278b3AB64D1CE75377BDdf00f61da",
       custom: "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5",
-      quest: "0x28E06CBD5E22B0f4E39D277457Be13E160fC742F",
-      quiz: "0xF9e41c0b83c580d3259C7aAB30256a94082E7A1e"
+      quest: "0x2Eb9692785e089DD7588b0D3220B5dD154eF2699",
+      quiz: "0x45aF94C51188C2f1cBAa060Bd9Ee4a37e416Ed1F"
     },
     tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438",
     nativeCurrency: {
@@ -110,8 +110,8 @@ export const networks: Network[] = [
       droplist: "0x0837EACf85472891F350cba74937cB02D90E60A4",
       dropcode: "0xd6Cb67dF496fF739c4eBA2448C1B0B44F4Cf0a7C",
       custom: "0x21E855A5f0E6cF8d0CfE8780eb18e818950dafb7",
-      quest: "0xc7889C58B51574d32C83b2e2F60d5eC145103Eb3",
-      quiz: "0x6D0d7DD8b5E80BfeCa9060703c3768440467D12e"  
+      quest: "0xE9a7637f11F22c55061936Bc97b9aFEAC2e93C2E",
+      quiz: "0x8BD9AD5C66Ca2BE1A728e4d139d92103615bcA7C"  
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
@@ -148,8 +148,8 @@ export const networks: Network[] = [
       droplist: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
       dropcode: "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
       custom: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
-      quest: "0x72680B6ad792a0069B3Bd5Acfd76182f3c63b703",
-      quiz: ""
+      quest: "0x069ad2047FaEC364eb5009E8E783Ec1D9ae08629",
+      quiz: "0x3C4ce82625Aa9dc0Efb199bCf5553Af32d27e555"
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
@@ -187,7 +187,7 @@ export const networks: Network[] = [
       dropcode: "0xda191fb5Ca50fC95226f7FC91C792927FC968CA9",
       custom: "0x587b840140321DD8002111282748acAdaa8fA206",
       quest: "0xb0B955e9B4a98A1323cE099A97632D5c4fc5d210",
-      quiz: "0xd942A4188122D81A37FC34743b7b395C2889d049"
+      quiz: "0xE88028BC2bF2C4bb6eC6C0587d3248b79cAA5198"
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {
@@ -224,8 +224,8 @@ export const networks: Network[] = [
       droplist: "0x4B8c7A12660C4847c65662a953F517198fBFc0ED",
       dropcode: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
       custom: "0x0F779235237Fc136c6EE9dD9bC2545404CDeAB36",
-      quest: "0x7E8D2A012cF5356e77f9eeccdddb942E72800f76",
-      quiz: "0xfdA2585D9Cf1AF2F079C0FC169e6914f64a2A51C"
+      quest: "0xBcA0AB3a9705C82DfBb92c4BAcFd5C2175511d54",
+      quiz: "0xBfbE657a1FB5Fbc1fFadfB5A79EBAfC7D2637d06"
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: {

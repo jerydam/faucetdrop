@@ -1297,7 +1297,7 @@ const handleFaucetCreation = async () => {
     // === INSTANT SYNC + GET SLUG ===
     let finalSlug = createdFaucetAddress // fallback
     try {
-      const syncRes = await fetch(`https://faucetdrops-indexer.onrender.com/sync-faucet/${createdFaucetAddress}`, {
+      const syncRes = await fetch(`http://127.0.0.1:8000/sync-faucet/${createdFaucetAddress}`, {
         method: "POST",
       })
       if (syncRes.ok) {

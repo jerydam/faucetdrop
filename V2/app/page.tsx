@@ -502,7 +502,7 @@ function HomeContent() {
         </div>
 
         {/* ── Analytics Dashboard ── */}
-        <AnalyticsDashboard loading={dashLoading} />
+        <AnalyticsDashboard />
 
         {/* ── Trending Quests ── */}
         <section>

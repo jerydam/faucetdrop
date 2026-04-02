@@ -4,7 +4,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
-import { Droplets, PackageCheck, GraduationCap, TrendingUp, TrendingDown, Minus, RefreshCw, AlertCircle } from "lucide-react";
+import { Droplets, PackageCheck, GraduationCap, TrendingUp, TrendingDown, Minus, AlertCircle } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export interface AnalyticsData {
@@ -31,10 +31,8 @@ export interface QuestAnalytics {
   weeklyCompletions: { week: string; completions: number; dropoffs: number }[];
   taskTypes:         { name: string; value: number }[];
   topQuests:         { name: string; value: number }[];
-  // ADD THIS
   allQuests:         { address: string; name: string; network: string; chainId: number; participants: number; tasks: number; isActive: boolean }[];
 }
-
 export interface QuizAnalytics {
   totalQuizzes:      number;
   attempts:          number;
@@ -43,21 +41,18 @@ export interface QuizAnalytics {
   scoreDistribution: { score: string; count: number; band: string }[];
   dailyAttempts:     { day: string; value: number }[];
   categories:        { name: string; value: number }[];
-  // ADD THIS
   allQuizzes:        { address: string; name: string; network: string; chainId: number; attempts: number }[];
 }
 
-// Update the fallbacks so the UI doesn't crash on boot
 const EMPTY_QUEST: QuestAnalytics = {
   activeQuests: 0, completions: 0, participants: 0, avgTasksPerQuest: 0,
-  weeklyCompletions: [], taskTypes: [], topQuests: [], allQuests: [], // Added
+  weeklyCompletions: [], taskTypes: [], topQuests: [], allQuests: [],
 };
 const EMPTY_QUIZ: QuizAnalytics = {
   totalQuizzes: 0, attempts: 0, passRate: 0, avgScore: 0,
-  scoreDistribution: [], dailyAttempts: [], categories: [], allQuizzes: [], // Added
+  scoreDistribution: [], dailyAttempts: [], categories: [], allQuizzes: [],
 };
 
-// Types for direct lists
 export interface QuestItem {
   faucetAddress: string;
   title: string;
@@ -69,30 +64,23 @@ export interface QuestItem {
   rewardPool: string;
   tokenSymbol: string;
 }
-
 export interface QuizItem {
   code: string;
   title: string;
-  status: string; // waiting, active, finished
+  status: string;
   playerCount: number;
   totalQuestions: number;
-  reward?: {
-    poolAmount: number;
-    tokenSymbol: string;
-  };
+  reward?: { poolAmount: number; tokenSymbol: string };
 }
 
 type Tab = "faucet" | "quest" | "quiz";
 
-// ─── API config ────────────────────────────────────────────────────────────────
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetdrops-indexer.onrender.com";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
-// ─── Mock / fallback data ──────────────────────────────────────────────────────
 const EMPTY_FAUCET: FaucetAnalytics = {
   totalFaucets: 0, totalDrops: 0, uniqueUsers: 0, avgDropPerUser: 0,
   monthlyVolume: [], typeSplit: [], topNetworks: [], recentActivity: [],
 };
-
 const EMPTY_DATA: AnalyticsData = { faucet: EMPTY_FAUCET, quest: EMPTY_QUEST, quiz: EMPTY_QUIZ };
 
 // ─── Colour palettes ───────────────────────────────────────────────────────────
@@ -214,8 +202,24 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
+// ─── Scrollable table wrapper — shows 4 rows, scrolls for the rest ─────────────
+function ScrollableTable({ children, rowCount }: { children: React.ReactNode; rowCount: number }) {
+  // 4 rows × ~53px per row + thead ~41px
+  const maxHeight = rowCount > 4 ? "max-h-[253px]" : "";
+  return (
+    <div className={`overflow-auto ${maxHeight}`}>
+      {children}
+    </div>
+  );
+}
+
 // ─── Tab panels ────────────────────────────────────────────────────────────────
 function FaucetPanel({ data }: { data: FaucetAnalytics }) {
+  // Sort recent activity by drops descending (most active first)
+  const sortedActivity = [...data.recentActivity].sort((a, b) => b.drops - a.drops);
+  // Sort top networks by value descending
+  const sortedNetworks = [...data.topNetworks].sort((a, b) => b.value - a.value);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -265,14 +269,14 @@ function FaucetPanel({ data }: { data: FaucetAnalytics }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Top networks by volume" sub="Total drops by chain">
-          {data.topNetworks.length
-            ? <RankedList items={data.topNetworks} color={FAUCET_COLORS.dropcode} />
+        <ChartCard title="Top networks by volume" sub="Total drops by chain, most active first">
+          {sortedNetworks.length
+            ? <RankedList items={sortedNetworks} color={FAUCET_COLORS.dropcode} />
             : <EmptyState message="No network data yet" />}
         </ChartCard>
-        <ChartCard title="Recent activity" sub="Latest drops across all faucets">
-          {data.recentActivity.length
-            ? <ActivityFeed items={data.recentActivity} />
+        <ChartCard title="Recent activity" sub="Most active faucets across all chains">
+          {sortedActivity.length
+            ? <ActivityFeed items={sortedActivity} />
             : <EmptyState message="No recent activity yet" />}
         </ChartCard>
       </div>
@@ -280,7 +284,15 @@ function FaucetPanel({ data }: { data: FaucetAnalytics }) {
   );
 }
 
-function QuestPanel({ data, questsList }: { data: QuestAnalytics, questsList: QuestItem[] }) {
+function QuestPanel({ data, questsList }: { data: QuestAnalytics; questsList: QuestItem[] }) {
+  // Filter out drafts, then sort: active first, then by participant count descending
+  const filteredQuests = questsList
+    .filter((q) => !q.isDraft)
+    .sort((a, b) => {
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      return b.totalParticipants - a.totalParticipants;
+    });
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -332,11 +344,10 @@ function QuestPanel({ data, questsList }: { data: QuestAnalytics, questsList: Qu
         </ChartCard>
       </div>
 
-      {/* Direct Backend Data Table */}
-      <ChartCard title="All Platform Quests" sub="Direct index of all campaigns">
-        <div className="overflow-x-auto">
+      <ChartCard title="All Platform Quests" sub="Active campaigns shown first · scroll to see more">
+        <ScrollableTable rowCount={filteredQuests.length}>
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-foreground uppercase border-b border-border/40">
+            <thead className="text-xs text-muted-foreground uppercase border-b border-border/40 sticky top-0 bg-card z-10">
               <tr>
                 <th className="px-4 py-3 font-medium">Title</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -346,16 +357,17 @@ function QuestPanel({ data, questsList }: { data: QuestAnalytics, questsList: Qu
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
-              {questsList.length > 0 ? (
-                questsList.map((quest, idx) => (
+              {filteredQuests.length > 0 ? (
+                filteredQuests.map((quest, idx) => (
                   <tr key={idx} className="hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3 font-medium text-foreground">{quest.title || "Untitled Quest"}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-[10px] font-semibold ${
-                        quest.isDraft ? "bg-gray-500/20 text-gray-400" :
-                        quest.isActive ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                        quest.isActive
+                          ? "bg-green-500/20 text-green-400"
+                          : "bg-red-500/20 text-red-400"
                       }`}>
-                        {quest.isDraft ? "Draft" : quest.isActive ? "Active" : "Ended"}
+                        {quest.isActive ? "Active" : "Ended"}
                       </span>
                     </td>
                     <td className="px-4 py-3">{fmt(quest.totalParticipants)}</td>
@@ -370,26 +382,39 @@ function QuestPanel({ data, questsList }: { data: QuestAnalytics, questsList: Qu
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
+        {filteredQuests.length > 4 && (
+          <p className="text-[11px] text-muted-foreground text-center mt-2">
+            Showing all {filteredQuests.length} quests · scroll to view more
+          </p>
+        )}
       </ChartCard>
     </div>
   );
 }
 
-function QuizPanel({ data, quizzesList }: { data: QuizAnalytics, quizzesList: QuizItem[] }) {
+function QuizPanel({ data, quizzesList }: { data: QuizAnalytics; quizzesList: QuizItem[] }) {
+  // Sort: active first, then waiting, then finished; within each group by playerCount desc
+  const STATUS_ORDER: Record<string, number> = { active: 0, waiting: 1, finished: 2 };
+  const sortedQuizzes = [...quizzesList].sort((a, b) => {
+    const statusDiff = (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3);
+    if (statusDiff !== 0) return statusDiff;
+    return b.playerCount - a.playerCount;
+  });
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <MetricCard label="Total Quizzes" value={data.totalQuizzes}          sub="Deployed quizzes"       trend="up" />
-        <MetricCard label="Attempts"      value={fmt(data.attempts)}         sub="Total submissions"      trend="up" />
-        <MetricCard label="Pass Rate"     value={pct(data.passRate)}         sub="Score ≥ 6 / 10"         trend={data.passRate >= 60 ? "up" : "down"} />
+        <MetricCard label="Total Quizzes" value={data.totalQuizzes}          sub="Deployed quizzes"        trend="up" />
+        <MetricCard label="Attempts"      value={fmt(data.attempts)}         sub="Total submissions"       trend="up" />
+        <MetricCard label="Pass Rate"     value={pct(data.passRate)}         sub="Score ≥ 6 / 10"          trend={data.passRate >= 60 ? "up" : "down"} />
         <MetricCard label="Avg Score"     value={data.avgScore.toFixed(1)}   sub="Mean across all quizzes" trend="neutral" />
       </div>
 
       <ChartCard title="Score distribution" sub="How participants scored across all quizzes (0–10)">
         <Legend items={[
-          { label: "Fail (0–5)",      color: QUIZ_COLORS.fail },
-          { label: "Pass (6–7)",      color: QUIZ_COLORS.pass },
+          { label: "Fail (0–5)",       color: QUIZ_COLORS.fail },
+          { label: "Pass (6–7)",       color: QUIZ_COLORS.pass },
           { label: "Excellent (8–10)", color: QUIZ_COLORS.excellent },
         ]} />
         {data.scoreDistribution.length ? (
@@ -434,11 +459,10 @@ function QuizPanel({ data, quizzesList }: { data: QuizAnalytics, quizzesList: Qu
         </ChartCard>
       </div>
 
-      {/* Direct Backend Data Table */}
-      <ChartCard title="All Platform Quizzes" sub="Direct index of all game rooms">
-        <div className="overflow-x-auto">
+      <ChartCard title="All Platform Quizzes" sub="Active rooms shown first · scroll to see more">
+        <ScrollableTable rowCount={sortedQuizzes.length}>
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-foreground uppercase border-b border-border/40">
+            <thead className="text-xs text-muted-foreground uppercase border-b border-border/40 sticky top-0 bg-card z-10">
               <tr>
                 <th className="px-4 py-3 font-medium">Code</th>
                 <th className="px-4 py-3 font-medium">Title</th>
@@ -449,15 +473,16 @@ function QuizPanel({ data, quizzesList }: { data: QuizAnalytics, quizzesList: Qu
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
-              {quizzesList.length > 0 ? (
-                quizzesList.map((quiz, idx) => (
+              {sortedQuizzes.length > 0 ? (
+                sortedQuizzes.map((quiz, idx) => (
                   <tr key={idx} className="hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3 font-mono font-bold text-foreground">{quiz.code}</td>
                     <td className="px-4 py-3 font-medium text-foreground truncate max-w-[200px]">{quiz.title || "Untitled"}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-[10px] font-semibold capitalize ${
+                        quiz.status === "active"  ? "bg-green-500/20 text-green-400"  :
                         quiz.status === "waiting" ? "bg-yellow-500/20 text-yellow-500" :
-                        quiz.status === "active" ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"
+                                                    "bg-gray-500/20 text-gray-400"
                       }`}>
                         {quiz.status}
                       </span>
@@ -476,7 +501,12 @@ function QuizPanel({ data, quizzesList }: { data: QuizAnalytics, quizzesList: Qu
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollableTable>
+        {sortedQuizzes.length > 4 && (
+          <p className="text-[11px] text-muted-foreground text-center mt-2">
+            Showing all {sortedQuizzes.length} quizzes · scroll to view more
+          </p>
+        )}
       </ChartCard>
     </div>
   );
@@ -500,66 +530,55 @@ function Skeleton() {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 const TAB_CONFIG: { id: Tab; label: string; icon: React.ElementType }[] = [
-  { id: "faucet", label: "Faucets",  icon: Droplets    },
+  { id: "faucet", label: "Faucets",  icon: Droplets     },
   { id: "quest",  label: "Quests",   icon: PackageCheck },
   { id: "quiz",   label: "Quizzes",  icon: GraduationCap },
 ];
 
 export default function AnalyticsDashboard() {
-  const [activeTab, setActiveTab]   = useState<Tab>("faucet");
-  const [data, setData]             = useState<AnalyticsData>(EMPTY_DATA);
-  const [questsList, setQuestsList] = useState<QuestItem[]>([]);
+  const [activeTab, setActiveTab]     = useState<Tab>("faucet");
+  const [data, setData]               = useState<AnalyticsData>(EMPTY_DATA);
+  const [questsList, setQuestsList]   = useState<QuestItem[]>([]);
   const [quizzesList, setQuizzesList] = useState<QuizItem[]>([]);
-  
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState<string | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchAnalytics = useCallback(async (isManual = false) => {
+  const fetchAnalytics = useCallback(async () => {
     try {
-      isManual ? setRefreshing(true) : setLoading(true);
+      setLoading(true);
       setError(null);
 
-      // Fetch aggregated analytics and direct lists simultaneously
       const [analyticsRes, questsRes, quizzesRes] = await Promise.all([
-        fetch(`${API_BASE}/api/analytics`, { signal: AbortSignal.timeout(30_000) }),
-        fetch(`${API_BASE}/api/quests`, { signal: AbortSignal.timeout(15_000) }).catch(() => null),
-        fetch(`${API_BASE}/api/quiz/list`, { signal: AbortSignal.timeout(15_000) }).catch(() => null)
+        fetch(`${API_BASE}/api/analytics`,  { signal: AbortSignal.timeout(30_000) }),
+        fetch(`${API_BASE}/api/quests`,     { signal: AbortSignal.timeout(15_000) }).catch(() => null),
+        fetch(`${API_BASE}/api/quiz/list`,  { signal: AbortSignal.timeout(15_000) }).catch(() => null),
       ]);
 
       if (!analyticsRes.ok) throw new Error(`HTTP ${analyticsRes.status}: ${analyticsRes.statusText}`);
 
-      const json = await analyticsRes.json();
-      
-      // Parse lists safely (they might be null if the fetch failed)
-      const questsJson = questsRes?.ok ? await questsRes.json() : { quests: [] };
-      const quizzesJson = quizzesRes?.ok ? await quizzesRes.json() : { quizzes: [] };
+      const json       = await analyticsRes.json();
+      const questsJson = questsRes?.ok  ? await questsRes.json()  : { quests:  [] };
+      const quizzesJson= quizzesRes?.ok ? await quizzesRes.json() : { quizzes: [] };
 
-      // Merge with empty defaults so the UI never crashes on missing fields
       setData({
         faucet: { ...EMPTY_FAUCET, ...(json.faucet ?? {}) },
         quest:  { ...EMPTY_QUEST,  ...(json.quest  ?? {}) },
         quiz:   { ...EMPTY_QUIZ,   ...(json.quiz   ?? {}) },
       });
-      
-      setQuestsList(questsJson.quests || []);
+      setQuestsList(questsJson.quests   || []);
       setQuizzesList(quizzesJson.quizzes || []);
       setLastUpdated(json.last_updated ?? null);
-
     } catch (err: any) {
       const msg = err?.name === "TimeoutError"
         ? "Request timed out — the backend may be waking up. Try again in a moment."
         : (err?.message ?? "Failed to fetch analytics");
       setError(msg);
-      // Keep whatever data we already had (don't wipe on refresh failure)
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
-  // Initial fetch
   useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
 
   const formattedUpdated = lastUpdated
@@ -578,36 +597,23 @@ export default function AnalyticsDashboard() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Refresh button */}
-          <button
-            onClick={() => fetchAnalytics(true)}
-            disabled={loading || refreshing}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border/60 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-40 transition-all"
-            title="Refresh analytics"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </button>
-
-          {/* Tab switcher */}
-          <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl border border-border/60">
-            {TAB_CONFIG.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={[
-                  "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                  activeTab === id
-                    ? "bg-background text-foreground shadow-sm border border-border/60"
-                    : "text-muted-foreground hover:text-foreground",
-                ].join(" ")}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {label}
-              </button>
-            ))}
-          </div>
+        {/* Tab switcher only — refresh button removed */}
+        <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl border border-border/60">
+          {TAB_CONFIG.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={[
+                "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150",
+                activeTab === id
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "text-muted-foreground hover:text-foreground",
+              ].join(" ")}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -618,7 +624,7 @@ export default function AnalyticsDashboard() {
           <div className="flex-1">
             <span className="font-medium">Could not load analytics — </span>{error}
           </div>
-          <button onClick={() => fetchAnalytics(true)} className="text-xs underline underline-offset-2 flex-shrink-0">
+          <button onClick={() => fetchAnalytics()} className="text-xs underline underline-offset-2 flex-shrink-0">
             Retry
           </button>
         </div>
@@ -628,11 +634,11 @@ export default function AnalyticsDashboard() {
       {loading ? (
         <Skeleton />
       ) : (
-        <div className={refreshing ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}>
+        <>
           {activeTab === "faucet" && <FaucetPanel data={data.faucet} />}
           {activeTab === "quest"  && <QuestPanel  data={data.quest}  questsList={questsList} />}
           {activeTab === "quiz"   && <QuizPanel   data={data.quiz}   quizzesList={quizzesList} />}
-        </div>
+        </>
       )}
     </section>
   );

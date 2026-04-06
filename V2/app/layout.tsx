@@ -43,7 +43,7 @@ export default function RootLayout({
         <title>FaucetDrops - Automated Onchain Reward and Engagement Platform</title>
         <meta name="title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
         <meta name="description" content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains." />
-        
+        <meta name="talentapp:project_verification" content="b30a81da8fe68c308c2b4978535103484c8acb90b729ec9625b7eff07309c1fb86809ee621e63c5eedc5c592ddde2c2d2c2c0e8afa73980dcf6339e92b0839d7"></meta>
         {/* Open Graph / Facebook / WhatsApp / Telegram */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://app.faucetdrops.io/" />

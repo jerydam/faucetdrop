@@ -1666,7 +1666,8 @@ export async function getFaucetTransactionHistory(
   provider: BrowserProvider,
   faucetAddress: string,
   network: Network,
-  faucetType?: FaucetType
+  faucetType?: FaucetType,
+  signerAddress?: string  // Pass the connected wallet address from the caller
 ): Promise<{
   faucetAddress: string
   transactionType: string
@@ -1680,54 +1681,57 @@ export async function getFaucetTransactionHistory(
       throw new Error(`Invalid faucet address: ${faucetAddress}`)
     }
 
-    const signer = await provider.getSigner()
-    const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucetAddress, signerAddress, faucetType)
+    // Get signer address - use passed address or try to get from provider
+    let resolvedSignerAddress = signerAddress
+    if (!resolvedSignerAddress) {
+      try {
+        const signer = await provider.getSigner()
+        resolvedSignerAddress = await signer.getAddress()
+      } catch (e) {
+        throw new Error("Wallet not connected. Please connect your wallet to view transaction history.")
+      }
+    }
 
+    const permissions = await checkPermissions(provider, faucetAddress, resolvedSignerAddress, faucetType)
     if (!permissions.isOwner && !permissions.isAdmin) {
       throw new Error("Only the owner or admin can view transaction history")
     }
 
-    let transactions: any[] = [];
+    let transactions: any[] = []
 
-    // Iterate through all factory addresses to collect transactions
     for (const factoryAddress of network.factoryAddresses) {
       if (!isAddress(factoryAddress)) {
-        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`);
-        continue;
+        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`)
+        continue
       }
 
-      // Detect factory type and get appropriate ABI
-      let factoryType: FactoryType;
-      let config: FactoryConfig;
-      
+      let factoryType: FactoryType
+      let config: FactoryConfig
+
       try {
-        factoryType = await detectFactoryType(provider, factoryAddress);
-        config = getFactoryConfig(factoryType);
+        factoryType = await detectFactoryType(provider, factoryAddress)
+        config = getFactoryConfig(factoryType)
       } catch (error) {
-        console.warn(`Could not detect factory type for ${factoryAddress}, skipping:`, error);
-        continue;
+        console.warn(`Could not detect factory type for ${factoryAddress}, skipping:`, error)
+        continue
       }
 
-      const factoryContract = new Contract(factoryAddress, config.abi, provider);
-
-      // Check if factory contract exists
-      const code = await provider.getCode(factoryAddress);
+      const code = await provider.getCode(factoryAddress)
       if (code === "0x") {
-        console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`);
-        continue;
+        console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`)
+        continue
       }
 
-      // Use getFaucetTransactions from the appropriate ABI
+      const factoryContract = new Contract(factoryAddress, config.abi, provider)
+
       try {
-        const factoryTxs = await factoryContract.getFaucetTransactions(faucetAddress);
-        transactions.push(...factoryTxs);
+        const factoryTxs = await factoryContract.getFaucetTransactions(faucetAddress)
+        transactions.push(...factoryTxs)
       } catch (error) {
-        console.warn(`Error fetching transactions from factory ${factoryAddress}:`, error);
+        console.warn(`Error fetching transactions from factory ${factoryAddress}:`, error)
       }
     }
 
-    // Map and filter transactions
     const filteredTransactions = transactions
       .filter((tx: any) => tx.faucetAddress.toLowerCase() === faucetAddress.toLowerCase())
       .map((tx: any) => ({
@@ -1737,10 +1741,11 @@ export async function getFaucetTransactionHistory(
         amount: BigInt(tx.amount),
         isEther: tx.isEther as boolean,
         timestamp: Number(tx.timestamp),
-      }));
+      }))
 
     console.log(`Fetched ${filteredTransactions.length} transactions for faucet ${faucetAddress}`)
     return filteredTransactions
+
   } catch (error: any) {
     console.error(`Error fetching transaction history for faucet ${faucetAddress}:`, error)
     throw new Error(error.message || "Failed to fetch transaction history")

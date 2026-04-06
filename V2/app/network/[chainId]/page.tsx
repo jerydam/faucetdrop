@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
 import { useNetwork, Network } from "@/hooks/use-network";
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FactoryType } from "@/lib/faucet";
-import { formatUnits, Contract, ZeroAddress } from "ethers";
+import { formatUnits, Contract, ZeroAddress, JsonRpcProvider } from "ethers";
 import { Coins, Clock, Search, Filter, SortAsc, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ERC20_ABI } from "@/lib/abis";
@@ -31,8 +31,10 @@ const DEFAULT_FAUCET_IMAGE = "/default.jpeg";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Lightweight row from `network_faucets` table */
+
 interface FaucetMeta {
   faucetAddress: string;
+  slug?: string;           // ✅ added
   isClaimActive: boolean;
   isEther: boolean;
   createdAt?: string | number;
@@ -119,8 +121,8 @@ async function fetchAllMetaFromSupabase(chainId: number): Promise<FaucetMeta[]> 
 
   return (data ?? []).map((r) => ({
     faucetAddress:  r.faucet_address,
-    isClaimActive:  r.is_claim_active,
-    isEther:        r.is_ether,
+    isClaimActive:  r.is_claim_active === true || r.is_claim_active === "true" || r.is_claim_active === 1,
+    isEther:        r.is_ether === true || r.is_ether === "true" || r.is_ether === 1,
     slug:           r.slug,
     createdAt:      r.start_time,
     tokenSymbol:    r.token_symbol,
@@ -224,8 +226,51 @@ function TokenBalance({
 function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetworkSwitch: () => Promise<void> }) {
   const { chainId } = useWallet();
   const isOnCorrectNetwork = chainId === faucet.network?.chainId;
+  
   const [startCountdown, setStartCountdown] = useState("");
   const [endCountdown, setEndCountdown] = useState("");
+  
+  // NEW: State to hold the live onchain status
+  const [onchainIsActive, setOnchainIsActive] = useState<boolean | null>(null);
+
+  // NEW: Fetch onchain status on component mount
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchOnchainStatus = async () => {
+      if (!faucet.faucetAddress || !faucet.network?.rpcUrl) {
+        if (isMounted) setOnchainIsActive(faucet.isClaimActive);
+        return;
+      }
+
+      try {
+        // Create an independent provider so this works regardless of the user's wallet state
+        const safeRpc = Array.isArray(faucet.network.rpcUrl) ? faucet.network.rpcUrl[0] : faucet.network.rpcUrl;
+        const rpcProvider = new JsonRpcProvider(safeRpc);
+
+        // Minimal ABI to read the isClaimActive state variable/function
+        const abi = ["function isClaimActive() view returns (bool)"];
+        const contract = new Contract(faucet.faucetAddress, abi, rpcProvider);
+
+        const active = await contract.isClaimActive();
+
+        if (isMounted) setOnchainIsActive(active);
+      } catch (error) {
+        console.warn(`Failed to fetch onchain status for ${faucet.faucetAddress}:`, error);
+        // Fallback to database value if the RPC call fails
+        if (isMounted) setOnchainIsActive(faucet.isClaimActive);
+      }
+    };
+
+    fetchOnchainStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [faucet.faucetAddress, faucet.network, faucet.isClaimActive]);
+
+  // Use the onchain status if loaded, otherwise fallback to the database status
+  const displayIsActive = onchainIsActive !== null ? onchainIsActive : faucet.isClaimActive;
 
   useEffect(() => {
     const update = () => {
@@ -244,14 +289,15 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
       else if (start > now) setStartCountdown(`${fmt(start - now)} until active`);
       else setStartCountdown("Already Active");
 
-      if (end > now && faucet.isClaimActive) setEndCountdown(`${fmt(end - now)} until inactive`);
+      // Updated to use displayIsActive
+      if (end > now && displayIsActive) setEndCountdown(`${fmt(end - now)} until inactive`);
       else if (end > 0 && end <= now) setEndCountdown("Ended");
       else setEndCountdown("N/A");
     };
     update();
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
-  }, [faucet.startTime, faucet.endTime, faucet.isClaimActive]);
+  }, [faucet.startTime, faucet.endTime, displayIsActive]);
 
   const displayTokenSymbol =
     faucet.tokenSymbol ||
@@ -263,12 +309,13 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
         <CardTitle className="text-sm sm:text-base md:text-lg flex items-center justify-between">
           <span className="truncate">{faucet.name || `${displayTokenSymbol} Faucet`}</span>
           <div className="flex items-center gap-2">
+            {/* Updated to reflect loading and onchain state */}
             <span className={`text-[10px] sm:text-xs md:text-sm px-1.5 sm:px-2 py-0.5 rounded-full ${
-              faucet.isClaimActive
+              displayIsActive
                 ? "bg-green-500/20 text-green-600 dark:text-green-400"
                 : "bg-red-500/20 text-red-600 dark:text-red-400"
             }`}>
-              {faucet.isClaimActive ? "Active" : "Inactive"}
+              {onchainIsActive === null ? "Loading..." : displayIsActive ? "Active" : "Inactive"}
             </span>
             {faucet.network && (
               <Badge
@@ -367,16 +414,16 @@ function FaucetCard({ faucet, onNetworkSwitch }: { faucet: FaucetData; onNetwork
       </CardContent>
 
       <CardFooter className="px-3 sm:px-4">
-  <Link 
-    href={`/faucet/${faucet.slug || buildFaucetSlug(faucet.name || "faucet", faucet.faucetAddress)}`} 
-    className="w-full"
-  >
-    <Button variant="outline" className="w-full h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
-      <Coins className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-      View Details
-    </Button>
-  </Link>
-</CardFooter>
+        <Link 
+          href={`/faucet/${faucet.slug || buildFaucetSlug(faucet.name || "faucet", faucet.faucetAddress)}`} 
+          className="w-full"
+        >
+          <Button variant="outline" className="w-full h-8 sm:h-9 md:h-10 text-xs sm:text-sm md:text-base">
+            <Coins className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+            View Details
+          </Button>
+        </Link>
+      </CardFooter>
     </Card>
   );
 }
@@ -463,7 +510,7 @@ export default function NetworkFaucets() {
   const { ensureCorrectNetwork } = useWallet();
   const { networks, setNetwork } = useNetwork();
   const { toast } = useToast();
-
+  const isFirstLoad = useRef(true);
   const [allFaucetsMeta, setAllFaucetsMeta] = useState<FaucetMeta[]>([]);
   const [currentPageDetails, setCurrentPageDetails] = useState<FaucetData[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
@@ -495,172 +542,175 @@ export default function NetworkFaucets() {
 
   // ── Client-side filter + sort on the lightweight meta list ─────────────────
   const filteredAndSortedMeta = useMemo(() => {
-    let list = [...allFaucetsMeta];
+  let list = [...allFaucetsMeta];
 
-    if (searchTerm.trim()) {
-      const s = searchTerm.toLowerCase().trim();
-      list = list.filter((f) =>
-        (f.name || f.tokenSymbol || "").toLowerCase().includes(s) ||
-        (f.tokenSymbol || "").toLowerCase().includes(s) ||
-        f.faucetAddress.toLowerCase().includes(s)
-      );
-    }
+  if (searchTerm.trim()) {
+    const s = searchTerm.toLowerCase().trim();
+    list = list.filter((f) =>
+      (f.name || f.tokenSymbol || "").toLowerCase().includes(s) ||
+      (f.tokenSymbol || "").toLowerCase().includes(s) ||
+      f.faucetAddress.toLowerCase().includes(s)
+    );
+  }
 
-    if (filterBy !== FILTER_OPTIONS.ALL) {
-      list = list.filter((f) => {
-        switch (filterBy) {
-          case FILTER_OPTIONS.ACTIVE:   return f.isClaimActive;
-          case FILTER_OPTIONS.INACTIVE: return !f.isClaimActive;
-          case FILTER_OPTIONS.NATIVE:   return f.isEther;
-          case FILTER_OPTIONS.ERC20:    return !f.isEther;
-          default: return true;
-        }
-      });
-    }
-
-    list.sort((a, b) => {
-      if (sortBy === SORT_OPTIONS.DEFAULT) {
-        if (a.isClaimActive !== b.isClaimActive) return a.isClaimActive ? -1 : 1;
-        return Number(b.createdAt || 0) - Number(a.createdAt || 0);
+  if (filterBy !== FILTER_OPTIONS.ALL) {
+    list = list.filter((f) => {
+      switch (filterBy) {
+        case FILTER_OPTIONS.ACTIVE:   return f.isClaimActive === true;
+        case FILTER_OPTIONS.INACTIVE: return f.isClaimActive !== true;
+        case FILTER_OPTIONS.NATIVE:   return f.isEther;
+        case FILTER_OPTIONS.ERC20:    return !f.isEther;
+        default: return true;
       }
-      const an = (a.name || a.tokenSymbol || "").toLowerCase();
-      const bn = (b.name || b.tokenSymbol || "").toLowerCase();
-      return sortBy === SORT_OPTIONS.NAME_ASC ? an.localeCompare(bn) : bn.localeCompare(an);
     });
+  }
 
-    return list;
-  }, [allFaucetsMeta, searchTerm, filterBy, sortBy]);
+  list.sort((a, b) => {
+    if (sortBy === SORT_OPTIONS.DEFAULT) {
+      const aActive = a.isClaimActive === true;
+      const bActive = b.isClaimActive === true;
+      if (aActive !== bActive) return aActive ? -1 : 1; // ✅ active first
+      return Number(b.createdAt || 0) - Number(a.createdAt || 0);
+    }
+    const an = (a.name || a.tokenSymbol || "").toLowerCase();
+    const bn = (b.name || b.tokenSymbol || "").toLowerCase();
+    return sortBy === SORT_OPTIONS.NAME_ASC ? an.localeCompare(bn) : bn.localeCompare(an);
+  });
+
+  return list;
+}, [allFaucetsMeta, searchTerm, filterBy, sortBy]);
 
   // ── Step 1: load ALL meta from Supabase (fast, lightweight) ────────────────
   const loadAllFaucetsMetadata = useCallback(async () => {
-    if (!network || isNaN(chainId)) return;
-    setLoadingInitial(true);
-    try {
-      const meta = await fetchAllMetaFromSupabase(chainId);
-      setAllFaucetsMeta(meta);
-      setPage(1);
-    } catch (error) {
-      console.error("❌ Error loading faucet meta:", error);
-      toast({ title: "Failed to load faucet list", variant: "destructive" });
-      setAllFaucetsMeta([]);
-    } finally {
-      setLoadingInitial(false);
-    }
-  }, [network, chainId, toast]);
-
+  if (!network || isNaN(chainId)) return;
+  setLoadingInitial(true);
+  try {
+    const meta = await fetchAllMetaFromSupabase(chainId);
+    setAllFaucetsMeta(meta);
+    setPage(1);
+  } catch (error) {
+    console.error("❌ Error loading faucet meta:", error);
+    toast({ title: "Failed to load faucet list", variant: "destructive" });
+    setAllFaucetsMeta([]);
+  } finally {
+    setLoadingInitial(false);
+  }
+}, [network, chainId, toast]);
   // ── Step 2: load FULL details for current page from Supabase ───────────────
-  const loadCurrentPageDetails = useCallback(async (
-    pg: number, perPage: number, sortedMeta: FaucetMeta[]
-  ) => {
-    if (!network || isNaN(chainId) || sortedMeta.length === 0) {
-      setCurrentPageDetails([]);
-      setLoadingPageDetails(false);
-      return;
-    }
-
-    setLoadingPageDetails(true);
+  
+const loadCurrentPageDetails = useCallback(async (
+  pg: number, perPage: number, sortedMeta: FaucetMeta[]
+) => {
+  if (!network || isNaN(chainId) || sortedMeta.length === 0) {
     setCurrentPageDetails([]);
+    setLoadingPageDetails(false);
+    return;
+  }
 
-    try {
-      const slice = sortedMeta.slice((pg - 1) * perPage, pg * perPage);
-      if (slice.length === 0) return;
+  setLoadingPageDetails(true);
+  setCurrentPageDetails([]);
 
-      // Single batch query — no RPC, no per-faucet waterfall
-      const detailMap = await fetchPageDetailsFromSupabase(
-        slice.map((m) => m.faucetAddress)
-      );
+  try {
+    const slice = sortedMeta.slice((pg - 1) * perPage, pg * perPage);
+    if (slice.length === 0) return;
 
-      const faucets: FaucetData[] = slice.map((meta) => {
-        const row = detailMap[meta.faucetAddress.toLowerCase()];
+    const detailMap = await fetchPageDetailsFromSupabase(
+      slice.map((m) => m.faucetAddress)
+    );
 
-        // Determine faucet type from meta (factory address match) — same logic as before
-        let faucetType: FactoryType = meta.factoryType || "dropcode";
-        if (network.factories) {
-          if (network.factories.custom?.toLowerCase() === meta.factoryAddress.toLowerCase()) faucetType = "custom";
-          else if (network.factories.dropcode?.toLowerCase() === meta.factoryAddress.toLowerCase()) faucetType = "dropcode";
-          else if (network.factories.droplist?.toLowerCase() === meta.factoryAddress.toLowerCase()) faucetType = "droplist";
-        }
+    const faucets: FaucetData[] = slice.map((meta) => {
+      const row = detailMap[meta.faucetAddress.toLowerCase()];
 
-        // If we have a DB row, map it; otherwise fall back to meta fields
-        if (row) {
-          return {
-            faucetAddress:  row.faucet_address,
-            name:           row.faucet_name,
-            slug:           row.slug,
-            tokenSymbol:    row.token_symbol || (row.is_ether ? getNativeTokenSymbol(network.name) : "TOK"),
-            tokenDecimals:  row.token_decimals ?? 18,
-            isEther:        row.is_ether,
-            claimAmount:    row.claim_amount ? BigInt(row.claim_amount) : undefined,
-            startTime:      row.start_time,
-            endTime:        row.end_time,
-            isClaimActive:  row.is_claim_active,
-            token:          row.token_address,
-            network,
-            createdAt:      row.start_time,
-            description:    row.description || (row.owner_address ? getDefaultDescription(network.name, row.owner_address) : undefined),
-            imageUrl:       row.image_url || DEFAULT_FAUCET_IMAGE,
-            owner:          row.owner_address,
-            factoryAddress: row.factory_address || meta.factoryAddress,
-            faucetType,
-          } as FaucetData;
-        }
+      let faucetType: FactoryType = meta.factoryType || "dropcode";
+      if (network.factories) {
+        if (network.factories.custom?.toLowerCase() === meta.factoryAddress.toLowerCase()) faucetType = "custom";
+        else if (network.factories.dropcode?.toLowerCase() === meta.factoryAddress.toLowerCase()) faucetType = "dropcode";
+        else if (network.factories.droplist?.toLowerCase() === meta.factoryAddress.toLowerCase()) faucetType = "droplist";
+      }
 
-        // Fallback: only lightweight meta available (row not yet indexed)
+      if (row) {
         return {
-          faucetAddress:  meta.faucetAddress,
-          name:           meta.name,
+          faucetAddress:  row.faucet_address,
+          name:           row.faucet_name,
           slug:           row.slug,
-          tokenSymbol:    meta.tokenSymbol || (meta.isEther ? getNativeTokenSymbol(network.name) : "TOK"),
-          tokenDecimals:  18,
-          isEther:        meta.isEther,
-          isClaimActive:  meta.isClaimActive,
+          tokenSymbol:    row.token_symbol || (row.is_ether ? getNativeTokenSymbol(network.name) : "TOK"),
+          tokenDecimals:  row.token_decimals ?? 18,
+          isEther:       row.is_ether === true || row.is_ether === "true" || row.is_ether === 1,
+          claimAmount:    row.claim_amount ? BigInt(row.claim_amount) : undefined,
+          startTime:      row.start_time,
+          endTime:        row.end_time,
+          isClaimActive: row.is_claim_active === true || row.is_claim_active === "true" || row.is_claim_active === 1,
+          token:          row.token_address,
           network,
-          createdAt:      meta.createdAt,
-          owner:          meta.owner,
-          factoryAddress: meta.factoryAddress,
-          imageUrl:       DEFAULT_FAUCET_IMAGE,
+          createdAt:      row.start_time,
+          description:    row.description || (row.owner_address ? getDefaultDescription(network.name, row.owner_address) : undefined),
+          imageUrl:       row.image_url || DEFAULT_FAUCET_IMAGE,
+          owner:          row.owner_address,
+          factoryAddress: row.factory_address || meta.factoryAddress,
           faucetType,
         } as FaucetData;
-      });
+      }
 
-      setCurrentPageDetails(faucets);
-    } catch (error) {
-      console.error("❌ Error loading page details:", error);
-      toast({ title: "Failed to load faucet details", variant: "destructive" });
-    } finally {
-      setLoadingPageDetails(false);
-    }
-  }, [network, chainId, toast]);
+      // ✅ Fallback: use meta.slug, NOT row.slug (row is undefined here)
+      return {
+        faucetAddress:  meta.faucetAddress,
+        name:           meta.name,
+        slug:           meta.slug,
+        tokenSymbol:    meta.tokenSymbol || (meta.isEther ? getNativeTokenSymbol(network.name) : "TOK"),
+        tokenDecimals:  18,
+        isEther:        meta.isEther,
+        isClaimActive:  meta.isClaimActive,
+        network,
+        createdAt:      meta.createdAt,
+        owner:          meta.owner,
+        factoryAddress: meta.factoryAddress,
+        imageUrl:       DEFAULT_FAUCET_IMAGE,
+        faucetType,
+      } as FaucetData;
+    });
+
+    setCurrentPageDetails(faucets);
+  } catch (error) {
+    console.error("❌ Error loading page details:", error);
+    toast({ title: "Failed to load faucet details", variant: "destructive" });
+  } finally {
+    setLoadingPageDetails(false);
+  }
+}, [network, chainId, toast]);
 
   // ── Effects ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (isNaN(chainId) || !network) {
-      setLoadingInitial(false);
-      toast({
-        title: "Network Not Found",
-        description: `Chain ID ${chainIdStr || "unknown"} is not supported`,
-        variant: "destructive",
-      });
-      router.push("/");
-      return;
-    }
-    loadAllFaucetsMetadata();
-  }, [chainId, network, router, toast, loadAllFaucetsMetadata, chainIdStr]);
+  if (isNaN(chainId) || !network) {
+    setLoadingInitial(false);
+    toast({
+      title: "Network Not Found",
+      description: `Chain ID ${chainIdStr || "unknown"} is not supported`,
+      variant: "destructive",
+    });
+    router.push("/");
+    return;
+  }
+  isFirstLoad.current = true; // ✅ reset on network change
+  loadAllFaucetsMetadata();
+}, [chainId, network, router, toast, loadAllFaucetsMetadata, chainIdStr]);
 
-  useEffect(() => {
-    if (!loadingInitial) {
-      if (filteredAndSortedMeta.length > 0) {
-        loadCurrentPageDetails(page, faucetsPerPage, filteredAndSortedMeta);
-      } else {
-        setCurrentPageDetails([]);
-        setLoadingPageDetails(false);
-      }
-    }
-  }, [page, faucetsPerPage, filteredAndSortedMeta, loadingInitial, loadCurrentPageDetails]);
+useEffect(() => {
+  if (loadingInitial) return;
 
-  useEffect(() => { setPage(1); }, [searchTerm, filterBy, sortBy]);
+  // ✅ On first load after meta arrives, force page=1 to avoid stale page state
+  const targetPage = isFirstLoad.current ? 1 : page;
+  isFirstLoad.current = false;
 
+  if (filteredAndSortedMeta.length > 0) {
+    loadCurrentPageDetails(targetPage, faucetsPerPage, filteredAndSortedMeta);
+  } else {
+    setCurrentPageDetails([]);
+    setLoadingPageDetails(false);
+  }
+}, [page, faucetsPerPage, filteredAndSortedMeta, loadingInitial, loadCurrentPageDetails]);
+
+useEffect(() => { setPage(1); }, [searchTerm, filterBy, sortBy]);
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleNetworkSwitch = async (targetChainId: number) => {

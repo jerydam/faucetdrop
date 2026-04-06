@@ -265,7 +265,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const [showCurrentSecretDialog, setShowCurrentSecretDialog] = useState(false);
   const [showNewCodeDialog, setShowNewCodeDialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
-
+  const [currentTime, setCurrentTime] = useState(Date.now());
   // ── Form States ────────────────────────────────────────────────────────────
   const [fundAmount, setFundAmount] = useState("");
   const [adjustedFundAmount, setAdjustedFundAmount] = useState("");
@@ -273,6 +273,14 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const [claimAmount, setClaimAmount] = useState(
     faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"
   );
+  useEffect(() => {
+  const timer = setInterval(() => {
+    setCurrentTime(Date.now());
+  }, 1000);
+
+  // Always clean up your intervals!
+  return () => clearInterval(timer);
+}, []);
   const [startTime, setStartTime] = useState(
     faucetDetails?.startTime
       ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16)
@@ -347,36 +355,73 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     validateStartTime(e.target.value);
   };
 
-  const loadTransactionHistory = useCallback(async () => {
+const loadTransactionHistory = useCallback(async () => {
   if (!selectedNetwork || !faucetAddress) return;
+  
+  console.group("🔍 loadTransactionHistory DEBUG");
+  console.log("faucetAddress:", faucetAddress);
+  console.log("selectedNetwork:", selectedNetwork);
+  console.log("faucetType:", faucetType);
+  
   try {
-    // Use a stable RPC provider instead of the wallet BrowserProvider
-    // so history loads regardless of which chain the wallet is on
     const { JsonRpcProvider } = await import("ethers");
+    
     const safeRpc = Array.isArray(selectedNetwork.rpcUrl)
       ? selectedNetwork.rpcUrl[0]
       : selectedNetwork.rpcUrl;
+    
+    console.log("safeRpc:", safeRpc);
+    
     const rpcProvider = new JsonRpcProvider(safeRpc);
+    
+    // Test the provider first
+    try {
+      const network = await rpcProvider.getNetwork();
+      console.log("✅ RPC connected - chainId:", network.chainId.toString());
+    } catch (rpcErr) {
+      console.error("❌ RPC connection failed:", rpcErr);
+    }
 
+    // Test if the faucet contract exists at that address
+    try {
+      const code = await rpcProvider.getCode(faucetAddress);
+      console.log("Contract bytecode length:", code.length, code === "0x" ? "❌ NO CONTRACT at this address!" : "✅ Contract exists");
+    } catch (codeErr) {
+      console.error("❌ getCode failed:", codeErr);
+    }
+
+    console.log("Calling getFaucetTransactionHistory...");
+    
     const txs = await getFaucetTransactionHistory(
-      rpcProvider as any,
-      faucetAddress,
-      selectedNetwork,
-      faucetType || undefined
-    );
-    setTransactions(txs.sort((a, b) => b.timestamp - a.timestamp));
+  rpcProvider as any,
+  faucetAddress,
+  selectedNetwork,
+  faucetType || undefined,
+  address ?? undefined 
+);
+    
+    console.log("✅ Raw txs returned:", txs);
+    console.log("txs count:", txs?.length);
+    console.log("First tx sample:", txs?.[0]);
+    
+    const sorted = txs.sort((a, b) => b.timestamp - a.timestamp);
+    setTransactions(sorted);
+    
   } catch (error: any) {
+    console.error("❌ Full error object:", error);
+    console.error("error.message:", error.message);
+    console.error("error.code:", error.code);
+    console.error("error.data:", error.data);
+    console.error("error.stack:", error.stack);
     toast.error(`Failed to load Activity Log: ${error.message}`);
+  } finally {
+    console.groupEnd();
   }
-}, [faucetAddress, selectedNetwork, faucetType, setTransactions]);
-
-
+}, [faucetAddress, selectedNetwork, faucetType, setTransactions, address]);
 useEffect(() => {
   if (activeTab === "history" && selectedNetwork) loadTransactionHistory();
 }, [activeTab, selectedNetwork, loadTransactionHistory]);
-  useEffect(() => {
-    if (activeTab === "history" && selectedNetwork) loadTransactionHistory();
-  }, [activeTab, selectedNetwork, loadTransactionHistory]);
+  
 
   useEffect(() => {
     if (faucetDetails) {
@@ -486,6 +531,29 @@ useEffect(() => {
     finally { setIsFunding(false); }
   };
 
+  const getTxExplorerUrl = (txHash: string) => {
+  const explorer = selectedNetwork?.blockExplorerUrl || selectedNetwork?.explorer;
+  if (!explorer || !txHash) return null;
+  return `${explorer.replace(/\/$/, "")}/tx/${txHash}`;
+};
+
+const getEventBadgeVariant = (type: string): "default" | "secondary" | "destructive" | "outline" => {
+  const t = type?.toLowerCase();
+  if (t === "claim" || t === "drip") return "default";
+  if (t === "fund" || t === "deposit") return "secondary";
+  if (t === "withdraw") return "destructive";
+  return "outline";
+};
+
+const getEventColor = (type: string) => {
+  const t = type?.toLowerCase();
+  if (t === "claim" || t === "drip") return "text-green-600 dark:text-green-400";
+  if (t === "fund" || t === "deposit") return "text-blue-600 dark:text-blue-400";
+  if (t === "withdraw") return "text-red-500 dark:text-red-400";
+  if (t === "reset") return "text-amber-500";
+  return "text-muted-foreground";
+};
+
   const handleWithdraw = async () => {
     if (!address || !provider || !withdrawAmount || !chainId || !checkNetwork()) return;
     try {
@@ -565,13 +633,16 @@ useEffect(() => {
     // 2. Save social tasks independently
     if (hasTaskChanges) {
       const formattedTasks = newSocialLinks
-        .filter((link) => link.url.trim() && link.handle.trim())
-        .map((link) => ({
-          platform: link.platform,
-          handle: link.handle,
-          url: link.url.trim(),
-          action: link.action,
-        }));
+  .filter((link) => link.url.trim() && link.handle.trim())
+  .map((link) => ({
+    title: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} on ${link.platform}`,
+    description: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} ${link.handle} on ${link.platform}`,
+    platform: link.platform,
+    handle: link.handle,
+    url: link.url.trim(),
+    action: link.action,
+    required: true,
+  }));
 
       if (formattedTasks.length > 0) {
         const taskResponse = await fetch(
@@ -828,16 +899,21 @@ useEffect(() => {
     },
   };
 
-  const renderCountdown = (timestamp: number, prefix: string) => {
-    if (timestamp === 0) return "N/A";
-    const diff = timestamp * 1000 - Date.now();
-    if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
-    const days = Math.floor(diff / 86400000);
-    const hours = Math.floor((diff % 86400000) / 3600000);
-    const minutes = Math.floor((diff % 3600000) / 60000);
-    const seconds = Math.floor((diff % 60000) / 1000);
-    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-  };
+  const renderCountdown = (timestamp: number, prefix: string): string => {
+  if (timestamp === 0) return "N/A";
+  
+  // Use 'currentTime' state instead of 'Date.now()'
+  const diff = timestamp * 1000 - currentTime; 
+  
+  if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
+  
+  const days  = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins  = Math.floor((diff % 3600000) / 60000);
+  const secs  = Math.floor((diff % 60000) / 1000);
+  
+  return `${days}d ${hours}h ${mins}m ${secs}s`;
+};
 
   const adminTabs = [
     { value: "fund", label: "Fund", icon: Upload },
@@ -1457,76 +1533,179 @@ useEffect(() => {
           </TabsContent>
 
           {/* ── History Tab ── */}
-          <TabsContent value="history" className="space-y-4 mt-5">
-            <Section icon={History} title="Activity Log — Last 100 Events">
-              {transactions.length > 0 ? (
-                <>
-                  <div className="overflow-x-auto rounded-lg border border-border/60">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableHead className="text-xs font-semibold">Type</TableHead>
-                          <TableHead className="text-xs font-semibold">Initiator</TableHead>
-                          <TableHead className="text-xs font-semibold">Amount</TableHead>
-                          <TableHead className="text-xs font-semibold">Token</TableHead>
-                          <TableHead className="text-xs font-semibold">Date</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {currentTransactions.map((tx, index) => (
-                          <TableRow key={`${tx.timestamp}-${index}`} className="hover:bg-muted/20 transition-colors">
-                            <TableCell className="text-xs capitalize">
-                              <Badge variant="outline" className="text-[10px] font-medium">{tx.transactionType}</Badge>
-                            </TableCell>
-                            <TableCell className="text-xs font-mono text-muted-foreground">
-                              {tx.initiator.slice(0, 6)}…{tx.initiator.slice(-4)}
-                            </TableCell>
-                            <TableCell className="text-xs font-mono">{formatUnits(tx.amount, tokenDecimals)}</TableCell>
-                            <TableCell className="text-xs">{getTokenName(tx.isEther)}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {new Date(tx.timestamp * 1000).toLocaleString()}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+          {/* ── History Tab ── */}
+<TabsContent value="history" className="space-y-4 mt-5">
+  <Section icon={History} title="Onchain Activity Log">
+    <div className="space-y-3">
+      {/* Refresh button */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          Live onchain events from the faucet contract.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs gap-1.5"
+          onClick={loadTransactionHistory}
+        >
+          <RotateCcw className="h-3 w-3" /> Refresh
+        </Button>
+      </div>
 
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-xs text-muted-foreground">
-                        Page {currentPage} of {totalPages}
-                      </span>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="outline" size="sm"
-                          onClick={() => handlePageChange(currentPage - 1)}
-                          disabled={currentPage === 1}
-                          className="h-7 text-xs"
+      {transactions.length > 0 ? (
+        <>
+         
+
+          {/* Table */}
+          <div className="overflow-x-auto rounded-lg border border-border/60">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="text-xs font-semibold w-[90px]">Event</TableHead>
+                  <TableHead className="text-xs font-semibold">Address</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Amount</TableHead>
+                  <TableHead className="text-xs font-semibold hidden sm:table-cell">Date</TableHead>
+                  <TableHead className="text-xs font-semibold text-right w-[60px]">Tx</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {currentTransactions.map((tx, index) => {
+                  const explorerUrl = getTxExplorerUrl(tx.txHash || tx.transactionHash);
+                  return (
+                    <TableRow
+                      key={`${tx.txHash || tx.transactionHash || tx.timestamp}-${index}`}
+                      className="hover:bg-muted/20 transition-colors"
+                    >
+                      <TableCell className="text-xs py-2.5">
+                        <Badge
+                          variant={getEventBadgeVariant(tx.transactionType)}
+                          className={`text-[10px] font-semibold capitalize px-2 ${
+                            tx.transactionType?.toLowerCase() === "claim" ||
+                            tx.transactionType?.toLowerCase() === "drip"
+                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800"
+                              : tx.transactionType?.toLowerCase() === "fund" ||
+                                tx.transactionType?.toLowerCase() === "deposit"
+                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                              : tx.transactionType?.toLowerCase() === "withdraw"
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800"
+                              : ""
+                          }`}
                         >
-                          Prev
-                        </Button>
-                        <Button
-                          variant="outline" size="sm"
-                          onClick={() => handlePageChange(currentPage + 1)}
-                          disabled={currentPage === totalPages}
-                          className="h-7 text-xs"
+                          {tx.transactionType || "Event"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs font-mono text-muted-foreground py-2.5">
+                        <span
+                          className="cursor-pointer hover:text-foreground transition-colors"
+                          onClick={() => navigator.clipboard.writeText(tx.initiator).then(() => toast.success("Address copied"))}
+                          title={tx.initiator}
                         >
-                          Next
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-8">
-                  <History className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No transactions found</p>
-                </div>
-              )}
-            </Section>
-          </TabsContent>
+                          {tx.initiator.slice(0, 6)}…{tx.initiator.slice(-4)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs font-mono text-right py-2.5">
+                        <span className={getEventColor(tx.transactionType)}>
+                          {tx.transactionType?.toLowerCase() === "withdraw" ? "−" : "+"}
+                          {formatUnits(tx.amount, tokenDecimals)}
+                        </span>
+                        <span className="text-muted-foreground ml-1">
+                          {getTokenName(tx.isEther)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground hidden sm:table-cell py-2.5 whitespace-nowrap">
+                        {new Date(tx.timestamp * 1000).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </TableCell>
+                      <TableCell className="text-right py-2.5">
+                        {explorerUrl ? (
+                          <a
+                            href={explorerUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="View on explorer"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground/30 text-[10px]">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs text-muted-foreground">
+                Showing {startIndex + 1}–{Math.min(startIndex + 10, transactions.length)} of {transactions.length}
+              </span>
+              <div className="flex gap-1">
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="h-7 text-xs"
+                >
+                  Prev
+                </Button>
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  const page = totalPages <= 5 ? i + 1 : Math.max(1, currentPage - 2) + i;
+                  if (page > totalPages) return null;
+                  return (
+                    <Button
+                      key={page}
+                      variant={currentPage === page ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(page)}
+                      className="h-7 w-7 text-xs p-0"
+                    >
+                      {page}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="h-7 text-xs"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-center py-12">
+          <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-muted/50 mb-3">
+            <Activity className="h-6 w-6 text-muted-foreground/50" />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">No onchain events found</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">
+            Events will appear here once users interact with the faucet
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3 h-7 text-xs gap-1.5"
+            onClick={loadTransactionHistory}
+          >
+            <RotateCcw className="h-3 w-3" /> Try Refreshing
+          </Button>
+        </div>
+      )}
+    </div>
+  </Section>
+</TabsContent>
         </Tabs>
       </CardContent>
 

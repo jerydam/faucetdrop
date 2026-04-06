@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter
 } from "@/components/ui/card";
@@ -267,7 +267,16 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
       : "0";
 
   const shouldShowSecretCodeInput = faucetType === 'dropcode' && faucetDetails?.backendMode;
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
+  useEffect(() => {
+  const timer = setInterval(() => {
+    setCurrentTime(Date.now());
+  }, 1000);
+
+  // Always clean up your intervals!
+  return () => clearInterval(timer);
+}, []);
   const handleShareOnX = () => {
     const shareText = encodeURIComponent(generateXPostContent(claimedAmount));
     window.open(`https://x.com/intent/tweet?text=${shareText}`, "_blank");
@@ -278,16 +287,21 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     dynamicTasks.length === 0 ||
     dynamicTasks.every(t => usernames[t.platform]?.trim().length > 0);
 
-  const renderCountdown = (timestamp: number, prefix: string): string => {
-    if (timestamp === 0) return "N/A";
-    const diff = timestamp * 1000 - Date.now();
-    if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
-    const days  = Math.floor(diff / 86400000);
-    const hours = Math.floor((diff % 86400000) / 3600000);
-    const mins  = Math.floor((diff % 3600000) / 60000);
-    const secs  = Math.floor((diff % 60000) / 1000);
-    return `${days}d ${hours}h ${mins}m ${secs}s`;
-  };
+ const renderCountdown = (timestamp: number, prefix: string): string => {
+  if (timestamp === 0) return "N/A";
+  
+  // Use 'currentTime' state instead of 'Date.now()'
+  const diff = timestamp * 1000 - currentTime; 
+  
+  if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
+  
+  const days  = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins  = Math.floor((diff % 3600000) / 60000);
+  const secs  = Math.floor((diff % 60000) / 1000);
+  
+  return `${days}d ${hours}h ${mins}m ${secs}s`;
+};
 
   const tasksNeeded = dynamicTasks.length > 0 && !allAccountsVerified;
   const faucetTypeLabel =

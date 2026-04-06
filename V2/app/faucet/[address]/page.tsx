@@ -88,6 +88,20 @@ function rowToFaucetDetails(row: FaucetDetailRow) {
 }
 
 // ── Remote helpers ───────────────────────────────────────────────────────────
+async function checkIsClaimActiveOnchain(
+    provider: any,
+    faucetAddress: string
+): Promise<boolean | null> {
+    try {
+        const { Contract } = await import("ethers")
+        // Minimal ABI to read the active status
+        const abi = ["function isClaimActive() view returns (bool)"]
+        const contract = new Contract(faucetAddress, abi, provider)
+        return await contract.isClaimActive()
+    } catch {
+        return null; // Fallback to DB value if RPC fails
+    }
+}
 
 async function checkIsAdmin(
     provider: any,
@@ -208,7 +222,7 @@ export default function FaucetDetails() {
     const { address: rawParam } = useParams<{ address: string }>()
     const searchParams  = useSearchParams()
     const networkId     = searchParams.get("networkId")
-
+    const [hasAutoSynced, setHasAutoSynced] = useState(false);
     const router                        = useRouter()
     const { address, chainId, isConnected, provider } = useWallet()
     const { networks }                  = useNetwork()
@@ -379,6 +393,22 @@ export default function FaucetDetails() {
           const details = rowToFaucetDetails(row)
           details.backendMode = actualBackendMode
 
+          const net = networks.find((n) => n.chainId === row!.chain_id) ?? null
+          setSelectedNetwork(net)
+
+          // 👇 NEW: Fetch live onchain status and overwrite the DB value
+          if (net) {
+              try {
+                  const safeRpc = Array.isArray(net.rpcUrl) ? net.rpcUrl[0] : net.rpcUrl
+                  const p = new JsonRpcProvider(safeRpc)
+                  const liveStatus = await checkIsClaimActiveOnchain(p, row.faucet_address)
+                  if (liveStatus !== null) {
+                      details.isClaimActive = liveStatus
+                  }
+              } catch (err) {
+                  console.warn("Failed to fetch live isClaimActive, using DB value.")
+              }
+          }
           const [template, tasks] = await Promise.all([
             loadCustomXPostTemplate(row.faucet_address),
             loadSocialMediaLinks(row.faucet_address),
@@ -394,7 +424,7 @@ export default function FaucetDetails() {
           })
           setDynamicTasks(tasks)
 
-          const net = networks.find((n) => n.chainId === row!.chain_id) ?? null
+          
           setSelectedNetwork(net)
           await loadUserSpecificData(row, normalizedType, net)
 
@@ -434,7 +464,16 @@ export default function FaucetDetails() {
 
                 const details = rowToFaucetDetails(row)
                 details.backendMode = actualBackendMode
-
+                try {
+                    const safeRpc = Array.isArray(selectedNetwork.rpcUrl) ? selectedNetwork.rpcUrl[0] : selectedNetwork.rpcUrl
+                    const p = new JsonRpcProvider(safeRpc)
+                    const liveStatus = await checkIsClaimActiveOnchain(p, faucetAddress)
+                    if (liveStatus !== null) {
+                        details.isClaimActive = liveStatus
+                    }
+                } catch (err) {
+                    console.warn("Failed to fetch live isClaimActive, using DB value.")
+                }
                 const template = await loadCustomXPostTemplate(faucetAddress)
                 setCustomXPostTemplate(template)
                 setFaucetDetails({ ...details, customXPostTemplate: template })
@@ -463,7 +502,33 @@ export default function FaucetDetails() {
 
     // ── Effects ────────────────────────────────────────────────────────────
 
-    useEffect(() => { resolveAndLoad() }, [rawParam, networkId])
+useEffect(() => { resolveAndLoad() }, [rawParam, networkId])
+
+// 👇 ADD THIS NEW EFFECT 👇
+useEffect(() => {
+    // If we don't have details, it's already active, or we already synced, do nothing
+    if (!faucetDetails || faucetDetails.isClaimActive || hasAutoSynced) {
+        return;
+    }
+
+    // Convert startTime to milliseconds
+    const startTimeMs = Number(faucetDetails.startTime) * 1000;
+    if (startTimeMs === 0) return;
+
+    const timer = setInterval(() => {
+        const now = Date.now();
+        if (now >= startTimeMs) {
+            console.log("⏰ Start time reached! Triggering auto-sync...");
+            setHasAutoSynced(true); // Lock it so it only fires once
+            clearInterval(timer);
+            
+            
+            refreshFaucetDetails(); 
+        }
+    }, 1000);
+
+    return () => clearInterval(timer);
+}, [faucetDetails, hasAutoSynced, refreshFaucetDetails]);
 
     // ── Claim handler ──────────────────────────────────────────────────────
 

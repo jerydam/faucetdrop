@@ -70,6 +70,7 @@ interface SecretCodeData {
 const SUPPORTED_CHAIN_IDS = [
   1,      // Ethereum Mainnet
   42220,  // Celo Mainnet
+  11155111,
   44787,  // Celo Testnet
   62320,  // Custom Network
   1135,   // Lisk
@@ -210,17 +211,16 @@ async function getChainIdFromWindow(): Promise<number | null> {
 
 async function getRobustChainId(provider: BrowserProvider): Promise<number> {
   try {
-    const windowChainId = await getChainIdFromWindow();
-    if (windowChainId) {
-      debugLog('Got chainId from window.ethereum', { chainId: windowChainId });
-      return windowChainId;
-    }
+    // BrowserProvider is already bound to the correct network
+    const network = await safeGetNetwork(provider);
+    return network.chainId;
   } catch (error: any) {
-    debugLog('Window ethereum approach failed, falling back to provider', error);
+    // Only fall back to window.ethereum if provider fails
+    debugLog('Provider network fetch failed, falling back to window.ethereum', error);
+    const windowChainId = await getChainIdFromWindow();
+    if (windowChainId) return windowChainId;
+    throw error;
   }
-
-  const network = await safeGetNetwork(provider);
-  return network.chainId;
 }
 
 // ─── Divvi ───────────────────────────────────────────────────────────────────

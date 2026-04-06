@@ -266,6 +266,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const [showNewCodeDialog, setShowNewCodeDialog] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   // ── Form States ────────────────────────────────────────────────────────────
   const [fundAmount, setFundAmount] = useState("");
   const [adjustedFundAmount, setAdjustedFundAmount] = useState("");
@@ -357,7 +358,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
 const loadTransactionHistory = useCallback(async () => {
   if (!selectedNetwork || !faucetAddress) return;
-  
+  setIsHistoryLoading(true);
   console.group("🔍 loadTransactionHistory DEBUG");
   console.log("faucetAddress:", faucetAddress);
   console.log("selectedNetwork:", selectedNetwork);
@@ -415,6 +416,7 @@ const loadTransactionHistory = useCallback(async () => {
     console.error("error.stack:", error.stack);
     toast.error(`Failed to load Activity Log: ${error.message}`);
   } finally {
+    setIsHistoryLoading(false);
     console.groupEnd();
   }
 }, [faucetAddress, selectedNetwork, faucetType, setTransactions, address]);
@@ -899,10 +901,20 @@ const getEventColor = (type: string) => {
     },
   };
 
-  const renderCountdown = (timestamp: number, prefix: string): string => {
+  const renderCountdown = (timestamp: number, prefix: string, startTimeMs?: number): string => {
   if (timestamp === 0) return "N/A";
   
-  // Use 'currentTime' state instead of 'Date.now()'
+  // NEW: If we are rendering the "End" time, and the faucet hasn't started yet, 
+  // show the fixed duration instead of a moving countdown.
+  if (prefix === "End" && startTimeMs && startTimeMs > currentTime) {
+      const duration = timestamp * 1000 - startTimeMs;
+      const d  = Math.floor(duration / 86400000);
+      const h = Math.floor((duration % 86400000) / 3600000);
+      const m  = Math.floor((duration % 3600000) / 60000);
+      return `${d}d ${h}h ${m}m (Duration)`; 
+  }
+
+  // Normal countdown logic
   const diff = timestamp * 1000 - currentTime; 
   
   if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
@@ -1532,9 +1544,7 @@ const getEventColor = (type: string) => {
             </Section>
           </TabsContent>
 
-          {/* ── History Tab ── */}
-          {/* ── History Tab ── */}
-<TabsContent value="history" className="space-y-4 mt-5">
+          <TabsContent value="history" className="space-y-4 mt-5">
   <Section icon={History} title="Onchain Activity Log">
     <div className="space-y-3">
       {/* Refresh button */}
@@ -1547,16 +1557,31 @@ const getEventColor = (type: string) => {
           size="sm"
           className="h-7 text-xs gap-1.5"
           onClick={loadTransactionHistory}
+          disabled={isHistoryLoading}
         >
-          <RotateCcw className="h-3 w-3" /> Refresh
+          {isHistoryLoading ? (
+            <Spinner /> // Or use the inline spinner classes below
+          ) : (
+            <RotateCcw className="h-3 w-3" />
+          )}
+          {isHistoryLoading ? "Refreshing..." : "Refresh"}
         </Button>
       </div>
 
-      {transactions.length > 0 ? (
+      {isHistoryLoading ? (
+        // LOADING STATE
+        <div className="text-center py-12">
+          <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-muted/50 mb-3">
+            <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Loading activity log...</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">
+            Fetching the latest events directly from the blockchain
+          </p>
+        </div>
+      ) : transactions.length > 0 ? (
+        // TABLE STATE
         <>
-         
-
-          {/* Table */}
           <div className="overflow-x-auto rounded-lg border border-border/60">
             <Table>
               <TableHeader>
@@ -1685,6 +1710,7 @@ const getEventColor = (type: string) => {
           )}
         </>
       ) : (
+        // EMPTY STATE
         <div className="text-center py-12">
           <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-muted/50 mb-3">
             <Activity className="h-6 w-6 text-muted-foreground/50" />

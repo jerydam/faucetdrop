@@ -287,10 +287,20 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
     dynamicTasks.length === 0 ||
     dynamicTasks.every(t => usernames[t.platform]?.trim().length > 0);
 
- const renderCountdown = (timestamp: number, prefix: string): string => {
+ const renderCountdown = (timestamp: number, prefix: string, startTimeMs?: number): string => {
   if (timestamp === 0) return "N/A";
   
-  // Use 'currentTime' state instead of 'Date.now()'
+  // NEW: If we are rendering the "End" time, and the faucet hasn't started yet, 
+  // show the fixed duration instead of a moving countdown.
+  if (prefix === "End" && startTimeMs && startTimeMs > currentTime) {
+      const duration = timestamp * 1000 - startTimeMs;
+      const d  = Math.floor(duration / 86400000);
+      const h = Math.floor((duration % 86400000) / 3600000);
+      const m  = Math.floor((duration % 3600000) / 60000);
+      return `${d}d ${h}h ${m}m (Duration)`; 
+  }
+
+  // Normal countdown logic
   const diff = timestamp * 1000 - currentTime; 
   
   if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
@@ -467,10 +477,14 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
               value={renderCountdown(Number(faucetDetails.startTime), "Start")}
             />
             <InfoRow
-              icon={Clock}
-              label="Ends"
-              value={renderCountdown(Number(faucetDetails.endTime), "End")}
-            />
+  icon={Clock}
+  label="Ends"
+  value={renderCountdown(
+      Number(faucetDetails.endTime), 
+      "End", 
+      Number(faucetDetails.startTime) * 1000 // Pass the start time in milliseconds
+  )}
+/>
           </div>
 
           {/* Drop Code input */}

@@ -580,22 +580,53 @@ export default function NetworkFaucets() {
   return list;
 }, [allFaucetsMeta, searchTerm, filterBy, sortBy]);
 
-  // ── Step 1: load ALL meta from Supabase (fast, lightweight) ────────────────
   const loadAllFaucetsMetadata = useCallback(async () => {
-  if (!network || isNaN(chainId)) return;
-  setLoadingInitial(true);
-  try {
-    const meta = await fetchAllMetaFromSupabase(chainId);
-    setAllFaucetsMeta(meta);
-    setPage(1);
-  } catch (error) {
-    console.error("❌ Error loading faucet meta:", error);
-    toast({ title: "Failed to load faucet list", variant: "destructive" });
-    setAllFaucetsMeta([]);
-  } finally {
-    setLoadingInitial(false);
-  }
-}, [network, chainId, toast]);
+    if (!network || isNaN(chainId)) return;
+    setLoadingInitial(true);
+    try {
+      let meta = await fetchAllMetaFromSupabase(chainId);
+
+      // 👇 NEW: Thorough Onchain Check
+      // Override the database's isClaimActive status with the live blockchain status
+      // so that the frontend's global filter works perfectly.
+      if (meta.length > 0 && network.rpcUrl) {
+        const safeRpc = Array.isArray(network.rpcUrl) ? network.rpcUrl[0] : network.rpcUrl;
+        const provider = new JsonRpcProvider(safeRpc);
+        const abi = ["function isClaimActive() view returns (bool)"];
+
+        const verifiedMeta: FaucetMeta[] = [];
+        const chunkSize = 10; // Batch requests to avoid RPC rate limits
+
+        for (let i = 0; i < meta.length; i += chunkSize) {
+          const chunk = meta.slice(i, i + chunkSize);
+          const chunkResults = await Promise.all(
+            chunk.map(async (m) => {
+              try {
+                const contract = new Contract(m.faucetAddress, abi, provider);
+                const activeOnchain = await contract.isClaimActive();
+                return { ...m, isClaimActive: activeOnchain };
+              } catch (err) {
+                return m; // Fallback to database value if the RPC fails
+              }
+            })
+          );
+          verifiedMeta.push(...chunkResults);
+        }
+        
+        meta = verifiedMeta; // Replace the DB list with our freshly verified onchain list
+      }
+      // 👆 END NEW
+
+      setAllFaucetsMeta(meta);
+      setPage(1);
+    } catch (error) {
+      console.error("❌ Error loading faucet meta:", error);
+      toast({ title: "Failed to load faucet list", variant: "destructive" });
+      setAllFaucetsMeta([]);
+    } finally {
+      setLoadingInitial(false);
+    }
+  }, [network, chainId, toast]);
   // ── Step 2: load FULL details for current page from Supabase ───────────────
   
 const loadCurrentPageDetails = useCallback(async (

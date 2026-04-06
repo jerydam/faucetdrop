@@ -1,4 +1,5 @@
 "use client"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { FaucetsCreatedChart } from "./charts/faucet-created-chart"
@@ -101,8 +102,54 @@ function DashboardProvider({ children }: { children: React.ReactNode }) {
 
 function DashboardContent() {
   const { data, loading, refreshing, manualRefresh } = useDashboardContext()
+  const [liveDrops, setLiveDrops] = useState<number | undefined>(undefined)
 
   const isLoading = loading && !data
+
+  // Fetch the live total drops directly from the new endpoint to ensure it stays in sync
+  useEffect(() => {
+    const fetchLiveDrops = async (forceRefresh = false) => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://faucetdrops-indexer.onrender.com"
+        // limit=1 ensures the response is instant, we just want the `json.total`
+        const response = await fetch(`${apiUrl}/api/claims?limit=1`, {
+          cache: forceRefresh ? 'no-store' : 'default'
+        })
+        if (response.ok) {
+          const json = await response.json()
+          if (json.success) setLiveDrops(json.total)
+        }
+      } catch (error) {
+        console.error("Failed to fetch live drops count:", error)
+      }
+    }
+
+    fetchLiveDrops()
+
+    // Refresh every 5 minutes
+    const interval = setInterval(() => fetchLiveDrops(), 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Force a fresh fetch when the user clicks the manual refresh button
+  useEffect(() => {
+    if (refreshing) {
+      const fetchLiveDrops = async () => {
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://faucetdrops-indexer.onrender.com"
+          const response = await fetch(`${apiUrl}/api/claims?limit=1`, { cache: 'no-store' })
+          if (response.ok) {
+            const json = await response.json()
+            if (json.success) setLiveDrops(json.total)
+          }
+        } catch (error) {
+          // Ignore
+        }
+      }
+      fetchLiveDrops()
+    }
+  }, [refreshing])
+
 
   return (
     <div className="w-full min-h-screen bg-gray-50 dark:bg-gray-950 border-dashed border-2 border-gray-200 dark:border-gray-800 p-4 md:p-6 lg:p-8 transition-colors duration-300">
@@ -159,9 +206,9 @@ function DashboardContent() {
           />
           <StatCard
             title="Total Drops"
-            value={data?.total_claims}
+            value={liveDrops ?? data?.total_claims}
             icon={PieChart}
-            loading={isLoading}
+            loading={isLoading && liveDrops === undefined}
           />
         </div>
 

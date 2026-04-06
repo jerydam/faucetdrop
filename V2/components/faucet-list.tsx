@@ -1,200 +1,127 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Coins, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
-import { buildFaucetSlug } from "@/lib/faucet-slug";
+import { formatUnits } from "ethers";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-/** Shape of a row in the `claim_data` table */
-type ClaimRow = {
-  faucet_address: string;
+// Matches the backend response from /api/claims
+type ApiClaim = {
+  claimer: string;
+  faucet: string;
   faucet_name: string;
+  amount: string; // The backend returns stringified amounts
+  token_symbol: string;
+  token_decimals: number;
+  is_ether: boolean;
+  time: number;
   network: string;
   chain_id: number;
-  rank: number;
-  claims: number;
-  total_transactions: number;
-  total_amount: string;
-  latest_claim_time: number;
-  updated_at: string;
-  slug?: string;   
+  transaction_type: string;
 };
-
-/** Shape of a row in the `dashboard_meta` table */
-type DashboardMeta = {
-  id: number;
-  total_claims: number;
-  total_unique_users: number;
-  total_faucets: number;
-  total_transactions: number;
-  last_updated: string;
-};
-
-// ── Cache ─────────────────────────────────────────────────────────────────────
-const CACHE_KEY_CLAIMS  = "sb_claim_rows";
-const CACHE_KEY_META    = "sb_dashboard_meta";
-const CACHE_KEY_TS      = "sb_last_fetched";
-const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
-
-function saveCache(key: string, data: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(data)); } catch { /* quota */ }
-}
-
-function loadCache<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch { return null; }
-}
-
-function isCacheValid(): boolean {
-  const ts = loadCache<number>(CACHE_KEY_TS);
-  return !!ts && Date.now() - ts < CACHE_DURATION_MS;
-}
-const getFaucetHref = (claim: ClaimRow) =>
-  claim.slug
-    ? `/faucet/${claim.slug}`
-    : `/faucet/${buildFaucetSlug(claim.faucet_name, claim.faucet_address)}`;
-// ── Supabase fetchers ─────────────────────────────────────────────────────────
-
-async function fetchClaimRows(): Promise<ClaimRow[]> {
-  // Step 1: fetch claim_data normally
-  const { data, error } = await supabase
-    .from("claim_data")
-    .select("*")
-    .order("latest_claim_time", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  if (!data?.length) return [];
-
-  // Step 2: batch fetch slugs from faucet_details using the addresses
-  const addresses = data.map((r) => r.faucet_address.toLowerCase());
-  const { data: slugRows } = await supabase
-    .from("faucet_details")
-    .select("faucet_address, slug")
-    .in("faucet_address", addresses);
-
-  // Step 3: build a slug lookup map
-  const slugMap: Record<string, string> = {};
-  for (const row of slugRows ?? []) {
-    slugMap[row.faucet_address.toLowerCase()] = row.slug;
-  }
-
-  // Step 4: merge slug into each claim row
-  return data.map((row) => ({
-    ...row,
-    slug: slugMap[row.faucet_address.toLowerCase()] ?? null,
-  })) as ClaimRow[];
-}
-
-async function fetchDashboardMeta(): Promise<DashboardMeta | null> {
-  const { data, error } = await supabase
-    .from("dashboard_meta")
-    .select("*")
-    .eq("id", 1)
-    .single();
-
-  if (error) return null;
-  return data as DashboardMeta;
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
 
 export function FaucetList() {
-  const [claims, setClaims]             = useState<ClaimRow[]>([]);
-  const [meta, setMeta]                 = useState<DashboardMeta | null>(null);
-  const [loading, setLoading]           = useState(true);
-  const [refreshing, setRefreshing]     = useState(false);
-  const [page, setPage]                 = useState(1);
-  const [isExpanded, setIsExpanded]     = useState(false);
-  const [isMobile, setIsMobile]         = useState(false);
-
+  const { toast } = useToast();
+  
+  const [claims, setClaims] = useState<ApiClaim[]>([]);
+  const [loadingClaims, setLoadingClaims] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  
+  // Dynamic claims per page based on screen size
   const claimsPerPage = isMobile ? 5 : 10;
 
-  // ── Responsive detection ───────────────────────────────────────────────────
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 640);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  useEffect(() => { setPage(1); }, [isMobile]);
-
-  // ── Load from Supabase (with local cache) ──────────────────────────────────
-  const loadData = useCallback(async (forceRefresh = false) => {
-    forceRefresh ? setRefreshing(true) : setLoading(true);
-
+  // Function to load claims from the FastAPI backend
+  const loadClaims = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoadingClaims(true);
+    }
+    
     try {
-      // Serve from cache when valid and not forcing
-      if (!forceRefresh && isCacheValid()) {
-        const cachedClaims = loadCache<ClaimRow[]>(CACHE_KEY_CLAIMS);
-        const cachedMeta   = loadCache<DashboardMeta>(CACHE_KEY_META);
-        if (cachedClaims?.length) {
-          setClaims(cachedClaims);
-          setMeta(cachedMeta ?? null);
-          return;
-        }
+      // Point this to your actual backend URL (e.g., using environment variables)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://faucetdrops-indexer.onrender.com";
+      const response = await fetch(`${apiUrl}/api/claims?limit=5000`, {
+        // If force refreshing, bypass cache
+        cache: forceRefresh ? 'no-store' : 'default'
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
       }
 
-      // Fresh fetch from Supabase
-      const [rows, dashMeta] = await Promise.all([
-        fetchClaimRows(),
-        fetchDashboardMeta(),
-      ]);
+      const data = await response.json();
 
-      setClaims(rows);
-      setMeta(dashMeta);
-      setPage(1);
+      if (data.success) {
+        setClaims(data.claims);
+        setLastUpdated(data.last_updated);
+        setPage(1);
 
-      // Persist to cache
-      saveCache(CACHE_KEY_CLAIMS, rows);
-      saveCache(CACHE_KEY_META, dashMeta);
-      saveCache(CACHE_KEY_TS, Date.now());
-
-      if (forceRefresh) toast.success("Drops refreshed successfully");
-
-    } catch (err: any) {
-      console.error("Error loading drops from Supabase:", err);
-      toast.error("Failed to load drops. Please try again later.");
+        if (forceRefresh) {
+          toast({
+            title: "Drops refreshed",
+            description: `Loaded recent drops from the database.`,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error loading drops:", error);
+      toast({
+        title: "Failed to load drops",
+        description: error instanceof Error ? error.message : "Please try again later.",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false);
+      setLoadingClaims(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [toast]);
 
-  // Initial load
-  useEffect(() => { loadData(); }, [loadData]);
-
-  // Background auto-refresh
+  // Initial load effect
   useEffect(() => {
-    const id = setInterval(() => loadData(true), CACHE_DURATION_MS);
-    return () => clearInterval(id);
-  }, [loadData]);
+    loadClaims();
+  }, [loadClaims]);
 
-  // ── Pagination ─────────────────────────────────────────────────────────────
-  const totalPages     = Math.ceil(claims.length / claimsPerPage);
+  // Background refresh effect (Every 5 minutes)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadClaims();
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [loadClaims]);
+
+  // Reset pagination when mobile state changes
+  useEffect(() => {
+    setPage(1);
+  }, [isMobile]);
+
+  const handleRefresh = () => {
+    loadClaims(true);
+  };
+
+  const totalPages = Math.ceil(claims.length / claimsPerPage);
   const paginatedClaims = claims.slice((page - 1) * claimsPerPage, page * claimsPerPage);
 
-  const lastUpdated = meta?.last_updated
-    ? new Date(meta.last_updated).toLocaleTimeString()
-    : loadCache<number>(CACHE_KEY_TS)
-      ? new Date(loadCache<number>(CACHE_KEY_TS)!).toLocaleTimeString()
-      : "Never";
-
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <Card className="w-full">
       <CardHeader>
@@ -206,11 +133,11 @@ export function FaucetList() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => loadData(true)}
-              disabled={loading || refreshing}
+              onClick={handleRefresh}
+              disabled={loadingClaims || refreshing}
               className="flex items-center gap-2 text-sm"
             >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
             <Button
@@ -220,29 +147,35 @@ export function FaucetList() {
               className="flex items-center gap-2 text-sm"
             >
               {isExpanded ? (
-                <> Collapse <ChevronUp className="h-4 w-4" /> </>
+                <>
+                  Collapse
+                  <ChevronUp className="h-4 w-4" />
+                </>
               ) : (
-                <> View Drops <ChevronDown className="h-4 w-4" /> </>
+                <>
+                  View Drops
+                  <ChevronDown className="h-4 w-4" />
+                </>
               )}
             </Button>
           </div>
         </div>
-
         {isExpanded && claims.length > 0 && (
           <div className="text-sm text-muted-foreground">
-            Total: {meta?.total_claims ?? claims.length} drops across all networks
-            &nbsp;•&nbsp;Last updated: {lastUpdated}
+            Total: {claims.length} drops • Last updated: {
+              lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : 'Never'
+            }
           </div>
         )}
       </CardHeader>
-
+      
       {isExpanded && (
         <CardContent>
-          {loading ? (
+          {loadingClaims ? (
             <div className="flex justify-center items-center py-10 sm:py-12">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-primary mx-auto" />
-                <p className="mt-4 text-sm sm:text-base">Loading drops…</p>
+                <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-4 text-sm sm:text-base">Loading drops history...</p>
               </div>
             </div>
           ) : claims.length === 0 ? (
@@ -250,113 +183,125 @@ export function FaucetList() {
               <Coins className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mx-auto mb-3 sm:mb-4" />
               <h3 className="text-lg sm:text-xl font-medium mb-2">No Drops Found</h3>
               <p className="text-xs sm:text-sm text-muted-foreground">
-                No drops have been recorded across any network yet.
+                No drops have been recorded yet.
               </p>
             </div>
           ) : (
             <>
-              {/* ── Mobile cards ─────────────────────────────────────────── */}
+              {/* Mobile View */}
               <div className="block sm:hidden space-y-3">
-                {paginatedClaims.map((claim, i) => (
-                  <Card key={`${claim.faucet_address}-${i}`} className="p-3">
-                    <div className="space-y-2 text-xs">
-                      <div className="flex justify-between items-start">
-                        <span className="text-muted-foreground">Faucet:</span>
-                        <Link
-                          href={getFaucetHref(claim)}
-                          className="text-blue-600 hover:underline text-right max-w-[160px] truncate"
-                        >
-                          {claim.faucet_name ||
-                            `${claim.faucet_address.slice(0, 6)}…${claim.faucet_address.slice(-4)}`}
-                        </Link>
+                {paginatedClaims.map((claim, index) => {
+                  const displayName = claim.faucet_name || `Faucet ${claim.faucet.slice(0, 6)}...${claim.faucet.slice(-4)}`;
+                  return (
+                    <Card key={`${claim.faucet}-${claim.time}-${index}`} className="p-3">
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between items-start">
+                          <span className="text-muted-foreground">Dropee:</span>
+                          <span className="font-mono text-right break-all max-w-[150px]">
+                            {claim.claimer.slice(0, 6)}...{claim.claimer.slice(-4)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-start">
+                          <span className="text-muted-foreground">Faucet:</span>
+                          <Link
+                            href={`/faucet/${claim.faucet}?networkId=${claim.chain_id}`}
+                            className="text-blue-600 hover:underline text-right max-w-[150px] truncate"
+                          >
+                            {displayName}
+                          </Link>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Amount:</span>
+                          <span className="font-medium">
+                            {Number(formatUnits(claim.amount, claim.token_decimals)).toFixed(4)} {claim.token_symbol}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Network:</span>
+                          <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                            {claim.network}
+                          </span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Time:</span>
+                          <span className="text-right">
+                            {new Date(claim.time * 1000).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Total Claims:</span>
-                        <span className="font-medium">{claim.claims.toLocaleString()}</span>
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Network:</span>
-                        <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-                          {claim.network}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Last Drop:</span>
-                        <span>
-                          {claim.latest_claim_time
-                            ? new Date(claim.latest_claim_time * 1000).toLocaleString()
-                            : "—"}
-                        </span>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
 
-              {/* ── Desktop table ─────────────────────────────────────────── */}
+              {/* Desktop Table View */}
               <div className="hidden sm:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs sm:text-sm">Rank</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Dropee</TableHead>
                       <TableHead className="text-xs sm:text-sm">Faucet</TableHead>
-                      <TableHead className="text-xs sm:text-sm">Total Claims</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Amount</TableHead>
                       <TableHead className="text-xs sm:text-sm">Network</TableHead>
-                      <TableHead className="text-xs sm:text-sm">Last Drop</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Timestamp</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedClaims.map((claim, i) => (
-                      <TableRow key={`${claim.faucet_address}-${i}`}>
-                        <TableCell className="text-xs sm:text-sm text-muted-foreground">
-                          #{claim.rank ?? (page - 1) * claimsPerPage + i + 1}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          <Link
-                            href={getFaucetHref(claim)}
-                            className="text-blue-600 hover:underline max-w-[160px] truncate block"
-                            title={claim.faucet_name}
-                          >
-                            {claim.faucet_name ||
-                              `${claim.faucet_address.slice(0, 6)}…${claim.faucet_address.slice(-4)}`}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm font-medium">
-                          {claim.claims.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-800">
-                            {claim.network}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          {claim.latest_claim_time
-                            ? new Date(claim.latest_claim_time * 1000).toLocaleString()
-                            : "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {paginatedClaims.map((claim, index) => {
+                      const displayName = claim.faucet_name || `Faucet ${claim.faucet.slice(0, 6)}...${claim.faucet.slice(-4)}`;
+                      return (
+                        <TableRow key={`${claim.faucet}-${claim.time}-${index}`}>
+                          <TableCell className="text-xs sm:text-sm font-mono">
+                            <div className="max-w-[120px] truncate" title={claim.claimer}>
+                              {claim.claimer}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs sm:text-sm">
+                            <Link
+                              href={`/faucet/${claim.faucet}?networkId=${claim.chain_id}`}
+                              className="text-blue-600 hover:underline max-w-[120px] truncate block"
+                              title={displayName}
+                            >
+                              {displayName}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-xs sm:text-sm">
+                            {Number(formatUnits(claim.amount, claim.token_decimals)).toFixed(4)} {claim.token_symbol}
+                          </TableCell>
+                          <TableCell className="text-xs sm:text-sm">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-800">
+                              {claim.network}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs sm:text-sm">
+                            {new Date(claim.time * 1000).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
 
-              {/* ── Pagination ────────────────────────────────────────────── */}
+              {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6">
                   <div className="text-xs sm:text-sm text-muted-foreground">
-                    Showing {(page - 1) * claimsPerPage + 1}–
-                    {Math.min(page * claimsPerPage, claims.length)} of {claims.length} faucets
+                    Showing {(page - 1) * claimsPerPage + 1} to {Math.min(page * claimsPerPage, claims.length)} of{" "}
+                    {claims.length} drops
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1 || loading || refreshing}
+                      disabled={page === 1 || loadingClaims || refreshing}
                       className="text-xs sm:text-sm hover:bg-primary/10"
+                      aria-label="Previous page"
                     >
                       Previous
                     </Button>
@@ -367,8 +312,9 @@ export function FaucetList() {
                       variant="outline"
                       size="sm"
                       onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages || loading || refreshing}
+                      disabled={page === totalPages || loadingClaims || refreshing}
                       className="text-xs sm:text-sm hover:bg-primary/10"
+                      aria-label="Next page"
                     >
                       Next
                     </Button>

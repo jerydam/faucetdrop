@@ -477,14 +477,14 @@ const FaucetUserView: React.FC<FaucetUserViewProps> = ({
               value={renderCountdown(Number(faucetDetails.startTime), "Start")}
             />
             <InfoRow
-  icon={Clock}
-  label="Ends"
-  value={renderCountdown(
-      Number(faucetDetails.endTime), 
-      "End", 
-      Number(faucetDetails.startTime) * 1000 // Pass the start time in milliseconds
-  )}
-/>
+              icon={Clock}
+              label="Ends"
+              value={renderCountdown(
+                  Number(faucetDetails.endTime), 
+                  "End", 
+                  Number(faucetDetails.startTime) * 1000 // Pass the start time in milliseconds
+              )}
+            />
           </div>
 
           {/* Drop Code input */}

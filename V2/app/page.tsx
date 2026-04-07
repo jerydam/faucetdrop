@@ -29,11 +29,11 @@ import AnalyticsDashboard from "@/components/Analyticsdashboard";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const POINTS_CONTRACT_ADDRESSES: Record<number, string> = {
-  42220: "0xf2743C3f64420b5337e76e7A5aE70E5506F0eb1e",
+  42220: "0xF8F6D74E61A0FC2dd2feCd41dE384ba2fbf91b9D",
   8453:  "0x42fcB7C4D4a36D772c430ee8C7d026f627365BcB",
-  56:    "0x2179Ab1d45d2ca92BCb029f3d7A997B9E1687792",
-  1135:  "0xceeC8Fc27467AD2d60dFd917877F2f303C3501fD",
-  42161: "0x6898d71Ed9B0E80573f723B26AF1cc0dd4F434d5",
+  56:    "0x4C603fe32fe590D8A47B7f23b027dc24C2c762B1",
+  1135:  "0x28B9DAB4Fd2CD9bF1A4773dB858e03Ee178AE075",
+  42161: "0xEcb026D22f9aA7FD9Aa83B509834dB8Fd66B27F6",
 };
 
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com";

@@ -151,21 +151,21 @@
         }
       ]
 
-      const networks: Network[] = [
+       const networks: Network[] = [
         {
           name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png", explorerUrl: "https://celoscan.io",
-          factoryAddresses: ["0x28E06CBD5E22B0f4E39D277457Be13E160fC742F", "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"],
-          factories: { quest: "0x28E06CBD5E22B0f4E39D277457Be13E160fC742F" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
+          factoryAddresses: ["0x2Eb9692785e089DD7588b0D3220B5dD154eF2699", "0x8cA5975Ded3B2f93E188c05dD6eb16d89b14aeA5"],
+          factories: { quest: "0x2Eb9692785e089DD7588b0D3220B5dD154eF2699" }, tokenAddress: "0x471EcE3750Da237f93B8E339c536989b8978a438", nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 }, isTestnet: false,
         },
         {
           name: "Lisk", symbol: "LSK", chainId: BigInt(1135), rpcUrl: "https://rpc.api.lisk.com", blockExplorer: "https://blockscout.lisk.com", explorerUrl: "https://blockscout.lisk.com", color: "#0D4477", logoUrl: "/lsk.png", iconUrl: "/lsk.png",
-          factoryAddresses: ["0xc7889C58B51574d32C83b2e2F60d5eC145103Eb3"],
-          factories: { quest: "0xc7889C58B51574d32C83b2e2F60d5eC145103Eb3" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+          factoryAddresses: ["0xE9a7637f11F22c55061936Bc97b9aFEAC2e93C2E"],
+          factories: { quest: "0xE9a7637f11F22c55061936Bc97b9aFEAC2e93C2E" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
         },
         {
           name: "Arbitrum", symbol: "ARB", chainId: BigInt(42161), rpcUrl: "https://arb1.arbitrum.io/rpc", blockExplorer: "https://arbiscan.io", explorerUrl: "https://arbiscan.io", color: "#28A0F0", logoUrl: "/arb.jpeg", iconUrl: "/arb.jpeg",
-          factoryAddresses: ["0x72680B6ad792a0069B3Bd5Acfd76182f3c63b703"],
-          factories: { quest: "0x72680B6ad792a0069B3Bd5Acfd76182f3c63b703" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+          factoryAddresses: ["0x069ad2047FaEC364eb5009E8E783Ec1D9ae08629"],
+          factories: { quest: "0x069ad2047FaEC364eb5009E8E783Ec1D9ae08629" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
         },
         {
           name: "Base", symbol: "BASE", chainId: BigInt(8453), rpcUrl: "https://base.publicnode.com", blockExplorer: "https://basescan.org", explorerUrl: "https://basescan.org", color: "#0052FF", logoUrl: "/base.png", iconUrl: "/base.png",
@@ -174,10 +174,11 @@
         },
         {
           name: "BNB", symbol: "BNB", chainId: BigInt(56), rpcUrl: "https://bsc-dataseed.binance.org/", blockExplorer: "https://bscscan.com", explorerUrl: "https://bscscan.com", color: "#F3BA2F", logoUrl: "/bnb.jpg", iconUrl: "/base.jpg",
-          factoryAddresses: ["0x7E8D2A012cF5356e77f9eeccdddb942E72800f76"],
-          factories: { quest: "0x7E8D2A012cF5356e77f9eeccdddb942E72800f76" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
+          factoryAddresses: ["0xBcA0AB3a9705C82DfBb92c4BAcFd5C2175511d54"],
+          factories: { quest: "0xBcA0AB3a9705C82DfBb92c4BAcFd5C2175511d54" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, isTestnet: false,
         }
       ]
+
 
       // Custom task template — available for all stages
   const CUSTOM_TASK_TEMPLATE: Partial<QuestTask> = {

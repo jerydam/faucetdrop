@@ -63,7 +63,7 @@ import { Header } from "@/components/header";
 import { SubscriptionModal } from "@/components/subscribe";
 import Loading from "@/app/loading";
 
-const API_BASE_URL = "http://127.0.0.1:8000"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
 // ============= TYPES =============
 export type VerificationType =

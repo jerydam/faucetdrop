@@ -263,53 +263,47 @@ function ParticipantProfileModal({
         {/* Task List */}
         <div className="px-4 pb-5">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Tasks completed</span>
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : (
-              <Badge variant="outline" className="text-xs font-mono">
-                {completedCount} / {totalTasks}
-              </Badge>
-            )}
-          </div>
+  <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Tasks completed</span>
+  {isLoading ? (
+    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+  ) : (
+    <Badge variant="outline" className="text-xs font-mono">
+      {completedCount} / {totalTasks}
+    </Badge>
+  )}
+</div>
 
-          {isLoading ? (
-            <div className="flex flex-col gap-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
-              {questTasks
-                .filter(t => !t.isSystem)
-                .map(task => {
-                  const done = completedIds.has(task.id);
-                  return (
-                    <div
-                      key={task.id}
-                      className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm ${
-                        done
-                          ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/50"
-                          : "bg-slate-50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-800"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 overflow-hidden">
-                        <CheckCircle2
-                          className={`h-4 w-4 shrink-0 ${done ? "text-green-500" : "text-slate-300 dark:text-slate-600"}`}
-                        />
-                        <span className={`truncate ${done ? "text-green-800 dark:text-green-300" : "text-muted-foreground"}`}>
-                          {task.title}
-                        </span>
-                      </div>
-                      <span className={`text-xs font-medium shrink-0 ml-2 ${done ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
-                        +{task.points} pts
-                      </span>
-                    </div>
-                  );
-                })}
-            </div>
-          )}
+{isLoading ? (
+  <div className="flex flex-col gap-2">
+    {[1, 2, 3].map(i => (
+      <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
+    ))}
+  </div>
+) : completedCount === 0 ? (
+  <div className="text-center py-8 text-muted-foreground text-sm">
+    No tasks completed yet.
+  </div>
+) : (
+  <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+    {questTasks
+      .filter(t => !t.isSystem && completedIds.has(t.id))
+      .map(task => (
+        <div
+          key={task.id}
+          className="flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/50"
+        >
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
+            <span className="truncate text-green-800 dark:text-green-300">{task.title}</span>
+          </div>
+          <span className="text-xs font-medium shrink-0 ml-2 text-green-700 dark:text-green-400">
+            +{task.points} pts
+          </span>
+        </div>
+      ))}
+  </div>
+)}
+
         </div>
       </div>
     </div>

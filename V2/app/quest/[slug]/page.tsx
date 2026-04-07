@@ -63,7 +63,7 @@ import { Header } from "@/components/header";
 import { SubscriptionModal } from "@/components/subscribe";
 import Loading from "@/app/loading";
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "http://127.0.0.1:8000"; // <-- REPLACE WITH ACTUAL BACKEND URL
 
 // ============= TYPES =============
 export type VerificationType =
@@ -853,46 +853,47 @@ const canManageQuest = isCreator || isQuestAdmin;
       })
       .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
   }, [leaderboard, participantData, userProgress, userWalletAddress, userProfile, questData, isCreator]);
+  
   useEffect(() => {
-    if (!faucetAddress || !userWalletAddress || !hasUsername) return;
-    const fetchUserSpecifics2 = async () => {
-      try {
-        const progRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/progress/${userWalletAddress}`);
-        const progJson = await progRes.json();
-        if (progJson.success) setUserProgress(progJson.progress);
-        if (isCreator) {
-          const pendingRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/pending`);
-          const pendingJson = await pendingRes.json();
-          if (pendingJson.success) {
-            const rawSubmissions = pendingJson.submissions;
-            const enrichedSubmissions = await Promise.all(
-              rawSubmissions.map(async (sub: any) => {
-                const relatedTask = questData?.tasks?.find((t: any) => t.id === sub.taskId);
-                const taskPoints = relatedTask ? relatedTask.points : 0;
-                try {
-                  const profileRes = await fetch(`${API_BASE_URL}/api/profile/${sub.walletAddress}`);
-                  const profileJson = await profileRes.json();
-                  return {
-                    ...sub,
-                    taskPoints,
-                    username: profileJson.success && profileJson.profile ? profileJson.profile.username : "Unknown User",
-                    avatarUrl: profileJson.success && profileJson.profile ? profileJson.profile.avatar_url : null,
-                  };
-                } catch {
-                  return { ...sub, taskPoints, username: "Unknown User", avatarUrl: null };
-                }
-              })
-            );
-            setPendingSubmissions(enrichedSubmissions);
-          }
+  if (!faucetAddress || !userWalletAddress || !hasUsername) return;
+  const fetchUserSpecifics2 = async () => {
+    try {
+      const progRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/progress/${userWalletAddress}`);
+      const progJson = await progRes.json();
+      if (progJson.success) setUserProgress(progJson.progress);
+      
+      if (canManageQuest) {
+        const pendingRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/pending`);
+        const pendingJson = await pendingRes.json();
+        if (pendingJson.success) {
+          const rawSubmissions = pendingJson.submissions;
+          const enrichedSubmissions = await Promise.all(
+            rawSubmissions.map(async (sub: any) => {
+              const relatedTask = questData?.tasks?.find((t: any) => t.id === sub.taskId);
+              const taskPoints = relatedTask ? relatedTask.points : 0;
+              try {
+                const profileRes = await fetch(`${API_BASE_URL}/api/profile/${sub.walletAddress}`);
+                const profileJson = await profileRes.json();
+                return {
+                  ...sub,
+                  taskPoints,
+                  username: profileJson.success && profileJson.profile ? profileJson.profile.username : "Unknown User",
+                  avatarUrl: profileJson.success && profileJson.profile ? profileJson.profile.avatar_url : null,
+                };
+              } catch {
+                return { ...sub, taskPoints, username: "Unknown User", avatarUrl: null };
+              }
+            })
+          );
+          setPendingSubmissions(enrichedSubmissions);
         }
-      } catch (error) {
-        console.error("Failed to load user specific data", error);
       }
-    };
-    fetchUserSpecifics2();
-  }, [faucetAddress, userWalletAddress, isCreator, hasUsername, questData]);
-
+    } catch (error) {
+      console.error("Failed to load user specific data", error);
+    }
+  };
+  fetchUserSpecifics2();
+}, [faucetAddress, userWalletAddress, isCreator, canManageQuest, hasUsername, questData]);
   const handleSaveDetails = async () => {
     setIsSaving(true);
     try {
@@ -1354,37 +1355,35 @@ const handleRemoveAdmin = async (adminAddress: string) => {
   };
 
   const handleReviewSubmission = async (submissionId: string, status: "approved" | "rejected", notes?: string) => {
-    setProcessingSubmission({ id: submissionId, action: status });
-    try {
-      // Build payload, injecting notes if they exist
-      const payload: any = { status };
-      if (notes) payload.notes = notes;
+  setProcessingSubmission({ id: submissionId, action: status });
+  try {
+    const payload: any = { status };
+    if (notes) payload.notes = notes;
 
-      const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/${submissionId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
+    // 👇 ADD `?adminAddress=${userWalletAddress}` TO THE URL 👇
+    const response = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/submissions/${submissionId}?adminAddress=${userWalletAddress}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    
+    const result = await response.json();
 
-      if (result.success) {
-        setPendingSubmissions((prev) => prev.filter((s) => s.submissionId !== submissionId));
-        toast.success(`Submission ${status}`);
-
-        // Reset rejection states
-        setRejectingSubId(null);
-        setRejectionNote("");
-
-        await loadUserProgress(); // Refresh global points
-      } else {
-        toast.error(result.message || "Action failed.");
-      }
-    } catch (error) {
-      toast.error("Network error. Action failed.");
-    } finally {
-      setProcessingSubmission(null);
+    if (result.success) {
+      setPendingSubmissions((prev) => prev.filter((s) => s.submissionId !== submissionId));
+      toast.success(`Submission ${status}`);
+      setRejectingSubId(null);
+      setRejectionNote("");
+      await loadUserProgress();
+    } else {
+      toast.error(result.message || "Action failed.");
     }
-  };
+  } catch (error) {
+    toast.error("Network error. Action failed.");
+  } finally {
+    setProcessingSubmission(null);
+  }
+};
 
   const handleFundQuest = async () => {
     if (!walletProvider || !faucetAddress) { toast.error("Wallet not connected."); return; }

@@ -37,7 +37,7 @@ const POINTS_CONTRACT_ADDRESSES: Record<number, string> = {
   42161: "0xEcb026D22f9aA7FD9Aa83B509834dB8Fd66B27F6",
 };
 
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 const POINTS_ABI = [
   "function claim(uint256 amount, uint256 timestamp, bytes signature) external",

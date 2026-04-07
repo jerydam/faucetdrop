@@ -2415,32 +2415,68 @@ const handleRemoveAdmin = async (adminAddress: string) => {
                             );
                           }
 
-                          if (task.id === "sys_referral") {
-                            if (!participantData) return null;
-                            const refCount = participantData.referral_count || 0;
-                            const referralLink = `${window.location.origin}${window.location.pathname}?ref=${participantData.referral_id}`;
-                            return (
-                              <Card key={task.id} className="group relative overflow-hidden transition-all duration-300 h-full flex flex-col">
-                                <CardContent className="p-5 flex flex-col h-full">
-                                  <div className="flex justify-between items-start mb-4">
-                                    <div className="p-2 rounded-lg bg-primary/10 text-primary"><Users className="h-5 w-5" /></div>
-                                    <Badge variant="secondary">+200 PTS each</Badge>
-                                  </div>
-                                  <h3 className="font-bold text-lg mb-2">{task.title}</h3>
-                                  <p className="text-sm text-muted-foreground flex-1">{task.description}</p>
-                                  <div className="mt-4 space-y-4">
-                                    <div>
-                                      <Label className="text-xs">Your Referral Link</Label>
-                                      <div className="flex gap-2 mt-1">
-                                        <Input value={referralLink} readOnly className="font-mono text-xs" />
-                                        <Button size="sm" onClick={() => { navigator.clipboard.writeText(referralLink); toast.success("Referral link copied to clipboard"); }}><Copy className="h-4 w-4" /></Button>
-                                      </div>
-                                    </div>
-                                    <p className="text-sm font-medium">You have <span className="text-primary font-bold">{refCount}</span> successful referrals (+<span className="text-primary font-bold">{refCount * 200}</span> points)</p>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            );
+                            if (task.id === "sys_referral") {
+                                    if (!participantData) return null;
+                                    const refCount = participantData.referral_count || 0;
+                                    const referralLink = `${window.location.origin}${window.location.pathname}?ref=${participantData.referral_id}`;
+                                    
+                                    // ── NEW: find the required referee task ──
+                                    const requiredRefereeTaskId = task.requiredRefereeTaskId;
+                                    const requiredRefereeTask = requiredRefereeTaskId && requiredRefereeTaskId !== "none"
+                                      ? questData.tasks?.find((t: any) => t.id === requiredRefereeTaskId)
+                                      : null;
+
+                                    return (
+                                      <Card key={task.id} className="group relative overflow-hidden transition-all duration-300 h-full flex flex-col">
+                                        <CardContent className="p-5 flex flex-col h-full">
+                                          <div className="flex justify-between items-start mb-4">
+                                            <div className="p-2 rounded-lg bg-primary/10 text-primary"><Users className="h-5 w-5" /></div>
+                                            <Badge variant="secondary">+200 PTS each</Badge>
+                                          </div>
+                                          <h3 className="font-bold text-lg mb-2">{task.title}</h3>
+                                          <p className="text-sm text-muted-foreground flex-1">{task.description}</p>
+
+                                          {/* ── NEW: Referee requirement notice ── */}
+                                          {requiredRefereeTask ? (
+                                            <div className="mt-3 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 flex items-start gap-2">
+                                              <ShieldCheck className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                                              <div className="text-xs text-blue-800 dark:text-blue-300">
+                                                <span className="font-semibold block mb-0.5">Your referral must complete:</span>
+                                                <span className="font-bold">{requiredRefereeTask.title}</span>
+                                                {requiredRefereeTask.description && (
+                                                  <span className="block text-blue-700 dark:text-blue-400 mt-0.5 opacity-80">
+                                                    {requiredRefereeTask.description}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="mt-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-start gap-2">
+                                              <Users className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                Your referral just needs to <span className="font-semibold">join the quest</span> for you to earn points.
+                                              </p>
+                                            </div>
+                                          )}
+
+                                          <div className="mt-4 space-y-4">
+                                            <div>
+                                              <Label className="text-xs">Your Referral Link</Label>
+                                              <div className="flex gap-2 mt-1">
+                                                <Input value={referralLink} readOnly className="font-mono text-xs" />
+                                                <Button size="sm" onClick={() => { navigator.clipboard.writeText(referralLink); toast.success("Referral link copied to clipboard"); }}>
+                                                  <Copy className="h-4 w-4" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                            <p className="text-sm font-medium">
+                                              You have <span className="text-primary font-bold">{refCount}</span> successful referrals (+
+                                              <span className="text-primary font-bold">{refCount * 200}</span> points)
+                                            </p>
+                                          </div>
+                                        </CardContent>
+                                      </Card>
+                                    );
                           }
 
                           const status = getTaskStatus(task);

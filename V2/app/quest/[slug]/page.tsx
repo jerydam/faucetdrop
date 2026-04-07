@@ -761,7 +761,7 @@ const canManageQuest = isCreator || isQuestAdmin;
       try {
         const questRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}?t=${Date.now()}`, { cache: "no-store" });
         const questJson = await questRes.json();
-        // In loadGlobalData(), preserve raw dates when merging:
+        
         if (questJson.success) {
           setQuestData((prev: any) => ({
             ...questJson.quest,
@@ -769,6 +769,7 @@ const canManageQuest = isCreator || isQuestAdmin;
             rawEndDate: prev?.rawEndDate ?? questJson.quest.endDate,
           }));
         }
+        
         const lbRes = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/leaderboard`);
         const lbJson = await lbRes.json();
         if (lbJson.success) setLeaderboard(lbJson.leaderboard);
@@ -777,24 +778,29 @@ const canManageQuest = isCreator || isQuestAdmin;
       } finally {
         setIsLoading(false);
       }
-
-      useEffect(() => {
-  if (!faucetAddress || !isCreator) return;
-  const fetchAdmins = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/admins`);
-      const json = await res.json();
-      if (json.success) setQuestAdmins(json.admins);
-    } catch (e) {
-      console.error("Failed to fetch quest admins", e);
-    }
-  };
-  fetchAdmins();
-}, [faucetAddress, isCreator]);
     };
+    
     loadGlobalData();
   }, [faucetAddress]);
 
+  // 2. ✅ Fetch Admins (Separated into its own top-level hook!)
+  useEffect(() => {
+    if (!faucetAddress || !isCreator) return;
+    
+    const fetchAdmins = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/admins`);
+        const json = await res.json();
+        if (json.success) {
+          setQuestAdmins(json.admins);
+        }
+      } catch (e) {
+        console.error("Failed to fetch quest admins", e);
+      }
+    };
+    
+    fetchAdmins();
+  }, [faucetAddress, isCreator]);
 
   const displayLeaderboard = useMemo(() => {
     let list = [...leaderboard];

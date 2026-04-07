@@ -2444,8 +2444,8 @@ const handleRemoveAdmin = async (adminAddress: string) => {
                                             <div className="mt-3 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 flex items-start gap-2">
                                               <ShieldCheck className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
                                               <div className="text-xs text-blue-800 dark:text-blue-300">
-                                                <span className="font-semibold block mb-0.5">Your referral must complete:</span>
-                                                <span className="font-bold">{requiredRefereeTask.title}</span>
+                                                <span className="font-semibold block mb-0.5">To earn referral points, your friends must complete the task:</span>
+                                                <span className="font-bold">{requiredRefereeTask.title} Task</span>
                                                 {requiredRefereeTask.description && (
                                                   <span className="block text-blue-700 dark:text-blue-400 mt-0.5 opacity-80">
                                                     {requiredRefereeTask.description}

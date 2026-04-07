@@ -851,7 +851,7 @@ const canManageQuest = isCreator || isQuestAdmin;
       });
       const json = await res.json();
       if (json.success) {
-        toast.success("Check-in successful! +100 points awarded.");
+        toast.success("Check-in successful! +50 points awarded.");
         if (json.participant) {
           setParticipantData(json.participant);
         } else {
@@ -869,6 +869,7 @@ const canManageQuest = isCreator || isQuestAdmin;
       setIsCheckingIn(false);
     }
   };
+
   const [isAdminEditing, setIsAdminEditing] = useState(false);
   const getCheckinStatus = () => {
     if (!participantData?.last_checkin_at) return { canCheckin: true, message: "Check in now for +50 points!" };

@@ -396,13 +396,65 @@ const readOnly = new Contract(cfg.contract, POINTS_ABI, provider);
 
       // 4. Backend verify
       toast.loading("Verifying proof", { id: "claim-tx" });
+      // Replace the "4. Backend verify" block in handleClaim with this:
+
+const verifyWithRetry = async (txHash: string, chainId: number, address: string, attempts = 3): Promise<void> => {
+  for (let i = 0; i < attempts; i++) {
+    try {
       const verifyRes = await fetch(`${API_BASE_URL}/api/droplist/verify-claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txHash: receipt.hash, chainId, walletAddress: address }),
+        body: JSON.stringify({ txHash, chainId, walletAddress: address }),
+        signal: AbortSignal.timeout(30_000), // 30s per attempt
       });
+
       const verifyData = await verifyRes.json();
-      if (!verifyRes.ok) throw new Error(verifyData?.detail || "Verification failed");
+
+      // ✅ Treat "already processed" as success (idempotency auto-heal)
+      if (verifyRes.ok || verifyData?.success === true) {
+        return; // success
+      }
+
+      // The backend already handles replay — if it returns 200 with success:true, we're done
+      const detail = verifyData?.detail || "";
+      if (detail.toLowerCase().includes("already")) {
+        return; // already verified, treat as success
+      }
+
+      throw new Error(detail || "Verification failed");
+
+    } catch (err: any) {
+      const isLast = i === attempts - 1;
+      const isNetwork = err?.name === "AbortError" 
+        || err?.message?.includes("fetch")
+        || err?.message?.includes("network")
+        || err?.message?.includes("aborted");
+
+      if (isNetwork && !isLast) {
+        // Network/timeout error — wait 2s and retry
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      if (isLast) throw err;
+    }
+  }
+};
+
+// In handleClaim, replace the verify block:
+toast.loading("Verifying proof...", { id: "claim-tx" });
+try {
+  await verifyWithRetry(receipt.hash, chainId, address);
+} catch (verifyErr: any) {
+  // ⚠️ Tx is confirmed on-chain even if verify fails.
+  // Show a soft warning — don't treat as full failure.
+  console.warn("[DropPoints] Verify failed but tx confirmed:", verifyErr);
+  toast.warning("Claimed! Balance will update shortly.", { id: "claim-tx" });
+  setLastClaimAt(new Date().toISOString()); // still set cooldown
+  setClaimBurst(true);
+  setTimeout(() => setClaimBurst(false), 800);
+  await fetchAllChainBalances(address);
+  return; // exit without throwing
+}
 
       // 5. Success
       toast.success("Drop Points claimed! \uD83C\uDF89", { id: "claim-tx" });

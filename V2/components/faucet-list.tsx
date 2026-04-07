@@ -14,7 +14,8 @@ type ApiClaim = {
   claimer: string;
   faucet: string;
   faucet_name: string;
-  amount: string; // The backend returns stringified amounts
+  slug?: string; // <-- Added slug property
+  amount: string; 
   token_symbol: string;
   token_decimals: number;
   is_ether: boolean;
@@ -49,7 +50,6 @@ export function FaucetList() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Function to load claims from the FastAPI backend
   const loadClaims = useCallback(async (forceRefresh = false) => {
     if (forceRefresh) {
       setRefreshing(true);
@@ -58,10 +58,8 @@ export function FaucetList() {
     }
     
     try {
-      // Point this to your actual backend URL (e.g., using environment variables)
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://faucetdrops-indexer.onrender.com";
       const response = await fetch(`${apiUrl}/api/claims?limit=5000`, {
-        // If force refreshing, bypass cache
         cache: forceRefresh ? 'no-store' : 'default'
       });
 
@@ -96,12 +94,10 @@ export function FaucetList() {
     }
   }, [toast]);
 
-  // Initial load effect
   useEffect(() => {
     loadClaims();
   }, [loadClaims]);
 
-  // Background refresh effect (Every 5 minutes)
   useEffect(() => {
     const interval = setInterval(() => {
       loadClaims();
@@ -110,7 +106,6 @@ export function FaucetList() {
     return () => clearInterval(interval);
   }, [loadClaims]);
 
-  // Reset pagination when mobile state changes
   useEffect(() => {
     setPage(1);
   }, [isMobile]);
@@ -192,6 +187,8 @@ export function FaucetList() {
               <div className="block sm:hidden space-y-3">
                 {paginatedClaims.map((claim, index) => {
                   const displayName = claim.faucet_name || `Faucet ${claim.faucet.slice(0, 6)}...${claim.faucet.slice(-4)}`;
+                  const targetSlug = claim.slug || claim.faucet; // <-- Fallback to address if slug is missing
+                  
                   return (
                     <Card key={`${claim.faucet}-${claim.time}-${index}`} className="p-3">
                       <div className="space-y-2 text-xs">
@@ -205,7 +202,7 @@ export function FaucetList() {
                         <div className="flex justify-between items-start">
                           <span className="text-muted-foreground">Faucet:</span>
                           <Link
-                            href={`/faucet/${claim.faucet}?networkId=${claim.chain_id}`}
+                            href={`/faucet/${targetSlug}?networkId=${claim.chain_id}`} // <-- Updated Link
                             className="text-blue-600 hover:underline text-right max-w-[150px] truncate"
                           >
                             {displayName}
@@ -253,6 +250,8 @@ export function FaucetList() {
                   <TableBody>
                     {paginatedClaims.map((claim, index) => {
                       const displayName = claim.faucet_name || `Faucet ${claim.faucet.slice(0, 6)}...${claim.faucet.slice(-4)}`;
+                      const targetSlug = claim.slug || claim.faucet; // <-- Fallback to address if slug is missing
+                      
                       return (
                         <TableRow key={`${claim.faucet}-${claim.time}-${index}`}>
                           <TableCell className="text-xs sm:text-sm font-mono">
@@ -262,7 +261,7 @@ export function FaucetList() {
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm">
                             <Link
-                              href={`/faucet/${claim.faucet}?networkId=${claim.chain_id}`}
+                              href={`/faucet/${targetSlug}?networkId=${claim.chain_id}`} // <-- Updated Link
                               className="text-blue-600 hover:underline max-w-[120px] truncate block"
                               title={displayName}
                             >

@@ -25,6 +25,7 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/theme";
 import { useDashboard } from "@/hooks/useDashboard";
 import AnalyticsDashboard from "@/components/Analyticsdashboard";
+import DropPointsPanel from "@/components/DropPointsPanel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -467,38 +468,7 @@ function HomeContent() {
             </div>
           </div>
 
-          {/* ── My Assets card ── */}
-          <div className="w-full lg:w-[320px] flex flex-col justify-end" id="claim-points">
-            <div className="bg-card bg-gradient-to-b from-card to-accent/20 dark:to-transparent rounded-2xl border border-border p-6 h-auto min-h-[144px] lg:h-72 flex flex-col justify-between shadow-sm">
-              <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">
-                My Assets
-              </h4>
-              <div className="flex flex-col gap-6">
-                <div className="flex items-center gap-3">
-                  <div className="relative w-12 h-12 shrink-0 drop-shadow-md hover:scale-105 transition-transform">
-                    <Image src="/drop-token.png" alt="Drop Points" fill className="object-contain" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold text-muted-foreground">Total Drop Token Earn</span>
-                    <span className="text-3xl font-black tracking-tight">
-                      {dropBalance !== null ? dropBalance.toLocaleString() : "---"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={handleClaimPoints}
-                disabled={isClaiming || !canClaim}
-                className={`w-full text-[11px] font-bold px-4 py-3 rounded-xl transition-all shadow-sm ${
-                  !canClaim
-                    ? "bg-accent text-muted-foreground cursor-not-allowed border border-border"
-                    : "text-primary border border-primary/30 hover:bg-primary/10"
-                }`}
-              >
-                {isClaiming ? "Claiming..." : canClaim ? "Claim Drop Token" : `Come back in ${countdown}`}
-              </button>
-            </div>
-          </div>
+         <DropPointsPanel/>
         </div>
 
         {/* ── Analytics Dashboard ── */}

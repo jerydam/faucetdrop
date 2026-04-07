@@ -12,7 +12,6 @@ import {
 import { useWallets } from '@privy-io/react-auth';
 import { QuestEditPanel } from "@/components/quest/questedit";
 import { QUEST_ABI } from "@/lib/abis";
-import { claimNoCodeViaBackend } from "@/lib/backend-service";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -61,7 +60,6 @@ import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
 import { Contract, BrowserProvider, parseEther, ZeroAddress } from "ethers";
 import { Header } from "@/components/header";
-import { FAUCET_ABI_CUSTOM } from "@/lib/abis";
 import { SubscriptionModal } from "@/components/subscribe";
 import Loading from "@/app/loading";
 
@@ -216,8 +214,10 @@ export default function QuestDetailsPage() {
   const [questData, setQuestData] = useState<any | null>(null);
   const [creatorSubscribed, setCreatorSubscribed] = useState<boolean>(true);
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
-
-// And wherever your modal is rendered:
+  const [questAdmins, setQuestAdmins] = useState<any[]>([]);
+  const [newAdminAddress, setNewAdminAddress] = useState("");
+  const [isAddingAdmin, setIsAddingAdmin] = useState(false);
+  const [removingAdmin, setRemovingAdmin] = useState<string | null>(null);
 
   // ── NEW: FETCH CREATOR'S SUBSCRIPTION STATUS ──
   useEffect(() => {
@@ -311,6 +311,8 @@ export default function QuestDetailsPage() {
   const claimWindowHours = questData?.claimWindowHours || 24;
   const claimWindowEnd = new Date(endDate.getTime() + (claimWindowHours * 60 * 60 * 1000));
   const isClaimWindowClosed = now > claimWindowEnd;
+  const [isQuestAdmin, setIsQuestAdmin] = useState(false);
+
 
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -352,6 +354,26 @@ export default function QuestDetailsPage() {
     ? userProgress.activeStages
     : ALL_STAGES;
 
+
+    useEffect(() => {
+  if (!faucetAddress || !userWalletAddress || isCreator) return;
+  const checkIfAdmin = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/admins`);
+      const json = await res.json();
+      if (json.success) {
+        const found = json.admins.some(
+          (a: any) => a.admin_address.toLowerCase() === userWalletAddress.toLowerCase()
+        );
+        setIsQuestAdmin(found);
+      }
+    } catch (e) {}
+  };
+  checkIfAdmin();
+}, [faucetAddress, userWalletAddress, isCreator]);
+
+
+const canManageQuest = isCreator || isQuestAdmin;
   useEffect(() => {
     if (!faucetAddress || !userWalletAddress || !hasUsername) return;
     const checkParticipant = async () => {
@@ -755,6 +777,20 @@ export default function QuestDetailsPage() {
       } finally {
         setIsLoading(false);
       }
+
+      useEffect(() => {
+  if (!faucetAddress || !isCreator) return;
+  const fetchAdmins = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/admins`);
+      const json = await res.json();
+      if (json.success) setQuestAdmins(json.admins);
+    } catch (e) {
+      console.error("Failed to fetch quest admins", e);
+    }
+  };
+  fetchAdmins();
+}, [faucetAddress, isCreator]);
     };
     loadGlobalData();
   }, [faucetAddress]);
@@ -877,6 +913,54 @@ export default function QuestDetailsPage() {
       setIsSaving(false);
     }
   };
+  const handleAddAdmin = async () => {
+  if (!newAdminAddress.trim() || !userWalletAddress || !faucetAddress) return;
+  setIsAddingAdmin(true);
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/admins`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        creator_address: userWalletAddress,
+        admin_address: newAdminAddress.trim(),
+      }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      toast.success("Admin added successfully!");
+      setQuestAdmins(prev => [...prev, json.admin]);
+      setNewAdminAddress("");
+    } else {
+      toast.error(json.detail || "Failed to add admin");
+    }
+  } catch (e) {
+    toast.error("Failed to add admin");
+  } finally {
+    setIsAddingAdmin(false);
+  }
+};
+
+const handleRemoveAdmin = async (adminAddress: string) => {
+  if (!userWalletAddress || !faucetAddress) return;
+  setRemovingAdmin(adminAddress);
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/api/quests/${faucetAddress}/admins/${adminAddress}?creator_address=${userWalletAddress}`,
+      { method: "DELETE" }
+    );
+    const json = await res.json();
+    if (json.success) {
+      toast.success("Admin removed");
+      setQuestAdmins(prev => prev.filter(a => a.admin_address !== adminAddress));
+    } else {
+      toast.error(json.detail || "Failed to remove admin");
+    }
+  } catch (e) {
+    toast.error("Failed to remove admin");
+  } finally {
+    setRemovingAdmin(null);
+  }
+};
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1945,17 +2029,17 @@ export default function QuestDetailsPage() {
                   </div>
                   <div className="text-center overflow-hidden">
                     <div className="text-[10px] md:text-xs text-slate-400 uppercase font-bold tracking-widest truncate mb-1">
-                      {isCreator ? "Your Role" : "Your Stage"}
+                      {canManageQuest ? "Your Role" : "Your Stage"}
                     </div>
                     <div className="text-2xl md:text-4xl font-black text-white truncate">
-                      {isCreator ? "Admin" : participantData ? userProgress.currentStage : "Not Joined"}
+                      {canManageQuest ? "Admin" : participantData ? userProgress.currentStage : "Not Joined"}
                     </div>
                   </div>
                 </div>
 
                 {/* ── Actions Area ── */}
                 {/* CHANGED: Hide entirely if the user is a participant */}
-                {(!participantData || isCreator) && (
+                {(!participantData || canManageQuest) && (
                   <div className="flex flex-row gap-2 w-full justify-center md:justify-start [&>button]:flex-1 md:[&>button]:flex-none mt-2">
 
                     {/* Copy Link is now hidden for participants */}
@@ -1972,7 +2056,7 @@ export default function QuestDetailsPage() {
                       <span className="truncate">Copy Link</span>
                     </Button>
 
-                    {!isCreator && (
+                    {!canManageQuest && (
                       <Button
                         onClick={handleJoin}
                         disabled={isJoining || questTiming.notStartedYet || questTiming.isEnded || !creatorSubscribed}
@@ -2018,7 +2102,7 @@ export default function QuestDetailsPage() {
             </div>
           </div>
         )}
-        {!creatorSubscribed && !isCreator && !isDemoQuest && (
+        {!creatorSubscribed && !canManageQuest && !isDemoQuest && (
           <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-full text-red-600 dark:text-red-400">
@@ -2081,7 +2165,7 @@ export default function QuestDetailsPage() {
         )}
 
         {/* ============= PROGRESS BAR (UPDATED) ============= */}
-        {!isCreator && participantData && (
+        {!canManageQuest && participantData && (
           <Card className="border-none bg-slate-50 dark:bg-slate-900/50 shadow-sm overflow-hidden">
             {/* Slightly reduced padding on mobile (p-4 to sm:p-6) */}
             <CardContent className="p-4 sm:p-6">
@@ -2178,7 +2262,7 @@ export default function QuestDetailsPage() {
                 <TabsTrigger value="leaderboard" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary pb-3 px-1 text-base font-medium whitespace-nowrap">
                   Leaderboard
                 </TabsTrigger>
-                {isCreator && (
+                {canManageQuest && (
                   <TabsTrigger value="admin" className="rounded-none border-b-2 border-transparent data-[state=active]:border-yellow-500 data-[state=active]:text-yellow-600 pb-3 px-1 text-base font-medium flex items-center gap-2 whitespace-nowrap">
                     <Shield className="h-4 w-4" /> Admin
                     {pendingSubmissions.length > 0 && (
@@ -2190,7 +2274,7 @@ export default function QuestDetailsPage() {
                 )}
               </TabsList>
 
-              {!isCreator && (
+              {!canManageQuest && (
                 <div className="flex shrink-0 w-full sm:w-auto animate-in fade-in duration-300 sm:pb-3">
                   <Button
                     variant="outline"
@@ -2299,7 +2383,7 @@ export default function QuestDetailsPage() {
                                   <h3 className="font-bold text-lg mb-2">{task.title}</h3>
                                   <p className="text-sm text-muted-foreground flex-1">{task.description}</p>
                                   <div className="mt-4 pt-4 border-t">
-                                    {participantData && !isCreator ? (
+                                    {participantData && !canManageQuest ? (
                                       checkinStatus.canCheckin ? (
                                         <Button
                                           onClick={handleDailyCheckin}
@@ -2318,7 +2402,7 @@ export default function QuestDetailsPage() {
                                         </div>
                                       )
                                     ) : (
-                                      <div className="text-center text-muted-foreground">{isCreator ? "Creators cannot check in" : "Join quest to check in"}</div>
+                                      <div className="text-center text-muted-foreground">{canManageQuest ? "Creators cannot check in" : "Join quest to check in"}</div>
                                     )}
                                   </div>
                                 </CardContent>
@@ -2400,7 +2484,7 @@ export default function QuestDetailsPage() {
                                   ) : isLocked || !participantData ? (
                                     <span className="text-sm text-muted-foreground">{!participantData ? "Join Required" : "Locked"}</span>
                                   ) : (
-                                    !isCreator ? (
+                                    !canManageQuest ? (
                                       <Button size="sm" onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }} disabled={!participantData || !questTiming.isLive || (status !== "available" && status !== "rejected")} className={status === "rejected" ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"}>
                                         {questTiming.notStartedYet ? "Starts Soon" : status === "rejected" ? "Try Again" : "Open Task"}
                                       </Button>
@@ -2537,7 +2621,7 @@ export default function QuestDetailsPage() {
 
 
             {/* ── ADMIN TAB ── */}
-            {isCreator && (
+            {canManageQuest && (
               <TabsContent value="admin" className="space-y-6">
                 {/* ── ADMIN HEADER & TOGGLE ── */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -2597,6 +2681,88 @@ export default function QuestDetailsPage() {
                         </CardContent>
                       </Card>
                     </div>
+
+                    {/* ── ADMIN MANAGEMENT ── */}
+{isCreator && !isAdminEditing && (
+  <Card className="border-slate-200 dark:border-slate-800 shadow-md overflow-hidden">
+    <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b dark:border-slate-800">
+      <div className="flex items-center justify-between">
+        <CardTitle className="text-lg font-bold flex items-center gap-2">
+          <Shield className="h-5 w-5 text-blue-500" /> Quest Admins
+        </CardTitle>
+        <Badge variant="outline" className="font-mono">{questAdmins.length} added</Badge>
+      </div>
+      <CardDescription>
+        Admins can approve and reject task submissions. They cannot participate in the quest.
+      </CardDescription>
+    </CardHeader>
+    <CardContent className="p-6 space-y-5 bg-white dark:bg-slate-950">
+
+      {/* Add Admin Input */}
+      <div className="flex gap-2">
+        <Input
+          placeholder="0x... wallet address"
+          value={newAdminAddress}
+          onChange={e => setNewAdminAddress(e.target.value)}
+          className="font-mono text-sm"
+        />
+        <Button
+          onClick={handleAddAdmin}
+          disabled={isAddingAdmin || !newAdminAddress.trim()}
+          className="shrink-0"
+        >
+          {isAddingAdmin ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          Add Admin
+        </Button>
+      </div>
+
+      {/* Admin List */}
+      {questAdmins.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground text-sm">
+          No admins added yet. Add a wallet address above to delegate review access.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {questAdmins.map((admin) => (
+            <div
+              key={admin.admin_address}
+              className="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50"
+            >
+              <div className="flex items-center gap-3">
+                <Avatar className="h-8 w-8 border border-slate-200 dark:border-slate-700 shrink-0">
+                  <AvatarImage src={admin.avatar_url || undefined} />
+                  <AvatarFallback className="bg-blue-100 text-blue-700 text-xs font-bold">
+                    {admin.username ? admin.username.slice(0, 2).toUpperCase() : admin.admin_address.slice(2, 4).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-sm font-semibold leading-none">
+                    {admin.username || `${admin.admin_address.slice(0, 6)}...${admin.admin_address.slice(-4)}`}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-mono mt-1">
+                    {admin.admin_address.slice(0, 10)}...{admin.admin_address.slice(-6)}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                onClick={() => handleRemoveAdmin(admin.admin_address)}
+                disabled={removingAdmin === admin.admin_address}
+              >
+                {removingAdmin === admin.admin_address
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <X className="h-4 w-4" />
+                }
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+)}
                     {/* ── POST-QUEST MANAGEMENT (Only shows if quest is over) ── */}
                     {isQuestEnded && !isAdminEditing && (
                       <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-slate-50 dark:bg-slate-900/50">

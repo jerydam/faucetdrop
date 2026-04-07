@@ -177,7 +177,144 @@ const useCountdown = (targetDate: string | null) => {
 
   return timeLeft;
 };
+// ============= PARTICIPANT PROFILE MODAL =============
+function ParticipantProfileModal({
+  entry,
+  progress,
+  isLoading,
+  questTasks,
+  onClose,
+}: {
+  entry: LeaderboardEntry;
+  progress: UserProgress | null;
+  isLoading: boolean;
+  questTasks: QuestTask[];
+  onClose: () => void;
+}) {
+  const completedIds = new Set(progress?.completedTasks || []);
+  const completedCount = completedIds.size;
+  const totalTasks = questTasks.filter(t => !t.isSystem).length;
 
+  const rankDisplay =
+    entry.rank === 1 ? "🥇" :
+    entry.rank === 2 ? "🥈" :
+    entry.rank === 3 ? "🥉" :
+    `#${entry.rank}`;
+
+  const initials = entry.username
+    ? entry.username.slice(0, 2).toUpperCase()
+    : entry.walletAddress.slice(2, 4).toUpperCase();
+
+  const shortAddress = `${entry.walletAddress.slice(0, 6)}...${entry.walletAddress.slice(-4)}`;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 px-5 py-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-11 w-11 border-2 border-slate-200 dark:border-slate-700">
+              <AvatarImage src={entry.avatarUrl || undefined} alt={entry.username || ""} className="object-cover" />
+              <AvatarFallback className="bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-bold text-sm">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="font-semibold text-base text-slate-900 dark:text-slate-100 leading-none">
+                {entry.username || shortAddress}
+              </p>
+              <p className="text-xs text-muted-foreground font-mono mt-1">{shortAddress}</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-3 gap-3 p-4">
+          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 text-center">
+            <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wider font-medium">Rank</div>
+            <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{rankDisplay}</div>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 text-center">
+            <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wider font-medium">Points</div>
+            <div className="text-2xl font-bold text-primary">{entry.points.toLocaleString()}</div>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 text-center">
+            <div className="text-xs text-muted-foreground mb-1 uppercase tracking-wider font-medium">Stage</div>
+            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 mt-1">
+              {progress?.currentStage || "—"}
+            </div>
+          </div>
+        </div>
+
+        {/* Task List */}
+        <div className="px-4 pb-5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Tasks completed</span>
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Badge variant="outline" className="text-xs font-mono">
+                {completedCount} / {totalTasks}
+              </Badge>
+            )}
+          </div>
+
+          {isLoading ? (
+            <div className="flex flex-col gap-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-10 rounded-lg bg-slate-100 dark:bg-slate-800 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+              {questTasks
+                .filter(t => !t.isSystem)
+                .map(task => {
+                  const done = completedIds.has(task.id);
+                  return (
+                    <div
+                      key={task.id}
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm ${
+                        done
+                          ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800/50"
+                          : "bg-slate-50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        <CheckCircle2
+                          className={`h-4 w-4 shrink-0 ${done ? "text-green-500" : "text-slate-300 dark:text-slate-600"}`}
+                        />
+                        <span className={`truncate ${done ? "text-green-800 dark:text-green-300" : "text-muted-foreground"}`}>
+                          {task.title}
+                        </span>
+                      </div>
+                      <span className={`text-xs font-medium shrink-0 ml-2 ${done ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
+                        +{task.points} pts
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 // ============= COMPONENT =============
 export default function QuestDetailsPage() {
   const params = useParams();
@@ -307,7 +444,9 @@ export default function QuestDetailsPage() {
   const now = new Date();
   const endDate = new Date(questData?.rawEndDate || Date.now());
   const isQuestEnded = now > endDate;
-
+  const [selectedParticipant, setSelectedParticipant] = useState<LeaderboardEntry | null>(null);
+  const [participantTaskDetails, setParticipantTaskDetails] = useState<any>(null);
+  const [isLoadingParticipantDetails, setIsLoadingParticipantDetails] = useState(false);
   const claimWindowHours = questData?.claimWindowHours || 24;
   const claimWindowEnd = new Date(endDate.getTime() + (claimWindowHours * 60 * 60 * 1000));
   const isClaimWindowClosed = now > claimWindowEnd;
@@ -657,6 +796,20 @@ const canManageQuest = isCreator || isQuestAdmin;
 
     window.open(xIntentUrl, "_blank");
   };
+
+  const handleParticipantClick = async (entry: LeaderboardEntry) => {
+  setSelectedParticipant(entry);
+  setIsLoadingParticipantDetails(true);
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/progress/${entry.walletAddress}`);
+    const json = await res.json();
+    if (json.success) setParticipantTaskDetails(json.progress);
+  } catch (e) {
+    console.error("Failed to load participant details", e);
+  } finally {
+    setIsLoadingParticipantDetails(false);
+  }
+};
 
   const handleJoin = async () => {
     if (!userWalletAddress || !faucetAddress) return;
@@ -2598,7 +2751,10 @@ const handleRemoveAdmin = async (adminAddress: string) => {
                             </TableCell>
                             <TableCell className="px-2 sm:px-4 overflow-hidden">
                               <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
-                                <Avatar className="h-6 w-6 sm:h-9 sm:w-9 border border-slate-200 dark:border-slate-700 shrink-0">
+                                <Avatar
+                                  className="h-6 w-6 sm:h-9 sm:w-9 border border-slate-200 dark:border-slate-700 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                                  onClick={() => handleParticipantClick(entry)}
+                                >
                                   <AvatarImage src={entry.avatarUrl || undefined} alt={entry.username || ""} className="object-cover" />
                                   <AvatarFallback className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[10px] sm:text-xs">
                                     {entry.username ? entry.username.substring(0, 2).toUpperCase() : entry.walletAddress.slice(0, 4)}
@@ -2606,11 +2762,18 @@ const handleRemoveAdmin = async (adminAddress: string) => {
                                 </Avatar>
                                 {/* min-w-0 is crucial here to allow the truncate class to work inside a flex container */}
                                 <div className="flex flex-col min-w-0">
-                                  <span className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate">
+                                  <span
+                                    className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate cursor-pointer hover:text-primary transition-colors"
+                                    onClick={() => handleParticipantClick(entry)}
+                                  >
                                     <span className="truncate">
                                       {entry.username || entry.walletAddress.slice(0, 6) + "..." + entry.walletAddress.slice(-4)}
                                     </span>
-                                    {entry.walletAddress === userWalletAddress && <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">You</Badge>}
+                                    {entry.walletAddress === userWalletAddress && (
+                                      <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
+                                        You
+                                      </Badge>
+                                    )}
                                   </span>
                                 </div>
                               </div>
@@ -3414,6 +3577,15 @@ const handleRemoveAdmin = async (adminAddress: string) => {
           </div>
         )}
       </div>
+      {selectedParticipant && (
+  <ParticipantProfileModal
+    entry={selectedParticipant}
+    progress={participantTaskDetails}
+    isLoading={isLoadingParticipantDetails}
+    questTasks={questData?.tasks || []}
+    onClose={() => { setSelectedParticipant(null); setParticipantTaskDetails(null); }}
+  />
+)}
     </div>
   );
 }

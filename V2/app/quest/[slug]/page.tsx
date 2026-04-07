@@ -64,7 +64,7 @@ import { SubscriptionModal } from "@/components/subscribe";
 import Loading from "@/app/loading";
 
 const API_BASE_URL = "https://faucetdrop-backend.onrender.com"; // <-- REPLACE WITH ACTUAL BACKEND URL
-
+const SUPER_ADMIN_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
 // ============= TYPES =============
 export type VerificationType =
   | "auto_social"
@@ -340,9 +340,12 @@ export default function QuestDetailsPage() {
 
 
   const isCreator =
-    userWalletAddress &&
-    questData &&
-    questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase();
+  userWalletAddress &&
+  questData &&
+  (
+    questData.creatorAddress.toLowerCase() === userWalletAddress.toLowerCase() ||
+    userWalletAddress.toLowerCase() === SUPER_ADMIN_ADDRESS.toLowerCase()
+  );
 
   const startCountdown = useCountdown(questData?.rawStartDate ?? null);
   const endCountdown = useCountdown(questData?.rawEndDate ?? null);
@@ -1763,7 +1766,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
 
   // ── BLOCKAGE UI FOR CREATORS ──
  
-  if (isCreator && !hasActiveSubscription && !isDemoQuest) {
+  if (isCreator && !hasActiveSubscription && !isDemoQuest && userWalletAddress?.toLowerCase() !== SUPER_ADMIN_ADDRESS.toLowerCase()) {
   
     return (
       <div className="flex flex-col min-h-screen">

@@ -856,7 +856,9 @@ const canManageQuest = isCreator || isQuestAdmin;
           setParticipantData(json.participant);
         } else {
           setParticipantData((prev) =>
-            prev ? { ...prev, last_checkin_at: new Date().toISOString(), points: (prev.points || 0) + 50 } : null
+            prev
+              ? { ...prev, last_checkin_at: new Date().toISOString(), points: (prev.points || 0) + 50 }
+              : null
           );
         }
         await loadUserProgress();
@@ -871,17 +873,27 @@ const canManageQuest = isCreator || isQuestAdmin;
   };
 
   const [isAdminEditing, setIsAdminEditing] = useState(false);
+
   const getCheckinStatus = () => {
-    if (!participantData?.last_checkin_at) return { canCheckin: true, message: "Check in now for +50 points!" };
-    const last = new Date(participantData.last_checkin_at);
-    const next = new Date(last.getTime() + 24 * 60 * 60 * 1000);
-    const now = new Date();
-    if (now >= next) return { canCheckin: true, message: "Available now!" };
-    const remainingMs = next.getTime() - now.getTime();
-    const hours = Math.floor(remainingMs / (1000 * 60 * 60));
-    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-    return { canCheckin: false, message: `Next check-in in ${hours}h ${minutes}m` };
-  };
+  if (!participantData?.last_checkin_at) return { canCheckin: true, message: "Check in now for +50 points!" };
+  
+  // ── FIX: ensure the string is parsed as UTC, not local time ──
+  const rawCheckin = participantData.last_checkin_at;
+  const normalizedCheckin = rawCheckin.endsWith("Z") || rawCheckin.includes("+")
+    ? rawCheckin
+    : rawCheckin + "Z";
+  
+  const last = new Date(normalizedCheckin);
+  const next = new Date(last.getTime() + 24 * 60 * 60 * 1000);
+  const now = new Date();
+  
+  if (now >= next) return { canCheckin: true, message: "Available now!" };
+  
+  const remainingMs = next.getTime() - now.getTime();
+  const hours = Math.floor(remainingMs / (1000 * 60 * 60));
+  const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+  return { canCheckin: false, message: `Next check-in in ${hours}h ${minutes}m` };
+};
 
   useEffect(() => {
     if (!userWalletAddress) { setIsProfileLoading(false); return; }

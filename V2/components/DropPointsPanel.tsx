@@ -271,64 +271,151 @@ export default function DropPointsPanel() {
   }, []);
 
   // ── History ───────────────────────────────────────────────────────────────────
+// ─── LS cache helpers ─────────────────────────────────────────────────────────
 
-  const fetchHistory = useCallback(async () => {
-    if (!address) return;
-    setHistoryLoading(true);
-    try {
-      const allClaims: ClaimEntry[] = [];
+const HISTORY_CACHE_KEY = (addr: string) => `drop_history_${addr.toLowerCase()}`;
+const HISTORY_CACHE_TTL = 30 * 60 * 1000; // 30 min
 
-      await Promise.allSettled(
-        CHAIN_IDS.map(async (id) => {
-          try {
-            const cfg = CHAIN_CONFIG[id];
-            const provider = getProvider(id);
-            const contract = new Contract(cfg.contract, POINTS_ABI, provider);
+function saveHistoryCache(addr: string, data: ClaimEntry[]) {
+  try {
+    localStorage.setItem(
+      HISTORY_CACHE_KEY(addr),
+      JSON.stringify({ data, cachedAt: Date.now() })
+    );
+  } catch { /* storage full — ignore */ }
+}
 
-            const filter = contract.filters.Transfer(
-              "0x0000000000000000000000000000000000000000",
-              address
-            );
-            const currentBlock = await provider.getBlockNumber();
-            const fromBlock = Math.max(0, currentBlock - 50000);
-            const logs = await contract.queryFilter(filter, fromBlock, "latest");
+function loadHistoryCache(addr: string): ClaimEntry[] | null {
+  try {
+    const raw = localStorage.getItem(HISTORY_CACHE_KEY(addr));
+    if (!raw) return null;
+    const { data, cachedAt } = JSON.parse(raw);
+    if (Date.now() - cachedAt > HISTORY_CACHE_TTL) return null; // expired
+    return data as ClaimEntry[];
+  } catch {
+    return null;
+  }
+}
 
-            const blockCache: Record<number, number> = {};
-            const decimals = await contract.decimals().catch(() => 18);
+function appendToHistoryCache(addr: string, newEntry: ClaimEntry) {
+  const existing = loadHistoryCache(addr) ?? [];
+  const deduped = [newEntry, ...existing.filter(e => e.tx_hash !== newEntry.tx_hash)];
+  deduped.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  saveHistoryCache(addr, deduped);
+}
+useEffect(() => {
+  if (!address) return;
 
-            for (const log of logs) {
-              const parsedLog = log as any;
-              if (!blockCache[parsedLog.blockNumber]) {
-                const block = await provider.getBlock(parsedLog.blockNumber);
-                blockCache[parsedLog.blockNumber] =
-                  block?.timestamp || Math.floor(Date.now() / 1000);
-              }
-              allClaims.push({
-                chain_id: id,
-                tx_hash: parsedLog.transactionHash,
-                amount: parseFloat(
-                  formatUnits(parsedLog.args[2] || parsedLog.args.value, decimals)
-                ),
-                timestamp: new Date(blockCache[parsedLog.blockNumber] * 1000).toISOString(),
-              });
-            }
-          } catch (chainErr) {
-            console.warn(`Could not fetch history for chain ${id}:`, chainErr);
-          }
-        })
-      );
+  // Show cached data instantly if available
+  const cached = loadHistoryCache(address);
+  if (cached) setHistory(cached);
 
-      allClaims.sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      setHistory(allClaims);
-    } catch (e) {
-      console.error("Error fetching on-chain history:", e);
-      toast.error("Failed to load on-chain history.");
-    } finally {
+  // Always kick off a background refresh (won't set loading if cache exists)
+  const timer = setTimeout(() => {
+    fetchHistory(false); // respects cache TTL — won't hit RPC if fresh
+  }, 2000); // 2s delay so chain balance fetch gets priority
+
+  return () => clearTimeout(timer);
+}, [address]); // intentionally exclude fetchHistory to run only on wallet change
+const BLOCK_LOOKBACK: Record<number, number> = {
+  42220: 1_000_000,  // Celo  ~5s blocks → ~90 days
+  8453:  2_000_000,  // Base  ~2s blocks → ~90 days
+  56:    3_000_000,  // BNB   ~3s blocks → ~90 days
+  1135:  500_000,    // Lisk
+  42161: 15_000_000, // Arbitrum ~0.5s blocks → ~90 days
+};
+const fetchHistory = useCallback(async (forceRefresh = false) => {
+  if (!address) return;
+
+  // 1. Load cache immediately — paint UI before any RPC call
+  if (!forceRefresh) {
+    const cached = loadHistoryCache(address);
+    if (cached) {
+      setHistory(cached);
       setHistoryLoading(false);
+      return; // fresh enough — skip RPC
     }
-  }, [address]);
+  }
+
+  setHistoryLoading(true);
+  try {
+    const allClaims: ClaimEntry[] = [];
+
+    await Promise.allSettled(
+      CHAIN_IDS.map(async (id) => {
+        try {
+          const cfg = CHAIN_CONFIG[id];
+          const provider = getProvider(id);
+          const contract = new Contract(cfg.contract, POINTS_ABI, provider);
+
+          const filter = contract.filters.Transfer(
+            "0x0000000000000000000000000000000000000000",
+            address
+          );
+
+          const currentBlock = await provider.getBlockNumber();
+          const lookback = BLOCK_LOOKBACK[id] ?? 100_000;
+          const fromBlock = Math.max(0, currentBlock - lookback);
+
+          const CHUNK = 100_000;
+          const chunks: { from: number; to: number }[] = [];
+          for (let start = fromBlock; start < currentBlock; start += CHUNK) {
+            chunks.push({ from: start, to: Math.min(start + CHUNK - 1, currentBlock) });
+          }
+
+          const logs: any[] = [];
+          for (const chunk of chunks) {
+            try {
+              const chunkLogs = await contract.queryFilter(filter, chunk.from, chunk.to);
+              logs.push(...chunkLogs);
+            } catch { /* skip bad chunk */ }
+          }
+
+          if (logs.length === 0) return;
+
+          const blockCache: Record<number, number> = {};
+          const decimals: number = await contract.decimals().catch(() => 18);
+
+          const uniqueBlocks = [...new Set(logs.map((l: any) => l.blockNumber))];
+          await Promise.allSettled(
+            uniqueBlocks.map(async (bn) => {
+              const block = await provider.getBlock(bn);
+              blockCache[bn] = block?.timestamp ?? Math.floor(Date.now() / 1000);
+            })
+          );
+
+          for (const log of logs) {
+            const parsedLog = log as any;
+            allClaims.push({
+              chain_id: id,
+              tx_hash: parsedLog.transactionHash,
+              amount: parseFloat(
+                formatUnits(parsedLog.args[2] ?? parsedLog.args.value, decimals)
+              ),
+              timestamp: new Date(
+                (blockCache[parsedLog.blockNumber] ?? Math.floor(Date.now() / 1000)) * 1000
+              ).toISOString(),
+            });
+          }
+        } catch (chainErr) {
+          console.warn(`History fetch failed for chain ${id}:`, chainErr);
+        }
+      })
+    );
+
+    allClaims.sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    setHistory(allClaims);
+    saveHistoryCache(address, allClaims); // ← persist after full fetch
+  } catch (e) {
+    console.error("Error fetching on-chain history:", e);
+    toast.error("Failed to load on-chain history.");
+  } finally {
+    setHistoryLoading(false);
+  }
+}, [address]);
 
 
   // ── Post-claim refresh (needs setters — stays as useCallback) ─────────────────
@@ -382,10 +469,14 @@ export default function DropPointsPanel() {
     fetchChainData(address);
   }, [address, chainId, fetchChainData]);
 
-  useEffect(() => {
-    if (activeTab === "history") fetchHistory();
-    
-  }, [activeTab, fetchHistory]);
+ useEffect(() => {
+  if (activeTab !== "history") return;
+  
+  // If we already have data (from prefetch or cache), don't re-fetch
+  if (history.length > 0) return;
+  
+  fetchHistory(false);
+}, [activeTab]);
 
   // Countdown — every second
   useEffect(() => {

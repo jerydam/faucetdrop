@@ -237,7 +237,7 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
           <DropdownMenuItem asChild>
             <Link href={dashboardLink} className="cursor-pointer flex items-center gap-2"> 
               {dbUsername ? <UserIcon className="h-4 w-4" /> : <LayoutDashboard className="h-4 w-4" />}
-              <span>{dbUsername ? "Profile" : "Dashboard"}</span>
+              <span>{dbUsername ? "Profile" : "loading..."}</span>
             </Link>
           </DropdownMenuItem>
           {address && (

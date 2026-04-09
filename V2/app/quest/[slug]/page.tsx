@@ -1414,11 +1414,13 @@ const handleRemoveAdmin = async (adminAddress: string) => {
           endpoint = "/api/tasks/verify-x-quote";
           payload.proofUrl = finalProofUrl;
           payload.requiredTag = selectedTask.targetHandle || "";
+        } else if (selectedTask.action === "comment") {
+          endpoint = "/api/tasks/verify-x-comment";
+          payload.proofUrl = finalProofUrl;
         } else {
           endpoint = "/api/tasks/verify-x";
           payload.submittedHandle =
             userProfile?.twitter_handle || userProfile?.username || "";
-
         }
 
         const verifyRes = await fetch(`${API_BASE_URL}${endpoint}`, {

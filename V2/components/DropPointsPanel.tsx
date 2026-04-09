@@ -219,6 +219,21 @@ export default function DropPointsPanel() {
     );
   }, []);
 
+const applyChainBalances = useCallback((chainResults: Array<{chain_id: number; balance: number | null; error: string | null}>) => {
+    setChainBalances(prev =>
+      prev.map(c => {
+        const match = chainResults.find(r => r.chain_id === c.chainId);
+        if (!match) return c;
+        return {
+          chainId: c.chainId,
+          balance: match.balance ?? c.balance,  // keep old if RPC failed
+          loading: false,
+          error: !!match.error,
+        };
+      })
+    );
+  }, []);
+
   // ── Cooldown state from API ───────────────────────────────────────────────────
   const fetchCooldownState = useCallback(async (addr: string) => {
     try {
@@ -398,7 +413,42 @@ const readOnly = new Contract(cfg.contract, POINTS_ABI, provider);
       toast.loading("Verifying proof", { id: "claim-tx" });
       // Replace the "4. Backend verify" block in handleClaim with this:
 
-const verifyWithRetry = async (txHash: string, chainId: number, address: string, attempts = 3): Promise<void> => {
+const refreshAllPostClaim = async (verifyData: any) => {
+        // 1. Apply on-chain balances from verify response
+        if (verifyData?.chain_balances?.length) {
+          setChainBalances(prev =>
+            prev.map(c => {
+              const match = verifyData.chain_balances.find((r: any) => r.chain_id === c.chainId);
+              if (!match) return c;
+              return { chainId: c.chainId, balance: match.balance ?? c.balance, loading: false, error: !!match.error };
+            })
+          );
+        }
+        // 2. Cooldown from exact block timestamp
+        setLastClaimAt(verifyData?.last_claim_at ?? new Date().toISOString());
+        // 3. Optimistic leaderboard patch
+        if (address && verifyData?.new_balance != null) {
+          setLeaderboard(prev => {
+            const exists = prev.find(e => e.address.toLowerCase() === address.toLowerCase());
+            const patched = exists
+              ? prev.map(e =>
+                  e.address.toLowerCase() === address.toLowerCase()
+                    ? { ...e, total_points: verifyData.new_balance, claims: e.claims + 1 }
+                    : e
+                )
+              : [{ rank: 1, address, username: undefined, total_points: verifyData.new_balance, claims: 1 }, ...prev];
+            return patched
+              .sort((a, b) => b.total_points - a.total_points)
+              .map((e, i) => ({ ...e, rank: i + 1 }));
+          });
+        }
+        // 4. Background refresh — history + leaderboard (always, not tab-gated)
+        Promise.allSettled([fetchHistory(), fetchLeaderboard()]);
+      };
+
+
+const verifyWithRetry = async (txHash: string, chainId: number, address: string, attempts = 3): Promise<any> => {
+
   for (let i = 0; i < attempts; i++) {
     try {
       const verifyRes = await fetch(`${API_BASE_URL}/api/droplist/verify-claim`, {
@@ -412,7 +462,7 @@ const verifyWithRetry = async (txHash: string, chainId: number, address: string,
 
       // ✅ Treat "already processed" as success (idempotency auto-heal)
       if (verifyRes.ok || verifyData?.success === true) {
-        return; // success
+        return verifyData; // ← return full payload
       }
 
       // The backend already handles replay — if it returns 200 with success:true, we're done
@@ -443,26 +493,24 @@ const verifyWithRetry = async (txHash: string, chainId: number, address: string,
 // In handleClaim, replace the verify block:
 toast.loading("Verifying proof...", { id: "claim-tx" });
 try {
-  await verifyWithRetry(receipt.hash, chainId, address);
+   const verifyData = await verifyWithRetry(receipt.hash, chainId, address);
+        await refreshAllPostClaim(verifyData);
 } catch (verifyErr: any) {
   // ⚠️ Tx is confirmed on-chain even if verify fails.
   // Show a soft warning — don't treat as full failure.
   console.warn("[DropPoints] Verify failed but tx confirmed:", verifyErr);
   toast.warning("Claimed! Balance will update shortly.", { id: "claim-tx" });
-  setLastClaimAt(new Date().toISOString()); // still set cooldown
   setClaimBurst(true);
   setTimeout(() => setClaimBurst(false), 800);
-  await fetchAllChainBalances(address);
+   fetchAllChainBalances(address);
+        Promise.allSettled([fetchHistory(), fetchLeaderboard()]);
   return; // exit without throwing
 }
 
       // 5. Success
       toast.success("Drop Points claimed! \uD83C\uDF89", { id: "claim-tx" });
-      setLastClaimAt(new Date().toISOString());
       setClaimBurst(true);
       setTimeout(() => setClaimBurst(false), 800);
-      await fetchAllChainBalances(address);
-      if (activeTab === "history") fetchHistory();
 
     } catch (error: any) {
       const msg: string = error?.reason || error?.message || "Claim failed";

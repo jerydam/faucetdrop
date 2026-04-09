@@ -63,24 +63,21 @@ const CHAIN_CONFIG: Record<
 
 const CHAIN_IDS = Object.keys(CHAIN_CONFIG).map(Number);
 
-// ─── ABI — balanceOf + decimals for on-chain reads ────────────────────────────
+const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
+
+// ─── ABI ──────────────────────────────────────────────────────────────────────
 
 const POINTS_ABI = [
   "function claim(uint256 amount, uint256 timestamp, bytes signature) external",
   "function canClaim(address user) view returns (bool)",
   "function balanceOf(address account) view returns (uint256)",
   "function decimals() view returns (uint8)",
-  // ADD THIS LINE SO ETHERS CAN READ THE LOGS
-  "event Transfer(address indexed from, address indexed to, uint256 value)"
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
 ];
-
-
-
-const API_BASE_URL = "https://faucetdrop-backend.onrender.com";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "history" | "leaderboard";
+type Tab = "overview" | "history";
 
 interface ChainBalance {
   chainId: number;
@@ -96,15 +93,9 @@ interface ClaimEntry {
   tx_hash: string;
 }
 
-interface LeaderboardEntry {
-  rank: number;
-  address: string;
-  username?: string;
-  total_points: number;
-  claims: number;
-}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// ─── Module-level helpers (no hooks, no state) ────────────────────────────────
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}\u2026${addr.slice(-4)}`;
@@ -118,7 +109,6 @@ function formatCountdown(ms: number): string {
   return `${h}h ${m.toString().padStart(2, "0")}m ${s.toString().padStart(2, "0")}s`;
 }
 
-// Module-level RPC provider cache
 const providerCache: Record<number, JsonRpcProvider> = {};
 function getProvider(chainId: number): JsonRpcProvider {
   if (!providerCache[chainId]) {
@@ -127,15 +117,39 @@ function getProvider(chainId: number): JsonRpcProvider {
   return providerCache[chainId];
 }
 
-async function fetchOnChainBalance(chainId: number, address: string): Promise<number> {
-  const cfg = CHAIN_CONFIG[chainId];
-  const provider = getProvider(chainId);
-  const contract = new Contract(cfg.contract, POINTS_ABI, provider);
-  const [raw, dec]: [bigint, number] = await Promise.all([
-    contract.balanceOf(address),
-    contract.decimals(),
-  ]);
-  return parseFloat(formatUnits(raw, dec));
+async function verifyWithRetry(
+  txHash: string,
+  chainId: number,
+  address: string,
+  attempts = 3
+): Promise<any> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const verifyRes = await fetch(`${API_BASE_URL}/api/droplist/verify-claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txHash, chainId, walletAddress: address }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const verifyData = await verifyRes.json();
+      if (verifyRes.ok || verifyData?.success === true) return verifyData;
+      const detail = verifyData?.detail || "";
+      if (detail.toLowerCase().includes("already")) return;
+      throw new Error(detail || "Verification failed");
+    } catch (err: any) {
+      const isLast = i === attempts - 1;
+      const isNetwork =
+        err?.name === "AbortError" ||
+        err?.message?.includes("fetch") ||
+        err?.message?.includes("network") ||
+        err?.message?.includes("aborted");
+      if (isNetwork && !isLast) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      if (isLast) throw err;
+    }
+  }
 }
 
 // ─── Particle burst ───────────────────────────────────────────────────────────
@@ -191,7 +205,6 @@ export default function DropPointsPanel() {
 
   const [history, setHistory]               = useState<ClaimEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [leaderboard, setLeaderboard]       = useState<LeaderboardEntry[]>([]);
   const [lbLoading, setLbLoading]           = useState(false);
 
   const claimLockRef = useRef(false);
@@ -200,107 +213,115 @@ export default function DropPointsPanel() {
   const allLoaded   = chainBalances.every((c) => !c.loading);
   const maxBalance  = Math.max(...chainBalances.map((c) => c.balance), 1);
 
-  // ── On-chain balances ────────────────────────────────────────────────────────
-  const fetchAllChainBalances = useCallback(async (addr: string) => {
+  // ── Single chain sweep: balances + last claim timestamp ──────────────────────
+
+  const fetchChainData = useCallback(async (addr: string) => {
     setChainBalances(CHAIN_IDS.map((id) => ({ chainId: id, balance: 0, loading: true, error: false })));
+
+    let latestClaimTs: number | null = null;
+
     await Promise.allSettled(
       CHAIN_IDS.map(async (id) => {
+        const cfg = CHAIN_CONFIG[id];
+        const provider = getProvider(id);
+        const contract = new Contract(cfg.contract, POINTS_ABI, provider);
+
+        // Balance
         try {
-          const balance = await fetchOnChainBalance(id, addr);
+          const [raw, dec]: [bigint, number] = await Promise.all([
+            contract.balanceOf(addr),
+            contract.decimals(),
+          ]);
+          const balance = parseFloat(formatUnits(raw, dec));
           setChainBalances((prev) =>
-            prev.map((c) => (c.chainId === id ? { chainId: id, balance, loading: false, error: false } : c))
+            prev.map((c) =>
+              c.chainId === id ? { chainId: id, balance, loading: false, error: false } : c
+            )
           );
         } catch {
           setChainBalances((prev) =>
             prev.map((c) => (c.chainId === id ? { ...c, loading: false, error: true } : c))
           );
         }
+
+        // Last claim timestamp via most recent mint Transfer
+        try {
+          const filter = contract.filters.Transfer(
+            "0x0000000000000000000000000000000000000000",
+            addr
+          );
+          const currentBlock = await provider.getBlockNumber();
+          const fromBlock = Math.max(0, currentBlock - 50000);
+          const logs = await contract.queryFilter(filter, fromBlock, "latest");
+
+          if (logs.length > 0) {
+            const lastLog = logs[logs.length - 1] as any;
+            const block = await provider.getBlock(lastLog.blockNumber);
+            if (block && (latestClaimTs === null || block.timestamp > latestClaimTs)) {
+              latestClaimTs = block.timestamp;
+            }
+          }
+        } catch { /* non-fatal */ }
       })
     );
+
+    if (latestClaimTs !== null) {
+      setLastClaimAt(new Date(latestClaimTs * 1000).toISOString());
+    }
   }, []);
 
-const applyChainBalances = useCallback((chainResults: Array<{chain_id: number; balance: number | null; error: string | null}>) => {
-    setChainBalances(prev =>
-      prev.map(c => {
-        const match = chainResults.find(r => r.chain_id === c.chainId);
-        if (!match) return c;
-        return {
-          chainId: c.chainId,
-          balance: match.balance ?? c.balance,  // keep old if RPC failed
-          loading: false,
-          error: !!match.error,
-        };
-      })
-    );
-  }, []);
+  // ── History ───────────────────────────────────────────────────────────────────
 
-  // ── Cooldown state from API ───────────────────────────────────────────────────
-  const fetchCooldownState = useCallback(async (addr: string) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/droplist/dashboard/${addr}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.last_claim_at) setLastClaimAt(data.last_claim_at);
-    } catch { /* non-fatal */ }
-  }, []);
-
-  // ── History ──────────────────────────────────────────────────────────────────
-  // ── History (Fetched Directly On-Chain) ──────────────────────────────────────
   const fetchHistory = useCallback(async () => {
     if (!address) return;
     setHistoryLoading(true);
-    
     try {
       const allClaims: ClaimEntry[] = [];
 
-      // Fetch events across all supported chains concurrently
       await Promise.allSettled(
         CHAIN_IDS.map(async (id) => {
           try {
             const cfg = CHAIN_CONFIG[id];
             const provider = getProvider(id);
             const contract = new Contract(cfg.contract, POINTS_ABI, provider);
-            
-            // Filter for Transfer events from the Zero Address (Minting) to the User
-            const filter = contract.filters.Transfer("0x0000000000000000000000000000000000000000", address);
-            
-            // Note: Public RPCs often limit how far back you can search. 
-            // We search the last 50,000 blocks to prevent RPC rate-limit crashes.
+
+            const filter = contract.filters.Transfer(
+              "0x0000000000000000000000000000000000000000",
+              address
+            );
             const currentBlock = await provider.getBlockNumber();
-            const fromBlock = Math.max(0, currentBlock - 50000); 
-            
+            const fromBlock = Math.max(0, currentBlock - 50000);
             const logs = await contract.queryFilter(filter, fromBlock, "latest");
-            
-            // Cache block timestamps so we don't spam the RPC
+
             const blockCache: Record<number, number> = {};
             const decimals = await contract.decimals().catch(() => 18);
-            
+
             for (const log of logs) {
-              // Handle ethers v6 log typing
-              const parsedLog = log as any; 
-              
+              const parsedLog = log as any;
               if (!blockCache[parsedLog.blockNumber]) {
                 const block = await provider.getBlock(parsedLog.blockNumber);
-                blockCache[parsedLog.blockNumber] = block?.timestamp || Math.floor(Date.now() / 1000);
+                blockCache[parsedLog.blockNumber] =
+                  block?.timestamp || Math.floor(Date.now() / 1000);
               }
-              
               allClaims.push({
                 chain_id: id,
                 tx_hash: parsedLog.transactionHash,
-                amount: parseFloat(formatUnits(parsedLog.args[2] || parsedLog.args.value, decimals)),
-                timestamp: new Date(blockCache[parsedLog.blockNumber] * 1000).toISOString()
+                amount: parseFloat(
+                  formatUnits(parsedLog.args[2] || parsedLog.args.value, decimals)
+                ),
+                timestamp: new Date(blockCache[parsedLog.blockNumber] * 1000).toISOString(),
               });
             }
           } catch (chainErr) {
-            console.warn(`Could not fetch history for chain ${id} (RPC limits):`, chainErr);
+            console.warn(`Could not fetch history for chain ${id}:`, chainErr);
           }
         })
       );
 
-      // Sort all accumulated claims from newest to oldest
-      allClaims.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      allClaims.sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
       setHistory(allClaims);
-
     } catch (e) {
       console.error("Error fetching on-chain history:", e);
       toast.error("Failed to load on-chain history.");
@@ -309,30 +330,62 @@ const applyChainBalances = useCallback((chainResults: Array<{chain_id: number; b
     }
   }, [address]);
 
-  // ── Leaderboard ──────────────────────────────────────────────────────────────
-  const fetchLeaderboard = useCallback(async () => {
-    setLbLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/droplist/leaderboard`);
-      if (res.ok) {
-        const data = await res.json();
-        setLeaderboard(Array.isArray(data) ? data : (data.leaderboard ?? []));
-      }
-    } catch { /* non-fatal */ }
-    finally { setLbLoading(false); }
-  }, []);
 
-  // ── Effects ──────────────────────────────────────────────────────────────────
+  // ── Post-claim refresh (needs setters — stays as useCallback) ─────────────────
+
+  const refreshAllPostClaim = useCallback(async (
+    verifyData: any,
+    receipt: any,
+    claimedChainId: number
+  ) => {
+    // 1. Balances from verify response
+    if (verifyData?.chain_balances?.length) {
+      setChainBalances((prev) =>
+        prev.map((c) => {
+          const match = verifyData.chain_balances.find((r: any) => r.chain_id === c.chainId);
+          if (!match) return c;
+          return {
+            chainId: c.chainId,
+            balance: match.balance ?? c.balance,
+            loading: false,
+            error: !!match.error,
+          };
+        })
+      );
+    }
+
+    // 2. Cooldown from confirmed block timestamp
+    if (receipt?.blockNumber) {
+      try {
+        const provider = getProvider(claimedChainId);
+        const block = await provider.getBlock(receipt.blockNumber);
+        setLastClaimAt(
+          block
+            ? new Date(block.timestamp * 1000).toISOString()
+            : (verifyData?.last_claim_at ?? new Date().toISOString())
+        );
+      } catch {
+        setLastClaimAt(verifyData?.last_claim_at ?? new Date().toISOString());
+      }
+    } else {
+      setLastClaimAt(verifyData?.last_claim_at ?? new Date().toISOString());
+    }
+
+    // 4. Background refresh
+    Promise.allSettled([fetchHistory()]);
+  }, [address, fetchHistory]);
+
+  // ── Effects ───────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!address) return;
-    fetchAllChainBalances(address);
-    fetchCooldownState(address);
-  }, [address, chainId, fetchAllChainBalances, fetchCooldownState]);
+    fetchChainData(address);
+  }, [address, chainId, fetchChainData]);
 
   useEffect(() => {
     if (activeTab === "history") fetchHistory();
-    if (activeTab === "leaderboard") fetchLeaderboard();
-  }, [activeTab, fetchHistory, fetchLeaderboard]);
+    
+  }, [activeTab, fetchHistory]);
 
   // Countdown — every second
   useEffect(() => {
@@ -348,7 +401,8 @@ const applyChainBalances = useCallback((chainResults: Array<{chain_id: number; b
     return () => clearInterval(t);
   }, [lastClaimAt]);
 
-  // ── Claim ────────────────────────────────────────────────────────────────────
+  // ── Claim ─────────────────────────────────────────────────────────────────────
+
   const handleClaim = async () => {
     if (!canClaim)    { toast.error(`Come back in ${formatCountdown(remainingMs)}`); return; }
     if (!isConnected) { toast.warning("Connect your wallet first."); return; }
@@ -361,14 +415,16 @@ const applyChainBalances = useCallback((chainResults: Array<{chain_id: number; b
     claimLockRef.current = true;
     setIsClaiming(true);
 
+    let receipt: any = null;
+
     try {
-      // 1. On-chain canClaim
+      // 1. On-chain canClaim check
       try {
-        const provider = getProvider(chainId); // Use the helper you already wrote!
-const readOnly = new Contract(cfg.contract, POINTS_ABI, provider);
+        const provider = getProvider(chainId);
+        const readOnly = new Contract(cfg.contract, POINTS_ABI, provider);
         const eligible: boolean = await readOnly.canClaim(address);
         if (!eligible) { toast.error("Already claimed today."); setCanClaim(false); return; }
-      } catch { /* proceed */ }
+      } catch { /* proceed if RPC check fails */ }
 
       // 2. Get signature from backend
       toast.loading("Generating secure signature...", { id: "claim-tx" });
@@ -380,135 +436,61 @@ const readOnly = new Contract(cfg.contract, POINTS_ABI, provider);
       const sigData = await sigRes.json();
       if (!sigRes.ok) throw new Error(sigData?.detail || "Failed to generate signature");
 
-      // ── Validate ALL params before touching ethers (prevents MetaMask TypeError) ──
       const { amount, timestamp, signature } = sigData;
 
-      if (amount === undefined || amount === null) {
+      if (amount === undefined || amount === null)
         throw new Error("Server returned missing 'amount' — cannot submit transaction.");
-      }
-      if (timestamp === undefined || timestamp === null) {
+      if (timestamp === undefined || timestamp === null)
         throw new Error("Server returned missing 'timestamp' — cannot submit transaction.");
-      }
-      if (!signature || typeof signature !== "string" || signature.length < 10) {
+      if (!signature || typeof signature !== "string" || signature.length < 10)
         throw new Error("Server returned invalid signature — cannot submit transaction.");
-      }
 
       const sig = signature.startsWith("0x") ? signature : `0x${signature}`;
-      if (!/^0x[0-9a-fA-F]{130}$/.test(sig)) {
-        throw new Error(`Malformed signature received (got length ${sig.length}, expected 132). Contact support.`);
-      }
-      // ─────────────────────────────────────────────────────────────────────────
+      if (!/^0x[0-9a-fA-F]{130}$/.test(sig))
+        throw new Error(
+          `Malformed signature received (got length ${sig.length}, expected 132). Contact support.`
+        );
 
       // 3. Send transaction
-      toast.loading("Awaiting wallet confirmation ...", { id: "claim-tx" });
+      toast.loading("Awaiting wallet confirmation...", { id: "claim-tx" });
       const contract = new Contract(cfg.contract, POINTS_ABI, signer);
-      const tx = await contract.claim(BigInt(amount), BigInt(timestamp), sig, {
-  from: address 
-});
+      const tx = await contract.claim(BigInt(amount), BigInt(timestamp), sig, { from: address });
 
-      toast.loading("Confirming on-chain ...", { id: "claim-tx" });
-      const receipt = await tx.wait();
+      // 4. Wait for on-chain confirmation
+      toast.loading("Confirming on-chain...", { id: "claim-tx" });
+      receipt = await tx.wait();
 
-      // 4. Backend verify
-      toast.loading("Verifying proof", { id: "claim-tx" });
-      // Replace the "4. Backend verify" block in handleClaim with this:
-
-const refreshAllPostClaim = async (verifyData: any) => {
-        // 1. Apply on-chain balances from verify response
-        if (verifyData?.chain_balances?.length) {
-          setChainBalances(prev =>
-            prev.map(c => {
-              const match = verifyData.chain_balances.find((r: any) => r.chain_id === c.chainId);
-              if (!match) return c;
-              return { chainId: c.chainId, balance: match.balance ?? c.balance, loading: false, error: !!match.error };
-            })
-          );
+      // 5. Verify with backend
+      toast.loading("Verifying proof...", { id: "claim-tx" });
+      try {
+        const verifyData = await verifyWithRetry(receipt.hash, chainId, address);
+        await refreshAllPostClaim(verifyData, receipt, chainId);
+      } catch (verifyErr: any) {
+        // Tx is confirmed on-chain — treat verify failure as a soft warning
+        console.warn("[DropPoints] Verify failed but tx confirmed:", verifyErr);
+        toast.warning("Claimed! Balance will update shortly.", { id: "claim-tx" });
+        setClaimBurst(true);
+        setTimeout(() => setClaimBurst(false), 800);
+        // Start cooldown from the confirmed block even without backend
+        if (receipt?.blockNumber) {
+          try {
+            const provider = getProvider(chainId);
+            const block = await provider.getBlock(receipt.blockNumber);
+            if (block) setLastClaimAt(new Date(block.timestamp * 1000).toISOString());
+            else setLastClaimAt(new Date().toISOString());
+          } catch {
+            setLastClaimAt(new Date().toISOString());
+          }
+        } else {
+          setLastClaimAt(new Date().toISOString());
         }
-        // 2. Cooldown from exact block timestamp
-        setLastClaimAt(verifyData?.last_claim_at ?? new Date().toISOString());
-        // 3. Optimistic leaderboard patch
-        if (address && verifyData?.new_balance != null) {
-          setLeaderboard(prev => {
-            const exists = prev.find(e => e.address.toLowerCase() === address.toLowerCase());
-            const patched = exists
-              ? prev.map(e =>
-                  e.address.toLowerCase() === address.toLowerCase()
-                    ? { ...e, total_points: verifyData.new_balance, claims: e.claims + 1 }
-                    : e
-                )
-              : [{ rank: 1, address, username: undefined, total_points: verifyData.new_balance, claims: 1 }, ...prev];
-            return patched
-              .sort((a, b) => b.total_points - a.total_points)
-              .map((e, i) => ({ ...e, rank: i + 1 }));
-          });
-        }
-        // 4. Background refresh — history + leaderboard (always, not tab-gated)
-        Promise.allSettled([fetchHistory(), fetchLeaderboard()]);
-      };
-
-
-const verifyWithRetry = async (txHash: string, chainId: number, address: string, attempts = 3): Promise<any> => {
-
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const verifyRes = await fetch(`${API_BASE_URL}/api/droplist/verify-claim`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ txHash, chainId, walletAddress: address }),
-        signal: AbortSignal.timeout(30_000), // 30s per attempt
-      });
-
-      const verifyData = await verifyRes.json();
-
-      // ✅ Treat "already processed" as success (idempotency auto-heal)
-      if (verifyRes.ok || verifyData?.success === true) {
-        return verifyData; // ← return full payload
+        fetchChainData(address);
+        Promise.allSettled([fetchHistory()]);
+        return;
       }
 
-      // The backend already handles replay — if it returns 200 with success:true, we're done
-      const detail = verifyData?.detail || "";
-      if (detail.toLowerCase().includes("already")) {
-        return; // already verified, treat as success
-      }
-
-      throw new Error(detail || "Verification failed");
-
-    } catch (err: any) {
-      const isLast = i === attempts - 1;
-      const isNetwork = err?.name === "AbortError" 
-        || err?.message?.includes("fetch")
-        || err?.message?.includes("network")
-        || err?.message?.includes("aborted");
-
-      if (isNetwork && !isLast) {
-        // Network/timeout error — wait 2s and retry
-        await new Promise(r => setTimeout(r, 2000));
-        continue;
-      }
-      if (isLast) throw err;
-    }
-  }
-};
-
-// In handleClaim, replace the verify block:
-toast.loading("Verifying proof...", { id: "claim-tx" });
-try {
-   const verifyData = await verifyWithRetry(receipt.hash, chainId, address);
-        await refreshAllPostClaim(verifyData);
-} catch (verifyErr: any) {
-  // ⚠️ Tx is confirmed on-chain even if verify fails.
-  // Show a soft warning — don't treat as full failure.
-  console.warn("[DropPoints] Verify failed but tx confirmed:", verifyErr);
-  toast.warning("Claimed! Balance will update shortly.", { id: "claim-tx" });
-  setClaimBurst(true);
-  setTimeout(() => setClaimBurst(false), 800);
-   fetchAllChainBalances(address);
-        Promise.allSettled([fetchHistory(), fetchLeaderboard()]);
-  return; // exit without throwing
-}
-
-      // 5. Success
-      toast.success("Drop Points claimed! \uD83C\uDF89", { id: "claim-tx" });
+      // 6. Success
+      toast.success("Drop Points claimed! 🎉", { id: "claim-tx" });
       setClaimBurst(true);
       setTimeout(() => setClaimBurst(false), 800);
 
@@ -516,7 +498,10 @@ try {
       const msg: string = error?.reason || error?.message || "Claim failed";
       if (msg.toLowerCase().includes("user rejected") || error?.code === 4001) {
         toast.error("Transaction cancelled.", { id: "claim-tx" });
-      } else if (msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("already used")) {
+      } else if (
+        msg.toLowerCase().includes("cooldown") ||
+        msg.toLowerCase().includes("already used")
+      ) {
         toast.error("Already claimed today.", { id: "claim-tx" });
         setCanClaim(false);
       } else {
@@ -529,14 +514,16 @@ try {
     }
   };
 
-  // ── Tabs config ──────────────────────────────────────────────────────────────
+  // ── Tabs config ───────────────────────────────────────────────────────────────
+
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "overview",    label: "Overview",    icon: <Droplets size={13} /> },
     { id: "history",     label: "History",     icon: <History size={13} /> },
-    { id: "leaderboard", label: "Leaderboard", icon: <Trophy size={13} /> },
+    
   ];
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
+
   return (
     <div
       id="claim-points"
@@ -563,7 +550,7 @@ try {
             )}
             {address && (
               <button
-                onClick={() => fetchAllChainBalances(address)}
+                onClick={() => fetchChainData(address)}
                 className="p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
                 title="Refresh on-chain balances"
               >
@@ -579,7 +566,9 @@ try {
             <Image src="/drop-token.png" alt="Drop" fill className="object-contain drop-shadow-md" />
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground font-semibold">Total Earned (All Chains)</p>
+            <p className="text-[10px] text-muted-foreground font-semibold">
+              Total Earned (All Chains)
+            </p>
             {!allLoaded && address ? (
               <div className="flex items-center gap-1.5 mt-1">
                 <Loader2 size={14} className="animate-spin text-muted-foreground" />
@@ -672,7 +661,10 @@ try {
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg.color }} />
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ background: cfg.color }}
+                        />
                         <span className="text-xs font-semibold">{cfg.name}</span>
                       </div>
                       {loading ? (
@@ -723,7 +715,10 @@ try {
                       key={i}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-accent/30 dark:bg-accent/10 border border-border/50 group"
                     >
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: cfg?.color ?? "#888" }} />
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ background: cfg?.color ?? "#888" }}
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold">
                           +{entry.amount.toLocaleString()} pts
@@ -742,7 +737,10 @@ try {
                           rel="noopener noreferrer"
                           className="opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                          <ExternalLink size={12} className="text-muted-foreground hover:text-foreground" />
+                          <ExternalLink
+                            size={12}
+                            className="text-muted-foreground hover:text-foreground"
+                          />
                         </a>
                       )}
                     </div>
@@ -752,60 +750,7 @@ try {
             </div>
           )}
 
-          {/* Leaderboard */}
-          {activeTab === "leaderboard" && (
-            <div className="p-4 space-y-2">
-              {lbLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="h-12 rounded-xl bg-accent animate-pulse" />
-                ))
-              ) : leaderboard.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
-                  <Trophy size={28} strokeWidth={1.5} />
-                  <p className="text-xs">Leaderboard coming soon</p>
-                </div>
-              ) : (
-                leaderboard.map((entry, i) => {
-                  const isUser = address?.toLowerCase() === entry.address.toLowerCase();
-                  const medals = ["🥇", "🥈", "🥉"];
-                  return (
-                    <div
-                      key={i}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors ${
-                        isUser
-                          ? "bg-primary/10 border-primary/30"
-                          : "bg-accent/30 dark:bg-accent/10 border-border/50"
-                      }`}
-                    >
-                      <span className="w-6 text-center text-sm">
-                        {i < 3
-                          ? medals[i]
-                          : <span className="text-[11px] text-muted-foreground font-mono">{i + 1}</span>}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold truncate">
-                          {/* 👇 Use Username if available, otherwise fallback to short address 👇 */}
-                          {entry.username ? entry.username : shortAddr(entry.address)}
-                          
-                          {isUser && (
-                            <span className="ml-1.5 text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded font-bold">
-                              You
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {entry.claims} claim{entry.claims !== 1 ? "s" : ""}
-                        </p>
-                      </div>
-                      <span className="text-xs font-black tabular-nums">
-                        {entry.total_points.toLocaleString()}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
+          
         </motion.div>
       </AnimatePresence>
     </div>

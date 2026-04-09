@@ -58,7 +58,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
-import { Contract, BrowserProvider, parseEther, ZeroAddress } from "ethers";
+import { Contract, BrowserProvider, parseEther, ZeroAddress, formatUnits, parseUnits } from "ethers";
 import { Header } from "@/components/header";
 import { SubscriptionModal } from "@/components/subscribe";
 import Loading from "@/app/loading";
@@ -1542,7 +1542,9 @@ const handleRemoveAdmin = async (adminAddress: string) => {
   }
 };
 
-  const handleFundQuest = async () => {
+  // Import parseUnits if you haven't already
+
+const handleFundQuest = async () => {
     if (!walletProvider || !faucetAddress) { toast.error("Wallet not connected."); return; }
     setIsFunding(true);
 
@@ -1551,19 +1553,22 @@ const handleRemoveAdmin = async (adminAddress: string) => {
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
 
-      const baseAmountWei = parseEther(rewardPoolAmount.toString());
-
-      // 👇 CHANGED HERE: Calculate exactly 1% fee
-      const totalAmountWei = baseAmountWei + (baseAmountWei * 1n) / 100n;
-
       const tokenAddress = questData.tokenAddress;
       const ERC20_ABI = [
         "function approve(address s, uint256 a) public returns (bool)",
         "function balanceOf(address a) public view returns (uint256)",
         "function allowance(address o, address s) public view returns (uint256)",
+        "function decimals() public view returns (uint8)",
       ];
 
       const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer);
+
+      // 👇 Fetch decimals first, use them for all amount calculations
+      const decimals = await tokenContract.decimals();
+
+      const baseAmountWei = parseUnits(rewardPoolAmount.toString(), decimals);
+      const totalAmountWei = baseAmountWei + (baseAmountWei * 1n) / 100n;
+
       const balance = await tokenContract.balanceOf(userAddress);
 
       if (balance < totalAmountWei) throw new Error("Insufficient token balance for prize + fees.");
@@ -1576,8 +1581,6 @@ const handleRemoveAdmin = async (adminAddress: string) => {
       }
 
       const questContract = new Contract(faucetAddress, QUEST_ABI, signer);
-
-      // 👇 PASSED totalAmountWei HERE (so the contract receives the pool + 1% fee)
       const tx = await questContract.fund(totalAmountWei);
 
       toast.info("Funding transaction sent...");
@@ -1884,30 +1887,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
     );
   }
 
-  if (!hasUsername) {
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header pageTitle={questData?.title || "Profile Setup"} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md shadow-2xl border-orange-100 dark:border-orange-900/50 bg-white dark:bg-slate-950 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-400 to-red-500" />
-            <CardHeader className="text-center pb-2 pt-8">
-              <div className="mx-auto bg-orange-50 dark:bg-orange-900/20 p-4 rounded-full mb-4 w-fit ring-1 ring-orange-100 dark:ring-orange-800">
-                <UserCircle className="h-10 w-10 text-orange-600 dark:text-orange-500" />
-              </div>
-              <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">Profile Setup Required</CardTitle>
-              <CardDescription className="text-base mt-2 max-w-xs mx-auto leading-relaxed">To participate in Quests and earn rewards, you must set a unique <strong>Username</strong>.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-4">
-              <Button size="lg" className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold h-12" onClick={() => { const routeParam = userProfile?.username || userWalletAddress; if (routeParam) router.push(`/dashboard/${routeParam}`); }}>
-                Update Profile Details
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  
 
   if (!questData) return (<div className="flex flex-col min-h-screen"><Header pageTitle="Not Found" /><div className="p-10 text-center">Quest not found.</div></div>);
 
@@ -2258,21 +2238,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
             </div>
           </div>
         )}
-        {!creatorSubscribed && !canManageQuest && !isDemoQuest && (
-          <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-full text-red-600 dark:text-red-400">
-                <Lock className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="font-semibold text-red-900 dark:text-red-200 text-sm">Quest Temporarily Locked</p>
-                <p className="text-xs text-red-700 dark:text-red-400">
-                  The creator's subscription has expired or is inactive. Tasks and joining are paused until they renew.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        
         {questTiming.isLive && questData?.endDate && (
           <div className="rounded-xl border border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-3">

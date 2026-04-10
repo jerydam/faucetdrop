@@ -2081,7 +2081,7 @@ const handleFundQuest = async () => {
                           <Badge variant={questData.isActive ? "default" : "destructive"} className="h-6 px-3">
                             {questData.isActive ? "Live" : "Paused"}
                           </Badge>
-                          {questData.isFunded && (
+                          {isCreator && questData.isFunded && (
                             <Badge className="bg-green-500 hover:bg-green-600 h-6 px-3">Funded</Badge>
                           )}
                         </div>
@@ -2877,7 +2877,7 @@ const handleFundQuest = async () => {
                         <CardHeader className="pb-2"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</CardTitle></CardHeader>
                         <CardContent className="flex items-center gap-2">
                           <Badge variant={questData.isActive ? "default" : "destructive"}>{questData.isActive ? "Active" : "Paused"}</Badge>
-                          {questData.isFunded && <Badge className="bg-emerald-500 text-white border-0">Funded</Badge>}
+                          {isCreator && questData.isFunded && <Badge className="bg-emerald-500 text-white border-0">Funded</Badge>}
                         </CardContent>
                       </Card>
                     </div>

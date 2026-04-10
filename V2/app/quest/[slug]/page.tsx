@@ -2712,7 +2712,7 @@ const handleFundQuest = async () => {
                         Claim Window Closed
                       </Badge>
                     ) : claimStatus.isActive ? (
-                      <Badge className="bg-green-600 animate-pulse text-xs">
+                      <Badge className="bg-green-600 animate-pulse text-xs">  
                         <Gift className="h-3 w-3 mr-1" /> Claim Active
                       </Badge>
                     ) : null}
@@ -2750,6 +2750,41 @@ const handleFundQuest = async () => {
 
                           return (
                             <>
+                            {/* Sticky "Your Rank" row if user is outside visible range */}
+                              {currentUserEntry && (
+                                <>
+                                  
+                                  <TableRow className="bg-primary/5 hover:bg-primary/10 border border-primary/20">
+                                    <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
+                                      <span className="text-muted-foreground">#{currentUserEntry.rank}</span>
+                                    </TableCell>
+                                    <TableCell className="px-2 sm:px-4 overflow-hidden">
+                                      <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
+                                        <Avatar className="h-6 w-6 sm:h-9 sm:w-9 border border-primary/30 shrink-0">
+                                          <AvatarImage src={currentUserEntry.avatarUrl || undefined} className="object-cover" />
+                                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-[10px] sm:text-xs">
+                                            {currentUserEntry.username ? currentUserEntry.username.substring(0, 2).toUpperCase() : currentUserEntry.walletAddress.slice(0, 4)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex flex-col min-w-0">
+                                          <span className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate">
+                                            <span className="truncate">
+                                              {currentUserEntry.username || currentUserEntry.walletAddress.slice(0, 6) + "..." + currentUserEntry.walletAddress.slice(-4)}
+                                            </span>
+                                            <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
+                                              You
+                                            </Badge>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4">
+                                      {currentUserEntry.points}
+                                    </TableCell>
+                                    {claimStatus.isActive && <TableCell />}
+                                  </TableRow>
+                                </>
+                              )}
                               {visibleEntries.map((entry) => (
                                 <TableRow
                                   key={entry.walletAddress}
@@ -2824,49 +2859,7 @@ const handleFundQuest = async () => {
                                 </TableRow>
                               ))}
 
-                              {/* Sticky "Your Rank" row if user is outside visible range */}
-                              {currentUserEntry && (
-                                <>
-                                  <TableRow>
-                                    <TableCell colSpan={claimStatus.isActive ? 4 : 3} className="py-1 px-0">
-                                      <div className="flex items-center gap-2 px-2 sm:px-4 py-1">
-                                        <div className="h-px bg-border flex-1" />
-                                        <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">your rank</span>
-                                        <div className="h-px bg-border flex-1" />
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                  <TableRow className="bg-primary/5 hover:bg-primary/10 border border-primary/20">
-                                    <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
-                                      <span className="text-muted-foreground">#{currentUserEntry.rank}</span>
-                                    </TableCell>
-                                    <TableCell className="px-2 sm:px-4 overflow-hidden">
-                                      <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
-                                        <Avatar className="h-6 w-6 sm:h-9 sm:w-9 border border-primary/30 shrink-0">
-                                          <AvatarImage src={currentUserEntry.avatarUrl || undefined} className="object-cover" />
-                                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-[10px] sm:text-xs">
-                                            {currentUserEntry.username ? currentUserEntry.username.substring(0, 2).toUpperCase() : currentUserEntry.walletAddress.slice(0, 4)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex flex-col min-w-0">
-                                          <span className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate">
-                                            <span className="truncate">
-                                              {currentUserEntry.username || currentUserEntry.walletAddress.slice(0, 6) + "..." + currentUserEntry.walletAddress.slice(-4)}
-                                            </span>
-                                            <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
-                                              You
-                                            </Badge>
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4">
-                                      {currentUserEntry.points}
-                                    </TableCell>
-                                    {claimStatus.isActive && <TableCell />}
-                                  </TableRow>
-                                </>
-                              )}
+                              
                             </>
                           );
                         })()}

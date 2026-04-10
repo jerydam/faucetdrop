@@ -2415,15 +2415,29 @@ const handleFundQuest = async () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
+                    onClick={async () => {
                       setIsRefreshingUser(true);
-                      window.location.reload(); // <--- Forces a full page reload
+                      try {
+                        await refreshAllStats();
+                        // Also re-fetch participant data
+                        if (faucetAddress && userWalletAddress) {
+                          const res = await fetch(
+                            `${API_BASE_URL}/api/quests/${faucetAddress}/participant/${userWalletAddress}`
+                          );
+                          const json = await res.json();
+                          if (json.success && json.participant) {
+                            setParticipantData(json.participant);
+                          }
+                        }
+                      } finally {
+                        setIsRefreshingUser(false);
+                      }
                     }}
                     disabled={isRefreshingUser}
                     className="w-full sm:w-auto shadow-sm border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 hover:bg-slate-50 dark:hover:bg-slate-900"
                   >
                     <RefreshCcw className={`mr-2 h-3.5 w-3.5 text-primary ${isRefreshingUser ? "animate-spin" : ""}`} />
-                    {isRefreshingUser ? "Reloading..." : "Refresh Page"}
+                    {isRefreshingUser ? "Refreshing..." : "Refresh"}
                   </Button>
                 </div>
               )}

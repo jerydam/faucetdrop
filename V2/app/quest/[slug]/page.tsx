@@ -317,7 +317,7 @@ export default function QuestDetailsPage() {
   const refCode = searchParams.get("ref");
   const { address: userWalletAddress, provider: walletProvider } = useWallet();
   // Add this hook inside both files (or extract to a shared hooks file)
-
+  const [leaderboardLimit, setLeaderboardLimit] = useState(50);
   const rawSlug = (params.addresss || params.faucetAddress) as string | undefined;
 
   const refreshAllStats = async () => {
@@ -2722,100 +2722,195 @@ const handleFundQuest = async () => {
 
                 {/* Reduced horizontal padding on mobile to maximize space */}
                 <CardContent className="px-2 sm:px-6">
-                  {/* table-fixed ensures the table doesn't expand past 100% width */}
-                  <Table className="table-fixed w-full">
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent">
-                        {/* Specific responsive widths to prevent column shifting */}
-                        <TableHead className="w-[45px] sm:w-[80px] px-1 sm:px-4 text-center sm:text-left">Rank</TableHead>
-                        <TableHead className="px-2 sm:px-4">Participant</TableHead>
-                        <TableHead className="text-right w-[60px] sm:w-[100px] px-1 sm:px-4">Points</TableHead>
-                        {claimStatus.isActive && <TableHead className="text-right w-[75px] sm:w-[120px] px-1 sm:px-4">Action</TableHead>}
+                <Table className="table-fixed w-full">
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-[45px] sm:w-[80px] px-1 sm:px-4 text-center sm:text-left">Rank</TableHead>
+                      <TableHead className="px-2 sm:px-4">Participant</TableHead>
+                      <TableHead className="text-right w-[60px] sm:w-[100px] px-1 sm:px-4">Points</TableHead>
+                      {claimStatus.isActive && <TableHead className="text-right w-[75px] sm:w-[120px] px-1 sm:px-4">Action</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredLeaderboard.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={claimStatus.isActive ? 4 : 3} className="text-center py-10 text-muted-foreground">
+                          No participants yet. Be the first to join!
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredLeaderboard.length === 0 ? (
-                        <TableRow><TableCell colSpan={claimStatus.isActive ? 4 : 3} className="text-center py-10 text-muted-foreground">No participants yet. Be the first to join!</TableCell></TableRow>
-                      ) : (
-                        displayLeaderboard.map((entry) => (
-                          <TableRow key={entry.walletAddress} className={entry.walletAddress === userWalletAddress ? "bg-primary/5 hover:bg-primary/10" : ""}>
-                            <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
-                              {entry.rank === 1 && "🥇"}{entry.rank === 2 && "🥈"}{entry.rank === 3 && "🥉"}{entry.rank > 3 && <span className="text-muted-foreground">#{entry.rank}</span>}
-                            </TableCell>
-                            <TableCell className="px-2 sm:px-4 overflow-hidden">
-                              <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
-                                <Avatar
-                                  className="h-6 w-6 sm:h-9 sm:w-9 border border-slate-200 dark:border-slate-700 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                                  onClick={() => handleParticipantClick(entry)}
+                    ) : (
+                      <>
+                        {/* Always show current user's row if they exist but are outside the visible limit */}
+                        {(() => {
+                          const visibleEntries = displayLeaderboard.slice(0, leaderboardLimit);
+                          const currentUserInVisible = visibleEntries.some(e => e.walletAddress === userWalletAddress);
+                          const currentUserEntry = !currentUserInVisible
+                            ? displayLeaderboard.find(e => e.walletAddress === userWalletAddress)
+                            : null;
+
+                          return (
+                            <>
+                              {visibleEntries.map((entry) => (
+                                <TableRow
+                                  key={entry.walletAddress}
+                                  className={entry.walletAddress === userWalletAddress ? "bg-primary/5 hover:bg-primary/10" : ""}
                                 >
-                                  <AvatarImage src={entry.avatarUrl || undefined} alt={entry.username || ""} className="object-cover" />
-                                  <AvatarFallback className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[10px] sm:text-xs">
-                                    {entry.username ? entry.username.substring(0, 2).toUpperCase() : entry.walletAddress.slice(0, 4)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                {/* min-w-0 is crucial here to allow the truncate class to work inside a flex container */}
-                                <div className="flex flex-col min-w-0">
-                                  <span
-                                    className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate cursor-pointer hover:text-primary transition-colors"
-                                    onClick={() => handleParticipantClick(entry)}
-                                  >
-                                    <span className="truncate">
-                                      {entry.username || entry.walletAddress.slice(0, 6) + "..." + entry.walletAddress.slice(-4)}
-                                    </span>
-                                    {entry.walletAddress === userWalletAddress && (
-                                      <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
-                                        You
-                                      </Badge>
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4 truncate">
-                              {entry.points}
-                            </TableCell>
-                            {claimStatus.isActive && (
-                              <TableCell className="text-right px-1 sm:px-4">
-                                {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
-                                  entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
-                                    claimState.hasClaimed ? (
-                                      <Badge className="bg-green-500 text-white border-0 text-[10px] sm:text-xs px-1 sm:px-2">Claimed ✅</Badge>
-                                    ) : (claimState.isExpiredOnChain || isClaimWindowClosed) ? (
-                                      <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-[10px] sm:text-xs">
-                                        Expired
-                                      </Badge>
-                                    ) : (
-                                      <Button
-                                        size="sm"
-                                        onClick={handleClaimReward}
-                                        disabled={isClaiming || claimState.isChecking}
-                                        className="
-                                      h-7 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-sm w-full sm:w-auto 
-                                      font-bold shadow-sm transition-all duration-300 flex items-center justify-center
-                                      bg-primary/10 backdrop-blur-md border border-primary/20 text-primary
-                                      hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25
-                                    "
+                                  <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
+                                    {entry.rank === 1 && "🥇"}
+                                    {entry.rank === 2 && "🥈"}
+                                    {entry.rank === 3 && "🥉"}
+                                    {entry.rank > 3 && <span className="text-muted-foreground">#{entry.rank}</span>}
+                                  </TableCell>
+                                  <TableCell className="px-2 sm:px-4 overflow-hidden">
+                                    <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
+                                      <Avatar
+                                        className="h-6 w-6 sm:h-9 sm:w-9 border border-slate-200 dark:border-slate-700 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                                        onClick={() => handleParticipantClick(entry)}
                                       >
-                                        {isClaiming || claimState.isChecking ? <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" /> : null}
-                                        <span className="truncate">
-                                          {isClaiming ? "Claiming..." : claimState.isChecking ? "Checking..." : "Claim"}
+                                        <AvatarImage src={entry.avatarUrl || undefined} alt={entry.username || ""} className="object-cover" />
+                                        <AvatarFallback className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[10px] sm:text-xs">
+                                          {entry.username ? entry.username.substring(0, 2).toUpperCase() : entry.walletAddress.slice(0, 4)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div className="flex flex-col min-w-0">
+                                        <span
+                                          className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate cursor-pointer hover:text-primary transition-colors"
+                                          onClick={() => handleParticipantClick(entry)}
+                                        >
+                                          <span className="truncate">
+                                            {entry.username || entry.walletAddress.slice(0, 6) + "..." + entry.walletAddress.slice(-4)}
+                                          </span>
+                                          {entry.walletAddress === userWalletAddress && (
+                                            <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
+                                              You
+                                            </Badge>
+                                          )}
                                         </span>
-                                      </Button>
-                                    )
-                                  ) : (
-                                    <span className="text-[9px] sm:text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-1 sm:px-2 py-1 rounded whitespace-nowrap">
-                                      Not Eligible
-                                    </span>
-                                  )
-                                )}
-                              </TableCell>
-                            )}
-                          </TableRow>
-                        ))
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4 truncate">
+                                    {entry.points}
+                                  </TableCell>
+                                  {claimStatus.isActive && (
+                                    <TableCell className="text-right px-1 sm:px-4">
+                                      {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
+                                        entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
+                                          claimState.hasClaimed ? (
+                                            <Badge className="bg-green-500 text-white border-0 text-[10px] sm:text-xs px-1 sm:px-2">Claimed ✅</Badge>
+                                          ) : (claimState.isExpiredOnChain || isClaimWindowClosed) ? (
+                                            <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-[10px] sm:text-xs">
+                                              Expired
+                                            </Badge>
+                                          ) : (
+                                            <Button
+                                              size="sm"
+                                              onClick={handleClaimReward}
+                                              disabled={isClaiming || claimState.isChecking}
+                                              className="h-7 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-sm w-full sm:w-auto font-bold shadow-sm transition-all duration-300 flex items-center justify-center bg-primary/10 backdrop-blur-md border border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25"
+                                            >
+                                              {isClaiming || claimState.isChecking ? <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" /> : null}
+                                              <span className="truncate">{isClaiming ? "Claiming..." : claimState.isChecking ? "Checking..." : "Claim"}</span>
+                                            </Button>
+                                          )
+                                        ) : (
+                                          <span className="text-[9px] sm:text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-1 sm:px-2 py-1 rounded whitespace-nowrap">
+                                            Not Eligible
+                                          </span>
+                                        )
+                                      )}
+                                    </TableCell>
+                                  )}
+                                </TableRow>
+                              ))}
+
+                              {/* Sticky "Your Rank" row if user is outside visible range */}
+                              {currentUserEntry && (
+                                <>
+                                  <TableRow>
+                                    <TableCell colSpan={claimStatus.isActive ? 4 : 3} className="py-1 px-0">
+                                      <div className="flex items-center gap-2 px-2 sm:px-4 py-1">
+                                        <div className="h-px bg-border flex-1" />
+                                        <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">your rank</span>
+                                        <div className="h-px bg-border flex-1" />
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                  <TableRow className="bg-primary/5 hover:bg-primary/10 border border-primary/20">
+                                    <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
+                                      <span className="text-muted-foreground">#{currentUserEntry.rank}</span>
+                                    </TableCell>
+                                    <TableCell className="px-2 sm:px-4 overflow-hidden">
+                                      <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
+                                        <Avatar className="h-6 w-6 sm:h-9 sm:w-9 border border-primary/30 shrink-0">
+                                          <AvatarImage src={currentUserEntry.avatarUrl || undefined} className="object-cover" />
+                                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-[10px] sm:text-xs">
+                                            {currentUserEntry.username ? currentUserEntry.username.substring(0, 2).toUpperCase() : currentUserEntry.walletAddress.slice(0, 4)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex flex-col min-w-0">
+                                          <span className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate">
+                                            <span className="truncate">
+                                              {currentUserEntry.username || currentUserEntry.walletAddress.slice(0, 6) + "..." + currentUserEntry.walletAddress.slice(-4)}
+                                            </span>
+                                            <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
+                                              You
+                                            </Badge>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4">
+                                      {currentUserEntry.points}
+                                    </TableCell>
+                                    {claimStatus.isActive && <TableCell />}
+                                  </TableRow>
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </TableBody>
+                </Table>
+
+                {/* ── Show More / Row Count Controls ── */}
+                {displayLeaderboard.length > 50 && (
+                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-xs text-muted-foreground">
+                      Showing <span className="font-semibold text-foreground">{Math.min(leaderboardLimit, displayLeaderboard.length)}</span> of{" "}
+                      <span className="font-semibold text-foreground">{displayLeaderboard.length}</span> participants
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap justify-center">
+                      {/* Row count selector — only show increments that make sense */}
+                      {[50, 100, 150, 200].filter(n => n <= displayLeaderboard.length + 49).map(n => (
+                        <button
+                          key={n}
+                          onClick={() => setLeaderboardLimit(n)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                            leaderboardLimit === n
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:text-primary"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      {leaderboardLimit < displayLeaderboard.length && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLeaderboardLimit(prev => prev + 50)}
+                          className="h-8 text-xs font-semibold"
+                        >
+                          Show More +50
+                        </Button>
                       )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
               </Card>
             </TabsContent>
 

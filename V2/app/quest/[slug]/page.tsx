@@ -2640,13 +2640,15 @@ const handleFundQuest = async () => {
                       ${status === "rejected" ? "border-red-500/50 bg-red-50/30 dark:bg-red-950/20" : ""}`}>
       <CardContent className="p-5 flex flex-col h-full">
                                 <div className="flex justify-between items-start mb-4">
-                                  <div className={`p-2 rounded-lg ${isLocked || !participantData ? "bg-slate-200 dark:bg-slate-800" : status === "rejected" ? "bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400" : "bg-primary/10 text-primary"}`}>
-                                    {isLocked || !participantData ? <Lock className="h-5 w-5" /> : status === "rejected" ? <X className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
-                                  </div>
-                                  <div className="flex flex-col items-end gap-1">
-                                    {status === "rejected" && <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">Rejected</Badge>}
-                                  </div>
+                                <div className={`p-2 rounded-lg ${isLocked || !participantData ? "bg-slate-200 dark:bg-slate-800" : status === "rejected" ? "bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400" : "bg-primary/10 text-primary"}`}>
+                                  {isLocked || !participantData ? <Lock className="h-5 w-5" /> : status === "rejected" ? <X className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
                                 </div>
+                                <div className="flex flex-col items-end gap-1">
+                                  {/* ADD THIS LINE */}
+                                  <Badge variant="secondary">+{task.points} pts</Badge>
+                                  {status === "rejected" && <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">Rejected</Badge>}
+                                </div>
+                              </div>
                                 <div className="mb-6 flex-1">
                                   <h3 className="font-bold text-lg mb-2 group-hover:text-primary transition-colors">{task.title}</h3>
                                   <p className="text-sm text-muted-foreground line-clamp-3">{task.description}</p>

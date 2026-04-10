@@ -1795,7 +1795,7 @@ const handleFundQuest = async () => {
   }, [questData, startCountdown]); // <--- ADD START COUNTDOWN HERE
 
   // ── UPDATED getTaskStatus: uses activeStages + stagesMeta from backend ──
-  const getTaskStatus = (task: QuestTask) => {
+  const getTaskStatus = (task: QuestTask): "completed" | "pending" | "rejected" | "available" | "locked" => {
     if (!creatorSubscribed) return "locked";
     if (!participantData) return "locked";
 
@@ -2610,22 +2610,26 @@ const handleFundQuest = async () => {
                                     );
                           }
 
-                          const status = getTaskStatus(task);
+                          const status: "completed" | "pending" | "rejected" | "available" | "locked" = getTaskStatus(task as QuestTask);
                           const isLocked = status === "locked";
+                          if (status === "completed") return null;
 
                           const taskSubmissions = userProgress.submissions?.filter((s: any) => String(s.taskId || s.task_id) === String(task.id)) || [];
                           taskSubmissions.sort((a: any, b: any) => new Date(b.submittedAt || b.submitted_at || 0).getTime() - new Date(a.submittedAt || a.submitted_at || 0).getTime());
                           const latestSub = taskSubmissions[0];
 
                           return (
-                            <Card key={task.id} className={`group relative overflow-hidden transition-all duration-300 h-full flex flex-col ${isLocked || !participantData ? "opacity-50" : "hover:shadow-lg hover:-translate-y-1 bg-white dark:bg-slate-950"} ${status === "completed" ? "border-green-500/30 bg-green-50/20" : ""} ${status === "pending" ? "border-orange-500/30 bg-orange-50/20" : ""} ${status === "rejected" ? "border-red-500/50 bg-red-50/30 dark:bg-red-950/20" : ""}`}>
-                              <CardContent className="p-5 flex flex-col h-full">
+                            <Card key={task.id} 
+          className={`group relative overflow-hidden transition-all duration-300 h-full flex flex-col 
+                      ${isLocked || !participantData ? "opacity-50" : "hover:shadow-lg hover:-translate-y-1 bg-white dark:bg-slate-950"}
+                      ${status === "pending" ? "border-orange-500/30 bg-orange-50/20" : ""}
+                      ${status === "rejected" ? "border-red-500/50 bg-red-50/30 dark:bg-red-950/20" : ""}`}>
+      <CardContent className="p-5 flex flex-col h-full">
                                 <div className="flex justify-between items-start mb-4">
                                   <div className={`p-2 rounded-lg ${isLocked || !participantData ? "bg-slate-200 dark:bg-slate-800" : status === "rejected" ? "bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-400" : "bg-primary/10 text-primary"}`}>
                                     {isLocked || !participantData ? <Lock className="h-5 w-5" /> : status === "rejected" ? <X className="h-5 w-5" /> : <Trophy className="h-5 w-5" />}
                                   </div>
                                   <div className="flex flex-col items-end gap-1">
-                                    <Badge variant={status === "completed" ? "default" : "secondary"} className={status === "completed" ? "bg-green-600" : ""}>{task.points} PTS</Badge>
                                     {status === "rejected" && <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">Rejected</Badge>}
                                   </div>
                                 </div>
@@ -2649,25 +2653,39 @@ const handleFundQuest = async () => {
                                     {task.verificationType === "manual_link" && <ExternalLink className="h-3 w-3" />}
                                     {task.verificationType.replace("manual_", "").replace("auto_", "")}
                                   </div>
-                                  {status === "completed" ? (
-                                    ""
-                                  ) : status === "pending" ? (
-                                    <div className="flex items-center text-orange-600 text-sm font-bold"><Clock className="h-4 w-4 mr-1" /> Reviewing</div>
-                                  ) : isLocked || !participantData ? (
-                                    <span className="text-sm text-muted-foreground">{!participantData ? "Join Required" : "Locked"}</span>
-                                  ) : (
-                                    !canManageQuest ? (
-                                      <Button size="sm" onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }} disabled={!participantData || !questTiming.isLive || (status !== "available" && status !== "rejected")} className={status === "rejected" ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"}>
-                                        {questTiming.notStartedYet ? "Starts Soon" : status === "rejected" ? "Try Again" : "Open Task"}
-                                      </Button>
-                                    ) : (
-                                      <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Preview Mode</span>
-                                    )
-                                  )}
-                                </div>
-                              </CardContent>
-                              {(!isLocked && (status === "available" || status === "rejected") && participantData) && <div className="absolute bottom-0 left-0 w-full h-1 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />}
-                            </Card>
+                                  {status === "pending" ? (
+            <div className="flex items-center text-orange-600 text-sm font-bold">
+              <Clock className="h-4 w-4 mr-1" /> Reviewing
+            </div>
+          ) : isLocked || !participantData ? (
+            <span className="text-sm text-muted-foreground">
+              {!participantData ? "Join Required" : "Locked"}
+            </span>
+          ) : !canManageQuest ? (
+            <Button
+              size="sm"
+              onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }}
+              disabled={!participantData || !questTiming.isLive || (status !== "available" && status !== "rejected")}
+              className={status === "rejected" ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"}
+            >
+              {questTiming.notStartedYet 
+                ? "Starts Soon" 
+                : status === "rejected" 
+                  ? "Try Again" 
+                  : "Open Task"}
+            </Button>
+          ) : (
+            <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
+              Preview Mode
+            </span>
+          )}
+        </div>
+      </CardContent>
+
+      {(!isLocked && (status === "available" || status === "rejected") && participantData) && (
+        <div className="absolute bottom-0 left-0 w-full h-1 bg-primary transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left" />
+      )}
+    </Card>
                           );
 
                         })}

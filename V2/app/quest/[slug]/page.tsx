@@ -2378,7 +2378,7 @@ const handleFundQuest = async () => {
               {hasNewBackendData && !isCurrentStageUnlocked && (
                 <div className="flex flex-col sm:flex-row sm:justify-between text-xs text-muted-foreground mt-3 sm:mt-2 gap-1.5 sm:gap-0">
                   <span className="font-medium">{pointsEarnedInCurrentStage} pts earned</span>
-                  <span className="sm:text-right">{unlockThreshold} pts to unlock next stage (70% of {stageTotal})</span>
+                  
                 </div>
               )}
             </CardContent>

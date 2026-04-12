@@ -283,7 +283,7 @@ export default function FaucetDetails() {
     const triggerForceSync = async (addressToSync: string) => {
         try {
             console.log(`Triggering force sync for ${addressToSync}...`);
-            const res = await fetch(`https://faucetdrops-indexer.onrender.com/force-sync-faucet/${addressToSync}`, {
+            const res = await fetch(`https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app/force-sync-faucet/${addressToSync}`, {
                 method: "POST",
             });
             const data = await res.json();

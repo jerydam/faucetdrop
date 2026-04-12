@@ -50,7 +50,7 @@ export function FaucetList() {
     else setLoadingClaims(true);
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://faucetdrops-indexer.onrender.com";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
       const response = await fetch(`${apiUrl}/api/claims?limit=5000`, {
         cache: forceRefresh ? 'no-store' : 'default'
       });

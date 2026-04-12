@@ -39,4 +39,4 @@ export function getBrowserFingerprint(): string {
   return fp;
 }
 
-export const API = process.env.NEXT_PUBLIC_API_URL || "https://faucetdrops-indexer.onrender.com";
+export const API = process.env.NEXT_PUBLIC_API_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";

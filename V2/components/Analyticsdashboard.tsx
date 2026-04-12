@@ -75,7 +75,7 @@ export interface QuizItem {
 
 type Tab = "faucet" | "quest" | "quiz";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetdrops-indexer.onrender.com";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
 
 const EMPTY_FAUCET: FaucetAnalytics = {
   totalFaucets: 0, totalDrops: 0, uniqueUsers: 0, avgDropPerUser: 0,

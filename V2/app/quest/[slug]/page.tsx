@@ -1796,6 +1796,7 @@ const handleFundQuest = async () => {
 
   // ── UPDATED getTaskStatus: uses activeStages + stagesMeta from backend ──
   const getTaskStatus = (task: QuestTask): "completed" | "pending" | "rejected" | "available" | "locked" => {
+    if (canManageQuest) return "available";
     if (!creatorSubscribed) return "locked";
     if (!participantData) return "locked";
 
@@ -2446,7 +2447,7 @@ const handleFundQuest = async () => {
             {/* ── TASKS TAB ── */}
             <TabsContent value="tasks" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="relative">
-                {!participantData && (
+                {!participantData && !canManageQuest && (
                   <div className="absolute inset-0 z-40 pointer-events-auto cursor-not-allowed" />
                 )}
                 {stagesToRender.map((stage) => {
@@ -2477,7 +2478,7 @@ const handleFundQuest = async () => {
                   }
 
                   // Lock everything if quest hasn't started
-                  if (isQuestNotStarted) isLockedStage = true;
+                  if (canManageQuest) isLockedStage = false;
 
                   // ── Per-stage progress info (shown in stage header) ──
                   const stageProgressLabel = stageMeta
@@ -2489,7 +2490,7 @@ const handleFundQuest = async () => {
                     : null;
 
                   return (
-                    <div key={stage} className={`space-y-4 ${isLockedStage || !participantData || isQuestNotStarted ? "opacity-50" : ""}`}>
+                    <div key={stage} className={`space-y-4 ${(isLockedStage || !participantData || isQuestNotStarted) && !canManageQuest ? "opacity-50" : ""}`}>
                       <div className="flex items-center gap-4">
                         <Badge
                           variant="outline"
@@ -2673,7 +2674,7 @@ const handleFundQuest = async () => {
             <div className="flex items-center text-orange-600 text-sm font-bold">
               <Clock className="h-4 w-4 mr-1" /> Reviewing
             </div>
-          ) : isLocked || !participantData ? (
+          ) : isLocked || (!participantData && !canManageQuest) ? (
             <span className="text-sm text-muted-foreground">
               {!participantData ? "Join Required" : "Locked"}
             </span>
@@ -2691,10 +2692,15 @@ const handleFundQuest = async () => {
                   : "Open Task"}
             </Button>
           ) : (
-            <span className="text-xs font-medium text-muted-foreground bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
-              Preview Mode
-            </span>
-          )}
+            <Button
+            size="sm"
+                variant="outline"
+                onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }}
+                className="text-xs text-muted-foreground"
+              >
+                Preview Task
+            </Button>
+            )}
         </div>
       </CardContent>
 
@@ -3340,7 +3346,12 @@ const handleFundQuest = async () => {
               </CardHeader>
 
               <CardContent className="pt-6 space-y-6 overflow-y-auto flex-1">
-
+              {canManageQuest && (
+              <div className="flex items-center gap-2 p-3 mb-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-xs text-yellow-800 dark:text-yellow-300">
+                <Shield className="h-4 w-4 shrink-0 text-yellow-500" />
+                <span><strong>Admin Preview</strong> — You can only view this task.</span>
+              </div>
+            )}
 
                 {/* ── CUSTOM TASK BLOCK ── */}
                 {(() => {
@@ -3596,7 +3607,7 @@ const handleFundQuest = async () => {
                 {/* Intelligent Disable Logic */}
                 <Button
                   onClick={handleSubmitTask}
-                  disabled={(() => {
+                  disabled={canManageQuest || (() => {
                     if (submittingTaskId === selectedTask.id) return true;
                     const vType = selectedTask.verificationType;
 

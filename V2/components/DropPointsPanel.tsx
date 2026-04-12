@@ -12,6 +12,9 @@ import {
   ExternalLink,
   RefreshCw,
   AlertCircle,
+  Link,
+  ShoppingBag,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
@@ -731,7 +734,35 @@ export default function DropPointsPanel() {
               <><Zap size={14} /> Claim Daily Drop Points</>
             )}
           </motion.button>
-        </div>
+         </div>
+
+        {/* Redeem link */}
+        <div
+  className="mt-3 w-full group relative overflow-hidden flex items-center gap-3 px-4 py-3
+    rounded-xl border border-border/40 bg-accent/20 cursor-not-allowed opacity-60"
+>
+  {/* Icon */}
+  <div className="w-8 h-8 rounded-lg bg-accent border border-border/50
+    flex items-center justify-center shrink-0">
+    <ShoppingBag size={14} className="text-muted-foreground" />
+  </div>
+
+  {/* Text */}
+  <div className="flex-1 text-left">
+    <p className="text-[11px] font-bold text-foreground leading-none mb-0.5">
+      Redeem at Merch Store
+    </p>
+    <p className="text-[10px] text-muted-foreground leading-none">
+      Trade DROP points for exclusive gear
+    </p>
+  </div>
+
+  {/* Coming soon badge */}
+  <span className="text-[9px] font-black px-2 py-0.5 rounded-full
+    bg-amber-500/15 border border-amber-500/30 text-amber-500 shrink-0">
+    SOON
+  </span>
+</div>
       </div>
 
       {/* Tabs */}

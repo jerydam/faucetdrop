@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Contract, parseEther } from "ethers";
+import { Contract, parseEther, JsonRpcProvider } from "ethers";
+import { REDEEM_ABI } from "@/lib/abis";
 import {
   ShoppingBag, Droplets, X, CheckCircle2,
-  AlertCircle, RefreshCw, ExternalLink,
+  AlertCircle, RefreshCw, ExternalLink, Loader2,
+  ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useWallet } from "@/hooks/use-wallet";
@@ -18,11 +20,11 @@ import { NetworkSelector } from "@/components/network-selector";
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 const POINTS_CONTRACT_ADDRESSES: Record<number, string> = {
-  42220: "0xYOUR_CELO_CONTRACT_ADDRESS",
-  8453:  "0xYOUR_BASE_CONTRACT_ADDRESS",
-  42161: "0xYOUR_ARB_CONTRACT_ADDRESS",
-  56:    "0xYOUR_BNB_CONTRACT_ADDRESS",
-  1135:  "0xYOUR_LISK_CONTRACT_ADDRESS",
+  42220: "0xF8F6D74E61A0FC2dd2feCd41dE384ba2fbf91b9D",
+  8453:  "0x42fcB7C4D4a36D772c430ee8C7d026f627365BcB",
+  42161: "0xEcb026D22f9aA7FD9Aa83B509834dB8Fd66B27F6",
+  56:    "0x4C603fe32fe590D8A47B7f23b027dc24C2c762B1",
+  1135:  "0x28B9DAB4Fd2CD9bF1A4773dB858e03Ee178AE075",
 };
 
 const CHAIN_META: Record<number, { name: string; color: string; explorer: string }> = {
@@ -41,8 +43,7 @@ const RPC_URLS: Record<number, string> = {
   1135:  "https://rpc.api.lisk.com",
 };
 
-const REDEEM_ABI = [
-  "function redeem(uint256 amount, string calldata rewardId) external",
+const BALANCE_ABI = [
   "function balanceOf(address account) external view returns (uint256)",
 ];
 
@@ -53,7 +54,7 @@ const MERCH_ITEMS = [
     id: "merch_tshirt_01",
     title: "Builder T-Shirt",
     description: "Premium 280g cotton, embroidered FaucetDrops logo. Ships worldwide.",
-    cost: 50,
+    cost: 500,
     stock: 50,
     tag: "POPULAR" as const,
   },
@@ -61,7 +62,7 @@ const MERCH_ITEMS = [
     id: "merch_hoodie_01",
     title: "Genesis Hoodie",
     description: "400g fleece, dark-mode inspired. Embroidered chest & back.",
-    cost: 20,
+    cost: 1200,
     stock: 15,
     tag: "LIMITED" as const,
   },
@@ -69,21 +70,201 @@ const MERCH_ITEMS = [
     id: "merch_cap_01",
     title: "Drop Points Cap",
     description: "Unstructured 6-panel dad cap, adjustable strap. One size.",
-    cost: 35,
+    cost: 350,
     stock: 30,
     tag: null,
   },
 ];
 
+// ─── TYPES ───────────────────────────────────────────────────────────────────
+
 type MerchItem = typeof MERCH_ITEMS[0];
 type ModalStep = "form" | "chain" | "confirm" | "processing" | "success";
+const MERCH_IMAGES: Record<string, { front: string; back: string } | null> = {
+  merch_tshirt_01: {
+    front: "/tshirt-front.jpg",
+    back:  "/tshirt-back.jpg",
+  },
+  merch_hoodie_01: null,
+  merch_cap_01:    null,
+};
+interface ChainBalance {
+  chainId: number;
+  balance: number;
+  loading: boolean;
+  error: boolean;
+}
 
 interface ShippingForm {
   fullName: string; email: string; street: string;
   city: string; state: string; zip: string; country: string;
 }
 
-// ─── CHECKOUT MODAL ───────────────────────────────────────────────────────────
+// ─── BALANCE BREAKDOWN PILL ───────────────────────────────────────────────────
+
+function BalanceBreakdown({
+  chainBalances,
+  totalBalance,
+  loading,
+  onRefresh,
+}: {
+  chainBalances: ChainBalance[];
+  totalBalance: number;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="bg-card border border-border rounded-2xl overflow-hidden min-w-[240px]">
+      {/* Total row */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => e.key === "Enter" && setOpen((o) => !o)}
+        className="w-full flex items-center gap-4 p-5 hover:bg-accent/20 transition-colors cursor-pointer"
+      >
+        <div className="w-11 h-11 relative shrink-0">
+          <Image src="/drop-token.png" alt="DROP" fill className="object-contain" />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+            Total Balance
+          </p>
+          {loading ? (
+            <div className="flex items-center gap-2 mt-1">
+              <Loader2 size={14} className="animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Checking chains…</span>
+            </div>
+          ) : (
+            <p className="text-2xl font-black tabular-nums">
+              {totalBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); onRefresh(); }}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          </button>
+          <ChevronDown
+            size={15}
+            className={`text-muted-foreground transition-transform duration-200
+              ${open ? "rotate-180" : ""}`}
+          />
+        </div>
+      </div>
+
+      {/* Per-chain breakdown */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden border-t border-border"
+          >
+            <div className="px-5 py-3 space-y-2.5">
+              {chainBalances.map((cb) => {
+                const meta = CHAIN_META[cb.chainId];
+                return (
+                  <div key={cb.chainId} className="flex items-center gap-3">
+                    {/* Chain color dot */}
+                    <div
+                      className="w-5 h-5 rounded-md flex items-center justify-center
+                        text-[7px] font-black shrink-0"
+                      style={{
+                        background: `${meta.color}18`,
+                        border: `1px solid ${meta.color}35`,
+                        color: meta.color,
+                      }}
+                    >
+                      {meta.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <span className="text-xs text-muted-foreground flex-1">{meta.name}</span>
+                    {cb.loading ? (
+                      <Loader2 size={11} className="animate-spin text-muted-foreground" />
+                    ) : cb.error ? (
+                      <span className="text-[10px] text-destructive/60">—</span>
+                    ) : (
+                      <span className={`text-xs font-black tabular-nums
+                        ${cb.balance > 0 ? "text-foreground" : "text-muted-foreground/40"}`}>
+                        {cb.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Divider + total */}
+              <div className="border-t border-border pt-2.5 flex items-center justify-between">
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                  Total
+                </span>
+                <span className="text-sm font-black text-primary tabular-nums">
+                  {totalBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} DROP
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+function MerchCard3D({ itemId }: { itemId: string }) {
+  const [flipped, setFlipped] = useState(false);
+  const images = MERCH_IMAGES[itemId];
+
+  if (!images) {
+    return <ShoppingBag className="w-16 h-16 text-muted-foreground/25" />;
+  }
+
+  return (
+    <div
+      className="w-full h-full"
+      style={{ perspective: "900px" }}
+      onMouseEnter={() => setFlipped(true)}
+      onMouseLeave={() => setFlipped(false)}
+    >
+      <motion.div
+        animate={{ rotateY: flipped ? 180 : 0 }}
+        transition={{ type: "spring", stiffness: 180, damping: 22 }}
+        style={{ transformStyle: "preserve-3d", position: "relative", width: "100%", height: "100%" }}
+      >
+        {/* Front */}
+        <div style={{ backfaceVisibility: "hidden", position: "absolute", inset: 0 }}>
+          <Image
+            src={images.front}
+            alt="Front"
+            fill
+            className="object-cover"
+            sizes="(max-width: 640px) 100vw, 33vw"
+          />
+        </div>
+        {/* Back */}
+        <div style={{
+          backfaceVisibility: "hidden",
+          position: "absolute",
+          inset: 0,
+          transform: "rotateY(180deg)",
+        }}>
+          <Image
+            src={images.back}
+            alt="Back"
+            fill
+            className="object-cover"
+            sizes="(max-width: 640px) 100vw, 33vw"
+          />
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 function CheckoutModal({
   item, address, signer, chainId, onClose, onSuccess,
@@ -157,7 +338,7 @@ function CheckoutModal({
       const contract = new Contract(contractAddr, REDEEM_ABI, signer);
       toast.loading("Confirm in your wallet…", { id: tid });
       const tx = await contract.redeem(parseEther(item.cost.toString()), item.id);
-      toast.loading("Trading points on-chain…", { id: tid });
+      toast.loading("Burning points on-chain…", { id: tid });
       const receipt = await tx.wait();
       setTxHash(receipt.hash);
       toast.loading("Securing your order…", { id: tid });
@@ -231,7 +412,7 @@ function CheckoutModal({
             <h2 className="font-bold text-xl">{item.title}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {step === "form" && "Enter your shipping details"}
-              {step === "chain" && "Choose which chain to Trade from"}
+              {step === "chain" && "Choose which chain to burn from"}
               {step === "confirm" && "Review & confirm your order"}
               {step === "processing" && "Processing transaction…"}
               {step === "success" && "Order confirmed!"}
@@ -271,7 +452,7 @@ function CheckoutModal({
                 initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
                 className="space-y-2">
                 <p className="text-xs text-muted-foreground mb-4">
-                  Select the chain to Trade{" "}
+                  Select the chain to burn{" "}
                   <span className="text-primary font-bold">{item.cost.toLocaleString()} DROP</span>.
                   Balance must be sufficient on that chain.
                 </p>
@@ -337,7 +518,7 @@ function CheckoutModal({
                 {selectedChainId && (
                   <div className="bg-accent/30 border border-border rounded-2xl p-4">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
-                      Trading from
+                      Burning from
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-md text-[8px] font-black flex items-center justify-center"
@@ -364,12 +545,12 @@ function CheckoutModal({
                   </p>
                   <p className="text-xs text-primary mt-2">{form.email}</p>
                 </div>
-                {/* Trade warning */}
+                {/* Burn warning */}
                 <div className="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
                   <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
                   <p className="text-[11px] text-amber-500/80 leading-relaxed">
                     <strong>{item.cost.toLocaleString()} DROP points</strong> will be permanently
-                    Traded on{" "}
+                    burned on{" "}
                     {selectedChainId ? CHAIN_META[selectedChainId].name : "the selected chain"}.
                     This is irreversible.
                   </p>
@@ -474,7 +655,7 @@ function CheckoutModal({
                     bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98]
                     flex items-center justify-center gap-2">
                   <Droplets size={16} />
-                  Trade &amp; Order
+                  Burn &amp; Order
                 </button>
               </div>
             )}
@@ -489,27 +670,67 @@ function CheckoutModal({
 
 export default function MerchandiseStore() {
   const { address, isConnected, signer, chainId } = useWallet();
-  const [dropBalance, setDropBalance] = useState<number | null>(null);
-  const [selectedItem, setSelectedItem] = useState<MerchItem | null>(null);
-  const [balanceKey, setBalanceKey] = useState(0);
 
+  const [chainBalances, setChainBalances] = useState<ChainBalance[]>(
+    Object.keys(POINTS_CONTRACT_ADDRESSES).map((id) => ({
+      chainId: Number(id),
+      balance: 0,
+      loading: false,
+      error: false,
+    }))
+  );
+  const [dropBalance, setDropBalance] = useState<number | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MerchItem | null>(null);
+
+  // Fetch all chain balances in parallel, update state as each resolves
   const fetchBalance = useCallback(async () => {
-    if (!address) return;
-    try {
-      const res = await fetch(`${API_BASE}/api/droplist/dashboard/${address}`);
-      if (res.ok) {
-        const data = await res.json();
-        setDropBalance(data.total_points ?? 0);
-      }
-    } catch { /* silent */ }
-  }, [address, balanceKey]);
+  if (!address) return;
+
+  setBalanceLoading(true);
+  setChainBalances((prev) =>
+    prev.map((cb) => ({ ...cb, loading: true, error: false }))
+  );
+
+  const allChainIds = Object.keys(POINTS_CONTRACT_ADDRESSES).map(Number);
+
+  // Collect all results first, THEN update state once
+  const results = await Promise.allSettled(
+    allChainIds.map(async (cid) => {
+      const provider = new JsonRpcProvider(RPC_URLS[cid]);
+      const contract = new Contract(
+        POINTS_CONTRACT_ADDRESSES[cid],
+        BALANCE_ABI,
+        provider,
+      );
+      const raw: bigint = await contract.balanceOf(address);
+      return { cid, balance: Number(raw) / 1e18 };
+    })
+  );
+
+  // Build the final state in one pass
+  const updated: ChainBalance[] = allChainIds.map((cid, i) => {
+    const result = results[i];
+    if (result.status === "fulfilled") {
+      return { chainId: cid, balance: result.value.balance, loading: false, error: false };
+    }
+    console.warn(`[store] balance fetch failed for chain ${cid}:`, result.reason);
+    return { chainId: cid, balance: 0, loading: false, error: true };
+  });
+
+  const total = updated.reduce((sum, cb) => sum + cb.balance, 0);
+
+  setChainBalances(updated);
+  setDropBalance(total);
+  setBalanceLoading(false);
+}, [address]);
 
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
 
   return (
     <div className="min-h-screen text-foreground bg-background selection:bg-primary/30 pb-20">
 
-      {/* ── Navigation (matches your app's pattern) ── */}
+      {/* ── Nav (unchanged) ── */}
       <nav className="fixed top-0 inset-x-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
           <Link href="/" className="flex items-center gap-2 mr-4 shrink-0">
@@ -517,7 +738,8 @@ export default function MerchandiseStore() {
             <span className="font-black text-sm tracking-tight hidden sm:block">FaucetDrops</span>
           </Link>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            
+            <Link href="/droplist" className="hover:text-foreground transition-colors">Droplist</Link>
+            <span className="text-border">/</span>
             <span className="text-foreground font-bold">Store</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -536,31 +758,18 @@ export default function MerchandiseStore() {
           <div>
             <h1 className="text-4xl sm:text-5xl font-black tracking-tight">Merch Store</h1>
             <p className="text-muted-foreground mt-2 max-w-md text-sm leading-relaxed">
-              Trade Drop Points for exclusive FaucetDrops gear.
+              Burn Drop Points for exclusive FaucetDrops gear.
               Redeem from any supported chain as long as your balance is sufficient.
             </p>
           </div>
 
-          {/* Balance pill */}
-          <div className="bg-card border border-border rounded-2xl p-5 flex items-center gap-4 min-w-[220px]">
-            <div className="w-11 h-11 relative shrink-0">
-              <Image src="/drop-token.png" alt="DROP" fill className="object-contain" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                My Balance
-              </p>
-              <p className="text-2xl font-black tabular-nums">
-                {dropBalance !== null ? dropBalance.toLocaleString() : "---"}
-              </p>
-            </div>
-            <button
-              onClick={() => setBalanceKey((k) => k + 1)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <RefreshCw size={14} />
-            </button>
-          </div>
+          {/* ── Balance breakdown pill (replaces the old simple pill) ── */}
+          <BalanceBreakdown
+            chainBalances={chainBalances}
+            totalBalance={dropBalance ?? 0}
+            loading={balanceLoading}
+            onRefresh={fetchBalance}
+          />
         </div>
 
         {/* ── Connect prompt ── */}
@@ -573,7 +782,7 @@ export default function MerchandiseStore() {
           </div>
         )}
 
-        {/* ── Grid ── */}
+        {/* ── Grid (unchanged) ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {MERCH_ITEMS.map((item, i) => {
             const canAfford = dropBalance !== null && dropBalance >= item.cost;
@@ -589,7 +798,6 @@ export default function MerchandiseStore() {
                     ? "border-border hover:border-primary/50"
                     : "border-border opacity-60"}`}
               >
-                {/* Image / placeholder */}
                 <div className="aspect-square bg-accent/30 relative flex items-center justify-center
                   border-b border-border">
                   {item.tag && (
@@ -602,23 +810,20 @@ export default function MerchandiseStore() {
                       </span>
                     </div>
                   )}
-                  {/* Cost badge */}
                   <div className="absolute top-3 right-3 bg-background/90 backdrop-blur border border-border
                     px-2.5 py-1 rounded-full flex items-center gap-1.5 z-10">
                     <Droplets size={11} className="text-primary fill-primary/20" />
                     <span className="text-[11px] font-black">{item.cost.toLocaleString()}</span>
                   </div>
-                  <ShoppingBag className="w-16 h-16 text-muted-foreground/25" />
+                  <MerchCard3D itemId={item.id} />
                 </div>
 
-                {/* Content */}
                 <div className="p-5 flex flex-col flex-1">
                   <h3 className="font-bold text-base mb-1.5 leading-tight">{item.title}</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-3">
                     {item.description}
                   </p>
 
-                  {/* Stock + shortfall */}
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-4">
                     <div className="flex items-center gap-1.5">
                       <div className={`w-1.5 h-1.5 rounded-full
@@ -627,7 +832,7 @@ export default function MerchandiseStore() {
                     </div>
                     {isConnected && !canAfford && dropBalance !== null && (
                       <span className="text-destructive/70">
-                        Need {(item.cost - dropBalance).toLocaleString()} more
+                        Need {(item.cost - dropBalance).toLocaleString(undefined, { maximumFractionDigits: 0 })} more
                       </span>
                     )}
                   </div>
@@ -657,28 +862,16 @@ export default function MerchandiseStore() {
           })}
         </div>
 
-        {/* ── How it works ── */}
+        {/* ── How it works (unchanged) ── */}
         <div className="mt-20 pt-12 border-t border-border">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-8">
             How it works
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             {[
-              {
-                n: "01",
-                t: "Earn DROP Points",
-                d: "Complete quests and daily check-ins on any supported chain.",
-              },
-              {
-                n: "02",
-                t: "Trade to Redeem",
-                d: "Pick an item, choose which chain to Trade from, and confirm the on-chain transaction.",
-              },
-              {
-                n: "03",
-                t: "We Ship to You",
-                d: "Dispatched within 5–10 business days. Tracking confirmation goes to your email.",
-              },
+              { n: "01", t: "Earn DROP Points", d: "Complete quests and daily check-ins on any supported chain." },
+              { n: "02", t: "Burn to Redeem", d: "Pick an item, choose which chain to burn from, and confirm the on-chain transaction." },
+              { n: "03", t: "We Ship to You", d: "Dispatched within 5–10 business days. Tracking confirmation goes to your email." },
             ].map((s) => (
               <div key={s.n} className="flex gap-5">
                 <span className="text-4xl font-black text-border/60 leading-none">{s.n}</span>
@@ -701,7 +894,7 @@ export default function MerchandiseStore() {
             signer={signer}
             chainId={chainId}
             onClose={() => setSelectedItem(null)}
-            onSuccess={() => setBalanceKey((k) => k + 1)}
+            onSuccess={() => fetchBalance()}
           />
         )}
       </AnimatePresence>

@@ -20,22 +20,22 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
- interface WalletConnectButtonProps {
+interface WalletConnectButtonProps {
   className?: string; // 💡 Tell TypeScript it can accept a className
 }
 export function WalletConnectButton({ className }: WalletConnectButtonProps) {
   const { ready, authenticated, login, logout, user } = usePrivy()
   const { wallets } = useWallets()
   const { address, walletType, isConnected } = useWallet()
-  
+
   const [dbUsername, setDbUsername] = useState<string | null>(null)
   const [dbAvatarUrl, setDbAvatarUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  
+
   // Use a ref to prevent multiple sync calls during React strict mode renders
   const hasSyncedRef = useRef(false)
-  
- 
+
+
 
 
   // --- FALLBACK HELPERS ---
@@ -90,33 +90,33 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
         // 2. If user doesn't exist, AUTO-SYNC them immediately
         if (!profileExists && !hasSyncedRef.current) {
           hasSyncedRef.current = true; // Prevent duplicate calls
-          
+
           const fallbackUsername = getFallbackUsername(user) || `user_${address.slice(-4)}`;
           const fallbackAvatar = getFallbackAvatar(user);
           const email = user?.email?.address || "";
-          
+
           console.log("[AutoSync] Creating new profile for:", fallbackUsername);
 
           const syncRes = await fetch(`${API_BASE_URL}/api/profile/sync`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  wallet_address: address,
-                  username: fallbackUsername,
-                  avatar_url: fallbackAvatar,
-                  email: email
-              })
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wallet_address: address,
+              username: fallbackUsername,
+              avatar_url: fallbackAvatar,
+              email: email
+            })
           });
-          
+
           const syncData = await syncRes.json();
           if (syncData.success && syncData.profile && isMounted) {
-              setDbUsername(syncData.profile.username);
-              setDbAvatarUrl(syncData.profile.avatar_url);
-              
-              // Broadcast to the rest of the app (like the Dashboard) that the profile is ready
-              window.dispatchEvent(new CustomEvent('profileUpdated', {
-                  detail: { username: syncData.profile.username, avatarUrl: syncData.profile.avatar_url }
-              }));
+            setDbUsername(syncData.profile.username);
+            setDbAvatarUrl(syncData.profile.avatar_url);
+
+            // Broadcast to the rest of the app (like the Dashboard) that the profile is ready
+            window.dispatchEvent(new CustomEvent('profileUpdated', {
+              detail: { username: syncData.profile.username, avatarUrl: syncData.profile.avatar_url }
+            }));
           }
         }
       } catch (error) {
@@ -144,10 +144,10 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
 
   const displayName = dbUsername || "Anonymous";
   const displayAvatar = dbAvatarUrl || getFallbackAvatar(user);
-  
+
   // Dashboard link will automatically use the brand new synced username!
-  const dashboardLink = dbUsername 
-    ? `/dashboard/${dbUsername}` 
+  const dashboardLink = dbUsername
+    ? `/dashboard/${dbUsername}`
     : `/dashboard/${address?.toLowerCase() || ''}`
 
   const getWalletName = () => {
@@ -155,16 +155,16 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
     const wallet = wallets[0]
     if (wallet.walletClientType === 'privy') return 'Embedded Wallet'
     return wallet.walletClientType === 'metamask' ? 'MetaMask' :
-           wallet.walletClientType === 'coinbase_wallet' ? 'Coinbase' :
-           'External Wallet'
+      wallet.walletClientType === 'coinbase_wallet' ? 'Coinbase' :
+        'External Wallet'
   }
 
   if (!ready) {
     return (
-      <Button 
-        size="sm" 
-        disabled 
-        variant="outline" 
+      <Button
+        size="sm"
+        disabled
+        variant="outline"
         // 💡 Merged here as well
         className={cn("text-xs font-bold uppercase tracking-widest px-6 opacity-50 border-border", className)}
       >
@@ -175,10 +175,10 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
 
   if (!isConnected) {
     return (
-      <Button 
-        onClick={login} 
-        size="sm" 
-        variant="default" 
+      <Button
+        onClick={login}
+        size="sm"
+        variant="default"
         // 💡 FIX: Use cn() to merge the incoming className with the default styles
         className={cn("text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-all", className)}
       >
@@ -190,9 +190,9 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           // 💡 Merged here as well
           className={cn("flex items-center gap-2 p-1 sm:pr-3 border-primary/20 hover:bg-primary/5 transition-all rounded-full h-9 relative", className)}
         >
@@ -230,14 +230,20 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
             )}
           </div>
         </DropdownMenuLabel>
-        
+
         <DropdownMenuSeparator />
-        
+
         <DropdownMenuGroup>
           <DropdownMenuItem asChild>
-            <Link href={dashboardLink} className="cursor-pointer flex items-center gap-2"> 
-              {dbUsername ? <UserIcon className="h-4 w-4" /> : <LayoutDashboard className="h-4 w-4" />}
-              <span>{dbUsername ? "Profile" : "loading..."}</span>
+            <Link
+              href={dashboardLink}
+              className={cn(
+                "cursor-pointer flex items-center gap-2",
+                (loading || !dbUsername) && "pointer-events-none opacity-50"  // disable while loading
+              )}
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              <span>{loading ? "Loading..." : dbUsername ? "Profile" : "Dashboard"}</span>
             </Link>
           </DropdownMenuItem>
           {address && (
@@ -247,7 +253,7 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
             </DropdownMenuItem>
           )}
         </DropdownMenuGroup>
-      
+
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logout} className="cursor-pointer flex items-center gap-2 text-red-600 focus:text-red-600 focus:bg-red-50">
           <LogOut className="h-4 w-4" />

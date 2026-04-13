@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Contract, parseEther, JsonRpcProvider } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
 import {
   ShoppingBag, Droplets, X, CheckCircle2,
   AlertCircle, RefreshCw, ExternalLink, Loader2,
-  ChevronDown,
+  ChevronDown, Plus, Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useWallet } from "@/hooks/use-wallet";
@@ -16,6 +16,8 @@ import { WalletConnectButton } from "@/components/wallet-connect";
 import { Header } from '@/components/header';
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
+
+const PLATFORM_OWNER = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
 
 const POINTS_CONTRACT_ADDRESSES: Record<number, string> = {
   42220: "0xF8F6D74E61A0FC2dd2feCd41dE384ba2fbf91b9D",
@@ -89,62 +91,61 @@ const MERCH_ITEMS = [
     tag: "NEW" as const,
   },
   {
-  id: "merch_backpack_01",
-  title: "Drop Backpack",
-  description: "Premium tech backpack with all-over drop pattern, USB charging port, and embroidered FaucetDrops logo. Multiple compartments.",
-  cost: 300,
-  stock: 20,
-  tag: "LIMITED" as const,
-},
-{
-  id: "merch_bracelet_rope_01",
-  title: "Builder Rope Bracelet",
-  description: "Braided nylon cord bracelet with matte black magnetic clasp engraved with the FaucetDrops logo.",
-  cost: 30,
-  stock: 50,
-  tag: "NEW" as const,
-},
-{
-  id: "merch_bracelet_silicone_01",
-  title: "Drop Silicone Band",
-  description: "Silicone wristband with debossed FaucetDrops branding and drop pattern. Adjustable fit.",
-  cost: 20,
-  stock: 100,
-  tag: null,
-},
-{
-  id: "merch_jug_01",
-  title: "FaucetDrops Jug",
-  description: "64oz insulated steel jug with handle, straw lid, and all-over drop pattern. Keeps cold 24h. Navy finish.",
-  cost: 120,
-  stock: 25,
-  tag: "NEW" as const,
-},
-{
-  id: "merch_cup_01",
-  title: "FaucetDrops Cup",
-  description: "16oz double-walled stainless steel cup with spill-resistant lid. Features subtle drop pattern and embossed logo. Made in the USA.",
-  cost: 50,
-  stock: 25,
-  tag: "NEW" as const,
-},
-{
-  id: "merch_pen_01",
-  title: "Tactical Drop Pen",
-  description: "Matte black aluminium tactical pen with FaucetDrops branding and drop-pattern grip. Smooth gel ink.",
-  cost: 25,
-  stock: 75,
-  tag: null,
-},
-{
-  id: "merch_stickers_01",
-  title: "Sticker Pack",
-  description: "9-piece holographic sticker set — drop logos, 'Drip With Purpose' banner, FaucetDrops Tech patch, and the Drop mascot. Weatherproof vinyl.",
-  cost: 15,
-  stock: 200,
-  tag: "POPULAR" as const,
-},
-  
+    id: "merch_backpack_01",
+    title: "Drop Backpack",
+    description: "Premium tech backpack with all-over drop pattern, USB charging port, and embroidered FaucetDrops logo. Multiple compartments.",
+    cost: 300,
+    stock: 20,
+    tag: "LIMITED" as const,
+  },
+  {
+    id: "merch_bracelet_rope_01",
+    title: "Builder Rope Bracelet",
+    description: "Braided nylon cord bracelet with matte black magnetic clasp engraved with the FaucetDrops logo.",
+    cost: 30,
+    stock: 50,
+    tag: "NEW" as const,
+  },
+  {
+    id: "merch_bracelet_silicone_01",
+    title: "Drop Silicone Band",
+    description: "Silicone wristband with debossed FaucetDrops branding and drop pattern. Adjustable fit.",
+    cost: 20,
+    stock: 100,
+    tag: null,
+  },
+  {
+    id: "merch_jug_01",
+    title: "FaucetDrops Jug",
+    description: "64oz insulated steel jug with handle, straw lid, and all-over drop pattern. Keeps cold 24h. Navy finish.",
+    cost: 120,
+    stock: 25,
+    tag: "NEW" as const,
+  },
+  {
+    id: "merch_cup_01",
+    title: "FaucetDrops Cup",
+    description: "16oz double-walled stainless steel cup with spill-resistant lid. Features subtle drop pattern and embossed logo. Made in the USA.",
+    cost: 50,
+    stock: 25,
+    tag: "NEW" as const,
+  },
+  {
+    id: "merch_pen_01",
+    title: "Tactical Drop Pen",
+    description: "Matte black aluminium tactical pen with FaucetDrops branding and drop-pattern grip. Smooth gel ink.",
+    cost: 25,
+    stock: 75,
+    tag: null,
+  },
+  {
+    id: "merch_stickers_01",
+    title: "Sticker Pack",
+    description: "9-piece holographic sticker set — drop logos, 'Drip With Purpose' banner, FaucetDrops Tech patch, and the Drop mascot. Weatherproof vinyl.",
+    cost: 15,
+    stock: 200,
+    tag: "POPULAR" as const,
+  },
   {
     id: "merch_book_01",
     title: "FaucetDrops Book",
@@ -185,70 +186,22 @@ type MerchItem = typeof MERCH_ITEMS[0];
 type ModalStep = "form" | "chain" | "confirm" | "processing" | "success";
 
 const MERCH_IMAGES: Record<string, { front: string; back: string } | null> = {
-  merch_tshirt_01: {
-    front: "/tshirt-front.jpg",
-    back:  "/tshirt-back.jpg",
-  },
-  merch_tshirt_02: {
-    front: "/merchB.jpg",
-    back:  "/merchb.jpg",
-  },
-  merch_hoodie_01: {
-    front: "/hoodie-front.jpg",
-    back:  "/hoodie-back.jpeg",
-  },
-  merch_cap_black_01: {
-    front: "/capB.jpeg",
-    back:  "/capB.jpeg",
-  },
-  merch_backpack_01: {
-  front: "/bag.jpeg",
-  back:  "/bag.jpeg",
-},
-merch_bracelet_rope_01: {
-  front: "/bracelet.jpeg",
-  back:  "/bracelet.jpeg",
-},
-merch_bracelet_silicone_01: {
-  front: "/bracelet.jpeg",
-  back:  "/bracelet.jpeg",
-},
-merch_jug_01: {
-  front: "/jug.jpeg",
-  back:  "/jug.jpeg",
-},
-merch_cup_01: {
-  front: "/cup.jpeg",
-  back:  "/cup.jpeg",
-},
-merch_pen_01: {
-  front: "/pen.jpeg",
-  back:  "/pen.jpeg",
-},
-merch_stickers_01: {
-  front: "/sticker.jpeg",
-  back:  "/sticker.jpeg",
-},
-  merch_cap_trucker_01: {
-    front: "/capw.jpg",
-    back:  "/capw.jpg",
-  },
-  merch_bottle_black_01: {
-    front: "/mugb.jpg",
-    back:  "/mugb.jpg",
-  },
-  merch_bottle_white_01: {
-    front: "/mugw.jpg",
-    back:  "/mugw.jpg",
-  },
-  merch_writing_01: {
-    front: "/writing.jpeg",
-    back:  "/writing.jpeg",
-  },
-  merch_book_01: {
-    front: "/book.jpeg",
-    back:  "/book.jpeg",
-  },
+  merch_tshirt_01:          { front: "/tshirt-front.jpg",  back: "/tshirt-back.jpg"  },
+  merch_tshirt_02:          { front: "/merchB.jpg",        back: "/merchb.jpg"        },
+  merch_hoodie_01:          { front: "/hoodie-front.jpg",  back: "/hoodie-back.jpeg"  },
+  merch_cap_black_01:       { front: "/capB.jpeg",         back: "/capB.jpeg"         },
+  merch_backpack_01:        { front: "/bag.jpeg",          back: "/bag.jpeg"          },
+  merch_bracelet_rope_01:   { front: "/bracelet.jpeg",     back: "/bracelet.jpeg"     },
+  merch_bracelet_silicone_01:{ front: "/bracelet.jpeg",   back: "/bracelet.jpeg"     },
+  merch_jug_01:             { front: "/jug.jpeg",          back: "/jug.jpeg"          },
+  merch_cup_01:             { front: "/cup.jpeg",          back: "/cup.jpeg"          },
+  merch_pen_01:             { front: "/pen.jpeg",          back: "/pen.jpeg"          },
+  merch_stickers_01:        { front: "/sticker.jpeg",      back: "/sticker.jpeg"      },
+  merch_cap_trucker_01:     { front: "/capw.jpg",          back: "/capw.jpg"          },
+  merch_bottle_black_01:    { front: "/mugb.jpg",          back: "/mugb.jpg"          },
+  merch_bottle_white_01:    { front: "/mugw.jpg",          back: "/mugw.jpg"          },
+  merch_writing_01:         { front: "/writing.jpeg",      back: "/writing.jpeg"      },
+  merch_book_01:            { front: "/book.jpeg",         back: "/book.jpeg"         },
 };
 
 interface ChainBalance {
@@ -280,7 +233,6 @@ function BalanceBreakdown({
 
   return (
     <div className="bg-card border border-border rounded-2xl overflow-hidden min-w-[240px]">
-      {/* Total row */}
       <div
         role="button"
         tabIndex={0}
@@ -315,13 +267,11 @@ function BalanceBreakdown({
           </button>
           <ChevronDown
             size={15}
-            className={`text-muted-foreground transition-transform duration-200
-              ${open ? "rotate-180" : ""}`}
+            className={`text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           />
         </div>
       </div>
 
-      {/* Per-chain breakdown */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -337,8 +287,7 @@ function BalanceBreakdown({
                 return (
                   <div key={cb.chainId} className="flex items-center gap-3">
                     <div
-                      className="w-5 h-5 rounded-md flex items-center justify-center
-                        text-[7px] font-black shrink-0"
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[7px] font-black shrink-0"
                       style={{
                         background: `${meta.color}18`,
                         border: `1px solid ${meta.color}35`,
@@ -353,19 +302,15 @@ function BalanceBreakdown({
                     ) : cb.error ? (
                       <span className="text-[10px] text-destructive/60">—</span>
                     ) : (
-                      <span className={`text-xs font-black tabular-nums
-                        ${cb.balance > 0 ? "text-foreground" : "text-muted-foreground/40"}`}>
+                      <span className={`text-xs font-black tabular-nums ${cb.balance > 0 ? "text-foreground" : "text-muted-foreground/40"}`}>
                         {cb.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </span>
                     )}
                   </div>
                 );
               })}
-
               <div className="border-t border-border pt-2.5 flex items-center justify-between">
-                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-                  Total
-                </span>
+                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Total</span>
                 <span className="text-sm font-black text-primary tabular-nums">
                   {totalBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} DROP
                 </span>
@@ -378,14 +323,12 @@ function BalanceBreakdown({
   );
 }
 
-// ─── MERCH CARD 3D (click/tap to flip — works on mobile) ─────────────────────
+// ─── MERCH CARD 3D ────────────────────────────────────────────────────────────
 
 function MerchCard3D({ itemId }: { itemId: string }) {
   const [flipped, setFlipped] = useState(false);
   const images = MERCH_IMAGES[itemId];
-
-  // True flip only when front and back are different images
-  const hasTwoSides = images !== null && images.front !== images.back;
+  const hasTwoSides = images !== null && images?.front !== images?.back;
 
   if (!images) {
     return <ShoppingBag className="w-16 h-16 text-muted-foreground/25" />;
@@ -393,54 +336,24 @@ function MerchCard3D({ itemId }: { itemId: string }) {
 
   return (
     <div className="w-full h-full relative" style={{ perspective: "900px" }}>
-      {/* Interaction layer — handles both touch tap and mouse hover */}
       <div
         className="absolute inset-0 z-10 cursor-pointer"
         onClick={() => hasTwoSides && setFlipped((f) => !f)}
         onMouseEnter={() => hasTwoSides && setFlipped(true)}
         onMouseLeave={() => hasTwoSides && setFlipped(false)}
       />
-
       <motion.div
         animate={{ rotateY: flipped ? 180 : 0 }}
         transition={{ type: "spring", stiffness: 180, damping: 22 }}
-        style={{
-          transformStyle: "preserve-3d",
-          position: "relative",
-          width: "100%",
-          height: "100%",
-        }}
+        style={{ transformStyle: "preserve-3d", position: "relative", width: "100%", height: "100%" }}
       >
-        {/* Front */}
         <div style={{ backfaceVisibility: "hidden", position: "absolute", inset: 0 }}>
-          <Image
-            src={images.front}
-            alt="Front"
-            fill
-            className="object-cover"
-            sizes="(max-width: 640px) 100vw, 33vw"
-          />
+          <Image src={images.front} alt="Front" fill className="object-cover" sizes="(max-width: 640px) 100vw, 33vw" />
         </div>
-        {/* Back */}
-        <div
-          style={{
-            backfaceVisibility: "hidden",
-            position: "absolute",
-            inset: 0,
-            transform: "rotateY(180deg)",
-          }}
-        >
-          <Image
-            src={images.back}
-            alt="Back"
-            fill
-            className="object-cover"
-            sizes="(max-width: 640px) 100vw, 33vw"
-          />
+        <div style={{ backfaceVisibility: "hidden", position: "absolute", inset: 0, transform: "rotateY(180deg)" }}>
+          <Image src={images.back} alt="Back" fill className="object-cover" sizes="(max-width: 640px) 100vw, 33vw" />
         </div>
       </motion.div>
-
-      {/* "Tap to flip" hint — only for 2-sided items, fades out once flipped */}
       {hasTwoSides && (
         <motion.div
           initial={{ opacity: 1 }}
@@ -448,8 +361,7 @@ function MerchCard3D({ itemId }: { itemId: string }) {
           transition={{ duration: 0.2 }}
           className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none"
         >
-          <span className="text-[9px] font-bold bg-background/70 backdrop-blur px-2 py-0.5
-            rounded-full text-muted-foreground border border-border/40 whitespace-nowrap">
+          <span className="text-[9px] font-bold bg-background/70 backdrop-blur px-2 py-0.5 rounded-full text-muted-foreground border border-border/40 whitespace-nowrap">
             tap to flip
           </span>
         </motion.div>
@@ -458,7 +370,148 @@ function MerchCard3D({ itemId }: { itemId: string }) {
   );
 }
 
+// ─── ADMIN STOCK BUTTON ───────────────────────────────────────────────────────
+
+function StockIncreaseButton({
+  itemId,
+  adminAddress,
+  currentStock,
+  onStockUpdated,
+}: {
+  itemId: string;
+  adminAddress: string;
+  currentStock: number;
+  onStockUpdated: (itemId: string, newStock: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [qty, setQty] = useState(10);
+  const [loading, setLoading] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleAdd = async () => {
+    if (qty < 1 || loading) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/merch/stock/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminAddress, quantity: qty }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      onStockUpdated(itemId, data.new_stock);
+      toast.success(`Stock updated → ${data.new_stock} units`);
+      setOpen(false);
+      setQty(10);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update stock");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="relative" ref={popoverRef}>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        title="Add stock"
+        className="w-7 h-7 rounded-full bg-primary/10 border border-primary/30 flex items-center
+          justify-center text-primary hover:bg-primary/20 transition-all active:scale-95 z-20"
+      >
+        <Plus size={13} strokeWidth={2.5} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: 4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: 4 }}
+            transition={{ duration: 0.14 }}
+            className="absolute bottom-9 right-0 z-50 bg-card border border-border rounded-xl
+              shadow-xl p-3 w-52"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">
+              Add stock — {itemId.replace("merch_", "").replace(/_/g, " ")}
+            </p>
+
+            <div className="flex items-center gap-2 mb-3">
+              <div className="text-[10px] text-muted-foreground">Current:</div>
+              <div className="text-xs font-black">{currentStock}</div>
+            </div>
+
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center
+                  text-muted-foreground hover:text-foreground transition-colors text-sm font-bold"
+              >−</button>
+              <input
+                type="number"
+                min={1}
+                max={10000}
+                value={qty}
+                onChange={(e) => setQty(Math.max(1, Math.min(10000, Number(e.target.value) || 1)))}
+                className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5
+                  text-center text-sm font-black outline-none focus:border-primary"
+              />
+              <button
+                onClick={() => setQty((q) => Math.min(10000, q + 1))}
+                className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center
+                  text-muted-foreground hover:text-foreground transition-colors text-sm font-bold"
+              >+</button>
+            </div>
+
+            {/* Quick presets */}
+            <div className="flex gap-1.5 mb-3">
+              {[5, 10, 25, 50].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setQty(n)}
+                  className={`flex-1 py-1 rounded-lg text-[10px] font-black transition-all
+                    ${qty === n
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-accent text-muted-foreground hover:text-foreground"}`}
+                >
+                  +{n}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={handleAdd}
+              disabled={loading}
+              className="w-full py-2 rounded-xl text-xs font-bold bg-primary text-primary-foreground
+                hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              {loading ? (
+                <><Loader2 size={12} className="animate-spin" /> Saving…</>
+              ) : (
+                <><Check size={12} /> Add {qty} units</>
+              )}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── CHECKOUT MODAL ───────────────────────────────────────────────────────────
+
 function Field({
   k, label, span2 = false, type = "text", value, onChange,
 }: {
@@ -485,8 +538,14 @@ function Field({
     </div>
   );
 }
+
 function CheckoutModal({
-  item, address, signer, chainId, onClose, onSuccess,
+  item,
+  address,
+  signer,
+  chainId,
+  onClose,
+  onSuccess,
 }: {
   item: MerchItem;
   address: string;
@@ -516,7 +575,6 @@ function CheckoutModal({
     await Promise.all(
       availableChains.map(async (cid) => {
         try {
-          const { JsonRpcProvider } = await import("ethers");
           const prov = new JsonRpcProvider(RPC_URLS[cid]);
           const contract = new Contract(POINTS_CONTRACT_ADDRESSES[cid], REDEEM_ABI, prov);
           const raw: bigint = await contract.balanceOf(address);
@@ -590,8 +648,6 @@ function CheckoutModal({
     }
   };
 
- 
-
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <motion.div
@@ -612,11 +668,11 @@ function CheckoutModal({
           <div>
             <h2 className="font-bold text-xl">{item.title}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {step === "form" && "Enter your shipping details"}
-              {step === "chain" && "Choose which chain to burn from"}
-              {step === "confirm" && "Review & confirm your order"}
+              {step === "form"       && "Enter your shipping details"}
+              {step === "chain"      && "Choose which chain to burn from"}
+              {step === "confirm"    && "Review & confirm your order"}
               {step === "processing" && "Processing transaction…"}
-              {step === "success" && "Order confirmed!"}
+              {step === "success"    && "Order confirmed!"}
             </p>
           </div>
           {step !== "processing" && (
@@ -632,7 +688,6 @@ function CheckoutModal({
         <div className="overflow-y-auto flex-1 px-6 py-5 no-scrollbar">
           <AnimatePresence mode="wait">
 
-            {/* ── Step 1: Shipping form ── */}
             {step === "form" && (
               <motion.div key="form"
                 initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
@@ -647,7 +702,6 @@ function CheckoutModal({
               </motion.div>
             )}
 
-            {/* ── Step 2: Chain picker ── */}
             {step === "chain" && (
               <motion.div key="chain"
                 initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
@@ -699,7 +753,6 @@ function CheckoutModal({
               </motion.div>
             )}
 
-            {/* ── Step 3: Confirm ── */}
             {step === "confirm" && (
               <motion.div key="confirm"
                 initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
@@ -716,9 +769,7 @@ function CheckoutModal({
                 </div>
                 {selectedChainId && (
                   <div className="bg-accent/30 border border-border rounded-2xl p-4">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
-                      Burning from
-                    </p>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Burning from</p>
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-md text-[8px] font-black flex items-center justify-center"
                         style={{
@@ -732,9 +783,7 @@ function CheckoutModal({
                   </div>
                 )}
                 <div className="bg-accent/30 border border-border rounded-2xl p-4">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
-                    Ship to
-                  </p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Ship to</p>
                   <p className="font-bold text-sm">{form.fullName}</p>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
                     {form.street}<br />
@@ -755,7 +804,6 @@ function CheckoutModal({
               </motion.div>
             )}
 
-            {/* ── Step 4: Processing ── */}
             {step === "processing" && (
               <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="flex flex-col items-center justify-center py-14 gap-4">
@@ -771,7 +819,6 @@ function CheckoutModal({
               </motion.div>
             )}
 
-            {/* ── Step 5: Success ── */}
             {step === "success" && (
               <motion.div key="success"
                 initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}
@@ -779,29 +826,25 @@ function CheckoutModal({
                 <motion.div
                   initial={{ scale: 0 }} animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 280, delay: 0.1 }}
-                  className="w-16 h-16 rounded-full bg-primary/10 border border-primary/30
-                    flex items-center justify-center">
+                  className="w-16 h-16 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
                   <CheckCircle2 size={28} className="text-primary" />
                 </motion.div>
                 <div>
                   <h3 className="font-black text-xl">Order Placed!</h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Confirmation sent to{" "}
-                    <span className="text-primary">{form.email}</span>
+                    Confirmation sent to <span className="text-primary">{form.email}</span>
                   </p>
                 </div>
                 {txHash && selectedChainId && (
                   <a href={`${CHAIN_META[selectedChainId].explorer}${txHash}`}
                     target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground
-                      hover:text-primary transition-colors">
+                    className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary transition-colors">
                     {txHash.slice(0, 14)}…{txHash.slice(-8)}
                     <ExternalLink size={10} />
                   </a>
                 )}
                 <button onClick={() => { onSuccess(); onClose(); }}
-                  className="mt-2 px-8 py-3 bg-primary text-primary-foreground text-xs font-bold
-                    rounded-xl hover:opacity-90 transition-all">
+                  className="mt-2 px-8 py-3 bg-primary text-primary-foreground text-xs font-bold rounded-xl hover:opacity-90 transition-all">
                   Done
                 </button>
               </motion.div>
@@ -826,8 +869,7 @@ function CheckoutModal({
             {step === "chain" && (
               <div className="flex gap-3">
                 <button onClick={() => setStep("form")}
-                  className="px-5 py-4 rounded-xl font-bold text-sm border border-border
-                    text-muted-foreground hover:text-foreground transition-colors">
+                  className="px-5 py-4 rounded-xl font-bold text-sm border border-border text-muted-foreground hover:text-foreground transition-colors">
                   ← Back
                 </button>
                 <button
@@ -843,8 +885,7 @@ function CheckoutModal({
             {step === "confirm" && (
               <div className="flex gap-3">
                 <button onClick={() => setStep("chain")}
-                  className="px-5 py-4 rounded-xl font-bold text-sm border border-border
-                    text-muted-foreground hover:text-foreground transition-colors">
+                  className="px-5 py-4 rounded-xl font-bold text-sm border border-border text-muted-foreground hover:text-foreground transition-colors">
                   ← Back
                 </button>
                 <button onClick={handleRedeem}
@@ -868,6 +909,12 @@ function CheckoutModal({
 export default function MerchandiseStore() {
   const { address, isConnected, signer, chainId } = useWallet();
 
+  // ── Admin detection ───────────────────────────────────────────────────────
+  const isAdmin = Boolean(
+    address && address.toLowerCase() === PLATFORM_OWNER.toLowerCase()
+  );
+
+  // ── State ─────────────────────────────────────────────────────────────────
   const [chainBalances, setChainBalances] = useState<ChainBalance[]>(
     Object.keys(POINTS_CONTRACT_ADDRESSES).map((id) => ({
       chainId: Number(id),
@@ -876,28 +923,46 @@ export default function MerchandiseStore() {
       error: false,
     }))
   );
-  const [dropBalance, setDropBalance] = useState<number | null>(null);
+  const [dropBalance, setDropBalance]   = useState<number | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MerchItem | null>(null);
 
+  // Live stock map: itemId → current stock count
+  const [stockMap, setStockMap] = useState<Record<string, number>>(() =>
+    Object.fromEntries(MERCH_ITEMS.map((m) => [m.id, m.stock]))
+  );
+  const [stockLoading, setStockLoading] = useState(false);
+
+  // ── Fetch live stock from backend ─────────────────────────────────────────
+  const fetchStock = useCallback(async () => {
+    setStockLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/merch/stock`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.stock) {
+          // Merge backend values over the local defaults
+          setStockMap((prev) => ({ ...prev, ...data.stock }));
+        }
+      }
+    } catch {
+      // Silently ignore — fall back to hardcoded defaults
+    } finally {
+      setStockLoading(false);
+    }
+  }, []);
+
+  // ── Fetch chain balances ──────────────────────────────────────────────────
   const fetchBalance = useCallback(async () => {
     if (!address) return;
-
     setBalanceLoading(true);
-    setChainBalances((prev) =>
-      prev.map((cb) => ({ ...cb, loading: true, error: false }))
-    );
+    setChainBalances((prev) => prev.map((cb) => ({ ...cb, loading: true, error: false })));
 
     const allChainIds = Object.keys(POINTS_CONTRACT_ADDRESSES).map(Number);
-
     const results = await Promise.allSettled(
       allChainIds.map(async (cid) => {
         const provider = new JsonRpcProvider(RPC_URLS[cid]);
-        const contract = new Contract(
-          POINTS_CONTRACT_ADDRESSES[cid],
-          BALANCE_ABI,
-          provider,
-        );
+        const contract = new Contract(POINTS_CONTRACT_ADDRESSES[cid], BALANCE_ABI, provider);
         const raw: bigint = await contract.balanceOf(address);
         return { cid, balance: Number(raw) / 1e18 };
       })
@@ -908,38 +973,71 @@ export default function MerchandiseStore() {
       if (result.status === "fulfilled") {
         return { chainId: cid, balance: result.value.balance, loading: false, error: false };
       }
-      console.warn(`[store] balance fetch failed for chain ${cid}:`, result.reason);
       return { chainId: cid, balance: 0, loading: false, error: true };
     });
 
-    const total = updated.reduce((sum, cb) => sum + cb.balance, 0);
-
     setChainBalances(updated);
-    setDropBalance(total);
+    setDropBalance(updated.reduce((sum, cb) => sum + cb.balance, 0));
     setBalanceLoading(false);
   }, [address]);
 
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
+  useEffect(() => { fetchStock(); },  [fetchStock]);
+
+  // ── Admin: update local stock map after a successful API call ─────────────
+  const handleStockUpdated = useCallback((itemId: string, newStock: number) => {
+    setStockMap((prev) => ({ ...prev, [itemId]: newStock }));
+  }, []);
+
+  // ── After a successful order, decrement local stock ───────────────────────
+  const handleOrderSuccess = useCallback((itemId: string) => {
+    setStockMap((prev) => ({
+      ...prev,
+      [itemId]: Math.max(0, (prev[itemId] ?? 0) - 1),
+    }));
+    fetchBalance();
+  }, [fetchBalance]);
+
+  // ── Build display items (merge live stock in) ─────────────────────────────
+  const displayItems = MERCH_ITEMS.map((item) => ({
+    ...item,
+    stock: stockMap[item.id] ?? item.stock,
+  }));
 
   return (
     <div className="min-h-screen text-foreground bg-background selection:bg-primary/30 pb-20">
 
       <Header
-  pageTitle="Merch Store"
-  hideAction={true}
-  onRefresh={fetchBalance}
-  loading={balanceLoading}
-/>
+        pageTitle="Merch Store"
+        hideAction={true}
+        onRefresh={fetchBalance}
+        loading={balanceLoading}
+      />
 
-<main className="pt-6 sm:pt-8 px-4 sm:px-6 max-w-[1400px] mx-auto">
+      <main className="pt-6 sm:pt-8 px-4 sm:px-6 max-w-[1400px] mx-auto">
+
         {/* ── Header row ── */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end
           gap-6 mb-10 border-b border-border pb-8">
           <div>
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tight">Merch Store</h1>
-            <p className="text-muted-foreground mt-2 max-w-md text-sm leading-relaxed">
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="text-4xl sm:text-5xl font-black tracking-tight">Merch Store</h1>
+              {/* Admin badge */}
+              {isAdmin && (
+                <span className="text-[10px] font-black px-2.5 py-1 rounded-full
+                  bg-amber-500/15 border border-amber-500/30 text-amber-500 uppercase tracking-widest">
+                  Admin
+                </span>
+              )}
+            </div>
+            <p className="text-muted-foreground mt-1 max-w-md text-sm leading-relaxed">
               Burn Drop Points for exclusive FaucetDrops gear.
               Redeem from any supported chain as long as your balance is sufficient.
+              {isAdmin && (
+                <span className="block mt-1 text-amber-500/80 text-xs">
+                  Use the + button on any card to add stock units.
+                </span>
+              )}
             </p>
           </div>
 
@@ -963,8 +1061,9 @@ export default function MerchandiseStore() {
 
         {/* ── Grid ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {MERCH_ITEMS.map((item, i) => {
+          {displayItems.map((item, i) => {
             const canAfford = dropBalance !== null && dropBalance >= item.cost;
+            const outOfStock = item.stock <= 0;
             return (
               <motion.div
                 key={item.id}
@@ -973,12 +1072,13 @@ export default function MerchandiseStore() {
                 transition={{ delay: i * 0.07 }}
                 whileHover={{ y: -4 }}
                 className={`bg-card border rounded-2xl overflow-hidden flex flex-col transition-colors
-                  ${canAfford && item.stock > 0
+                  ${canAfford && !outOfStock
                     ? "border-border hover:border-primary/50"
                     : "border-border opacity-60"}`}
               >
-                <div className="aspect-square bg-accent/30 relative flex items-center justify-center
-                  border-b border-border">
+                {/* ── Product image ── */}
+                <div className="aspect-square bg-accent/30 relative flex items-center justify-center border-b border-border">
+                  {/* Tag badge */}
                   {item.tag && (
                     <div className="absolute top-3 left-3 z-10">
                       <span className={`text-[9px] font-black px-2.5 py-1 rounded-full
@@ -991,45 +1091,65 @@ export default function MerchandiseStore() {
                       </span>
                     </div>
                   )}
+
+                  {/* Price pill */}
                   <div className="absolute top-3 right-3 bg-background/90 backdrop-blur border border-border
                     px-2.5 py-1 rounded-full flex items-center gap-1.5 z-10">
                     <Droplets size={11} className="text-primary fill-primary/20" />
                     <span className="text-[11px] font-black">{item.cost.toLocaleString()}</span>
                   </div>
+
                   <MerchCard3D itemId={item.id} />
                 </div>
 
+                {/* ── Card body ── */}
                 <div className="p-5 flex flex-col flex-1">
                   <h3 className="font-bold text-base mb-1.5 leading-tight">{item.title}</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-3">
                     {item.description}
                   </p>
 
+                  {/* Stock row — includes admin + button */}
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-4">
                     <div className="flex items-center gap-1.5">
                       <div className={`w-1.5 h-1.5 rounded-full
                         ${item.stock > 20 ? "bg-green-500" : item.stock > 5 ? "bg-amber-500" : "bg-red-500"}`} />
                       {item.stock} in stock
                     </div>
-                    {isConnected && !canAfford && dropBalance !== null && (
-                      <span className="text-destructive/70">
-                        Need {(item.cost - dropBalance).toLocaleString(undefined, { maximumFractionDigits: 0 })} more
-                      </span>
-                    )}
+
+                    <div className="flex items-center gap-2">
+                      {/* "Need X more" hint for regular users */}
+                      {!isAdmin && isConnected && !canAfford && dropBalance !== null && (
+                        <span className="text-destructive/70">
+                          Need {(item.cost - dropBalance).toLocaleString(undefined, { maximumFractionDigits: 0 })} more
+                        </span>
+                      )}
+
+                      {/* Admin stock-increase button */}
+                      {isAdmin && address && (
+                        <StockIncreaseButton
+                          itemId={item.id}
+                          adminAddress={address}
+                          currentStock={item.stock}
+                          onStockUpdated={handleStockUpdated}
+                        />
+                      )}
+                    </div>
                   </div>
 
+                  {/* CTA */}
                   <button
                     onClick={() => {
                       if (!isConnected) { toast.error("Connect your wallet first"); return; }
-                      if (canAfford && item.stock > 0) setSelectedItem(item);
+                      if (canAfford && !outOfStock) setSelectedItem(item);
                     }}
-                    disabled={isConnected && (!canAfford || item.stock <= 0)}
+                    disabled={isConnected && (!canAfford || outOfStock)}
                     className={`w-full py-3 rounded-xl text-xs font-bold transition-all
-                      ${canAfford && item.stock > 0
+                      ${canAfford && !outOfStock
                         ? "bg-primary text-primary-foreground hover:opacity-90"
                         : "bg-accent text-muted-foreground cursor-not-allowed"}`}
                   >
-                    {item.stock <= 0
+                    {outOfStock
                       ? "Out of Stock"
                       : !isConnected
                         ? "Connect to Redeem"
@@ -1075,7 +1195,7 @@ export default function MerchandiseStore() {
             signer={signer}
             chainId={chainId}
             onClose={() => setSelectedItem(null)}
-            onSuccess={() => fetchBalance()}
+            onSuccess={() => handleOrderSuccess(selectedItem.id)}
           />
         )}
       </AnimatePresence>

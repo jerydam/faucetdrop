@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { Header } from '@/components/header';
 import { WalletConnectButton } from "@/components/wallet-connect";
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/";
 
 const CHAIN_NAMES: Record<number, string> = {
   42220: "Celo", 8453: "Base", 42161: "Arbitrum", 56: "BNB Chain", 1135: "Lisk",

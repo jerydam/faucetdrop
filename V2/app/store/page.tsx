@@ -47,7 +47,7 @@ const BALANCE_ABI = [
   "function balanceOf(address account) external view returns (uint256)",
 ];
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/";
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
 
 const MERCH_ITEMS = [
   {

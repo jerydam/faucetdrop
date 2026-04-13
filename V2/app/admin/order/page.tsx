@@ -18,7 +18,7 @@ import { WalletConnectButton } from "@/components/wallet-connect";
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 
 const ADMIN_WALLET = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
 
 const CHAIN_EXPLORERS: Record<number, string> = {
   42220: "https://celoscan.io/tx/",

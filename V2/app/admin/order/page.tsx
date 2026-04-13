@@ -490,16 +490,7 @@ function OrderRow({
                     <Truck size={13} /> Mark as Shipped
                   </button>
                 )}
-                {order.status === "shipped" && (
-                  <button
-                    onClick={() => onOpenUpdate(order, "delivered")}
-                    className="w-full py-3 rounded-xl text-xs font-bold flex items-center
-                      justify-center gap-2 bg-primary/10 border border-primary/25 text-primary
-                      hover:bg-primary/20 transition-all"
-                  >
-                    <CheckCircle2 size={13} /> Mark as Delivered
-                  </button>
-                )}
+                
                 {/* Edit / re-open update for any status */}
                 {(order.status === "shipped" || order.status === "delivered") && (
                   <button

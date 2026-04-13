@@ -11,11 +11,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useWallet } from "@/hooks/use-wallet";
-import Link from 'next/link';
 import Image from 'next/image';
-import { ThemeToggle } from '@/components/theme';
 import { WalletConnectButton } from "@/components/wallet-connect";
-import { NetworkSelector } from "@/components/network-selector";
+import { Header } from '@/components/header';
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 
@@ -54,25 +52,105 @@ const MERCH_ITEMS = [
     id: "merch_tshirt_01",
     title: "Builder T-Shirt",
     description: "Premium 280g cotton, embroidered FaucetDrops logo. Ships worldwide.",
-    cost: 500,
-    stock: 50,
+    cost: 100,
+    stock: 200,
+    tag: "POPULAR" as const,
+  },
+  {
+    id: "merch_tshirt_02",
+    title: "Builder T-Shirt",
+    description: "Premium 280g cotton, embroidered FaucetDrops logo. Ships worldwide.",
+    cost: 150,
+    stock: 100,
     tag: "POPULAR" as const,
   },
   {
     id: "merch_hoodie_01",
     title: "Genesis Hoodie",
     description: "400g fleece, dark-mode inspired. Embroidered chest & back.",
-    cost: 1200,
+    cost: 200,
     stock: 15,
     tag: "LIMITED" as const,
   },
   {
-    id: "merch_cap_01",
+    id: "merch_cap_black_01",
     title: "Drop Points Cap",
-    description: "Unstructured 6-panel dad cap, adjustable strap. One size.",
-    cost: 350,
+    description: "Structured 6-panel cap with embroidered FaucetDrops logo. Adjustable strap. One size.",
+    cost: 50,
     stock: 30,
     tag: null,
+  },
+  {
+  id: "merch_backpack_01",
+  title: "Drop Backpack",
+  description: "Premium tech backpack with all-over drop pattern, USB charging port, and embroidered FaucetDrops logo. Multiple compartments.",
+  cost: 300,
+  stock: 20,
+  tag: "LIMITED" as const,
+},
+{
+  id: "merch_bracelet_rope_01",
+  title: "Builder Rope Bracelet",
+  description: "Braided nylon cord bracelet with matte black magnetic clasp engraved with the FaucetDrops logo.",
+  cost: 30,
+  stock: 50,
+  tag: "NEW" as const,
+},
+{
+  id: "merch_bracelet_silicone_01",
+  title: "Drop Silicone Band",
+  description: "Silicone wristband with debossed FaucetDrops branding and drop pattern. Adjustable fit.",
+  cost: 20,
+  stock: 100,
+  tag: null,
+},
+{
+  id: "merch_jug_01",
+  title: "FaucetDrops Jug",
+  description: "64oz insulated steel jug with handle, straw lid, and all-over drop pattern. Keeps cold 24h. Navy finish.",
+  cost: 120,
+  stock: 25,
+  tag: "NEW" as const,
+},
+{
+  id: "merch_pen_01",
+  title: "Tactical Drop Pen",
+  description: "Matte black aluminium tactical pen with FaucetDrops branding and drop-pattern grip. Smooth gel ink.",
+  cost: 25,
+  stock: 75,
+  tag: null,
+},
+{
+  id: "merch_stickers_01",
+  title: "Sticker Pack",
+  description: "9-piece holographic sticker set — drop logos, 'Drip With Purpose' banner, FaucetDrops Tech patch, and the Drop mascot. Weatherproof vinyl.",
+  cost: 15,
+  stock: 200,
+  tag: "POPULAR" as const,
+},
+  {
+    id: "merch_cap_trucker_01",
+    title: "FaucetDrops Trucker Cap",
+    description: "Mesh-back trucker cap with bold FaucetDrops branding. Snapback closure. One size fits most.",
+    cost: 40,
+    stock: 25,
+    tag: "NEW" as const,
+  },
+  {
+    id: "merch_bottle_black_01",
+    title: "Drop Bottle — Black",
+    description: "750ml aluminium bottle with carabiner clip and FaucetDrops logo. BPA-free.",
+    cost: 80,
+    stock: 20,
+    tag: null,
+  },
+  {
+    id: "merch_bottle_white_01",
+    title: "Drop Bottle — White",
+    description: "750ml aluminium bottle with carabiner clip. Clean white finish with subtle drop pattern.",
+    cost: 60,
+    stock: 18,
+    tag: "NEW" as const,
   },
 ];
 
@@ -80,14 +158,62 @@ const MERCH_ITEMS = [
 
 type MerchItem = typeof MERCH_ITEMS[0];
 type ModalStep = "form" | "chain" | "confirm" | "processing" | "success";
+
 const MERCH_IMAGES: Record<string, { front: string; back: string } | null> = {
   merch_tshirt_01: {
     front: "/tshirt-front.jpg",
     back:  "/tshirt-back.jpg",
   },
-  merch_hoodie_01: null,
-  merch_cap_01:    null,
+  merch_tshirt_02: {
+    front: "/merchB.jpg",
+    back:  "/merchb.jpg",
+  },
+  merch_hoodie_01: {
+    front: "/hoodie-front.jpg",
+    back:  "/hoodie-back.jpeg",
+  },
+  merch_cap_black_01: {
+    front: "/capB.jpeg",
+    back:  "/capB.jpeg",
+  },
+  merch_backpack_01: {
+  front: "/bag.jpeg",
+  back:  "/bag.jpeg",
+},
+merch_bracelet_rope_01: {
+  front: "/bracelet.jpeg",
+  back:  "/bracelet.jpeg",
+},
+merch_bracelet_silicone_01: {
+  front: "/bracelet.jpeg",
+  back:  "/bracelet.jpeg",
+},
+merch_jug_01: {
+  front: "/jug.jpeg",
+  back:  "/jug.jpeg",
+},
+merch_pen_01: {
+  front: "/pen.jpeg",
+  back:  "/pen.jpeg",
+},
+merch_stickers_01: {
+  front: "/sticker.jpeg",
+  back:  "/sticker.jpeg",
+},
+  merch_cap_trucker_01: {
+    front: "/capw.jpg",
+    back:  "/capw.jpg",
+  },
+  merch_bottle_black_01: {
+    front: "/mugb.jpg",
+    back:  "/mugb.jpg",
+  },
+  merch_bottle_white_01: {
+    front: "/mugw.jpg",
+    back:  "/mugw.jpg",
+  },
 };
+
 interface ChainBalance {
   chainId: number;
   balance: number;
@@ -173,7 +299,6 @@ function BalanceBreakdown({
                 const meta = CHAIN_META[cb.chainId];
                 return (
                   <div key={cb.chainId} className="flex items-center gap-3">
-                    {/* Chain color dot */}
                     <div
                       className="w-5 h-5 rounded-md flex items-center justify-center
                         text-[7px] font-black shrink-0"
@@ -200,7 +325,6 @@ function BalanceBreakdown({
                 );
               })}
 
-              {/* Divider + total */}
               <div className="border-t border-border pt-2.5 flex items-center justify-between">
                 <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
                   Total
@@ -216,25 +340,39 @@ function BalanceBreakdown({
     </div>
   );
 }
+
+// ─── MERCH CARD 3D (click/tap to flip — works on mobile) ─────────────────────
+
 function MerchCard3D({ itemId }: { itemId: string }) {
   const [flipped, setFlipped] = useState(false);
   const images = MERCH_IMAGES[itemId];
+
+  // True flip only when front and back are different images
+  const hasTwoSides = images !== null && images.front !== images.back;
 
   if (!images) {
     return <ShoppingBag className="w-16 h-16 text-muted-foreground/25" />;
   }
 
   return (
-    <div
-      className="w-full h-full"
-      style={{ perspective: "900px" }}
-      onMouseEnter={() => setFlipped(true)}
-      onMouseLeave={() => setFlipped(false)}
-    >
+    <div className="w-full h-full relative" style={{ perspective: "900px" }}>
+      {/* Interaction layer — handles both touch tap and mouse hover */}
+      <div
+        className="absolute inset-0 z-10 cursor-pointer"
+        onClick={() => hasTwoSides && setFlipped((f) => !f)}
+        onMouseEnter={() => hasTwoSides && setFlipped(true)}
+        onMouseLeave={() => hasTwoSides && setFlipped(false)}
+      />
+
       <motion.div
         animate={{ rotateY: flipped ? 180 : 0 }}
         transition={{ type: "spring", stiffness: 180, damping: 22 }}
-        style={{ transformStyle: "preserve-3d", position: "relative", width: "100%", height: "100%" }}
+        style={{
+          transformStyle: "preserve-3d",
+          position: "relative",
+          width: "100%",
+          height: "100%",
+        }}
       >
         {/* Front */}
         <div style={{ backfaceVisibility: "hidden", position: "absolute", inset: 0 }}>
@@ -247,12 +385,14 @@ function MerchCard3D({ itemId }: { itemId: string }) {
           />
         </div>
         {/* Back */}
-        <div style={{
-          backfaceVisibility: "hidden",
-          position: "absolute",
-          inset: 0,
-          transform: "rotateY(180deg)",
-        }}>
+        <div
+          style={{
+            backfaceVisibility: "hidden",
+            position: "absolute",
+            inset: 0,
+            transform: "rotateY(180deg)",
+          }}
+        >
           <Image
             src={images.back}
             alt="Back"
@@ -262,10 +402,52 @@ function MerchCard3D({ itemId }: { itemId: string }) {
           />
         </div>
       </motion.div>
+
+      {/* "Tap to flip" hint — only for 2-sided items, fades out once flipped */}
+      {hasTwoSides && (
+        <motion.div
+          initial={{ opacity: 1 }}
+          animate={{ opacity: flipped ? 0 : 1 }}
+          transition={{ duration: 0.2 }}
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none"
+        >
+          <span className="text-[9px] font-bold bg-background/70 backdrop-blur px-2 py-0.5
+            rounded-full text-muted-foreground border border-border/40 whitespace-nowrap">
+            tap to flip
+          </span>
+        </motion.div>
+      )}
     </div>
   );
 }
 
+// ─── CHECKOUT MODAL ───────────────────────────────────────────────────────────
+function Field({
+  k, label, span2 = false, type = "text", value, onChange,
+}: {
+  k: keyof ShippingForm;
+  label: string;
+  span2?: boolean;
+  type?: string;
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  return (
+    <div className={span2 ? "col-span-2" : ""}>
+      <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">
+        {label}
+      </label>
+      <input
+        required
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm
+          outline-none focus:border-primary transition-colors"
+      />
+    </div>
+  );
+}
 function CheckoutModal({
   item, address, signer, chainId, onClose, onSuccess,
 }: {
@@ -290,7 +472,6 @@ function CheckoutModal({
 
   const availableChains = Object.keys(POINTS_CONTRACT_ADDRESSES).map(Number);
 
-  // Fetch each chain's on-chain DROP balance for this wallet
   const fetchChainBalances = useCallback(async () => {
     if (!address) return;
     setLoadingBalances(true);
@@ -327,7 +508,6 @@ function CheckoutModal({
     setStep("processing");
     const tid = "merch-redeem";
     try {
-      // Ask wallet to switch network if needed
       if (chainId !== selectedChainId && (window as any).ethereum) {
         toast.loading("Switching network…", { id: tid });
         await (window as any).ethereum.request({
@@ -373,23 +553,7 @@ function CheckoutModal({
     }
   };
 
-  const Field = ({
-    k, label, span2 = false, type = "text",
-  }: {
-    k: keyof ShippingForm; label: string; span2?: boolean; type?: string;
-  }) => (
-    <div className={span2 ? "col-span-2" : ""}>
-      <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">
-        {label}
-      </label>
-      <input
-        required type={type} value={form[k]}
-        onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-        className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm
-          outline-none focus:border-primary transition-colors"
-      />
-    </div>
-  );
+ 
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -436,13 +600,13 @@ function CheckoutModal({
               <motion.div key="form"
                 initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
                 className="grid grid-cols-2 gap-3">
-                <Field k="fullName" label="Full Name" span2 />
-                <Field k="email" label="Email Address" span2 type="email" />
-                <Field k="street" label="Street Address" span2 />
-                <Field k="city" label="City" />
-                <Field k="state" label="State / Province" />
-                <Field k="country" label="Country" />
-                <Field k="zip" label="ZIP / Postal Code" />
+                <Field k="fullName" label="Full Name"       span2  value={form.fullName} onChange={(v) => setForm({ ...form, fullName: v })} />
+                <Field k="email"    label="Email Address"   span2  type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
+                <Field k="street"   label="Street Address"  span2  value={form.street}   onChange={(v) => setForm({ ...form, street: v })} />
+                <Field k="city"     label="City"                   value={form.city}     onChange={(v) => setForm({ ...form, city: v })} />
+                <Field k="state"    label="State / Province"       value={form.state}    onChange={(v) => setForm({ ...form, state: v })} />
+                <Field k="country"  label="Country"                value={form.country}  onChange={(v) => setForm({ ...form, country: v })} />
+                <Field k="zip"      label="ZIP / Postal Code"      value={form.zip}      onChange={(v) => setForm({ ...form, zip: v })} />
               </motion.div>
             )}
 
@@ -503,7 +667,6 @@ function CheckoutModal({
               <motion.div key="confirm"
                 initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
                 className="space-y-3">
-                {/* Item */}
                 <div className="bg-accent/30 border border-border rounded-2xl p-4">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Item</p>
                   <div className="flex items-center justify-between">
@@ -514,7 +677,6 @@ function CheckoutModal({
                     </div>
                   </div>
                 </div>
-                {/* Chain */}
                 {selectedChainId && (
                   <div className="bg-accent/30 border border-border rounded-2xl p-4">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
@@ -532,7 +694,6 @@ function CheckoutModal({
                     </div>
                   </div>
                 )}
-                {/* Address */}
                 <div className="bg-accent/30 border border-border rounded-2xl p-4">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
                     Ship to
@@ -545,7 +706,6 @@ function CheckoutModal({
                   </p>
                   <p className="text-xs text-primary mt-2">{form.email}</p>
                 </div>
-                {/* Burn warning */}
                 <div className="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
                   <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
                   <p className="text-[11px] text-amber-500/80 leading-relaxed">
@@ -683,75 +843,58 @@ export default function MerchandiseStore() {
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MerchItem | null>(null);
 
-  // Fetch all chain balances in parallel, update state as each resolves
   const fetchBalance = useCallback(async () => {
-  if (!address) return;
+    if (!address) return;
 
-  setBalanceLoading(true);
-  setChainBalances((prev) =>
-    prev.map((cb) => ({ ...cb, loading: true, error: false }))
-  );
+    setBalanceLoading(true);
+    setChainBalances((prev) =>
+      prev.map((cb) => ({ ...cb, loading: true, error: false }))
+    );
 
-  const allChainIds = Object.keys(POINTS_CONTRACT_ADDRESSES).map(Number);
+    const allChainIds = Object.keys(POINTS_CONTRACT_ADDRESSES).map(Number);
 
-  // Collect all results first, THEN update state once
-  const results = await Promise.allSettled(
-    allChainIds.map(async (cid) => {
-      const provider = new JsonRpcProvider(RPC_URLS[cid]);
-      const contract = new Contract(
-        POINTS_CONTRACT_ADDRESSES[cid],
-        BALANCE_ABI,
-        provider,
-      );
-      const raw: bigint = await contract.balanceOf(address);
-      return { cid, balance: Number(raw) / 1e18 };
-    })
-  );
+    const results = await Promise.allSettled(
+      allChainIds.map(async (cid) => {
+        const provider = new JsonRpcProvider(RPC_URLS[cid]);
+        const contract = new Contract(
+          POINTS_CONTRACT_ADDRESSES[cid],
+          BALANCE_ABI,
+          provider,
+        );
+        const raw: bigint = await contract.balanceOf(address);
+        return { cid, balance: Number(raw) / 1e18 };
+      })
+    );
 
-  // Build the final state in one pass
-  const updated: ChainBalance[] = allChainIds.map((cid, i) => {
-    const result = results[i];
-    if (result.status === "fulfilled") {
-      return { chainId: cid, balance: result.value.balance, loading: false, error: false };
-    }
-    console.warn(`[store] balance fetch failed for chain ${cid}:`, result.reason);
-    return { chainId: cid, balance: 0, loading: false, error: true };
-  });
+    const updated: ChainBalance[] = allChainIds.map((cid, i) => {
+      const result = results[i];
+      if (result.status === "fulfilled") {
+        return { chainId: cid, balance: result.value.balance, loading: false, error: false };
+      }
+      console.warn(`[store] balance fetch failed for chain ${cid}:`, result.reason);
+      return { chainId: cid, balance: 0, loading: false, error: true };
+    });
 
-  const total = updated.reduce((sum, cb) => sum + cb.balance, 0);
+    const total = updated.reduce((sum, cb) => sum + cb.balance, 0);
 
-  setChainBalances(updated);
-  setDropBalance(total);
-  setBalanceLoading(false);
-}, [address]);
+    setChainBalances(updated);
+    setDropBalance(total);
+    setBalanceLoading(false);
+  }, [address]);
 
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
 
   return (
     <div className="min-h-screen text-foreground bg-background selection:bg-primary/30 pb-20">
 
-      {/* ── Nav (unchanged) ── */}
-      <nav className="fixed top-0 inset-x-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 mr-4 shrink-0">
-            <Image src="/drop-token.png" alt="FaucetDrops" width={28} height={28} className="rounded-lg" />
-            <span className="font-black text-sm tracking-tight hidden sm:block">FaucetDrops</span>
-          </Link>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Link href="/droplist" className="hover:text-foreground transition-colors">Droplist</Link>
-            <span className="text-border">/</span>
-            <span className="text-foreground font-bold">Store</span>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <ThemeToggle />
-            <NetworkSelector />
-            <WalletConnectButton />
-          </div>
-        </div>
-      </nav>
+      <Header
+  pageTitle="Merch Store"
+  hideAction={true}
+  onRefresh={fetchBalance}
+  loading={balanceLoading}
+/>
 
-      <main className="pt-24 sm:pt-28 px-4 sm:px-6 max-w-[1400px] mx-auto">
-
+<main className="pt-6 sm:pt-8 px-4 sm:px-6 max-w-[1400px] mx-auto">
         {/* ── Header row ── */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end
           gap-6 mb-10 border-b border-border pb-8">
@@ -763,7 +906,6 @@ export default function MerchandiseStore() {
             </p>
           </div>
 
-          {/* ── Balance breakdown pill (replaces the old simple pill) ── */}
           <BalanceBreakdown
             chainBalances={chainBalances}
             totalBalance={dropBalance ?? 0}
@@ -782,7 +924,7 @@ export default function MerchandiseStore() {
           </div>
         )}
 
-        {/* ── Grid (unchanged) ── */}
+        {/* ── Grid ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {MERCH_ITEMS.map((item, i) => {
             const canAfford = dropBalance !== null && dropBalance >= item.cost;
@@ -805,7 +947,9 @@ export default function MerchandiseStore() {
                       <span className={`text-[9px] font-black px-2.5 py-1 rounded-full
                         ${item.tag === "LIMITED"
                           ? "bg-amber-500/15 border border-amber-500/30 text-amber-500"
-                          : "bg-primary/15 border border-primary/30 text-primary"}`}>
+                          : item.tag === "NEW"
+                            ? "bg-green-500/15 border border-green-500/30 text-green-500"
+                            : "bg-primary/15 border border-primary/30 text-primary"}`}>
                         {item.tag}
                       </span>
                     </div>
@@ -862,7 +1006,7 @@ export default function MerchandiseStore() {
           })}
         </div>
 
-        {/* ── How it works (unchanged) ── */}
+        {/* ── How it works ── */}
         <div className="mt-20 pt-12 border-t border-border">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-8">
             How it works

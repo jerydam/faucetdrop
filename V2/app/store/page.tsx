@@ -81,6 +81,14 @@ const MERCH_ITEMS = [
     tag: null,
   },
   {
+    id: "merch_cap_trucker_01",
+    title: "FaucetDrops Trucker Cap",
+    description: "Mesh-back trucker cap with bold FaucetDrops branding. Snapback closure. One size fits most.",
+    cost: 40,
+    stock: 25,
+    tag: "NEW" as const,
+  },
+  {
   id: "merch_backpack_01",
   title: "Drop Backpack",
   description: "Premium tech backpack with all-over drop pattern, USB charging port, and embroidered FaucetDrops logo. Multiple compartments.",
@@ -113,6 +121,14 @@ const MERCH_ITEMS = [
   tag: "NEW" as const,
 },
 {
+  id: "merch_cup_01",
+  title: "FaucetDrops Cup",
+  description: "16oz double-walled stainless steel cup with spill-resistant lid. Features subtle drop pattern and embossed logo. Made in the USA.",
+  cost: 50,
+  stock: 25,
+  tag: "NEW" as const,
+},
+{
   id: "merch_pen_01",
   title: "Tactical Drop Pen",
   description: "Matte black aluminium tactical pen with FaucetDrops branding and drop-pattern grip. Smooth gel ink.",
@@ -128,12 +144,21 @@ const MERCH_ITEMS = [
   stock: 200,
   tag: "POPULAR" as const,
 },
+  
   {
-    id: "merch_cap_trucker_01",
-    title: "FaucetDrops Trucker Cap",
-    description: "Mesh-back trucker cap with bold FaucetDrops branding. Snapback closure. One size fits most.",
-    cost: 40,
-    stock: 25,
+    id: "merch_book_01",
+    title: "FaucetDrops Book",
+    description: "Comprehensive guide to FaucetDrops and its ecosystem. Perfect for developers and enthusiasts.",
+    cost: 25,
+    stock: 50,
+    tag: "NEW" as const,
+  },
+  {
+    id: "merch_writing_01",
+    title: "FaucetDrops Writing Kit",
+    description: "Complete writing kit with FaucetDrops branding. Includes pen, notebook, and tote bag.",
+    cost: 50,
+    stock: 10,
     tag: "NEW" as const,
   },
   {
@@ -192,6 +217,10 @@ merch_jug_01: {
   front: "/jug.jpeg",
   back:  "/jug.jpeg",
 },
+merch_cup_01: {
+  front: "/cup.jpeg",
+  back:  "/cup.jpeg",
+},
 merch_pen_01: {
   front: "/pen.jpeg",
   back:  "/pen.jpeg",
@@ -211,6 +240,14 @@ merch_stickers_01: {
   merch_bottle_white_01: {
     front: "/mugw.jpg",
     back:  "/mugw.jpg",
+  },
+  merch_writing_01: {
+    front: "/writing.jpeg",
+    back:  "/writing.jpeg",
+  },
+  merch_book_01: {
+    front: "/book.jpeg",
+    back:  "/book.jpeg",
   },
 };
 

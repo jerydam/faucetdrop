@@ -20,7 +20,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { usePathname } from "next/navigation"
 
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
+const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/"
 
 interface WalletConnectButtonProps {
   className?: string;
@@ -48,7 +48,10 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
     return google?.picture || google?.profilePictureUrl || twitter?.profilePictureUrl || "";
   }, []);
 
-  const getFallbackUsername = useCallback((privyUser: User | null) => {
+ const ADMIN_ADDRESSES = ["0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785", ""].map(a => a.toLowerCase())
+
+const isAdmin = !!address && ADMIN_ADDRESSES.includes(address.toLowerCase())  
+const getFallbackUsername = useCallback((privyUser: User | null) => {
     if (!privyUser) return "";
     if (privyUser.twitter?.username) return privyUser.twitter.username;
     if (privyUser.discord?.username) return privyUser.discord.username;
@@ -226,16 +229,22 @@ export function WalletConnectButton({ className }: WalletConnectButtonProps) {
         <DropdownMenuGroup>
           {/* Show My Orders on store pages, Profile otherwise */}
           {isStorePage ? (
-            <DropdownMenuItem asChild>
-              <Link
-                href={`/store/orders`}
-                className="cursor-pointer flex items-center gap-2"
-              >
-                <ShoppingBag className="h-4 w-4" />
-                <span>My Orders</span>
-              </Link>
-            </DropdownMenuItem>
-          ) : (
+  isAdmin ? (
+    <DropdownMenuItem asChild>
+      <Link href="/store/admin" className="cursor-pointer flex items-center gap-2">
+        <LayoutDashboard className="h-4 w-4" />
+        <span>Admin</span>
+      </Link>
+    </DropdownMenuItem>
+  ) : (
+    <DropdownMenuItem asChild>
+      <Link href="/store/orders" className="cursor-pointer flex items-center gap-2">
+        <ShoppingBag className="h-4 w-4" />
+        <span>My Orders</span>
+      </Link>
+    </DropdownMenuItem>
+  )
+)  : (
             <DropdownMenuItem asChild>
               <Link
                 href={dashboardLink}

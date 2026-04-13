@@ -654,12 +654,7 @@ export default function AdminOrderDashboard() {
             <span className="text-foreground font-bold">Orders</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Link href="/admin/orders/tracking"
-              className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground
-                hover:text-foreground border border-border bg-card rounded-xl px-3 py-1.5
-                transition-colors">
-              <ExternalLink size={12} /> Customer Tracking
-            </Link>
+           
             <button
               onClick={() => fetchOrders(true)}
               disabled={refreshing}

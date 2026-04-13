@@ -64,7 +64,7 @@ const CHAIN_CONFIG: Record<
 
 const CHAIN_IDS = Object.keys(CHAIN_CONFIG).map(Number);
 
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 // ─── ABI ──────────────────────────────────────────────────────────────────────
 
@@ -246,22 +246,19 @@ export default function DropPointsPanel() {
 
   // ── Cooldown from contract (connected chain only) ─────────────────────────
 
-  const fetchCooldownFromContract = useCallback(async (addr: string, cId: number) => {
-    const cfg = CHAIN_CONFIG[cId];
-    if (!cfg) return;
+  const fetchCooldownFromContract = useCallback(async (addr: string) => {
+  const COOLDOWN = 24 * 60 * 60 * 1000;
 
-    const provider = getProvider(cId);
-    const contract = new Contract(cfg.contract, POINTS_ABI, provider);
+  const results = await Promise.allSettled(
+    CHAIN_IDS.map(async (id) => {
+      const cfg = CHAIN_CONFIG[id];
+      const provider = getProvider(id);
+      const contract = new Contract(cfg.contract, POINTS_ABI, provider);
 
-    try {
       const eligible: boolean = await contract.canClaim(addr);
-      if (eligible) {
-        setCanClaim(true);
-        setRemainingMs(0);
-        setLastClaimAt(null);
-        return;
-      }
+      if (eligible) return null; // no recent claim on this chain
 
+      // Find last mint timestamp on this chain
       const filter = contract.filters.Transfer(
         "0x0000000000000000000000000000000000000000",
         addr
@@ -273,17 +270,41 @@ export default function DropPointsPanel() {
       if (logs.length > 0) {
         const lastLog = logs[logs.length - 1] as any;
         const block = await provider.getBlock(lastLog.blockNumber);
-        if (block) {
-          setLastClaimAt(new Date(block.timestamp * 1000).toISOString());
-          return;
-        }
+        if (block) return block.timestamp * 1000; // ms
       }
 
-      setLastClaimAt(new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString());
-    } catch (err) {
-      console.warn("Cooldown fetch failed:", err);
+      // canClaim returned false but no logs found — assume recent
+      return Date.now() - 23 * 60 * 60 * 1000;
+    })
+  );
+
+  // Find the most recent claim timestamp across all chains
+  let mostRecentClaimMs: number | null = null;
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value !== null) {
+      if (mostRecentClaimMs === null || result.value > mostRecentClaimMs) {
+        mostRecentClaimMs = result.value;
+      }
     }
-  }, []);
+  }
+
+  if (mostRecentClaimMs === null) {
+    setCanClaim(true);
+    setRemainingMs(0);
+    setLastClaimAt(null);
+  } else {
+    const rem = COOLDOWN - (Date.now() - mostRecentClaimMs);
+    if (rem > 0) {
+      setCanClaim(false);
+      setRemainingMs(rem);
+      setLastClaimAt(new Date(mostRecentClaimMs).toISOString());
+    } else {
+      setCanClaim(true);
+      setRemainingMs(0);
+      setLastClaimAt(null);
+    }
+  }
+}, []);
 
   // ── Chain balances ────────────────────────────────────────────────────────
 
@@ -464,9 +485,9 @@ export default function DropPointsPanel() {
   // ── Effects ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!address || !chainId) return;
+    if (!address) return;
     fetchChainData(address);
-    fetchCooldownFromContract(address, chainId);
+    fetchCooldownFromContract(address);
   }, [address, chainId, fetchChainData, fetchCooldownFromContract]);
 
   useEffect(() => {
@@ -665,7 +686,7 @@ export default function DropPointsPanel() {
               <button
                 onClick={() => {
                   fetchChainData(address);
-                  if (chainId) fetchCooldownFromContract(address, chainId);
+                  if (chainId) fetchCooldownFromContract(address);
                 }}
                 className="p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
                 title="Refresh"

@@ -187,7 +187,7 @@ type ModalStep = "form" | "chain" | "confirm" | "processing" | "success";
 
 const MERCH_IMAGES: Record<string, { front: string; back: string } | null> = {
   merch_tshirt_01:          { front: "/tshirt-front.jpg",  back: "/tshirt-back.jpg"  },
-  merch_tshirt_02:          { front: "/merchB.jpg",        back: "/merchb.jpg"        },
+  merch_tshirt_02:          { front: "/merchB.jpg",        back: "/merchb.jpeg"        },
   merch_hoodie_01:          { front: "/hoodie-front.jpg",  back: "/hoodie-back.jpeg"  },
   merch_cap_black_01:       { front: "/capB.jpeg",         back: "/capB.jpeg"         },
   merch_backpack_01:        { front: "/bag.jpeg",          back: "/bag.jpeg"          },

@@ -59,8 +59,8 @@ const ITEM_IMAGES: Record<string, string> = {
   merch_tshirt_02:             "/merchB.jpg",
   merch_hoodie_01:             "/hoodie-front.jpg",
   merch_cap_black_01:          "/capB.jpeg",
-  merch_cap_trucker_01:        "/capw.jpg",
-  merch_bottle_black_01:       "/mugb.jpg",
+  merch_cap_trucker_01:        "/capw.jpeg",
+  merch_bottle_black_01:       "/mugb.jpeg",
   merch_bottle_white_01:       "/mugw.jpg",
   merch_backpack_01:           "/bag.jpeg",
   merch_bracelet_rope_01:      "/bracelet.jpeg",
@@ -68,6 +68,8 @@ const ITEM_IMAGES: Record<string, string> = {
   merch_jug_01:                "/jug.jpeg",
   merch_pen_01:                "/pen.jpeg",
   merch_stickers_01:           "/sticker.jpeg",
+  merch_writing_01:            "/writing.jpeg",
+  merch_book_01:               "/book.jpeg",
 };
 
 const STATUS_ORDER: OrderStatus[] = ["processing", "shipped", "delivered"];

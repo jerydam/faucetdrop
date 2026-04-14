@@ -79,7 +79,22 @@ const STATUS_CONFIG: Record<OrderStatus, {
     step: 3,
   },
 };
-
+// Frontend (add to both orders/page.tsx and orders/track/page.tsx)
+const ITEM_IMAGES: Record<string, string> = {
+  merch_tshirt_01:             "/tshirt-front.jpg",
+  merch_tshirt_02:             "/merchB.jpg",
+  merch_hoodie_01:             "/hoodie-front.jpg",
+  merch_cap_black_01:          "/capB.jpeg",
+  merch_cap_trucker_01:        "/capw.jpg",
+  merch_bottle_black_01:       "/mugb.jpg",
+  merch_bottle_white_01:       "/mugw.jpg",
+  merch_backpack_01:           "/bag.jpeg",
+  merch_bracelet_rope_01:      "/bracelet.jpeg",
+  merch_bracelet_silicone_01:  "/bracelet.jpeg",
+  merch_jug_01:                "/jug.jpeg",
+  merch_pen_01:                "/pen.jpeg",
+  merch_stickers_01:           "/sticker.jpeg",
+};
 // ── Mini progress bar ─────────────────────────────────────────────────────────
 
 function OrderProgress({ status }: { status: OrderStatus }) {
@@ -125,10 +140,19 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
     >
       <div className="flex items-start gap-4">
         {/* Icon */}
-        <div className="w-12 h-12 rounded-xl bg-accent/40 border border-border
-          flex items-center justify-center shrink-0 group-hover:border-primary/30 transition-colors">
-          <ShoppingBag size={20} className="text-muted-foreground" />
-        </div>
+        <div className="w-12 h-12 rounded-xl border border-border overflow-hidden shrink-0">
+  {ITEM_IMAGES[order.itemId] ? (
+    <img
+      src={ITEM_IMAGES[order.itemId]}
+      alt={friendlyItem}
+      className="w-full h-full object-cover"
+    />
+  ) : (
+    <div className="w-full h-full bg-accent/40 flex items-center justify-center">
+      <ShoppingBag size={20} className="text-muted-foreground" />
+    </div>
+  )}
+</div>
 
         <div className="flex-1 min-w-0">
           {/* Name + status */}

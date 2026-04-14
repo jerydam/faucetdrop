@@ -54,6 +54,22 @@ const STEPS: { key: OrderStatus; label: string; desc: string; icon: React.Elemen
   { key: "delivered",  label: "Delivered",      desc: "Order has been delivered.",     icon: CheckCircle2 },
 ];
 
+const ITEM_IMAGES: Record<string, string> = {
+  merch_tshirt_01:             "/tshirt-front.jpg",
+  merch_tshirt_02:             "/merchB.jpg",
+  merch_hoodie_01:             "/hoodie-front.jpg",
+  merch_cap_black_01:          "/capB.jpeg",
+  merch_cap_trucker_01:        "/capw.jpg",
+  merch_bottle_black_01:       "/mugb.jpg",
+  merch_bottle_white_01:       "/mugw.jpg",
+  merch_backpack_01:           "/bag.jpeg",
+  merch_bracelet_rope_01:      "/bracelet.jpeg",
+  merch_bracelet_silicone_01:  "/bracelet.jpeg",
+  merch_jug_01:                "/jug.jpeg",
+  merch_pen_01:                "/pen.jpeg",
+  merch_stickers_01:           "/sticker.jpeg",
+};
+
 const STATUS_ORDER: OrderStatus[] = ["processing", "shipped", "delivered"];
 function statusIndex(s: OrderStatus) { return STATUS_ORDER.indexOf(s); }
 
@@ -114,17 +130,41 @@ function ConfirmDeliveryModal({
         className="relative z-10 w-full max-w-sm bg-card border border-border
           rounded-3xl overflow-hidden shadow-2xl"
       >
-        {/* Header */}
-        <div className="flex items-start justify-between px-6 pt-6 pb-4">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20
-            flex items-center justify-center shrink-0">
-            <PartyPopper size={22} className="text-primary" />
+        {/* Card header */}
+        <div className="px-6 py-5 border-b border-border bg-accent/20 flex flex-wrap
+          items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-xl border border-border overflow-hidden shrink-0">
+              {ITEM_IMAGES[order.itemId] ? (
+                <img
+                  src={ITEM_IMAGES[order.itemId]}
+                  alt={friendlyName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-accent/40 flex items-center justify-center">
+                  <ShoppingBag size={20} className="text-muted-foreground" />
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <ShoppingBag size={14} className="text-primary" />
+                <span className="text-xs font-bold text-primary">{friendlyName}</span>
+              </div>
+              <p className="text-[10px] font-mono text-muted-foreground">
+                Order #{order.orderId.split("-")[0].toUpperCase()}
+              </p>
+            </div>
           </div>
-          <button onClick={onClose}
-            className="w-8 h-8 rounded-full bg-accent flex items-center justify-center
-              text-muted-foreground hover:text-foreground transition-colors">
-            <X size={15} />
-          </button>
+          <div className="text-right">
+            <p className="text-[10px] text-muted-foreground">Placed on</p>
+            <p className="text-xs font-bold">
+              {new Date(order.createdAt).toLocaleDateString("en-US", {
+                month: "long", day: "numeric", year: "numeric",
+              })}
+            </p>
+          </div>
         </div>
 
         {/* Body */}
@@ -203,17 +243,33 @@ function OrderTrackerCard({ order: initialOrder }: { order: Order }) {
         animate={{ opacity: 1, y: 0 }}
         className="bg-card border border-border rounded-3xl overflow-hidden"
       >
-        {/* Card header */}
+        {/* Card header — with item image */}
         <div className="px-6 py-5 border-b border-border bg-accent/20 flex flex-wrap
           items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <ShoppingBag size={14} className="text-primary" />
-              <span className="text-xs font-bold text-primary">{friendlyName}</span>
+          <div className="flex items-center gap-3">
+            {/* Item image thumbnail */}
+            <div className="w-14 h-14 rounded-xl border border-border overflow-hidden shrink-0">
+              {ITEM_IMAGES[order.itemId] ? (
+                <img
+                  src={ITEM_IMAGES[order.itemId]}
+                  alt={friendlyName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-accent/40 flex items-center justify-center">
+                  <ShoppingBag size={20} className="text-muted-foreground" />
+                </div>
+              )}
             </div>
-            <p className="text-[10px] font-mono text-muted-foreground">
-              Order #{order.orderId.split("-")[0].toUpperCase()}
-            </p>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <ShoppingBag size={14} className="text-primary" />
+                <span className="text-xs font-bold text-primary">{friendlyName}</span>
+              </div>
+              <p className="text-[10px] font-mono text-muted-foreground">
+                Order #{order.orderId.split("-")[0].toUpperCase()}
+              </p>
+            </div>
           </div>
           <div className="text-right">
             <p className="text-[10px] text-muted-foreground">Placed on</p>
@@ -452,7 +508,7 @@ function OrderTrackerCard({ order: initialOrder }: { order: Order }) {
   );
 }
 
-// ── Inner content + Page export — unchanged from your original ────────────────
+// ── Inner content + Page export ───────────────────────────────────────────────
 
 function TrackingContent() {
   const searchParams = useSearchParams();

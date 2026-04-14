@@ -94,6 +94,8 @@ const ITEM_IMAGES: Record<string, string> = {
   merch_jug_01:                "/jug.jpeg",
   merch_pen_01:                "/pen.jpeg",
   merch_stickers_01:           "/sticker.jpeg",
+  merch_writing_01:            "/writing.jpeg",
+  merch_book_01:               "/book.jpeg",  
 };
 // ── Mini progress bar ─────────────────────────────────────────────────────────
 

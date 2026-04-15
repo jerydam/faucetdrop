@@ -892,8 +892,15 @@ const canManageQuest = isCreator || isQuestAdmin;
   const remainingMs = next.getTime() - now.getTime();
   const hours = Math.floor(remainingMs / (1000 * 60 * 60));
   const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-  return { canCheckin: false, message: `Next check-in in ${hours}h ${minutes}m` };
+  const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
+return { canCheckin: false, message: `Next check-in in ${hours}h ${minutes}m ${seconds}s` };
 };
+const [, forceUpdate] = useState(0);
+
+useEffect(() => {
+  const interval = setInterval(() => forceUpdate(n => n + 1), 1000);
+  return () => clearInterval(interval);
+}, []);
 
   useEffect(() => {
     if (!userWalletAddress) { setIsProfileLoading(false); return; }

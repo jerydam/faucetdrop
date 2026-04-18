@@ -31,7 +31,7 @@ export default function QuizDocsPage() {
                 <p className="text-lg text-gray-400">
                   Join live competitive quizzes where your Web3 knowledge translates directly into rewards. Powered by high-speed WebSockets for an instant gaming experience.
                 </p>
-                <div className="relative aspect-video bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
+                <div className="relative rounded-xl border border-gray-700 overflow-hidden">
                   <Image
                     src="/quizshot.png" 
                     alt="Quiz Platform Interface"

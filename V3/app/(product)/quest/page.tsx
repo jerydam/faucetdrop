@@ -34,16 +34,17 @@ export default function QuestPage() {
                   Complete tasks, climb stages, and claim onchain rewards gaslessly. Thousands of community members earn daily through quests.
                 </p>
                 <div className="flex-1">
-                  <div className="relative aspect-video bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
+                  <div className="relative  rounded-xl border border-gray-700 overflow-hidden">
                     {/* Replace with actual image */}
-                    <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+                    <div className=" flex items-center justify-center text-gray-500">
                       <Image
                         src="/quest.png"
                         alt="Quest Platform"
                         width={1000}
                         height={1000}
                         className="w-full h-auto rounded-xl"
-                      />                  </div>
+                      />
+                      </div>
                   </div>
                 </div>
                 <p className="text-lg text-gray-400">

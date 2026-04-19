@@ -87,7 +87,7 @@ function parseOnchainError(err: any): string {
   const raw: string = err?.message || "Unknown error";
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 interface QuizOption { id: "A" | "B" | "C" | "D"; text: string }
 interface QuizQuestion {
@@ -195,15 +195,32 @@ function calcDistribution(config: RewardConfig) {
   const pool = parseFloat(config.poolAmount) || 0;
   const n = config.totalWinners;
   if (n === 0 || pool === 0) return [];
+
   const rows: { rank: number; pct: number; amount: number }[] = [];
+
   if (config.distributionType === "equal") {
-    const share = 100 / n;
-    for (let i = 1; i <= n; i++) rows.push({ rank: i, pct: share, amount: (pool * share) / 100 });
+    // Distribute evenly, give remainder to rank 1
+    const baseAmount = Math.floor((pool * 1e8) / n) / 1e8;
+    const remainder = Math.round((pool - baseAmount * n) * 1e8) / 1e8;
+    for (let i = 1; i <= n; i++) {
+      const amount = i === 1 ? baseAmount + remainder : baseAmount;
+      rows.push({ rank: i, pct: (amount / pool) * 100, amount });
+    }
   } else {
+    // Custom — compute amounts from percentages, reconcile to pool exactly
+    let runningTotal = 0;
     const defaultPct = 100 / n;
     for (let i = 1; i <= n; i++) {
       const pct = parseFloat(config.customTiers[i] ?? String(defaultPct)) || 0;
-      rows.push({ rank: i, pct, amount: (pool * pct) / 100 });
+      if (i < n) {
+        const amount = Math.floor((pool * pct / 100) * 1e8) / 1e8;
+        runningTotal += amount;
+        rows.push({ rank: i, pct, amount });
+      } else {
+        // Last rank gets exact remainder to eliminate dust
+        const amount = Math.round((pool - runningTotal) * 1e8) / 1e8;
+        rows.push({ rank: i, pct, amount });
+      }
     }
   }
   return rows;
@@ -532,13 +549,32 @@ function ImageUploader({ value, onChange, isUploading, setIsUploading }: ImageUp
 }
 
 // ── Reward Preview ─────────────────────────────────────────────
-function RewardPreview({ config }: { config: RewardConfig }) {
+function RewardPreview({ config, onAmountEdit }: {
+  config: RewardConfig;
+  onAmountEdit?: (rank: number, newAmount: string) => void;
+}) {
   const rows = useMemo(() => calcDistribution(config), [config]);
   if (rows.length === 0) return null;
+
   const podiumEmoji = ["🥇", "🥈", "🥉"];
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const pool = parseFloat(config.poolAmount) || 0;
+  const dustDiff = Math.abs(total - pool);
+  const isCustom = config.distributionType === "custom";
+
   return (
     <div className="space-y-2">
-      <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Prize Breakdown</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Prize Breakdown</p>
+        {dustDiff > 0.000001 && (
+          <span className="text-[10px] text-amber-500 font-bold">
+            ⚠ Σ {total.toFixed(6)} ≠ {pool} (diff: {dustDiff.toFixed(8)})
+          </span>
+        )}
+        {dustDiff <= 0.000001 && pool > 0 && (
+          <span className="text-[10px] text-emerald-500 font-bold">✓ Exact split</span>
+        )}
+      </div>
       <div className="space-y-1.5">
         {rows.map(row => {
           const emoji = podiumEmoji[row.rank - 1] ?? "🏅";
@@ -550,23 +586,60 @@ function RewardPreview({ config }: { config: RewardConfig }) {
               row.rank === 3 ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800" :
               "bg-muted/20 border-border"
             )}>
-              <span className="text-lg">{emoji}</span>
+              <span className="text-lg shrink-0">{emoji}</span>
               <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                 <div
                   className={cn("h-full rounded-full",
-                    row.rank === 1 ? "bg-yellow-500" : row.rank === 2 ? "bg-muted-foreground/50" : row.rank === 3 ? "bg-amber-500" : "bg-primary"
+                    row.rank === 1 ? "bg-yellow-500" :
+                    row.rank === 2 ? "bg-muted-foreground/50" :
+                    row.rank === 3 ? "bg-amber-500" : "bg-primary"
                   )}
                   style={{ width: `${row.pct}%` }}
                 />
               </div>
-              <span className="text-xs font-black text-foreground tabular-nums">
-                {row.amount.toFixed(4)} <span className="text-muted-foreground font-medium">{config.tokenSymbol || "TKN"}</span>
+
+              {/* Editable amount for custom mode */}
+              {isCustom && onAmountEdit ? (
+                <div className="relative w-32 shrink-0">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    defaultValue={row.amount}
+                    onBlur={e => {
+                      const newAmt = parseFloat(e.target.value);
+                      if (isNaN(newAmt) || newAmt < 0) return;
+                      onAmountEdit(row.rank, e.target.value);
+                    }}
+                    className="w-full h-7 rounded-lg border border-border bg-card text-xs font-mono text-foreground px-2 pr-10 text-right focus:outline-none focus:border-primary"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">
+                    {config.tokenSymbol || "TKN"}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xs font-black text-foreground tabular-nums shrink-0">
+                  {row.amount.toFixed(6)} <span className="text-muted-foreground font-medium">{config.tokenSymbol || "TKN"}</span>
+                </span>
+              )}
+
+              <span className="text-[10px] text-muted-foreground w-9 text-right shrink-0">
+                {row.pct.toFixed(1)}%
               </span>
-              <span className="text-[10px] text-muted-foreground w-9 text-right">{row.pct.toFixed(1)}%</span>
             </div>
           );
         })}
       </div>
+
+      {/* Exact fund amount callout */}
+      {pool > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+          <Info className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+          <p className="text-[11px] text-blue-700 dark:text-blue-300 font-medium">
+            Fund exactly <span className="font-black">{pool} {config.tokenSymbol}</span> — contract distributes precise amounts above.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -823,10 +896,11 @@ const handlePdfUpload = async () => {
       ? { ...q, options: q.options.map(o => o.id === optId ? { ...o, text } : o) } : q));
   };
   const addQuestion = () => {
-    setQuestions(prev => [...prev, blankQuestion()]);
-    setActiveQIdx(questions.length);
-    toast.success(`Question ${questions.length + 1} added! 🎯`);
-  };
+  const inheritedTimeLimit = questions[0]?.timeLimit ?? 30;
+  setQuestions(prev => [...prev, { ...blankQuestion(), timeLimit: inheritedTimeLimit }]);
+  setActiveQIdx(questions.length);
+  toast.success(`Question ${questions.length + 1} added! 🎯`);
+};
   const removeQuestion = (idx: number) => {
     if (questions.length === 1) { toast.error("Need at least 1 question!"); return; }
     setQuestions(prev => prev.filter((_, i) => i !== idx));
@@ -1406,7 +1480,20 @@ const handlePdfUpload = async () => {
   };
 
   // ── Step 2: Rewards ──
-  const renderStepRewards = () => (
+  const renderStepRewards = () => {
+  // Convert an edited amount back to a percentage and store it
+  const handleAmountEdit = (rank: number, newAmountStr: string) => {
+    const pool = parseFloat(reward.poolAmount) || 0;
+    const newAmount = parseFloat(newAmountStr) || 0;
+    if (pool <= 0) return;
+    const newPct = (newAmount / pool) * 100;
+    setReward(prev => ({
+      ...prev,
+      customTiers: { ...prev.customTiers, [rank]: newPct.toFixed(6) },
+    }));
+  };
+
+  return (
     <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300 max-w-xl mx-auto">
       <div className="text-center space-y-2 pb-2">
         <div className="text-5xl">💰</div>
@@ -1464,7 +1551,7 @@ const handlePdfUpload = async () => {
         <div className="relative">
           <Input type="number" min="0" step="any" value={reward.poolAmount}
             onChange={e => setR({ poolAmount: e.target.value })} placeholder="0.00"
-            className={cn("h-12 text-lg font-mono rounded-xl pr-24 border-2")} />
+            className="h-12 text-lg font-mono rounded-xl pr-24 border-2" />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
             {isFetchingPrice && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
             {reward.tokenLogoUrl && <img src={reward.tokenLogoUrl} alt="" className="w-5 h-5 rounded-full" />}
@@ -1472,8 +1559,7 @@ const handlePdfUpload = async () => {
           </div>
         </div>
         {poolUsdValue !== null && (
-          <div className={cn("flex items-center gap-2 text-xs rounded-xl px-3 py-2",
-            "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400")}>
+          <div className="flex items-center gap-2 text-xs rounded-xl px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400">
             <span className="font-black">≈ ${poolUsdValue.toFixed(2)} USD</span>
           </div>
         )}
@@ -1511,7 +1597,7 @@ const handlePdfUpload = async () => {
         <div className="grid grid-cols-2 gap-2">
           {([
             { type: "equal" as const, emoji: "⚖️", label: "Equal Split", desc: "Same prize for all" },
-            { type: "custom" as const, emoji: "🎯", label: "Custom", desc: "Set each % manually" },
+            { type: "custom" as const, emoji: "🎯", label: "Custom", desc: "Set % or amount directly" },
           ]).map(({ type, emoji, label, desc }) => (
             <button key={type} onClick={() => setR({ distributionType: type })}
               className={cn("flex flex-col items-center gap-1.5 p-4 rounded-2xl border-2 text-center transition-all",
@@ -1534,8 +1620,8 @@ const handlePdfUpload = async () => {
               const total = customTierTotal(reward);
               return (
                 <span className={cn("text-xs font-black tabular-nums",
-                  total > 100 ? "text-destructive" : total < 100 ? "text-amber-500" : "text-emerald-500")}>
-                  {total.toFixed(1)}% {total > 100 ? "⚠ over!" : total < 100 ? `(${(100 - total).toFixed(1)}% left)` : "✓ perfect"}
+                  total > 100.01 ? "text-destructive" : total < 99.99 ? "text-amber-500" : "text-emerald-500")}>
+                  {total.toFixed(1)}% {total > 100.01 ? "⚠ over!" : total < 99.99 ? `(${(100 - total).toFixed(1)}% left)` : "✓ perfect"}
                 </span>
               );
             })()}
@@ -1544,28 +1630,54 @@ const handlePdfUpload = async () => {
             {Array.from({ length: reward.totalWinners }, (_, i) => {
               const rank = i + 1;
               const podiumEmoji = ["🥇", "🥈", "🥉"][i] ?? "🏅";
+              const pool = parseFloat(reward.poolAmount) || 0;
+              const pct = parseFloat(reward.customTiers[rank] ?? String(100 / reward.totalWinners)) || 0;
+              const derivedAmount = pool > 0 ? (pool * pct / 100) : 0;
               return (
                 <div key={rank} className="flex items-center gap-3">
                   <span className="text-lg shrink-0">{podiumEmoji}</span>
-                  <span className="text-xs font-bold text-muted-foreground w-8">#{rank}</span>
-                  <div className="flex-1 relative">
+                  <span className="text-xs font-bold text-muted-foreground w-8 shrink-0">#{rank}</span>
+
+                  {/* % input */}
+                  <div className="relative flex-1">
                     <Input type="number" min="0" max="100" step="0.1"
                       value={reward.customTiers[rank] ?? ""}
                       onChange={e => setReward(prev => ({ ...prev, customTiers: { ...prev.customTiers, [rank]: e.target.value } }))}
                       placeholder={`${(100 / reward.totalWinners).toFixed(1)}`}
                       className="h-9 pr-7 font-mono text-sm rounded-xl border-2" />
-                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">%</span>
                   </div>
-                  <span className="text-xs text-muted-foreground w-20 text-right tabular-nums text-[11px]">
-                    {reward.poolAmount ? `${((parseFloat(reward.poolAmount) || 0) * (parseFloat(reward.customTiers[rank] ?? "0") || 0) / 100).toFixed(3)} ${reward.tokenSymbol}` : "—"}
-                  </span>
+
+                  {/* Amount input — editing this recalculates the % */}
+                  <div className="relative w-32 shrink-0">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={pool > 0 ? derivedAmount.toFixed(6) : ""}
+                      placeholder="0.000000"
+                      onChange={e => {
+                        const newAmt = parseFloat(e.target.value);
+                        if (isNaN(newAmt) || pool <= 0) return;
+                        const newPct = (newAmt / pool) * 100;
+                        setReward(prev => ({
+                          ...prev,
+                          customTiers: { ...prev.customTiers, [rank]: newPct.toFixed(6) },
+                        }));
+                      }}
+                      className="h-9 pr-10 font-mono text-xs rounded-xl border-2 text-right"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none">
+                      {reward.tokenSymbol || "TKN"}
+                    </span>
+                  </div>
                 </div>
               );
             })}
           </div>
           <button
             onClick={() => {
-              const equal = (100 / reward.totalWinners).toFixed(1);
+              const equal = (100 / reward.totalWinners).toFixed(6);
               const reset: Record<number, string> = {};
               for (let i = 1; i <= reward.totalWinners; i++) reset[i] = equal;
               setReward(prev => ({ ...prev, customTiers: reset }));
@@ -1595,9 +1707,10 @@ const handlePdfUpload = async () => {
         </p>
       </div>
 
-      <RewardPreview config={reward} />
+      <RewardPreview config={reward} onAmountEdit={handleAmountEdit} />
     </div>
   );
+};
 
   // ── Step 3: Launch ──
   const renderStepLaunch = () => (
@@ -1717,7 +1830,15 @@ const handlePdfUpload = async () => {
       return !!title.trim() && !!userWalletAddress && isSupportedNetwork;
     }
     if (stepId === "questions") return completedQuestions > 0;
-    if (stepId === "rewards") return !!reward.poolAmount && parseFloat(reward.poolAmount) > 0 && !!reward.tokenAddress;
+   if (stepId === "rewards") {
+  if (!reward.poolAmount || parseFloat(reward.poolAmount) <= 0) return false;
+  if (!reward.tokenAddress) return false;
+  if (reward.distributionType === "custom") {
+    const total = customTierTotal(reward);
+    if (total > 100.01 || total < 99.99) return false;
+  }
+  return true;
+}
     return true;
   };
 

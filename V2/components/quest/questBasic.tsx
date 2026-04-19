@@ -20,7 +20,7 @@ import { ZeroAddress, isAddress as ethersIsAddress } from 'ethers'
 import { type Network } from "@/lib/faucet"
 
 // ==== CONFIG ====
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
+const API_BASE_URL = "http://127.0.0.1:8000"
 
 const networks: Network[] = [
     {

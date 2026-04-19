@@ -265,7 +265,7 @@ export const networks: Network[] = [
     symbol: "CELO",
     chainId: 11142220,
     rpcUrl: [
-      "https://sepolia.celo.org",
+      "forno.celo-sepolia.celo-testnet.org",
       "https://celo-sepolia.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
       "https://celo-sepolia.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
     ],

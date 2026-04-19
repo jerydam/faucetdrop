@@ -92,7 +92,7 @@
     const raw: string = err?.message || "Unknown error";
     return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
   }
-  const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+  const API_BASE_URL = "http://127.0.0.1:8000";
 
   // ── Safe WS URL ──
   function getWsBaseUrl(): string {
@@ -507,7 +507,7 @@
         const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/claim`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress: myWallet }),
+          body: JSON.stringify({ walletAddress: userWalletAddress }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.detail || data.message || "Claim failed");
@@ -2033,37 +2033,44 @@
     }, [phase, personalResult, myRankChange, leaderboard, myWallet]);
 
     const handleJoin = async () => {
-      if (!userWalletAddress || !username) { toast.error("Set a username in your profile"); return; }
-      setIsJoining(true);
-      try {
-        const r = await fetch(`${API_BASE_URL}/api/quiz/${code}/join`, { 
-          method: "POST", 
-          headers: { "Content-Type": "application/json" }, 
-          body: JSON.stringify({ walletAddress: userWalletAddress, username, avatarUrl }) 
-        });
-        const d = await r.json();
-        
-        if (d.success) { 
-          setHasJoined(true); 
-          setIsSpectator(false); // Make sure they are playing, not spectating
-          
-          if (d.status === "active") {
-            toast.success("Joined mid-game! Wait for the next question."); 
-          } else {
-            toast.success(d.message || "Joined quiz!"); 
-          }
-        } else if (d.finished) { 
-          setPhase("game_over"); 
-          toast.info("This quiz has already ended."); 
-        } else { 
-          toast.error(d.message || "Failed to join"); 
-        }
-      } catch { 
-        toast.error("Failed to join"); 
-      } finally { 
-        setIsJoining(false); 
+  if (!userWalletAddress || !username) { toast.error("Set a username in your profile"); return; }
+  setIsJoining(true);
+  try {
+    const r = await fetch(`${API_BASE_URL}/api/quiz/${code}/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress: userWalletAddress, username, avatarUrl })
+    });
+    const d = await r.json();
+
+    // ✅ Creator gets lobby access but is never added as a participant
+    if (d.isCreator) {
+      setIsCreator(true);
+      setIsSpectator(true);
+      setHasJoined(true);
+      return;
+    }
+
+    if (d.success) {
+      setHasJoined(true);
+      setIsSpectator(false);
+      if (d.status === "active") {
+        toast.success("Joined mid-game! Wait for the next question.");
+      } else {
+        toast.success(d.message || "Joined quiz!");
       }
-    };
+    } else if (d.finished) {
+      setPhase("game_over");
+      toast.info("This quiz has already ended.");
+    } else {
+      toast.error(d.message || "Failed to join");
+    }
+  } catch {
+    toast.error("Failed to join");
+  } finally {
+    setIsJoining(false);
+  }
+};
 
     const handleSendChat = () => {
       const text = chatInput.trim();

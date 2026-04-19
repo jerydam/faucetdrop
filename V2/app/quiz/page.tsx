@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Loading from "../loading/page";
 
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 interface QuizCard {
   code: string;
@@ -149,9 +149,12 @@ function QuizCardItem({
         <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
           <span className="flex items-center gap-1"><BookOpen className="h-3 w-3" /> {quiz.totalQuestions}Q</span>
           <span className="flex items-center gap-1">
-            <Users className="h-3 w-3" />
-            {quiz.playerCount}{quiz.maxParticipants > 0 && `/${quiz.maxParticipants}`}
+          <Users className="h-3 w-3" />
+          <span className="font-semibold">{quiz.playerCount}</span>
+          <span className="text-slate-300 dark:text-slate-600">
+            {quiz.maxParticipants > 0 ? `/${quiz.maxParticipants}` : " joined"}
           </span>
+        </span>
           {quiz.reward && (
             <span className="flex items-center gap-1">
               <Trophy className="h-3 w-3 text-yellow-500" /> {quiz.reward.totalWinners}W
@@ -318,6 +321,12 @@ export default function QuizListPage() {
                     {waitingCount} Starting Soon
                   </span>
                 )}
+                {quizzes.reduce((sum, q) => sum + q.playerCount, 0) > 0 && (
+                <span className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm font-medium">
+                  <Users className="h-3.5 w-3.5" />
+                  {quizzes.reduce((sum, q) => sum + q.playerCount, 0).toLocaleString()} total players
+                </span>
+              )}
               </div>
             </div>
 

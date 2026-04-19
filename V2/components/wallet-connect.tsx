@@ -20,7 +20,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { usePathname } from "next/navigation"
 
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
+const API_BASE_URL = "http://127.0.0.1:8000"
 
 interface WalletConnectButtonProps {
   className?: string;

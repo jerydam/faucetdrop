@@ -63,7 +63,7 @@ import { Header } from "@/components/header";
 import { SubscriptionModal } from "@/components/subscribe";
 import Loading from "@/app/loading";
 
-const API_BASE_URL = "http://127.0.0.1:8000"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"; // <-- REPLACE WITH ACTUAL BACKEND URL
 const SUPER_ADMIN_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
 // ============= TYPES =============
 export type VerificationType =

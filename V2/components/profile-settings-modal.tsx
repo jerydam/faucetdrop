@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, Save, Upload, Check, Edit2, RefreshCw, CheckCircle2, Link as LinkIcon, Wallet } from "lucide-react"
 import { toast } from "sonner"
 
-const API_BASE_URL = "http://127.0.0.1:8000"
+const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
 
 interface UserProfile {
   wallet_address: string;

@@ -4,8 +4,8 @@
 
 import { toast } from "sonner";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
-const VERIFIER_API_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+const VERIFIER_API_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
 
 // ============================================
 // TYPE DEFINITIONS

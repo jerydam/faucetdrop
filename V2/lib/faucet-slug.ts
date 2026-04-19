@@ -1,5 +1,5 @@
 
-const BACKEND = "http://127.0.0.1:8000"
+const BACKEND = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

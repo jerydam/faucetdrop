@@ -260,32 +260,32 @@ export const networks: Network[] = [
     },
     isTestnet: true, // 👈 Marks it as a testnet in your UI
   },
-  {
-    name: "Celo Sepolia",
-    symbol: "CELO",
-    chainId: 11142220,
-    rpcUrl: [
-      "forno.celo-sepolia.celo-testnet.org",
-      "https://celo-sepolia.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
-      "https://celo-sepolia.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
-    ],
-    blockExplorerUrls: "https://sepolia.celoscan.io",
-    explorerUrl: "https://sepolia.celoscan.io",
-    color: "#35D07F",
-    logoUrl: "/celo.png",
-    iconUrl: "/celo.png",
-    factoryAddresses: [],
-    factories: {
-      droplist: "",
-      dropcode: "0x69a12ecB86A9510c70CEB72d209A7d8b034ca5fE",
-      custom: "",
-      quest: "",
-      quiz: "",
-    },
-    tokenAddress: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9", // Celo testnet token
-    nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
-    isTestnet: true,
-  }
+  // {
+  //   name: "Celo Sepolia",
+  //   symbol: "CELO",
+  //   chainId: 11142220,
+  //   rpcUrl: [
+  //     "forno.celo-sepolia.celo-testnet.org",
+  //     "https://celo-sepolia.g.alchemy.com/v2/sXHCrL5-xwYkPtkRC_WTEZHvIkOVTbw-",
+  //     "https://celo-sepolia.infura.io/v3/e9fa8c3350054dafa40019a5b604679f",
+  //   ],
+  //   blockExplorerUrls: "https://sepolia.celoscan.io",
+  //   explorerUrl: "https://sepolia.celoscan.io",
+  //   color: "#35D07F",
+  //   logoUrl: "/celo.png",
+  //   iconUrl: "/celo.png",
+  //   factoryAddresses: [],
+  //   factories: {
+  //     droplist: "",
+  //     dropcode: "0x69a12ecB86A9510c70CEB72d209A7d8b034ca5fE",
+  //     custom: "",
+  //     quest: "",
+  //     quiz: "",
+  //   },
+  //   tokenAddress: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9", // Celo testnet token
+  //   nativeCurrency: { name: "Celo", symbol: "CELO", decimals: 18 },
+  //   isTestnet: true,
+  // }
 ]
 
 // =============================================

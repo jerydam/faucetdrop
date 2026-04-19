@@ -524,7 +524,34 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       logoUrl: "/busdt.jpg", 
       description: "Binance-Peg BUSD Token",
     },
-]
+],
+ 11142220: [
+    {
+      address: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9",
+      name: "Celo",
+      symbol: "CELO",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/celo.jpeg",
+      description: "Native Celo token on Alfajores testnet",
+    },
+    {
+      address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
+      name: "Celo Dollar",
+      symbol: "cUSD",
+      decimals: 18,
+      logoUrl: "/cusd.png",
+      description: "USD-pegged stablecoin on Celo Alfajores",
+    },
+    {
+      address: "0x10c892A6EC43a53E45D0B916B4b7D383B1b78C0F",
+      name: "Celo Euro",
+      symbol: "cEUR",
+      decimals: 18,
+      logoUrl: "/ceur.png",
+      description: "Euro-pegged stablecoin on Celo Alfajores",
+    },
+  ]
 }
 
 const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{

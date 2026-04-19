@@ -71,7 +71,7 @@ const SUPPORTED_CHAIN_IDS = [
   1,      // Ethereum Mainnet
   42220,  // Celo Mainnet
   11155111,
-  44787,  // Celo Testnet
+  11142220,  // Celo Testnet
   62320,  // Custom Network
   1135,   // Lisk
   4202,   // Lisk Testnet

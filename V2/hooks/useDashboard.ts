@@ -55,6 +55,7 @@ const NETWORK_COLORS: Record<string, string> = {
   Arbitrum:  '#28A0F0',
   Base:      '#0052FF',
   BNB:       '#F3BA2F',
+  CeloTestnet: '#35D07F',
 };
 
 const NETWORK_CHAIN_IDS: Record<string, number> = {
@@ -63,6 +64,7 @@ const NETWORK_CHAIN_IDS: Record<string, number> = {
   Arbitrum:  42161,
   Base:      8453,
   BNB:       56,
+  CeloTestnet: 11142220,
 };
 
 async function fetchDashboardFromSupabase(): Promise<DashboardData> {

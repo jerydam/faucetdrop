@@ -1781,7 +1781,7 @@
               return;
             }
           }
-          console.log("[WS DECODED]", msg);
+          
         } catch (e) {
           console.warn("Failed to parse/decrypt WS message", e);
           return;

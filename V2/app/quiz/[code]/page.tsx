@@ -500,37 +500,55 @@
     };
 
     const handleClaim = async () => {
-      if (!activeWallet) { toast.error("Wallet not connected"); return; }
-      setIsClaiming(true);
-      toast.info("Processing claim...");
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/claim`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress: userWalletAddress }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data.success) throw new Error(data.detail || data.message || "Claim failed");
-        setClaimedTx(data.txHash);
-        setClaimStatus("claimed");
-        toast.success("Reward claimed! It is now in your wallet.");
-        setPayoutsData(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            payouts: prev.payouts.map(p =>
-              p.wallet_address.toLowerCase() === myWallet.toLowerCase()
-                ? { ...p, status: "claimed", tx_hash: data.txHash }
-                : p
-            ),
-          };
-        });
-      } catch (e: any) {
-        toast.error(e.message || "Failed to process claim");
-      } finally {
-        setIsClaiming(false);
-      }
-    };
+  if (!activeWallet) { toast.error("Wallet not connected"); return; }
+  setIsClaiming(true);
+  toast.info("Processing claim...");
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/quiz/${code}/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress: userWalletAddress }), // use original cased address
+    });
+
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      // response body wasn't JSON — still check if tx went through
+    }
+
+    // If we got a txHash back, the claim succeeded regardless of HTTP status
+    if (data.txHash) {
+      setClaimedTx(data.txHash);
+      setClaimStatus("claimed");
+      toast.success("Reward claimed! It is now in your wallet.");
+      setPayoutsData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          payouts: prev.payouts.map(p =>
+            p.wallet_address.toLowerCase() === myWallet.toLowerCase()
+              ? { ...p, status: "claimed", tx_hash: data.txHash }
+              : p
+          ),
+        };
+      });
+      return;
+    }
+
+    // No txHash — genuine failure
+    const errMsg = data.detail || data.message || "Claim failed";
+    throw new Error(errMsg);
+
+  } catch (e: any) {
+    // Don't show error if claim actually succeeded (txHash already set)
+    if (!claimedTx) {
+      toast.error(e.message || "Failed to process claim");
+    }
+  } finally {
+    setIsClaiming(false);
+  }
+};
 
     const fetchResults = async () => {
       if (resultsData) { setShowFullResults(true); return; }

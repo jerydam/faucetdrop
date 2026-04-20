@@ -108,8 +108,8 @@ export function NetworkSelector({
   
   const router = useRouter()
   const pathname = usePathname()
-  
-  const isWalletAvailable = typeof window !== "undefined" && window.ethereum
+  const { ready } = usePrivy() 
+  const isWalletAvailable = typeof window !== "undefined" && ready
   const hasWalletConnected = authenticated && isConnected && !!address
   
   const currentNetwork = networks.find((net) => net.chainId === chainId)

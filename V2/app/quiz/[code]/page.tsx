@@ -1769,7 +1769,6 @@
       };
 
       ws.onmessage = async (ev) => {
-        console.log("[WS RAW]", ev.data);
         let msg: any;
         try {
           if (sessionKeyRef.current) {

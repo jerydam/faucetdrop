@@ -1654,7 +1654,7 @@
                       onValueChange={v => {
                         setNewQuest((prev: any) => ({
                           ...prev,
-                          tasks: prev.tasks.map((t: QuestTask) => t.id === 'sys_referral' ? { ...t, requiredRefereeTaskId: v } : t)
+                          tasks: prev.tasks.map((t: QuestTask) => t.id === 'sys_referral' ? { ...t, requiredRefereeTaskId: v === "none" ? undefined : v } : t)
                         }))
                       }}
                     >
@@ -1662,7 +1662,8 @@
                         <SelectContent>
                             <SelectItem value="none">Just Join Quest (Default)</SelectItem>
                             {newQuest.tasks
-                              .filter((t: QuestTask) => !t.isSystem && t.category === 'social') 
+                              // UPDATED FILTER: Only show non-system tasks in the Beginner stage
+                              .filter((t: QuestTask) => !t.isSystem && t.stage === 'Beginner') 
                               .map((t: QuestTask) => (
                               <SelectItem key={t.id} value={t.id}>Must complete: {t.title}</SelectItem>
                             ))}

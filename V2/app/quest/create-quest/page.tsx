@@ -19,7 +19,6 @@ import Phase2TimingTasksFinalize, {
     type VerificationType 
     
 } from '@/components/quest/questAdvance'
-
 import { useWallet } from "@/hooks/use-wallet"
 import Loading from '@/app/loading'
 
@@ -183,6 +182,17 @@ function QuestCreatorContent() {
     const [isDemoMode, setIsDemoMode] = useState(false)
     const [showPostPhase1Modal, setShowPostPhase1Modal] = useState(false)
     // Add this EFFECT to fetch the profile
+
+const [isSubscribed, setIsSubscribed] = useState(false)
+
+// Fetch subscription status from your existing API
+useEffect(() => {
+    if (!address) return
+    fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}`)
+        .then(r => r.json())
+        .then(data => setIsSubscribed(data.is_subscribed ?? false))
+        .catch(() => setIsSubscribed(false))
+}, [address])
     useEffect(() => {
         if (!address) return;
 
@@ -564,6 +574,7 @@ const { openSubscriptionModal } = useSubscriptionModal()
                     nameError={nameError}
                     setNameError={setNameError}
                     isCheckingName={isCheckingName}
+                    isSubscribed={isSubscribed}
                     setIsCheckingName={setIsCheckingName}
                     isUploadingImage={isUploadingImage}
                     setIsUploadingImage={setIsUploadingImage}

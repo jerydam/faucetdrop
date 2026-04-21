@@ -288,6 +288,7 @@ interface Phase1Props<T extends QuestData> {
     setUploadImageError: React.Dispatch<React.SetStateAction<string | null>>
     handleImageUpload: (file: File) => Promise<void>
     onDraftSaved: (faucetAddress: string) => void
+    isSubscribed: boolean
     isSavingDraft: boolean
     setIsSavingDraft: React.Dispatch<React.SetStateAction<boolean>>
     setError: React.Dispatch<React.SetStateAction<string | null>>
@@ -311,7 +312,8 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     onDraftSaved,
     isSavingDraft,
     setIsSavingDraft,
-    setError
+    setError,
+    isSubscribed
 }: Phase1Props<T>) {
     const { address, isConnected, chainId } = useWallet()
     const network = useMemo(() => networks.find(n => n.chainId === BigInt(chainId || 0)) || null, [chainId])
@@ -565,7 +567,39 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
         [newQuest.distributionConfig.tiers]
     )
     const hasZeroRanks = newQuest.distributionConfig.tiers.some(r => (parseFloat(String(r.amount)) || 0) <= 0)
-
+    // ── Subscription gate ────────────────────────────────────────────────────────
+if (!isSubscribed) {
+    return (
+        <div className="max-w-5xl mx-auto py-8">
+            <Card className="border-dashed border-2 border-amber-400/40 bg-amber-400/5">
+                <CardContent className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+                    <div className="h-14 w-14 rounded-full bg-amber-400/10 flex items-center justify-center">
+                        <Trophy className="h-7 w-7 text-amber-400" />
+                    </div>
+                    <div className="space-y-1">
+                        <h3 className="text-xl font-semibold">Subscriber Feature</h3>
+                        <p className="text-muted-foreground text-sm max-w-sm">
+                            Creating quests is available to subscribed users only. Upgrade your plan to unlock quest creation and rewards distribution.
+                        </p>
+                    </div>
+                    <Button
+                        size="lg"
+                        className="mt-2 bg-amber-400 hover:bg-amber-500 text-black font-semibold"
+                        onClick={() => window.location.href = '/pricing'}  // adjust route
+                    >
+                        <Star className="mr-2 h-4 w-4" /> Upgrade to Subscribe
+                    </Button>
+                    {/* Demo tester bypass — remove in production */}
+                    {process.env.NODE_ENV === 'development' && (
+                        <p className="text-xs text-muted-foreground mt-4 font-mono">
+                            DEV: Pass <code className="bg-muted px-1 rounded">isSubscribed=true</code> to preview
+                        </p>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
     // ── Render ───────────────────────────────────────────────────────────────
     return (
         <div className="space-y-12 max-w-5xl mx-auto py-8">

@@ -53,7 +53,7 @@ const CAMPAIGNS = [
     points: "100+ Faucets",
     path: "/faucet",
     bgImage: "/faucet-bg.png",
-    cta: "Launch Faucet",
+    cta: "Explore Faucet",
   },
   {
     id: 2,
@@ -63,7 +63,7 @@ const CAMPAIGNS = [
     points: "20+ Quests",
     path: "/quest",
     bgImage: "/quest-bg.png",
-    cta: "Launch Quest",
+    cta: "Explore Quest",
   },
   {
     id: 3,
@@ -73,7 +73,7 @@ const CAMPAIGNS = [
     points: "50+ Quizzes",
     path: "/quiz",
     bgImage: "/quiz-bg.png",
-    cta: "Launch Quiz",
+    cta: "Explore Quiz",
   },
 ];
 

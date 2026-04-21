@@ -199,28 +199,19 @@ function calcDistribution(config: RewardConfig) {
   const rows: { rank: number; pct: number; amount: number }[] = [];
 
   if (config.distributionType === "equal") {
-    // Distribute evenly, give remainder to rank 1
-    const baseAmount = Math.floor((pool * 1e8) / n) / 1e8;
-    const remainder = Math.round((pool - baseAmount * n) * 1e8) / 1e8;
+    // Pure equal split — every winner gets exactly pool / n, no rounding
+    const pct = 100 / n;
+    const amount = pool / n;
     for (let i = 1; i <= n; i++) {
-      const amount = i === 1 ? baseAmount + remainder : baseAmount;
-      rows.push({ rank: i, pct: (amount / pool) * 100, amount });
+      rows.push({ rank: i, pct, amount });
     }
   } else {
-    // Custom — compute amounts from percentages, reconcile to pool exactly
-    let runningTotal = 0;
+    // Custom — derive amount directly from percentage, no floor/remainder
     const defaultPct = 100 / n;
     for (let i = 1; i <= n; i++) {
       const pct = parseFloat(config.customTiers[i] ?? String(defaultPct)) || 0;
-      if (i < n) {
-        const amount = Math.floor((pool * pct / 100) * 1e8) / 1e8;
-        runningTotal += amount;
-        rows.push({ rank: i, pct, amount });
-      } else {
-        // Last rank gets exact remainder to eliminate dust
-        const amount = Math.round((pool - runningTotal) * 1e8) / 1e8;
-        rows.push({ rank: i, pct, amount });
-      }
+      const amount = (pool * pct) / 100;
+      rows.push({ rank: i, pct, amount });
     }
   }
   return rows;

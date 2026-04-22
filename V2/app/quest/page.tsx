@@ -289,17 +289,31 @@ function QuestCard({
             );
         }
 
-        // Not joined + active/upcoming
-        return (
-            <Button
-                size={viewMode === 'grid' ? 'default' : 'sm'}
-                className="w-full font-semibold bg-primary text-white hover:bg-primary/90"
-                onClick={() => onNavigate(quest.slug || quest.faucetAddress)}
-            >
-                Join Quest
-                <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-        );
+        // Not joined + upcoming (disabled)
+if (isUpcoming) {
+    return (
+        <Button
+            size={viewMode === 'grid' ? 'default' : 'sm'}
+            disabled
+            className="w-full font-semibold"
+        >
+            <CalendarClock className="h-4 w-4 mr-2" />
+            Starts in {startCountdown}
+        </Button>
+    );
+}
+
+// Not joined + active
+return (
+    <Button
+        size={viewMode === 'grid' ? 'default' : 'sm'}
+        className="w-full font-semibold bg-primary text-white hover:bg-primary/90"
+        onClick={() => onNavigate(quest.slug || quest.faucetAddress)}
+    >
+        Join Quest
+        <ArrowRight className="h-4 w-4 ml-2" />
+    </Button>
+);
     };
 
     return (

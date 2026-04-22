@@ -797,7 +797,7 @@
         const hoursInt =
           newQuest.claimWindowUnit === "hours" ? claimValue : claimValue * 24;
 
-        const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000) + (24 * 60 * 60);
+        const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000) + (12 * 60 * 60);
 
         let deployedAddress: string;
 

@@ -160,18 +160,41 @@ const useCountdown = (targetDate: string | null) => {
   const [timeLeft, setTimeLeft] = useState<string>("");
 
   useEffect(() => {
-    if (!targetDate) return;
-    const interval = setInterval(() => {
+    if (!targetDate) {
+      setTimeLeft(""); 
+      return;
+    }
+
+    const calculateTimeLeft = () => {
       const now = new Date().getTime();
       const target = new Date(targetDate).getTime();
       const diff = target - now;
-      if (diff <= 0) { setTimeLeft("00:00:00"); clearInterval(interval); return; }
+      
+      if (diff <= 0) { 
+        setTimeLeft("00:00:00"); 
+        return true; // Tells the interval to stop
+      }
+      
       const d = Math.floor(diff / (1000 * 60 * 60 * 24));
       const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
       const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
       const s = Math.floor((diff % (1000 * 60)) / 1000);
+      
       setTimeLeft(d > 0 ? `${d}d ${h}h ${m}m ${s}s` : `${h}h ${m}m ${s}s`);
+      return false;
+    };
+
+    // 1. Run immediately!
+    const isFinished = calculateTimeLeft();
+    if (isFinished) return;
+
+    // 2. Then set the interval
+    const interval = setInterval(() => {
+      if (calculateTimeLeft()) {
+        clearInterval(interval);
+      }
     }, 1000);
+
     return () => clearInterval(interval);
   }, [targetDate]);
 
@@ -349,7 +372,7 @@ export default function QuestDetailsPage() {
   const [newAdminAddress, setNewAdminAddress] = useState("");
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
   const [removingAdmin, setRemovingAdmin] = useState<string | null>(null);
-
+  const [claimWindowEndIso, setClaimWindowEndIso] = useState<string | null>(null);
   // ── NEW: FETCH CREATOR'S SUBSCRIPTION STATUS ──
   useEffect(() => {
     if (!questData?.creatorAddress) return;
@@ -381,7 +404,8 @@ export default function QuestDetailsPage() {
     hasClaimed: false,
     canClaimOnChain: false,
     isExpiredOnChain: false,
-    fundsWithdrawnOnChain: false, // <-- ADD THIS
+    fundsWithdrawnOnChain: false,
+    claimWindowEndTimestamp: null as number | null,
   });
   const refreshParticipantData = async () => {
     setIsRefreshingUser(true);
@@ -441,9 +465,9 @@ export default function QuestDetailsPage() {
   const [selectedParticipant, setSelectedParticipant] = useState<LeaderboardEntry | null>(null);
   const [participantTaskDetails, setParticipantTaskDetails] = useState<any>(null);
   const [isLoadingParticipantDetails, setIsLoadingParticipantDetails] = useState(false);
-  const claimWindowHours = questData?.claimWindowHours || 24;
-  const claimWindowEnd = new Date(endDate.getTime() + (claimWindowHours * 60 * 60 * 1000));
-  const isClaimWindowClosed = now > claimWindowEnd;
+  const claimWindowHours = questData?.claimWindowHours || 12;
+  const isClaimWindowClosed = claimState.isExpiredOnChain;
+  
   const [isQuestAdmin, setIsQuestAdmin] = useState(false);
 
 
@@ -615,83 +639,114 @@ const canManageQuest = isCreator || isQuestAdmin;
   }, [faucetAddress, userWalletAddress, hasUsername, isCreator]);
 
   // ── ON-CHAIN CLAIM STATUS CHECK ──
-  useEffect(() => {
-    const checkClaimStatus = async () => {
-      // Use activeWallet instead of walletProvider
-      if (!faucetAddress || !userWalletAddress || !activeWallet) return;
+ useEffect(() => {
+  const checkClaimStatus = async () => {
+    if (!faucetAddress || !userWalletAddress || !activeWallet) return;
 
-      try {
-        setClaimState(prev => ({ ...prev, isChecking: true }));
+    try {
+      setClaimState(prev => ({ ...prev, isChecking: true }));
 
-        // 1. Extract the raw EIP-1193 provider from Privy (Just like you did in handleAdminWithdraw!)
-        const privyProvider = await activeWallet.getEthereumProvider();
+      const privyProvider = await activeWallet.getEthereumProvider();
+      const ethersProvider = new BrowserProvider(privyProvider);
+      const contract = new Contract(
+        faucetAddress,
+        [
+          "function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeUntilStart, uint256 timeRemaining)",
+          "function isClaimActive() view returns (bool)",
+        ],
+        ethersProvider
+      );
 
-        // 2. Wrap it in ethers.js
-        const ethersProvider = new BrowserProvider(privyProvider);
+      const [status, claimActive] = await Promise.all([
+        contract.getClaimStatus(userWalletAddress),
+        contract.isClaimActive(),
+      ]);
 
-        // 3. Connect to your specific smart contract
-        const contract = new Contract(faucetAddress, QUEST_ABI, ethersProvider);
+      const claimed       = status[0];
+      const hasReward     = status[1];
+      const rewardAmount  = status[2];
+      const canClaim      = status[3];
+      const timeUntilStart = status[4];
+      const timeRemaining  = status[5];
 
-        console.log(`🔍 Fetching on-chain claim status for Wallet: ${userWalletAddress}`);
-        console.log(`📄 Target Contract Address: ${faucetAddress}`);
+      // Expired = claim window opened but is now over (timeRemaining=0, timeUntilStart=0, canClaim=false)
+      const isExpired = !canClaim && timeRemaining === 0n && timeUntilStart === 0n && !claimActive;
 
-        // 4. Fetch the data directly from the contract
-        const status = await contract.getClaimStatus(userWalletAddress);
-        const isWithdrawn = await contract.fundsWithdrawn();
-        const claimed = status[0];
-        const hasReward = status[1];
-        const rewardAmount = status[2];
-        const canClaim = status[3];
-        const timeUntilStart = status[4];
-        const timeRemaining = status[5];
-
-        console.log("✅ Contract Return Data:", {
-          claimed: claimed,
-          hasRewardAmount: hasReward,
-          rewardAmountWei: rewardAmount.toString(),
-          canClaim: canClaim,
-          timeUntilStartSeconds: timeUntilStart.toString(),
-          timeRemainingSeconds: timeRemaining.toString()
-        });
-
-        // 5. Update our UI state based on the blockchain's response
-        setClaimState({
-          isChecking: false,
-          isWinnerOnChain: hasReward,
-          hasClaimed: claimed,
-          canClaimOnChain: canClaim,
-          isExpiredOnChain: !canClaim && timeRemaining === 0n && timeUntilStart === 0n,
-          fundsWithdrawnOnChain: isWithdrawn,
-        });
-
-      } catch (error) {
-        console.error("❌ Error fetching on-chain claim status:", error);
-        setClaimState(prev => ({ ...prev, isChecking: false }));
-      }
-    };
-
-    // Only run this check if the quest has officially ended
-    if (isQuestEnded) {
-      checkClaimStatus();
+      setClaimState({
+        isChecking:          false,
+        isWinnerOnChain:     hasReward,
+        hasClaimed:          claimed,
+        canClaimOnChain:     canClaim,
+        isExpiredOnChain:    isExpired,
+        fundsWithdrawnOnChain: isExpired && !hasReward,
+        claimWindowEndTimestamp: null, 
+        
+      });
+      
+    } catch (error) {
+      console.error("❌ Error fetching on-chain claim status:", error);
+      setClaimState(prev => ({ ...prev, isChecking: false }));
     }
-  }, [faucetAddress, userWalletAddress, activeWallet, isQuestEnded]); // Make sure activeWallet is in the dependency array
+  };
 
-  const claimStatus = useMemo(() => {
-    if (!questData?.rawEndDate) return { isActive: false, message: "Not started" };
+  if (isQuestEnded) checkClaimStatus();
+}, [faucetAddress, userWalletAddress, activeWallet, isQuestEnded]);
+  
+const [isClaimWindowOpen, setIsClaimWindowOpen] = useState<boolean | null>(null);
 
-    const endDate = new Date(questData.rawEndDate);
-    // Add 24 hours for the Review Period
-    const reviewEndDate = new Date(endDate.getTime() + (24 * 60 * 60 * 1000));
-    const claimWindowEnd = new Date(
-      reviewEndDate.getTime() + (questData.claimWindowHours || 168) * 60 * 60 * 1000
-    );
-    const now = new Date();
+useEffect(() => {
+  const checkClaimWindow = async () => {
+    if (!faucetAddress || !activeWallet) return;
+    try {
+      const privyProvider = await activeWallet.getEthereumProvider();
+      const ethersProvider = new BrowserProvider(privyProvider);
+      const contract = new Contract(
+        faucetAddress,
+        [
+          "function isClaimActive() view returns (bool)",
+          "function claimStartTime() view returns (uint256)",
+          "function claimDuration() view returns (uint256)",
+        ],
+        ethersProvider
+      );
 
-    if (now < endDate) return { isActive: false, message: "Quest active" };
-    if (now >= endDate && now < reviewEndDate) return { isActive: false, message: "Reviewing (24h)" };
-    if (now > claimWindowEnd) return { isActive: false, message: "Claim ended" };
-    return { isActive: true, message: "Claim Live" };
-  }, [questData?.rawEndDate, questData?.claimWindowHours]);
+      const [active, claimStart, claimDuration] = await Promise.all([
+        contract.isClaimActive(),
+        contract.claimStartTime().catch(() => null),
+        contract.claimDuration().catch(() => null),
+      ]);
+
+      setIsClaimWindowOpen(active);
+
+      // Compute end from chain: claimStartTime + claimDuration
+      if (claimStart && claimDuration) {
+        const endMs = (Number(claimStart) + Number(claimDuration)) * 1000;
+        setClaimWindowEndIso(new Date(endMs).toISOString());
+      }
+    } catch (e) {
+      console.error("isClaimActive check failed", e);
+    }
+  };
+  if (isQuestEnded) checkClaimWindow();
+}, [faucetAddress, activeWallet, isQuestEnded]);
+
+
+const claimStatus = useMemo(() => {
+  if (!questData?.rawEndDate) return { isActive: false, message: "Not started" };
+
+  const endDate = new Date(questData.rawEndDate);
+  const now = new Date();
+
+  if (now < endDate) return { isActive: false, message: "Quest active" };
+
+  // On-chain is the only source of truth
+  if (isClaimWindowOpen === true)  return { isActive: true,  message: "Claim Live" };
+  if (isClaimWindowOpen === false) return { isActive: false, message: "Claim ended" };
+
+  // Still loading on-chain state — show neutral
+  return { isActive: false, message: "Checking..." };
+
+}, [questData?.rawEndDate, isClaimWindowOpen]);
 
   const questTiming = useMemo(() => {
   if (!questData?.rawStartDate || !questData?.rawEndDate) {
@@ -871,7 +926,9 @@ const canManageQuest = isCreator || isQuestAdmin;
       setIsCheckingIn(false);
     }
   };
-
+  const claimWindowCountdown = useCountdown(
+  claimStatus.isActive ? claimWindowEndIso : null
+);
   const [isAdminEditing, setIsAdminEditing] = useState(false);
 
   const getCheckinStatus = () => {
@@ -2197,7 +2254,7 @@ const handleFundQuest = async () => {
 
                 {/* ── Actions Area ── */}
                 {/* CHANGED: Hide entirely if the user is a participant */}
-                {(!participantData || canManageQuest) && (
+                {( canManageQuest) && (
                   <div className="flex flex-row gap-2 w-full justify-center md:justify-start [&>button]:flex-1 md:[&>button]:flex-none mt-2">
 
                     {/* Copy Link is now hidden for participants */}
@@ -2280,7 +2337,7 @@ const handleFundQuest = async () => {
           </div>
         )}
 
-        {questTiming.isEnded && !questTiming.isReviewing && (
+        {questTiming.isEnded && !questTiming.isReviewing && !claimStatus.isActive && !isClaimWindowClosed && (
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 px-6 py-4 flex items-center gap-3">
             <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500">
               <CheckCircle2 className="h-5 w-5" />
@@ -2294,15 +2351,52 @@ const handleFundQuest = async () => {
           </div>
         )}
 
-        {questTiming.isReviewing && (
+        {questTiming.isReviewing && !claimStatus.isActive && !isClaimWindowClosed && (
           <div className="rounded-xl border border-yellow-200 dark:border-yellow-900/50 bg-yellow-50 dark:bg-yellow-900/20 px-6 py-4 flex items-center gap-3">
             <div className="p-2 bg-yellow-100 dark:bg-yellow-900/40 rounded-full text-yellow-600 dark:text-yellow-400">
               <Clock className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-semibold text-yellow-800 dark:text-yellow-200 text-sm">Admin Review Period (24 Hours)</p>
+              <p className="font-semibold text-yellow-800 dark:text-yellow-200 text-sm">Admin Review Period (12 Hours)</p>
               <p className="text-xs text-yellow-700 dark:text-yellow-400">
                 The quest has ended. The creator is currently reviewing pending tasks. Claims will open once verification is complete.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {claimStatus.isActive && !isClaimWindowClosed && (
+          <div className="rounded-xl border border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-full text-green-600 dark:text-green-400">
+                <Gift className="h-5 w-5 animate-pulse" />
+              </div>
+              <div>
+                <p className="font-semibold text-green-900 dark:text-green-200 text-sm">🎉 Claim Window is Live!</p>
+                <p className="text-xs text-green-700 dark:text-green-400">
+                  Winners can now claim their rewards from the leaderboard. Claim window closes in:
+                </p>
+              </div>
+            </div>
+            <div className="text-2xl font-black text-green-700 dark:text-green-300 font-mono tracking-tight shrink-0 min-w-[120px] text-right">
+            {claimWindowCountdown || (
+        <span className="text-sm font-normal text-green-600 dark:text-green-400 animate-pulse">
+          Loading...
+        </span>
+      )}
+    </div>
+          </div>
+        )}
+
+          {claimState.isExpiredOnChain && questTiming.isEnded && (
+             <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 px-6 py-4 flex items-center gap-3">
+            <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-full text-red-600 dark:text-red-400">
+              <X className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-red-800 dark:text-red-200 text-sm">Claim Window Closed</p>
+              <p className="text-xs text-red-700 dark:text-red-400">
+                The reward claim period has expired. Unclaimed rewards have been returned to the quest creator.
               </p>
             </div>
           </div>
@@ -2732,19 +2826,19 @@ const handleFundQuest = async () => {
                 <CardHeader className="px-4 sm:px-6">
                   <CardTitle className="flex justify-between items-center text-lg sm:text-xl">
                     Top Contributors
-                    {questTiming.isReviewing ? (
-                      <Badge variant="outline" className="text-yellow-600 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 text-xs">
-                        Reviewing Results (24h)
-                      </Badge>
-                    ) : (claimState.isExpiredOnChain || isClaimWindowClosed) ? (
-                      <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-xs">
-                        Claim Window Closed
-                      </Badge>
-                    ) : claimStatus.isActive ? (
-                      <Badge className="bg-green-600 animate-pulse text-xs">  
-                        <Gift className="h-3 w-3 mr-1" /> Claim Active
-                      </Badge>
-                    ) : null}
+                    {claimStatus.isActive ? (
+                    <Badge className="bg-green-600 animate-pulse text-white border-0 text-xs">
+                      <Gift className="h-3 w-3 mr-1" /> Claim Window Live
+                    </Badge>
+                  ) : (claimState.isExpiredOnChain || isClaimWindowClosed) ? (
+                    <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-xs">
+                      Claim Window Closed
+                    </Badge>
+                  ) : questTiming.isReviewing ? (
+                    <Badge variant="outline" className="text-yellow-600 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 text-xs">
+                      Reviewing Results (12h)
+                    </Badge>
+                  ) : null}
                   </CardTitle>
                   <CardDescription>Ranked by total points earned in this quest</CardDescription>
                 </CardHeader>
@@ -2758,143 +2852,166 @@ const handleFundQuest = async () => {
                       <TableHead className="px-2 sm:px-4">Participant</TableHead>
                       <TableHead className="text-right w-[60px] sm:w-[100px] px-1 sm:px-4">Points</TableHead>
                       {claimStatus.isActive && <TableHead className="text-right w-[75px] sm:w-[120px] px-1 sm:px-4">Action</TableHead>}
+
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredLeaderboard.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={claimStatus.isActive ? 4 : 3} className="text-center py-10 text-muted-foreground">
-                          No participants yet. Be the first to join!
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      <>
-                        {/* Always show current user's row if they exist but are outside the visible limit */}
-                        {(() => {
-                          const visibleEntries = displayLeaderboard.slice(0, leaderboardLimit);
-                          const currentUserInVisible = visibleEntries.some(e => e.walletAddress === userWalletAddress);
-                          const currentUserEntry = !currentUserInVisible
-                            ? displayLeaderboard.find(e => e.walletAddress === userWalletAddress)
-                            : null;
+  {filteredLeaderboard.length === 0 ? (
+    <TableRow>
+      <TableCell colSpan={claimStatus.isActive ? 4 : 3} className="text-center py-10 text-muted-foreground">
+        No participants yet. Be the first to join!
+      </TableCell>
+    </TableRow>
+  ) : (
+    <>
+      {(() => {
+        const visibleEntries = displayLeaderboard.slice(0, leaderboardLimit);
+        const currentUserInVisible = visibleEntries.some(e => e.walletAddress === userWalletAddress);
+        const currentUserEntry = !currentUserInVisible
+          ? displayLeaderboard.find(e => e.walletAddress === userWalletAddress)
+          : null;
 
-                          return (
-                            <>
-                            {/* Sticky "Your Rank" row if user is outside visible range */}
-                              {currentUserEntry && (
-                                <>
-                                  
-                                  <TableRow className="bg-primary/5 hover:bg-primary/10 border border-primary/20">
-                                    <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
-                                      <span className="text-muted-foreground">#{currentUserEntry.rank}</span>
-                                    </TableCell>
-                                    <TableCell className="px-2 sm:px-4 overflow-hidden">
-                                      <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
-                                        <Avatar className="h-6 w-6 sm:h-9 sm:w-9 border border-primary/30 shrink-0">
-                                          <AvatarImage src={currentUserEntry.avatarUrl || undefined} className="object-cover" />
-                                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-[10px] sm:text-xs">
-                                            {currentUserEntry.username ? currentUserEntry.username.substring(0, 2).toUpperCase() : currentUserEntry.walletAddress.slice(0, 4)}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex flex-col min-w-0">
-                                          <span className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate">
-                                            <span className="truncate">
-                                              {currentUserEntry.username || currentUserEntry.walletAddress.slice(0, 6) + "..." + currentUserEntry.walletAddress.slice(-4)}
-                                            </span>
-                                            <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
-                                              You
-                                            </Badge>
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4">
-                                      {currentUserEntry.points}
-                                    </TableCell>
-                                    {claimStatus.isActive && <TableCell />}
-                                  </TableRow>
-                                </>
-                              )}
-                              {visibleEntries.map((entry) => (
-                                <TableRow
-                                  key={entry.walletAddress}
-                                  className={entry.walletAddress === userWalletAddress ? "bg-primary/5 hover:bg-primary/10" : ""}
-                                >
-                                  <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
-                                    {entry.rank === 1 && "🥇"}
-                                    {entry.rank === 2 && "🥈"}
-                                    {entry.rank === 3 && "🥉"}
-                                    {entry.rank > 3 && <span className="text-muted-foreground">#{entry.rank}</span>}
-                                  </TableCell>
-                                  <TableCell className="px-2 sm:px-4 overflow-hidden">
-                                    <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
-                                      <Avatar
-                                        className="h-6 w-6 sm:h-9 sm:w-9 border border-slate-200 dark:border-slate-700 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                                        onClick={() => handleParticipantClick(entry)}
-                                      >
-                                        <AvatarImage src={entry.avatarUrl || undefined} alt={entry.username || ""} className="object-cover" />
-                                        <AvatarFallback className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[10px] sm:text-xs">
-                                          {entry.username ? entry.username.substring(0, 2).toUpperCase() : entry.walletAddress.slice(0, 4)}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <div className="flex flex-col min-w-0">
-                                        <span
-                                          className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate cursor-pointer hover:text-primary transition-colors"
-                                          onClick={() => handleParticipantClick(entry)}
-                                        >
-                                          <span className="truncate">
-                                            {entry.username || entry.walletAddress.slice(0, 6) + "..." + entry.walletAddress.slice(-4)}
-                                          </span>
-                                          {entry.walletAddress === userWalletAddress && (
-                                            <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
-                                              You
-                                            </Badge>
-                                          )}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4 truncate">
-                                    {entry.points}
-                                  </TableCell>
-                                  {claimStatus.isActive && (
-                                    <TableCell className="text-right px-1 sm:px-4">
-                                      {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() && (
-                                        entry.rank <= (questData.distributionConfig?.totalWinners || 100) ? (
-                                          claimState.hasClaimed ? (
-                                            <Badge className="bg-green-500 text-white border-0 text-[10px] sm:text-xs px-1 sm:px-2">Claimed ✅</Badge>
-                                          ) : (claimState.isExpiredOnChain || isClaimWindowClosed) ? (
-                                            <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-[10px] sm:text-xs">
-                                              Expired
-                                            </Badge>
-                                          ) : (
-                                            <Button
-                                              size="sm"
-                                              onClick={handleClaimReward}
-                                              disabled={isClaiming || claimState.isChecking}
-                                              className="h-7 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-sm w-full sm:w-auto font-bold shadow-sm transition-all duration-300 flex items-center justify-center bg-primary/10 backdrop-blur-md border border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25"
-                                            >
-                                              {isClaiming || claimState.isChecking ? <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" /> : null}
-                                              <span className="truncate">{isClaiming ? "Claiming..." : claimState.isChecking ? "Checking..." : "Claim"}</span>
-                                            </Button>
-                                          )
-                                        ) : (
-                                          <span className="text-[9px] sm:text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-1 sm:px-2 py-1 rounded whitespace-nowrap">
-                                            Not Eligible
-                                          </span>
-                                        )
-                                      )}
-                                    </TableCell>
-                                  )}
-                                </TableRow>
-                              ))}
+        // Extract the claim button logic into a reusable function so both rows match perfectly
+        const renderClaimStatus = (entryRank: number) => {
+          if (claimState.hasClaimed) {
+            return (
+              <Badge className="bg-green-500 text-white border-0 text-[10px] sm:text-xs px-1 sm:px-2">
+                Claimed ✅
+              </Badge>
+            );
+          }
+          if (claimState.isExpiredOnChain || isClaimWindowClosed) {
+            return (
+              <Badge variant="outline" className="text-red-500 border-red-500 bg-red-50 dark:bg-red-950/20 text-[10px] sm:text-xs">
+                Expired
+              </Badge>
+            );
+          }
+          if (claimState.canClaimOnChain) {
+            if (entryRank <= (questData.distributionConfig?.totalWinners || 100)) {
+              return (
+                <Button
+                  size="sm"
+                  onClick={handleClaimReward}
+                  disabled={isClaiming || claimState.isChecking}
+                  className="h-7 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-sm w-full sm:w-auto font-bold shadow-sm transition-all duration-300 flex items-center justify-center bg-primary/10 backdrop-blur-md border border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25"
+                >
+                  {isClaiming || claimState.isChecking ? <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" /> : null}
+                  <span className="truncate">
+                    {isClaiming ? "Claiming..." : claimState.isChecking ? "Checking..." : "Claim"}
+                  </span>
+                </Button>
+              );
+            }
+          }
+          return (
+            <span className="text-[9px] sm:text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-1 sm:px-2 py-1 rounded whitespace-nowrap">
+              Not Eligible
+            </span>
+          );
+        };
 
-                              
-                            </>
-                          );
-                        })()}
-                      </>
-                    )}
-                  </TableBody>
+        return (
+          <>
+            {/* Sticky "Your Rank" row if user is outside visible range */}
+            {currentUserEntry && (
+              <TableRow className="bg-primary/5 hover:bg-primary/10 border border-primary/20">
+                <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
+                  <span className="text-muted-foreground">#{currentUserEntry.rank}</span>
+                </TableCell>
+                <TableCell className="px-2 sm:px-4 overflow-hidden">
+                  <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
+                    <Avatar className="h-6 w-6 sm:h-9 sm:w-9 border border-primary/30 shrink-0">
+                      <AvatarImage src={currentUserEntry.avatarUrl || undefined} className="object-cover" />
+                      <AvatarFallback className="bg-primary/10 text-primary font-bold text-[10px] sm:text-xs">
+                        {currentUserEntry.username ? currentUserEntry.username.substring(0, 2).toUpperCase() : currentUserEntry.walletAddress.slice(0, 4)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate">
+                        <span className="truncate">
+                          {currentUserEntry.username || currentUserEntry.walletAddress.slice(0, 6) + "..." + currentUserEntry.walletAddress.slice(-4)}
+                        </span>
+                        <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
+                          You
+                        </Badge>
+                      </span>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4">
+                  {currentUserEntry.points}
+                </TableCell>
+                
+                {/* Fixed: Now uses the extracted claim logic instead of an empty TableCell */}
+                {claimStatus.isActive && (
+                  <TableCell className="text-right px-1 sm:px-4">
+                    {renderClaimStatus(currentUserEntry.rank)}
+                  </TableCell>
+                )}
+              </TableRow>
+            )}
+
+            {/* Normal Visible Entries */}
+            {visibleEntries.map((entry) => (
+              <TableRow
+                key={entry.walletAddress}
+                className={entry.walletAddress === userWalletAddress ? "bg-primary/5 hover:bg-primary/10" : ""}
+              >
+                <TableCell className="font-medium text-sm sm:text-lg px-1 sm:px-4 text-center sm:text-left">
+                  {entry.rank === 1 && "🥇"}
+                  {entry.rank === 2 && "🥈"}
+                  {entry.rank === 3 && "🥉"}
+                  {entry.rank > 3 && <span className="text-muted-foreground">#{entry.rank}</span>}
+                </TableCell>
+                <TableCell className="px-2 sm:px-4 overflow-hidden">
+                  <div className="flex items-center gap-2 sm:gap-3 overflow-hidden">
+                    <Avatar
+                      className="h-6 w-6 sm:h-9 sm:w-9 border border-slate-200 dark:border-slate-700 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                      onClick={() => handleParticipantClick(entry)}
+                    >
+                      <AvatarImage src={entry.avatarUrl || undefined} alt={entry.username || ""} className="object-cover" />
+                      <AvatarFallback className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[10px] sm:text-xs">
+                        {entry.username ? entry.username.substring(0, 2).toUpperCase() : entry.walletAddress.slice(0, 4)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col min-w-0">
+                      <span
+                        className="font-semibold text-xs sm:text-sm flex items-center gap-1 sm:gap-2 truncate cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => handleParticipantClick(entry)}
+                      >
+                        <span className="truncate">
+                          {entry.username || entry.walletAddress.slice(0, 6) + "..." + entry.walletAddress.slice(-4)}
+                        </span>
+                        {entry.walletAddress === userWalletAddress && (
+                          <Badge variant="outline" className="text-[9px] sm:text-[10px] h-3 sm:h-4 px-1 py-0 border-primary text-primary shrink-0">
+                            You
+                          </Badge>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right font-bold text-primary text-sm sm:text-lg px-1 sm:px-4 truncate">
+                  {entry.points}
+                </TableCell>
+
+                {/* Fixed: Calls the extracted function for the logged-in user's row in the normal list */}
+                {claimStatus.isActive && (
+                  <TableCell className="text-right px-1 sm:px-4">
+                    {entry.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase() 
+                      ? renderClaimStatus(entry.rank) 
+                      : null}
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </>
+        );
+      })()}
+    </>
+  )}
+</TableBody>
                 </Table>
 
                 {/* ── Show More / Row Count Controls ── */}
@@ -3101,7 +3218,7 @@ const handleFundQuest = async () => {
                                 {/* Use the on-chain expiration state here */}
                                 {claimState.isExpiredOnChain
                                   ? "The claim window has closed. You can safely withdraw the remaining pool."
-                                  : `Withdrawals are locked. The claim window closes on: ${claimWindowEnd.toLocaleString()}`}
+                                  : `Withdrawals are locked. The claim window closes on: ${new Date(claimState.claimWindowEndTimestamp!).toLocaleString()}`}
                               </p>
                             </div>
                             <Button

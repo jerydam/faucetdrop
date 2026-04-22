@@ -2374,17 +2374,36 @@ const handleFundQuest = async () => {
               <div>
                 <p className="font-semibold text-green-900 dark:text-green-200 text-sm">🎉 Claim Window is Live!</p>
                 <p className="text-xs text-green-700 dark:text-green-400">
-                  Winners can now claim their rewards from the leaderboard. Claim window closes in:
+                  Check your eligibility and claim your reward below.
                 </p>
               </div>
             </div>
-            <div className="text-2xl font-black text-green-700 dark:text-green-300 font-mono tracking-tight shrink-0 min-w-[120px] text-right">
-            {claimWindowCountdown || (
-        <span className="text-sm font-normal text-green-600 dark:text-green-400 animate-pulse">
-          Loading...
-        </span>
-      )}
-    </div>
+            
+            {/* ── CLAIM STATUS BUTTON REPLACING COUNTDOWN ── */}
+            <div className="shrink-0 flex items-center justify-end min-w-[120px]">
+              {claimState.isChecking ? (
+                <Button disabled className="bg-green-600/50 text-white cursor-not-allowed">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" /> Checking...
+                </Button>
+              ) : claimState.hasClaimed ? (
+                <Button disabled className="bg-green-600 text-white font-bold opacity-100">
+                  Claimed ✅
+                </Button>
+              ) : claimState.canClaimOnChain ? (
+                <Button
+                  onClick={handleClaimReward}
+                  disabled={isClaiming}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg"
+                >
+                  {isClaiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {isClaiming ? "Claiming..." : "Claim Reward"}
+                </Button>
+              ) : (
+                <Button disabled variant="outline" className="border-green-500/50 text-green-700 dark:text-green-400 bg-transparent">
+                  Not Eligible
+                </Button>
+              )}
+            </div>
           </div>
         )}
 

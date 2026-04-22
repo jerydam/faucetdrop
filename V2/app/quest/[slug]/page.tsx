@@ -2414,7 +2414,7 @@ const handleFundQuest = async () => {
         </Button>
       ) : claimState.hasClaimed ? (
         <Button disabled className="bg-green-600 text-white font-bold opacity-100">
-          Claimed ✅
+          {claimState.rewardAmount ? `Claimed ${claimState.rewardAmount} ${tokenSymbol} ✅` : "Claimed ✅"}
         </Button>
       ) : // Banner button:
         claimState.canClaimOnChain ? (
@@ -2938,31 +2938,24 @@ const handleFundQuest = async () => {
               </Badge>
             );
           }
+        
           if (claimState.canClaimOnChain) {
-            if (entryRank <= (questData.distributionConfig?.totalWinners || 100)) {
-              return (
-                <Button
-                  size="sm"
-                  onClick={handleClaimReward}
-                  disabled={isClaiming || claimState.isChecking}
-                  className="h-7 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-sm w-full sm:w-auto font-bold shadow-sm transition-all duration-300 flex items-center justify-center bg-primary/10 backdrop-blur-md border border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25"
-                >
-                  {isClaiming || claimState.isChecking ? (
-                    <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" />
-                  ) : null}
-                  <span className="truncate">
-                    {isClaiming
-                      ? "Claiming..."
-                      : claimState.isChecking
-                        ? "Checking..."
-                        : claimState.rewardAmount
-                          ? `Claim ${claimState.rewardAmount} ${tokenSymbol}`
-                          : "Claim Reward"}
-                  </span>
-                </Button>
-              );
-            }
-          }
+                      if (entryRank <= (questData.distributionConfig?.totalWinners || 100)) {
+                        return (
+                          <Button
+                            size="sm"
+                            onClick={handleClaimReward}
+                            disabled={isClaiming || claimState.isChecking}
+                            className="h-7 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-sm w-full sm:w-auto font-bold shadow-sm transition-all duration-300 flex items-center justify-center bg-primary/10 backdrop-blur-md border border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25"
+                          >
+                            {isClaiming || claimState.isChecking ? <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" /> : null}
+                            <span className="truncate">
+                              {isClaiming ? "Claiming..." : claimState.isChecking ? "Checking..." : "Claim"}
+                            </span>
+                          </Button>
+                        );
+                      }
+                    }
           return (
             <span className="text-[9px] sm:text-xs text-muted-foreground font-medium bg-slate-100 dark:bg-slate-800 px-1 sm:px-2 py-1 rounded whitespace-nowrap">
               Not Eligible

@@ -1646,7 +1646,7 @@ const handleFundQuest = async () => {
       const decimals = await tokenContract.decimals();
 
       const baseAmountWei = parseUnits(rewardPoolAmount.toString(), decimals);
-      const totalAmountWei = baseAmountWei + (baseAmountWei * 1n) / 100n;
+      const totalAmountWei = (baseAmountWei * 100n + 98n) / 99n;
 
       const balance = await tokenContract.balanceOf(userAddress);
 

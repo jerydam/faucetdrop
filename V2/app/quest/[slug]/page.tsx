@@ -407,6 +407,7 @@ export default function QuestDetailsPage() {
     isExpiredOnChain: false,
     fundsWithdrawnOnChain: false,
     claimWindowEndTimestamp: null as number | null,
+    rewardAmount: null as string | null,
   });
   const refreshParticipantData = async () => {
     setIsRefreshingUser(true);
@@ -650,39 +651,51 @@ const canManageQuest = isCreator || isQuestAdmin;
       const privyProvider = await activeWallet.getEthereumProvider();
       const ethersProvider = new BrowserProvider(privyProvider);
       const contract = new Contract(
-        faucetAddress,
-        [
-          "function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeUntilStart, uint256 timeRemaining)",
-          "function isClaimActive() view returns (bool)",
-        ],
-        ethersProvider
-      );
+  faucetAddress,
+  [
+    "function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeUntilStart, uint256 timeRemaining)",
+    "function isClaimActive() view returns (bool)",
+    "function customClaimAmounts(address) view returns (uint256)", // <-- ADD
+  ],
+  ethersProvider
+);
 
-      const [status, claimActive] = await Promise.all([
-        contract.getClaimStatus(userWalletAddress),
-        contract.isClaimActive(),
-      ]);
+      const [status, claimActive, customAmount] = await Promise.all([
+      contract.getClaimStatus(userWalletAddress),
+      contract.isClaimActive(),
+      contract.customClaimAmounts(userWalletAddress).catch(() => 0n), // fallback if not set
+    ]);
 
-      const claimed       = status[0];
-      const hasReward     = status[1];
-      const rewardAmount  = status[2];
-      const canClaim      = status[3];
-      const timeUntilStart = status[4];
-      const timeRemaining  = status[5];
+    const claimed        = status[0];
+    const hasReward      = status[1];
+    const rewardAmount   = status[2];
+    const canClaim       = status[3];
+    const timeUntilStart = status[4];
+    const timeRemaining  = status[5];
 
-      // Expired = claim window opened but is now over (timeRemaining=0, timeUntilStart=0, canClaim=false)
-      const isExpired = !canClaim && timeRemaining === 0n && timeUntilStart === 0n && !claimActive;
+    // Use customClaimAmount if set, else fall back to rewardAmount from getClaimStatus
+    const actualAmount = customAmount > 0n ? customAmount : rewardAmount;
 
-      setClaimState({
-        isChecking:          false,
-        isWinnerOnChain:     hasReward,
-        hasClaimed:          claimed,
-        canClaimOnChain:     canClaim,
-        isExpiredOnChain:    isExpired,
-        fundsWithdrawnOnChain: isExpired && !hasReward,
-        claimWindowEndTimestamp: null, 
-        
-      });
+    const decimals = 6; // USDT/USDC
+    const formatted = (hasReward || customAmount > 0n)
+      ? Number(formatUnits(actualAmount, decimals)).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 4,
+        })
+      : null;
+
+    const isExpired = !canClaim && timeRemaining === 0n && timeUntilStart === 0n && !claimActive;
+
+    setClaimState({
+      isChecking: false,
+      isWinnerOnChain: hasReward || customAmount > 0n,
+      hasClaimed: claimed,
+      canClaimOnChain: canClaim,
+      isExpiredOnChain: isExpired,
+      fundsWithdrawnOnChain: isExpired && !hasReward,
+      claimWindowEndTimestamp: null,
+      rewardAmount: formatted,
+    });
       
     } catch (error) {
       console.error("❌ Error fetching on-chain claim status:", error);
@@ -694,6 +707,8 @@ const canManageQuest = isCreator || isQuestAdmin;
 }, [faucetAddress, userWalletAddress, activeWallet, isQuestEnded]);
   
 const [isClaimWindowOpen, setIsClaimWindowOpen] = useState<boolean | null>(null);
+
+
 
 useEffect(() => {
   const checkClaimWindow = async () => {
@@ -2401,20 +2416,25 @@ const handleFundQuest = async () => {
         <Button disabled className="bg-green-600 text-white font-bold opacity-100">
           Claimed ✅
         </Button>
-      ) : claimState.canClaimOnChain ? (
-        <Button
-          onClick={handleClaimReward}
-          disabled={isClaiming}
-          className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg"
-        >
-          {isClaiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-          {isClaiming ? "Claiming..." : "Claim Reward"}
-        </Button>
-      ) : (
-        <Button disabled variant="outline" className="border-green-500/50 text-green-700 dark:text-green-400 bg-transparent">
-          Not Eligible
-        </Button>
-      )}
+      ) : // Banner button:
+        claimState.canClaimOnChain ? (
+          <Button
+            onClick={handleClaimReward}
+            disabled={isClaiming}
+            className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg"
+          >
+            {isClaiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {isClaiming
+              ? "Claiming..."
+              : claimState.rewardAmount
+                ? `Claim ${claimState.rewardAmount} ${tokenSymbol}`
+                : "Claim Reward"}
+          </Button>
+        ) : (
+          <Button disabled variant="outline" className="border-green-500/50 text-green-700 dark:text-green-400 bg-transparent">
+            {claimState.rewardAmount ? `${claimState.rewardAmount} ${tokenSymbol}` : "Not Eligible"}
+          </Button>
+        )}
     </div>
   </div>
 )}
@@ -2882,7 +2902,7 @@ const handleFundQuest = async () => {
                       <TableHead className="w-[45px] sm:w-[80px] px-1 sm:px-4 text-center sm:text-left">Rank</TableHead>
                       <TableHead className="px-2 sm:px-4">Participant</TableHead>
                       <TableHead className="text-right w-[60px] sm:w-[100px] px-1 sm:px-4">Points</TableHead>
-                      {claimStatus.isActive && <TableHead className="text-right w-[75px] sm:w-[120px] px-1 sm:px-4">Action</TableHead>}
+                      {claimStatus.isActive && <TableHead className="text-right w-[75px] sm:w-[120px]LEADERBOARD  px-1 sm:px-4">Action</TableHead>}
 
                     </TableRow>
                   </TableHeader>
@@ -2927,9 +2947,17 @@ const handleFundQuest = async () => {
                   disabled={isClaiming || claimState.isChecking}
                   className="h-7 px-2 sm:h-9 sm:px-3 text-[10px] sm:text-sm w-full sm:w-auto font-bold shadow-sm transition-all duration-300 flex items-center justify-center bg-primary/10 backdrop-blur-md border border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25"
                 >
-                  {isClaiming || claimState.isChecking ? <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" /> : null}
+                  {isClaiming || claimState.isChecking ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1 sm:mr-2 shrink-0" />
+                  ) : null}
                   <span className="truncate">
-                    {isClaiming ? "Claiming..." : claimState.isChecking ? "Checking..." : "Claim"}
+                    {isClaiming
+                      ? "Claiming..."
+                      : claimState.isChecking
+                        ? "Checking..."
+                        : claimState.rewardAmount
+                          ? `Claim ${claimState.rewardAmount} ${tokenSymbol}`
+                          : "Claim Reward"}
                   </span>
                 </Button>
               );

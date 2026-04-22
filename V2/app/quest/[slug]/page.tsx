@@ -705,25 +705,19 @@ useEffect(() => {
         faucetAddress,
         [
           "function isClaimActive() view returns (bool)",
-          "function claimStartTime() view returns (uint256)",
-          "function claimDuration() view returns (uint256)",
+          "function endTime() view returns (uint256)",
         ],
         ethersProvider
       );
 
-      const [active, claimStart, claimDuration] = await Promise.all([
+      const [active, endTime] = await Promise.all([
         contract.isClaimActive(),
-        contract.claimStartTime().catch(() => null),
-        contract.claimDuration().catch(() => null),
+        contract.endTime(),
       ]);
 
       setIsClaimWindowOpen(active);
+      setClaimWindowEndIso(new Date(Number(endTime) * 1000).toISOString());
 
-      // Compute end from chain: claimStartTime + claimDuration
-      if (claimStart && claimDuration) {
-        const endMs = (Number(claimStart) + Number(claimDuration)) * 1000;
-        setClaimWindowEndIso(new Date(endMs).toISOString());
-      }
     } catch (e) {
       console.error("isClaimActive check failed", e);
     }
@@ -927,9 +921,7 @@ const claimStatus = useMemo(() => {
       setIsCheckingIn(false);
     }
   };
-  const claimWindowCountdown = useCountdown(
-  claimStatus.isActive ? claimWindowEndIso : null
-);
+  const claimWindowCountdown = useCountdown(claimWindowEndIso);
   const [isAdminEditing, setIsAdminEditing] = useState(false);
 
   const getCheckinStatus = () => {
@@ -2377,46 +2369,55 @@ const handleFundQuest = async () => {
         )}
 
         {claimStatus.isActive && !isClaimWindowClosed && (
-          <div className="rounded-xl border border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-full text-green-600 dark:text-green-400">
-                <Gift className="h-5 w-5 animate-pulse" />
-              </div>
-              <div>
-                <p className="font-semibold text-green-900 dark:text-green-200 text-sm">🎉 Claim Window is Live!</p>
-                <p className="text-xs text-green-700 dark:text-green-400">
-                  Check your eligibility and claim your reward below.
-                </p>
-              </div>
-            </div>
-            
-            {/* ── CLAIM STATUS BUTTON REPLACING COUNTDOWN ── */}
-            <div className="shrink-0 flex items-center justify-end min-w-[120px]">
-              {claimState.isChecking ? (
-                <Button disabled className="bg-green-600/50 text-white cursor-not-allowed">
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" /> Checking...
-                </Button>
-              ) : claimState.hasClaimed ? (
-                <Button disabled className="bg-green-600 text-white font-bold opacity-100">
-                  Claimed ✅
-                </Button>
-              ) : claimState.canClaimOnChain ? (
-                <Button
-                  onClick={handleClaimReward}
-                  disabled={isClaiming}
-                  className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg"
-                >
-                  {isClaiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  {isClaiming ? "Claiming..." : "Claim Reward"}
-                </Button>
-              ) : (
-                <Button disabled variant="outline" className="border-green-500/50 text-green-700 dark:text-green-400 bg-transparent">
-                  Not Eligible
-                </Button>
-              )}
-            </div>
-          </div>
+  <div className="rounded-xl border border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-950/20 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+    <div className="flex items-center gap-3">
+      <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-full text-green-600 dark:text-green-400">
+        <Gift className="h-5 w-5 animate-pulse" />
+      </div>
+      <div>
+        <p className="font-semibold text-green-900 dark:text-green-200 text-sm">🎉 Claim Window is Live!</p>
+        <p className="text-xs text-green-700 dark:text-green-400">
+          Check your eligibility and claim your reward below.
+        </p>
+        {claimWindowCountdown && claimWindowCountdown !== "00:00:00" ? (
+          <p className="text-xs font-mono font-bold text-green-800 dark:text-green-300 mt-1">
+            ⏳ Claiming Ends in {claimWindowCountdown}
+          </p>
+        ) : claimWindowEndIso ? (
+          <p className="text-xs text-green-700 dark:text-green-400 mt-1">Claim window closing...</p>
+        ) : (
+          <p className="text-xs text-green-700 dark:text-green-400 mt-1">Fetching end time from contract...</p>
         )}
+      </div>
+    </div>
+
+    {/* ── CLAIM STATUS BUTTON ── */}
+    <div className="shrink-0 flex items-center justify-end min-w-[120px]">
+      {claimState.isChecking ? (
+        <Button disabled className="bg-green-600/50 text-white cursor-not-allowed">
+          <Loader2 className="h-4 w-4 animate-spin mr-2" /> Checking...
+        </Button>
+      ) : claimState.hasClaimed ? (
+        <Button disabled className="bg-green-600 text-white font-bold opacity-100">
+          Claimed ✅
+        </Button>
+      ) : claimState.canClaimOnChain ? (
+        <Button
+          onClick={handleClaimReward}
+          disabled={isClaiming}
+          className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg"
+        >
+          {isClaiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          {isClaiming ? "Claiming..." : "Claim Reward"}
+        </Button>
+      ) : (
+        <Button disabled variant="outline" className="border-green-500/50 text-green-700 dark:text-green-400 bg-transparent">
+          Not Eligible
+        </Button>
+      )}
+    </div>
+  </div>
+)}
 
           {claimState.isExpiredOnChain && questTiming.isEnded && (
              <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/20 px-6 py-4 flex items-center gap-3">

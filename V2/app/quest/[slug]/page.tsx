@@ -62,6 +62,7 @@ import { Contract, BrowserProvider, parseEther, ZeroAddress, formatUnits, parseU
 import { Header } from "@/components/header";
 import { SubscriptionModal } from "@/components/subscribe";
 import Loading from "@/app/loading";
+import LoadingPage from "@/components/claimloading";
 
 const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"; // <-- REPLACE WITH ACTUAL BACKEND URL
 const SUPER_ADMIN_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
@@ -1771,6 +1772,7 @@ const handleFundQuest = async () => {
     const input = parseFloat(fundAmount || "0");
     return Math.abs(input - totalRequired) < 0.0001;
   }, [fundAmount, totalRequired]);
+  
   // --- PARTICIPANT: CLAIM REWARD (VIA BACKEND) ---
   const handleClaimReward = async () => {
     if (!activeWallet) return toast.error("Wallet not connected");
@@ -1794,15 +1796,24 @@ const handleFundQuest = async () => {
 
       if (data.success) {
         toast.success("Reward Claimed Successfully! Tx: " + data.txHash);
+        
+        // ── ADD THIS: Instantly update local state to hide the button ──
+        setClaimState(prev => ({ 
+          ...prev, 
+          hasClaimed: true, 
+          canClaimOnChain: false 
+        }));
+        
       } else {
         toast.error(data.detail || "Claim failed.");
       }
     } catch (e: any) {
       toast.error("Network error during claim.");
     } finally {
-      setIsClaiming(false);
+      setIsClaiming(false); // This will automatically hide your popup
     }
   };
+
   // --- ADMIN: WITHDRAW FUNDS (DIRECT CONTRACT INTERACTION) ---
   const handleAdminWithdraw = async () => {
     if (!activeWallet) return toast.error("Wallet not connected");
@@ -3837,6 +3848,12 @@ const handleFundQuest = async () => {
     onClose={() => { setSelectedParticipant(null); setParticipantTaskDetails(null); }}
   />
 )}
+{/* ============= CLAIM LOADING OVERLAY ============= */}
+        {isClaiming && (
+          <div className="fixed inset-0 z-[100] animate-in fade-in duration-200">
+            <LoadingPage />
+          </div>
+        )}
     </div>
   );
 }

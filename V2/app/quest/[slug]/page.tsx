@@ -2272,45 +2272,48 @@ const handleFundQuest = async () => {
 
                 {/* ── Actions Area ── */}
                 {/* CHANGED: Hide entirely if the user is a participant */}
-                {( canManageQuest) && (
-                  <div className="flex flex-row gap-2 w-full justify-center md:justify-start [&>button]:flex-1 md:[&>button]:flex-none mt-2">
+                
+                 {/* ── Actions Area ── */}
+<div className="flex flex-row gap-2 w-full justify-center md:justify-start [&>button]:flex-1 md:[&>button]:flex-none mt-2">
 
-                    {/* Copy Link is now hidden for participants */}
-                    <Button
-                      variant="outline"
-                      className="bg-white/5 border-white/10 text-white hover:bg-white/10 h-11 md:h-12 px-2 md:px-6 text-xs md:text-sm"
-                      onClick={() => {
-                        const link = window.location.href.split("?")[0];
-                        navigator.clipboard.writeText(link);
-                        toast.success("Quest link copied to clipboard!");
-                      }}
-                    >
-                      <Copy className="mr-1.5 md:mr-2 h-4 w-4 md:h-5 md:w-5 shrink-0" />
-                      <span className="truncate">Copy Link</span>
-                    </Button>
+  {/* Admin Action: Copy Link */}
+  {canManageQuest && (
+    <Button
+      variant="outline"
+      className="bg-white/5 border-white/10 text-white hover:bg-white/10 h-11 md:h-12 px-2 md:px-6 text-xs md:text-sm"
+      onClick={() => {
+        const link = window.location.href.split("?")[0];
+        navigator.clipboard.writeText(link);
+        toast.success("Quest link copied to clipboard!");
+      }}
+    >
+      <Copy className="mr-1.5 md:mr-2 h-4 w-4 md:h-5 md:w-5 shrink-0" />
+      <span className="truncate">Copy Link</span>
+    </Button>
+  )}
 
-                    {!canManageQuest && (
-                      <Button
-                        onClick={handleJoin}
-                        disabled={isJoining || questTiming.notStartedYet || questTiming.isEnded || !creatorSubscribed}
-                        className="h-11 md:h-12 px-2 md:px-6 text-xs md:text-sm"
-                      >
-                        {isJoining ? <Loader2 className="mr-1.5 md:mr-2 h-4 w-4 md:h-5 md:w-5 animate-spin shrink-0" /> : null}
-                        <span className="truncate">
-                          {isJoining
-                            ? "Joining..."
-                            : !creatorSubscribed
-                              ? "Locked"
-                              : questTiming.notStartedYet
-                                ? `Starts in ${startCountdown}`
-                                : questTiming.isEnded
-                                  ? "Ended"
-                                  : "Join Quest"}
-                        </span>
-                      </Button>
-                    )}
-                  </div>
-                )}
+  {/* Participant Action: Join Quest */}
+  {!canManageQuest && !participantData && (
+    <Button
+      onClick={handleJoin}
+      disabled={isJoining || questTiming.notStartedYet || questTiming.isEnded || !creatorSubscribed}
+      className="h-11 md:h-12 px-2 md:px-6 text-xs md:text-sm"
+    >
+      {isJoining ? <Loader2 className="mr-1.5 md:mr-2 h-4 w-4 md:h-5 md:w-5 animate-spin shrink-0" /> : null}
+      <span className="truncate">
+        {isJoining
+          ? "Joining..."
+          : !creatorSubscribed
+            ? "Locked"
+            : questTiming.notStartedYet
+              ? `Starts in ${startCountdown}`
+              : questTiming.isEnded
+                ? "Ended"
+                : "Join Quest"}
+      </span>
+    </Button>
+  )}
+</div>
               </div>
 
             </div>

@@ -965,7 +965,6 @@ const [, forceUpdate] = useState(0);
   useEffect(() => {
     if (showSubmitModal && selectedTask) {
       sessionStorage.setItem(`modal_open_time_${selectedTask.id}`, Date.now().toString());
-      console.log(`[Modal Opened] Task: ${selectedTask.id} | Timer started!`);
     } else if (!showSubmitModal && selectedTask) {
       // Clean up when they close it
       sessionStorage.removeItem(`modal_open_time_${selectedTask.id}`);

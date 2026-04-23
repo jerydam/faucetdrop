@@ -961,6 +961,17 @@ const claimStatus = useMemo(() => {
 return { canCheckin: false, message: `Next check-in in ${hours}h ${minutes}m ${seconds}s` };
 };
 const [, forceUpdate] = useState(0);
+// Add this near your other state variables
+  useEffect(() => {
+    if (showSubmitModal && selectedTask) {
+      sessionStorage.setItem(`modal_open_time_${selectedTask.id}`, Date.now().toString());
+      console.log(`[Modal Opened] Task: ${selectedTask.id} | Timer started!`);
+    } else if (!showSubmitModal && selectedTask) {
+      // Clean up when they close it
+      sessionStorage.removeItem(`modal_open_time_${selectedTask.id}`);
+      sessionStorage.removeItem(`task_click_${selectedTask.id}`);
+    }
+  }, [showSubmitModal, selectedTask]);
 
 useEffect(() => {
   const interval = setInterval(() => forceUpdate(n => n + 1), 1000);
@@ -1493,7 +1504,21 @@ const handleRemoveAdmin = async (adminAddress: string) => {
           taskId: selectedTask.id,
           submissionId,
         };
+        // 👇 1. READ BOTH TIMERS 👇
+        const openTs = sessionStorage.getItem(`modal_open_time_${selectedTask.id}`);
+        const clickTs = sessionStorage.getItem(`task_click_${selectedTask.id}`);
+        
+        // Calculate elapsed times
+        const modalElapsed = openTs ? (Date.now() - parseInt(openTs)) / 1000 : 0;
+        const clickElapsed = clickTs ? (Date.now() - parseInt(clickTs)) / 1000 : 0;
+        
+        // Populate payload
+        payload.modalElapsedSeconds = modalElapsed; // How long modal was open
+        payload.elapsedSeconds = clickElapsed;      // How long since they clicked "Post on X"
+        payload.clickedAction = !!clickTs;          // Did they click it?
 
+        console.log(`[Sending to Backend] Modal Open: ${modalElapsed}s | Clicked: ${payload.clickedAction} | Waited Since Click: ${clickElapsed}s`);
+        
         if (selectedTask.action === "quote") {
           endpoint = "/api/tasks/verify-x-quote";
           payload.proofUrl = finalProofUrl;
@@ -3648,25 +3673,25 @@ const handleFundQuest = async () => {
                         </p>
                       </div>
                      <Button
-                        size="sm"
-                        className="w-full max-w-xs gap-2 font-bold uppercase tracking-wider"
-                        variant={isXShareTask ? "default" : "outline"}
-                        onClick={() => {
-                          if (isXShareTask) {
-                            handleXShareAction(selectedTask);
-                          } else {
-                            // ✅ ONLY track the click time if it is a "none" verification task
-                            if (selectedTask.verificationType === "none") {
-                              sessionStorage.setItem(`task_click_${selectedTask.id}`, Date.now().toString());
-                            }
-                            
-                            window.open(selectedTask.url, "_blank");
-                          }
-                        }}
-                      >
-                        {isXShareTask ? "Post on X" : `${selectedTask.action.replace('_', ' ')} NOW`}
-                        <ExternalLink className="h-4 w-4 opacity-50" />
-                      </Button>
+                      size="sm"
+                      className="w-full max-w-xs gap-2 font-bold uppercase tracking-wider"
+                      variant={isXShareTask ? "default" : "outline"}
+                      onClick={() => {
+                        // 1. THIS IS OUR EVENT LISTENER: Record the exact click time
+                        sessionStorage.setItem(`task_click_${selectedTask.id}`, Date.now().toString()); 
+                        console.log(`[Timer Started] Task: ${selectedTask.id}`);
+
+                        // 2. Open the URL
+                        if (isXShareTask) {
+                          handleXShareAction(selectedTask);
+                        } else {
+                          window.open(selectedTask.url, "_blank");
+                        }
+                      }}
+                    >
+                      {isXShareTask ? "Post on X" : `${selectedTask.action.replace('_', ' ')} NOW`}
+                      <ExternalLink className="h-4 w-4 opacity-50" />
+                    </Button>
                     </div>
                   );
                 })()}

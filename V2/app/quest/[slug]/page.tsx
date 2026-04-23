@@ -2885,7 +2885,7 @@ const handleFundQuest = async () => {
                   description: "Link your X (Twitter), Telegram, and Google (Email) accounts before attempting tasks.",
                   action: {
                     label: "Edit Profile",
-                    onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+                    onClick: () => router.push(`/dashboard/${userProfile?.username || userWalletAddress}`),
                   },
                   duration: 7000,
                 });

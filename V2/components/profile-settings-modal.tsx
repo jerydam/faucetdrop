@@ -217,7 +217,7 @@ useEffect(() => {
     if (!isConnected || !address || !signer) return toast.error("Wallet error")
     if (!user?.google?.email)         return toast.error("Please connect your Google (Email) account.")
     if (!user?.twitter?.username)     return toast.error("Please connect your X (Twitter) account.")
-
+    if (!user?.telegram?.username)    return toast.error("Please connect your Telegram account.")
     setSaving(true)
     const validUsername = await checkUsernameUniqueness(formData.username || "")
     if (!validUsername) { setSaving(false); return toast.error("Please fix errors before saving.") }

@@ -146,9 +146,12 @@ interface UserProfile {
   bio?: string;
   avatar_url?: string;
   twitter_handle?: string;
-  is_quest_subscribed?: boolean;             // <--- ADD THIS
-  quest_subscription_expires_at?: string;    // <--- ADD THIS
+  telegram_handle?: string;   // ← add
+  email?: string;             // ← add
+  is_quest_subscribed?: boolean;
+  quest_subscription_expires_at?: string;
 }
+
 interface ParticipantData {
   referral_id: string;
   referral_count: number;
@@ -201,6 +204,7 @@ const useCountdown = (targetDate: string | null) => {
 
   return timeLeft;
 };
+
 // ============= PARTICIPANT PROFILE MODAL =============
 function ParticipantProfileModal({
   entry,
@@ -497,6 +501,12 @@ export default function QuestDetailsPage() {
     isActive: true,
   });
 
+const isProfileComplete = !!(
+  userProfile?.username &&
+  userProfile?.twitter_handle &&
+  userProfile?.telegram_handle &&
+  userProfile?.email
+);
 
   const isCreator =
   userWalletAddress &&
@@ -1223,7 +1233,17 @@ const handleRemoveAdmin = async (adminAddress: string) => {
 
   const handleSubmitTask = async () => {
     if (!selectedTask || !userWalletAddress) return;
-
+    if (!isProfileComplete) {
+  toast.error("Profile incomplete", {
+    description: "You must set a username and link your X (Twitter), Telegram, and Google accounts before completing tasks.",
+    action: {
+      label: "Edit Profile",
+      onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+    },
+    duration: 7000,
+  });
+  return;
+}
     // ✅ CHECK & COMPARE ONLY FOR "NONE" TASKS
     if (selectedTask.verificationType === "none" && selectedTask.url) {
       const clickTimestamp = sessionStorage.getItem(`task_click_${selectedTask.id}`);
@@ -2857,18 +2877,32 @@ const handleFundQuest = async () => {
               {!participantData ? "Join Required" : "Locked"}
             </span>
           ) : !canManageQuest ? (
-            <Button
-              size="sm"
-              onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }}
-              disabled={!participantData || !questTiming.isLive || (status !== "available" && status !== "rejected")}
-              className={status === "rejected" ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"}
-            >
-              {questTiming.notStartedYet 
-                ? "Starts Soon" 
-                : status === "rejected" 
-                  ? "Try Again" 
-                  : "Open Task"}
-            </Button>
+           <Button
+            size="sm"
+            onClick={() => {
+              if (!isProfileComplete) {
+                toast.error("Profile incomplete", {
+                  description: "Link your X (Twitter), Telegram, and Google (Email) accounts before attempting tasks.",
+                  action: {
+                    label: "Edit Profile",
+                    onClick: () => router.push(`/dashboard/${userWalletAddress}`),
+                  },
+                  duration: 7000,
+                });
+                return;
+              }
+              setSelectedTask(task);
+              setShowSubmitModal(true);
+            }}
+            disabled={!participantData || !questTiming.isLive || (status !== "available" && status !== "rejected")}
+            className={status === "rejected" ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-900 text-white hover:bg-primary dark:bg-slate-100 dark:text-black"}
+          >
+            {questTiming.notStartedYet 
+              ? "Starts Soon" 
+              : status === "rejected" 
+                ? "Try Again" 
+                : "Open Task"}
+          </Button>
           ) : (
             <Button
             size="sm"

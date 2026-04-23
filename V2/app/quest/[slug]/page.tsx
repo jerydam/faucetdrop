@@ -1517,7 +1517,6 @@ const handleRemoveAdmin = async (adminAddress: string) => {
         payload.elapsedSeconds = clickElapsed;      // How long since they clicked "Post on X"
         payload.clickedAction = !!clickTs;          // Did they click it?
 
-        console.log(`[Sending to Backend] Modal Open: ${modalElapsed}s | Clicked: ${payload.clickedAction} | Waited Since Click: ${clickElapsed}s`);
         
         if (selectedTask.action === "quote") {
           endpoint = "/api/tasks/verify-x-quote";

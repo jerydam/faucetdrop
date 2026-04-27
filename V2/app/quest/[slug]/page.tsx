@@ -219,9 +219,16 @@ function ParticipantProfileModal({
   questTasks: QuestTask[];
   onClose: () => void;
 }) {
-  const completedIds = new Set(progress?.completedTasks || []);
+  const nonSystemTasks = questTasks.filter(t => !t.isSystem);
+
+  const completedIds = new Set(
+    (progress?.completedTasks || []).filter(id =>
+      nonSystemTasks.some(t => t.id === id)
+    )
+  );
+  
   const completedCount = completedIds.size;
-  const totalTasks = questTasks.filter(t => !t.isSystem).length;
+  const totalTasks = nonSystemTasks.length;
 
   const rankDisplay =
     entry.rank === 1 ? "🥇" :

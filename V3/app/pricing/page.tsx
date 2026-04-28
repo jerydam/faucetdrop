@@ -58,7 +58,7 @@ const DISTRIBUTION_CARDS = [
     feeLabel: "Fee",
     tagline: "Targeted distribution for selected users",
     accent: "#338BFF",
-    popular: true,
+    popular: false,
     features: [
       "Restricted to whitelisted wallets",
       "Perfect for airdrops & early supporters",
@@ -406,7 +406,7 @@ export default function PricingPage() {
           </div>
 
           <a
-            href="#"
+            href="mailto:drops.faucet@gmail.com"
             className="relative lg:self-center w-full lg:w-auto text-center font-semibold text-sm px-8 py-4 rounded-xl text-white no-underline transition-all hover:opacity-90 hover:-translate-y-0.5"
             style={{
               background: "linear-gradient(135deg, #0052FF, #338BFF)",

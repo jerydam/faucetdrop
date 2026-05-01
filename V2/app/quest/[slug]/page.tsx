@@ -3760,10 +3760,10 @@ const handleFundQuest = async () => {
                   )}
 
                 {/* 3. DYNAMIC INPUT: Image Uploads */}
-                {(
-                  ['manual_upload', 'manual_link_image'].includes(selectedTask.verificationType) ||
-                  (selectedTask.verificationType === 'auto_social' && !['Twitter', 'Discord', 'Telegram'].includes(selectedTask.targetPlatform || ''))
-                ) && selectedTask.category === 'social' && (
+                  {(
+                      ['manual_upload', 'manual_link_image'].includes(selectedTask.verificationType) ||
+                      (selectedTask.verificationType === 'auto_social' && !['Twitter', 'Discord', 'Telegram'].includes(selectedTask.targetPlatform || ''))
+                    ) && (
                     <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
                       <div className="flex items-center gap-2">
                         {selectedTask.url && <Badge variant="outline" className="bg-background">Step {selectedTask.verificationType === 'manual_link_image' ? '3' : '2'}</Badge>}

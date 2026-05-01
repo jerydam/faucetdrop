@@ -232,7 +232,12 @@ function TaskForm({ initial, onSave, onCancel, isDemoQuest }: TaskFormProps) {
   const availableVerificationTypes = isDemoQuest
     ? VERIFICATION_TYPES.filter(({ value }) => value === "auto_social" || value === "none")
     : VERIFICATION_TYPES;
-
+  const [isCustomTask, setIsCustomTask] = useState(
+    initial.action === 'custom' || (
+      !initial.targetPlatform &&
+      initial.verificationType === 'manual_link_image'
+    )
+  );
   const [discordStatus, setDiscordStatus] = useState<{ checking: boolean; ok: boolean | null; msg: string }>({ checking: false, ok: null, msg: "" });
   const [telegramStatus, setTelegramStatus] = useState<{ checking: boolean; ok: boolean | null; botUsername: string }>({ checking: false, ok: null, botUsername: "" });
 
@@ -300,17 +305,18 @@ function TaskForm({ initial, onSave, onCancel, isDemoQuest }: TaskFormProps) {
   const suggestedForStage = SUGGESTED_TASKS_BY_STAGE[task.stage] || [];
 
   const applySuggestion = (s: Partial<EditableTask>) => {
-    setTask((prev) => ({
-      ...prev,
-      ...s,
-      stage: s.stage || prev.stage,
-      id: prev.id,
-      _isDirty: true,
-      _isNew: prev._isNew,
-    }));
-    setDiscordStatus({ checking: false, ok: null, msg: "" });
-    setTelegramStatus({ checking: false, ok: null, botUsername: "" });
-  };
+  setIsCustomTask(false); // ← ADD THIS
+  setTask((prev) => ({
+    ...prev,
+    ...s,
+    stage: s.stage || prev.stage,
+    id: prev.id,
+    _isDirty: true,
+    _isNew: prev._isNew,
+  }));
+  setDiscordStatus({ checking: false, ok: null, msg: "" });
+  setTelegramStatus({ checking: false, ok: null, botUsername: "" });
+};
 
   const handleSave = () => {
     if (!task.title.trim()) { toast.error("Title is required"); return; }
@@ -358,42 +364,68 @@ function TaskForm({ initial, onSave, onCancel, isDemoQuest }: TaskFormProps) {
             </Select>
           </div>
         </div>
-
+        
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
             <Zap className="h-3 w-3 text-yellow-500" /> Quick Add Templates
           </Label>
-          <div className="flex flex-wrap gap-1.5">
-            {suggestedForStage.map((s, i) => (
-              <Button key={i} variant="outline" size="sm"
-                className="text-xs h-7 bg-white dark:bg-slate-900 hover:border-primary hover:text-primary transition-colors"
-                onClick={() => applySuggestion(s)}>
-                <Plus className="h-3 w-3 mr-1" />{s.title}
-              </Button>
-            ))}
-          </div>
+           <div className="flex flex-wrap gap-1.5">
+    {/* Custom Task Button */}
+    <Button
+      key="custom"
+      variant="outline"
+      size="sm"
+      className="text-xs h-7 bg-primary/5 border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
+      onClick={() => {
+        setIsCustomTask(true);
+        setTask(prev => ({
+        ...prev,
+        title: "",
+        description: "",
+        category: "general",
+        action: "custom",
+        verificationType: "manual_link_image",
+        targetPlatform: "",  // ← empty string instead of undefined
+        url: "",
+        targetContractAddress: "",
+        _isDirty: true,
+      }));
+      }}
+    >
+      <Plus className="h-3 w-3 mr-1" /> Custom
+    </Button>
+
+    {/* Existing suggested tasks */}
+    {suggestedForStage.map((s, i) => (
+      <Button key={i} variant="outline" size="sm"
+        className="text-xs h-7 bg-white dark:bg-slate-900 hover:border-primary hover:text-primary transition-colors"
+        onClick={() => applySuggestion(s)}>
+        <Plus className="h-3 w-3 mr-1" />{s.title}
+      </Button>
+    ))}
+  </div>
         </div>
       </div>
-
+        
       <div className="h-px bg-slate-200 dark:bg-slate-700" />
 
       {/* ── Title + Points ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="sm:col-span-2 space-y-1.5">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Task Title <span className="text-red-500">*</span>
-          </Label>
-          <Input value={task.title} placeholder="e.g. Follow us on Twitter"
-            onChange={(e) => patch({ title: e.target.value })}
-            className="h-10 bg-white dark:bg-slate-950" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Points</Label>
-          <Input type="number" min={0} max={10000} value={task.points}
-            onChange={(e) => patch({ points: Number(e.target.value) })}
-            className="h-10 bg-white dark:bg-slate-950" />
-        </div>
-      </div>
+<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  <div className="sm:col-span-2 space-y-1.5">
+    <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      Task Title <span className="text-red-500">*</span>
+    </Label>
+    <Input value={task.title} placeholder="e.g. Sign up on our platform"
+      onChange={(e) => patch({ title: e.target.value })}
+      className="h-10 bg-white dark:bg-slate-950" />
+  </div>
+  <div className="space-y-1.5">
+    <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Points</Label>
+    <Input type="number" min={0} max={10000} value={task.points}
+      onChange={(e) => patch({ points: Number(e.target.value) })}
+      className="h-10 bg-white dark:bg-slate-950" />
+  </div>
+</div>
 
       {/* ── Description ── */}
       <div className="space-y-1.5">
@@ -437,6 +469,73 @@ function TaskForm({ initial, onSave, onCancel, isDemoQuest }: TaskFormProps) {
         </div>
       </div>
 
+
+      {/* ══════════════════════════════════════════
+    CUSTOM TASK CONFIGURATION
+══════════════════════════════════════════ */}
+{isCustomTask && (
+  <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 space-y-4">
+    <p className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+      <Zap className="h-3.5 w-3.5 text-primary" /> Custom Task
+      <Badge variant="outline" className="ml-auto text-[10px] normal-case tracking-normal">
+        Link + Image Upload
+      </Badge>
+    </p>
+
+    {/* Action Label */}
+    <div className="space-y-1.5">
+      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Action Label <span className="text-red-500">*</span>
+      </Label>
+      <Input
+        className="h-9 bg-white dark:bg-slate-950"
+        placeholder="e.g. signup, interact, complete, submit..."
+        value={task.action === 'custom' ? '' : task.action || ''}
+        onChange={(e) => patch({ action: e.target.value || 'custom' })}
+      />
+      <p className="text-[10px] text-muted-foreground">
+        Short verb describing what the user must do.
+      </p>
+    </div>
+
+    {/* Reference URL */}
+    <div className="space-y-1.5">
+      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <LinkIcon className="h-3 w-3" /> Reference URL
+        <span className="text-muted-foreground font-normal">(optional)</span>
+      </Label>
+      <Input
+        className="h-9 bg-white dark:bg-slate-950 font-mono text-xs"
+        placeholder="https://your-site.com/signup"
+        value={task.url || ""}
+        onChange={(e) => patch({ url: e.target.value })}
+        onBlur={() => {
+          if (task.url?.includes('.')) patch({ url: normalizeUrl(task.url) });
+        }}
+      />
+    </div>
+
+    {/* Contract Address */}
+    <div className="space-y-1.5">
+      <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+        <Code className="h-3 w-3" /> Contract Address
+        <span className="text-muted-foreground font-normal">(optional)</span>
+      </Label>
+      <Input
+        className="h-9 bg-white dark:bg-slate-950 font-mono text-xs"
+        placeholder="0x... (leave blank if not applicable)"
+        value={task.targetContractAddress || ""}
+        onChange={(e) => patch({ targetContractAddress: e.target.value })}
+      />
+    </div>
+
+    <div className="flex items-start gap-2 p-2.5 bg-muted/50 rounded-md border border-border text-[11px] text-muted-foreground">
+      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-green-500" />
+      Participants submit a <strong className="text-foreground mx-0.5">proof link</strong> and
+      <strong className="text-foreground mx-0.5">screenshot</strong> for manual review.
+    </div>
+  </div>
+)}
       {/* ══════════════════════════════════════════
           SOCIAL TASK CONFIGURATION
       ══════════════════════════════════════════ */}

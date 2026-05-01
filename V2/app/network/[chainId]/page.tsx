@@ -762,7 +762,12 @@ useEffect(() => { setPage(1); }, [searchTerm, filterBy, sortBy]);
     setSearchTerm(""); setFilterBy(FILTER_OPTIONS.ALL);
     setSortBy(SORT_OPTIONS.DEFAULT); setPage(1);
   };
-
+  const handleNetworkRefresh = async () => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "...";
+  // Fire backend sync without blocking the UI refresh
+  fetch(`${apiUrl}/api/refresh/network-faucets`).catch(() => {});
+  await loadAllFaucetsMetadata();
+};
   // ── Pagination helpers ──────────────────────────────────────────────────────
 
   const hasActiveFilters = searchTerm.trim() !== "" || filterBy !== FILTER_OPTIONS.ALL || sortBy !== SORT_OPTIONS.DEFAULT;
@@ -799,7 +804,7 @@ useEffect(() => { setPage(1); }, [searchTerm, filterBy, sortBy]);
         <div className="flex-1">
           <Header
             pageTitle={`Faucets on ${network?.name || "Unknown Network"}`}
-            onRefresh={loadAllFaucetsMetadata}
+            onRefresh={handleNetworkRefresh}
             loading={isLoading}
           />
         </div>

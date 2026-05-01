@@ -4,7 +4,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
-import { Droplets, PackageCheck, GraduationCap, TrendingUp, TrendingDown, Minus, AlertCircle } from "lucide-react";
+import { Droplets, PackageCheck, GraduationCap, TrendingUp, TrendingDown, Minus, AlertCircle, RefreshCw } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export interface AnalyticsData {
@@ -542,8 +542,18 @@ export default function AnalyticsDashboard() {
   const [quizzesList, setQuizzesList] = useState<QuizItem[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
+  const [refreshingAnalytics, setRefreshingAnalytics] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-
+    const handleAnalyticsRefresh = async () => {
+      setRefreshingAnalytics(true);
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "...";
+        await fetch(`${apiUrl}/api/refresh/analytics`);
+        // If you have a refetch function from useDashboard, call it here
+      } finally {
+        setRefreshingAnalytics(false);
+      }
+    };
   const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
@@ -590,12 +600,30 @@ export default function AnalyticsDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Analytics</p>
-          <h2 className="text-2xl font-bold text-foreground tracking-tight">Platform Performance</h2>
-          {formattedUpdated && !loading && (
-            <p className="text-[11px] text-muted-foreground mt-0.5">Updated {formattedUpdated}</p>
-          )}
-        </div>
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+        Analytics
+      </p>
+      
+      <div className="flex items-center gap-2">
+        <h2 className="text-2xl font-bold text-foreground tracking-tight">
+          Platform Performance
+        </h2>
+        
+        <button 
+          onClick={handleAnalyticsRefresh} 
+          disabled={refreshingAnalytics}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <RefreshCw size={18} className={refreshingAnalytics ? "animate-spin" : ""} />
+        </button>
+      </div>
+
+      {formattedUpdated && !loading && (
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Updated {formattedUpdated}
+        </p>
+      )}
+    </div>
 
         {/* Tab switcher only — refresh button removed */}
         <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-xl border border-border/60">

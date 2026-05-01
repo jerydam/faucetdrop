@@ -88,7 +88,18 @@ export function FaucetList() {
   }, [loadClaims]);
   useEffect(() => { setPage(1); }, [isMobile]);
 
-  const handleRefresh = () => loadClaims(true);
+  const handleRefresh = async () => {
+  setRefreshing(true);
+  try {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "...";
+    await fetch(`${apiUrl}/api/refresh/claims`);
+    await loadClaims(true); // still reload from the claims endpoint for display
+  } catch (error) {
+    toast({ title: "Refresh failed", variant: "destructive" });
+  } finally {
+    setRefreshing(false);
+  }
+};
 
   const totalPages = Math.ceil(claims.length / claimsPerPage);
   const paginatedClaims = claims.slice((page - 1) * claimsPerPage, page * claimsPerPage);

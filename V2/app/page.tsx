@@ -228,6 +228,8 @@
     const [lastClaimAt, setLastClaimAt]       = useState<string | null>(null);
     const [countdown, setCountdown]           = useState<string>("");
     const [canClaim, setCanClaim]             = useState<boolean>(true);
+    
+
 
     const hasPromptedLogin   = useRef(false);
     const hasTriggeredTx     = useRef(false);

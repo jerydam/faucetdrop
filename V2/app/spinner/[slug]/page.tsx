@@ -2,16 +2,26 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { SpinWheel, getWinnerIndex } from "@/components/SpinWheel";
-import { Upload, Share2, Plus, X, Crown, Trophy, RotateCcw, Play, Pencil, Check, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Upload, Share2, Plus, X, Trophy, RotateCcw,
+  Play, Pencil, Check, Settings, ArrowLeft,
+} from "lucide-react";
 import { toast } from "sonner";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
 
-const COLORS = [
+// Wheel segment colours — kept intentionally vivid (they're the wheel itself)
+const WHEEL_COLORS = [
   "#7C5CFC","#FF3B5C","#00C896","#FFD166","#06C2FF",
   "#FF8C42","#A78BFA","#FF6B9D","#4ECDC4","#45B7D1",
 ];
-const getColor = (i: number) => COLORS[i % COLORS.length];
+const getColor = (i: number) => WHEEL_COLORS[i % WHEEL_COLORS.length];
 
 interface RoomData {
   slug: string;
@@ -21,10 +31,11 @@ interface RoomData {
   winners: string[];
 }
 
+/* ── Confetti — keeps its party colours ── */
 function Confetti() {
   const colors = ["#7C5CFC","#FF3B5C","#00C896","#FFD166","#06C2FF","#FF8C42"];
   return (
-    <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 999, overflow: "hidden" }}>
+    <div className="pointer-events-none fixed inset-0 z-[999] overflow-hidden">
       {Array.from({ length: 70 }).map((_, i) => (
         <div
           key={i}
@@ -43,8 +54,8 @@ function Confetti() {
       ))}
       <style>{`
         @keyframes confettiFall {
-          0% { opacity: 1; transform: translate(0, 0) rotate(0deg); }
-          100% { opacity: 0; transform: translate(${Math.random() > 0.5 ? "" : "-"}${60 + Math.random() * 60}px, 220px) rotate(720deg); }
+          0%   { opacity: 1; transform: translate(0,0) rotate(0deg); }
+          100% { opacity: 0; transform: translate(${Math.random() > .5 ? "" : "-"}${60 + Math.random() * 60}px, 220px) rotate(720deg); }
         }
       `}</style>
     </div>
@@ -54,6 +65,7 @@ function Confetti() {
 export default function SpinnerRoom() {
   const { slug } = useParams() as { slug: string };
   const router = useRouter();
+
   const [room, setRoom] = useState<RoomData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -79,13 +91,14 @@ export default function SpinnerRoom() {
   const addInputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
+  /* ── Fetch room ── */
   const fetchRoom = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/spinners/${slug}`);
       const data = await res.json();
       if (data.success) {
         setRoom(data.data);
-        setWinHistory((data.data.winners || []).map((name: string) => ({ name, ts: "" })));
+        setWinHistory((data.data.winners ?? []).map((name: string) => ({ name, ts: "" })));
       } else {
         toast.error("Room not found");
         router.push("/");
@@ -99,23 +112,23 @@ export default function SpinnerRoom() {
 
   useEffect(() => { fetchRoom(); }, [fetchRoom]);
 
+  /* ── Backend sync ── */
   const syncBackend = useCallback(async (participants: string[], winners?: string[]) => {
     try {
       await fetch(`${BACKEND_URL}/api/spinners/${slug}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participants, winners: winners ?? winHistory.map(w => w.name) }),
+        body: JSON.stringify({ participants, winners: winners ?? winHistory.map((w) => w.name) }),
       });
     } catch { /* silent */ }
   }, [slug, winHistory]);
 
-  /* ---------- FILE UPLOAD ---------- */
+  /* ── File upload ── */
   const handleFile = (file: File) => {
     if (!room) return;
     const reader = new FileReader();
-    reader.onload = async ev => {
-      const names = (ev.target?.result as string)
-        .split(/[\n,\r]+/).map(n => n.trim()).filter(Boolean);
+    reader.onload = async (ev) => {
+      const names = (ev.target?.result as string).split(/[\n,\r]+/).map((n) => n.trim()).filter(Boolean);
       const merged = Array.from(new Set([...room.participants, ...names]));
       const added = merged.length - room.participants.length;
       setRoom({ ...room, participants: merged });
@@ -125,7 +138,7 @@ export default function SpinnerRoom() {
     reader.readAsText(file);
   };
 
-  /* ---------- PARTICIPANTS CRUD ---------- */
+  /* ── Participants CRUD ── */
   const addParticipant = async () => {
     const name = addingName.trim();
     if (!name || !room) return;
@@ -161,7 +174,7 @@ export default function SpinnerRoom() {
     toast.success(`Renamed to "${name}"`);
   };
 
-  /* ---------- SPIN ---------- */
+  /* ── Spin ── */
   const doSpin = () => {
     if (!room || spinning || room.participants.length < 2) return;
     setShowWinner(false);
@@ -171,22 +184,12 @@ export default function SpinnerRoom() {
 
     const n = room.participants.length;
     const arc = 360 / n;
-
-    // Pick a random winner index
     const targetWinIdx = Math.floor(Math.random() * n);
-
-    // Calculate how much to rotate so targetWinIdx lands under the pointer.
-    // Pointer is at RIGHT (0° screen). SpinWheel draws with offset -90deg.
-    // Segment i starts at: (rotation - 90 + i * arc) degrees from 12 o'clock
-    // We want segment targetWinIdx's center to be at the pointer (right = 0° = 90° from top)
-    // => targetWinIdx * arc + arc/2 + final_rotation - 90 ≡ 0 (mod 360)
-    // => final_rotation = 90 - targetWinIdx * arc - arc/2 (mod 360)
     const slotAngle = targetWinIdx * arc + arc / 2;
     const targetMod = ((90 - slotAngle) % 360 + 360) % 360;
     const currentMod = ((rotRef.current % 360) + 360) % 360;
-    const extraSpins = 6 + Math.random() * 6;
     const shortDelta = ((targetMod - currentMod) % 360 + 360) % 360;
-    const totalDelta = extraSpins * 360 + shortDelta;
+    const totalDelta = (6 + Math.random() * 6) * 360 + shortDelta;
 
     const startRot = rotRef.current;
     const targetRot = startRot + totalDelta;
@@ -199,7 +202,6 @@ export default function SpinnerRoom() {
       const r = startRot + (targetRot - startRot) * ease(t);
       rotRef.current = r;
       setRotation(r);
-
       if (t < 1) {
         animFrameRef.current = requestAnimationFrame(animate);
       } else {
@@ -207,10 +209,8 @@ export default function SpinnerRoom() {
         setRotation(targetRot);
         setSpinning(false);
 
-        // ---- WINNER VERIFICATION using rotation-based calculation ----
         const verifiedIdx = getWinnerIndex(targetRot, n);
         const winnerName = room.participants[verifiedIdx];
-
         setWinner(winnerName);
         setTimeout(() => {
           setShowWinner(true);
@@ -218,14 +218,14 @@ export default function SpinnerRoom() {
         }, 150);
 
         const newEntry = { name: winnerName, ts: new Date().toLocaleTimeString() };
-        setWinHistory(prev => [newEntry, ...prev]);
+        setWinHistory((prev) => [newEntry, ...prev]);
 
         if (autoRemove) {
           const updated = room.participants.filter((_, idx) => idx !== verifiedIdx);
           setRoom({ ...room, participants: updated });
-          syncBackend(updated, [winnerName, ...winHistory.map(w => w.name)]);
+          syncBackend(updated, [winnerName, ...winHistory.map((w) => w.name)]);
         } else {
-          syncBackend(room.participants, [winnerName, ...winHistory.map(w => w.name)]);
+          syncBackend(room.participants, [winnerName, ...winHistory.map((w) => w.name)]);
         }
       }
     };
@@ -234,19 +234,18 @@ export default function SpinnerRoom() {
 
   useEffect(() => () => cancelAnimationFrame(animFrameRef.current), []);
 
-  /* ---------- COPY ---------- */
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success("Link copied to clipboard!");
   };
 
-  /* ---------- LOADING / NOT FOUND ---------- */
+  /* ── Loading ── */
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", background: "#060B14", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ textAlign: "center", color: "#6B7FA3", fontFamily: "'Space Grotesk', sans-serif" }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>🎡</div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Loading room...</div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center text-muted-foreground">
+          <div className="mb-3 text-5xl">🎡</div>
+          <p className="text-sm font-semibold">Loading room...</p>
         </div>
       </div>
     );
@@ -254,314 +253,377 @@ export default function SpinnerRoom() {
   if (!room) return null;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#060B14", color: "#E8EDF8", fontFamily: "'Space Grotesk', sans-serif" }}>
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       {showConfetti && <Confetti />}
 
-      {/* Ambient */}
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none" }}>
-        <div style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "#7C5CFC", filter: "blur(120px)", opacity: 0.08, top: -100, left: -80 }} />
-        <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "#FF3B5C", filter: "blur(120px)", opacity: 0.06, bottom: 0, right: -60 }} />
+      {/* Ambient — single primary orb, very low opacity */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="room-orb-1" />
+        <div className="room-orb-2" />
       </div>
 
-      {/* Room Header */}
-      <div
-        style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "14px 28px", borderBottom: "1px solid #1E2E4A",
-          background: "rgba(13,21,38,0.9)", backdropFilter: "blur(12px)",
-          flexWrap: "wrap", gap: 10, position: "sticky", top: 0, zIndex: 100,
-        }}
-      >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 17, fontWeight: 800 }}>
-            {room.name}
-            <span
-              style={{
-                padding: "3px 10px", borderRadius: 20,
-                background: "rgba(0,200,150,0.12)", border: "1px solid rgba(0,200,150,0.3)",
-                color: "#00C896", fontSize: 11, fontWeight: 700, letterSpacing: "0.3px",
-              }}
-            >● LIVE</span>
-          </div>
-          {room.description && <div style={{ fontSize: 12, color: "#6B7FA3", marginTop: 2 }}>{room.description}</div>}
-        </div>
+      {/* ══ Header ══ */}
+      <header className="sticky top-0 z-50 px-3 py-2 sm:px-6 sm:py-3 bg-surface-header border-b border-surface">
+        <div className="flex items-center gap-2">
+          {/* Back */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 shrink-0 px-2 text-muted-foreground hover:text-foreground"
+            onClick={() => router.push("/")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Back</span>
+          </Button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          {/* Slug */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "#0D1526", border: "1px solid #1E2E4A", borderRadius: 8 }}>
-            <span style={{ fontSize: 10, color: "#6B7FA3", fontWeight: 600 }}>SLUG</span>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "#00C896" }}>{slug}</span>
-            <button onClick={copyLink} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7FA3", fontSize: 14, padding: 0 }} title="Copy">⧉</button>
+          <div className="hidden sm:block w-px h-6 bg-border" />
+
+          {/* Room info */}
+          <div className="flex flex-1 items-center gap-2 min-w-0">
+            <h1 className="truncate text-sm sm:text-base font-bold text-foreground">{room.name}</h1>
+            
+            {room.description && (
+              <span className="hidden truncate text-xs lg:block text-muted-foreground">{room.description}</span>
+            )}
           </div>
-          <input type="file" ref={fileRef} accept=".txt,.csv" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
-          {[
-            { icon: <Upload size={13} />, label: "Upload File", action: () => fileRef.current?.click() },
-            { icon: <Share2 size={13} />, label: "Share Link", action: copyLink },
-          ].map(btn => (
-            <button
-              key={btn.label}
-              onClick={btn.action}
-              style={{
-                display: "flex", alignItems: "center", gap: 6, padding: "8px 14px",
-                background: "#0D1526", border: "1px solid #1E2E4A", borderRadius: 8,
-                color: "#6B7FA3", fontFamily: "'Space Grotesk', sans-serif",
-                fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#7C5CFC"; (e.currentTarget as HTMLButtonElement).style.color = "#7C5CFC"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#1E2E4A"; (e.currentTarget as HTMLButtonElement).style.color = "#6B7FA3"; }}
+
+         <ThemeToggle/>
+
+          {/* Actions */}
+          <div className="flex items-center gap-1.5">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".txt,.csv"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-2 sm:px-3"
+              onClick={() => fileRef.current?.click()}
+              title="Upload file"
             >
-              {btn.icon} {btn.label}
-            </button>
-          ))}
+              <Upload className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline ml-1.5">Upload</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="px-2 sm:px-3"
+              onClick={copyLink}
+              title="Share link"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline ml-1.5">Share</span>
+            </Button>
+          </div>
+          
         </div>
-      </div>
+            
+        {/* Mobile slug strip */}
+        
+      </header>
 
-      {/* Main grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, padding: "24px 28px", maxWidth: 1200, margin: "0 auto", position: "relative", zIndex: 1 }}>
+      {/* ══ Main content ══ */}
+      <div className="room-grid relative z-10 mx-auto w-full max-w-[1200px] gap-5 px-3 py-4 pb-20 sm:px-6 sm:py-6" style={{ display: "grid" }}>
 
         {/* Wheel stage */}
-        <div style={{ background: "#0D1526", border: "1px solid #1E2E4A", borderRadius: 16, overflow: "hidden" }}>
-          <div
-            style={{
-              padding: "32px 28px", display: "flex", flexDirection: "column",
-              alignItems: "center", gap: 24, minHeight: 500,
-              background: "radial-gradient(circle at 50% 55%, rgba(124,92,252,0.07), transparent 65%)",
-              position: "relative",
-            }}
+        <Card className="bg-surface-card border-surface overflow-hidden" style={{ borderRadius: 16 }}>
+          <CardContent
+            className="flex flex-col items-center justify-center gap-4 sm:gap-6 p-4 sm:p-8 wheel-stage-bg"
+            style={{ minHeight: "clamp(360px, 60vw, 500px)" }}
           >
-            {/* Winner Banner */}
+            {/* Winner banner */}
             {showWinner && winner && (
-              <div
-                style={{
-                  width: "100%", maxWidth: 380, padding: "18px 22px",
-                  borderRadius: 13, textAlign: "center",
-                  background: "linear-gradient(135deg, rgba(255,209,102,0.1), rgba(255,59,92,0.07))",
-                  border: "1px solid rgba(255,209,102,0.35)",
-                  animation: "fadeUp 0.4s ease",
-                }}
-              >
-                <div style={{ fontSize: 22, marginBottom: 6 }}>👑</div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color: "#FFD166", marginBottom: 5 }}>Winner!</div>
-                <div style={{ fontSize: 32, fontWeight: 900, color: "#fff", letterSpacing: "-0.5px" }}>{winner}</div>
+              <div className="winner-banner w-full max-w-sm rounded-xl p-4 sm:p-5 text-center">
+                <div className="mb-1.5 text-xl sm:text-2xl">👑</div>
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-primary">Winner!</p>
+                <p className="text-2xl sm:text-3xl font-black tracking-tight text-foreground" style={{ letterSpacing: "-0.5px" }}>
+                  {winner}
+                </p>
               </div>
             )}
 
-            <SpinWheel names={room.participants} spinning={spinning} rotation={rotation} />
+            {/* Wheel */}
+            <div className="w-full flex items-center justify-center" style={{ maxWidth: "min(420px, calc(100vw - 64px))" }}>
+              <SpinWheel names={room.participants} spinning={spinning} rotation={rotation} />
+            </div>
 
-            {/* Buttons */}
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <button
+            {/* Spin controls */}
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <Button
                 onClick={doSpin}
                 disabled={spinning || room.participants.length < 2}
-                style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  padding: "15px 32px", borderRadius: 11, border: "none",
-                  background: (spinning || room.participants.length < 2)
-                    ? "#182440"
-                    : "linear-gradient(135deg, #FFD166, #FF3B5C)",
-                  color: (spinning || room.participants.length < 2) ? "#6B7FA3" : "#060B14",
-                  fontFamily: "'Space Grotesk', sans-serif", fontWeight: 800, fontSize: 17,
-                  cursor: (spinning || room.participants.length < 2) ? "not-allowed" : "pointer",
-                  boxShadow: spinning ? "none" : "0 4px 24px rgba(255,59,92,0.35)",
-                  transition: "all 0.2s", minWidth: 140,
-                }}
+                size="lg"
+                className={`gap-2 px-6 sm:px-8 text-base sm:text-lg font-black border-0 spin-btn ${spinning || room.participants.length < 2 ? "spin-btn-disabled" : "spin-btn-active"}`}
+                style={{ minWidth: 120 }}
               >
                 {spinning
-                  ? <><RotateCcw size={18} style={{ animation: "spin 1s linear infinite" }} /> Spinning...</>
-                  : <><Play size={18} /> Spin!</>}
-              </button>
+                  ? <><RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" /> Spinning...</>
+                  : <><Play className="h-4 w-4 sm:h-5 sm:w-5" /> Spin!</>}
+              </Button>
 
               {showWinner && !spinning && (
-                <button
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 sm:h-12 sm:w-12"
                   onClick={() => { setWinner(null); setShowWinner(false); }}
                   title="Clear winner"
-                  style={{
-                    width: 52, height: 52, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
-                    background: "#0D1526", border: "1px solid #1E2E4A", cursor: "pointer", color: "#6B7FA3",
-                    transition: "all 0.2s",
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#6B7FA3"; (e.currentTarget as HTMLButtonElement).style.color = "#E8EDF8"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#1E2E4A"; (e.currentTarget as HTMLButtonElement).style.color = "#6B7FA3"; }}
                 >
-                  <RotateCcw size={18} />
-                </button>
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
               )}
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* Sidebar */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* ── Sidebar ── */}
+        <div className="flex flex-col gap-4">
 
           {/* Participants */}
-          <div style={{ background: "#0D1526", border: "1px solid #1E2E4A", borderRadius: 14, overflow: "hidden" }}>
-            <div style={{ padding: "12px 16px", borderBottom: "1px solid #1E2E4A", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700 }}>
-              👥 Participants
-              <span style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: 10, background: "#182440", border: "1px solid #1E2E4A", fontSize: 11, color: "#7C5CFC", fontWeight: 700 }}>
-                {room.participants.length}
-              </span>
-            </div>
-            <div style={{ padding: 14 }}>
+          <Card className="bg-surface-card border-surface overflow-hidden" style={{ borderRadius: 14 }}>
+            <CardHeader className="pb-3 border-b border-surface">
+              <CardTitle className="flex items-center gap-2 text-sm text-foreground">
+                👥 Participants
+                <Badge variant="secondary" className="ml-auto text-xs font-bold">
+                  {room.participants.length}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3">
               {/* Upload strip */}
               <div
                 onClick={() => fileRef.current?.click()}
-                style={{
-                  border: "2px dashed #1E2E4A", borderRadius: 8, padding: "10px",
-                  textAlign: "center", cursor: "pointer", marginBottom: 10,
-                  fontSize: 12, color: "#6B7FA3", transition: "all 0.2s",
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "#7C5CFC"; (e.currentTarget as HTMLDivElement).style.color = "#7C5CFC"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "#1E2E4A"; (e.currentTarget as HTMLDivElement).style.color = "#6B7FA3"; }}
+                className="upload-strip mb-2.5 cursor-pointer rounded-lg px-3 py-2.5 text-center text-xs transition-colors text-muted-foreground border-2 border-dashed border-border"
               >
                 📂 Upload .txt or .csv file
               </div>
 
               {/* Add input */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                <input
+              <div className="mb-2.5 flex gap-2">
+                <Input
                   ref={addInputRef}
-                  type="text"
                   placeholder="Add a name..."
                   value={addingName}
-                  onChange={e => setAddingName(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") addParticipant(); }}
-                  style={{ flex: 1, height: 36, padding: "0 12px", background: "#060B14", border: "1px solid #1E2E4A", borderRadius: 8, color: "#E8EDF8", fontFamily: "'Space Grotesk', sans-serif", fontSize: 13, outline: "none" }}
-                  onFocus={e => (e.currentTarget.style.borderColor = "#7C5CFC")}
-                  onBlur={e => (e.currentTarget.style.borderColor = "#1E2E4A")}
+                  onChange={(e) => setAddingName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addParticipant(); }}
+                  className="h-9 text-sm"
                 />
-                <button
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
                   onClick={addParticipant}
-                  style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(124,92,252,0.15)", border: "1px solid rgba(124,92,252,0.3)", color: "#7C5CFC", fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
                 >
-                  <Plus size={16} />
-                </button>
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
 
-              {/* List */}
-              <div style={{ maxHeight: 280, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+              {/* Participant list */}
+              <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto pr-0.5">
                 {room.participants.map((name, i) => (
                   <div
                     key={i}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 8, transition: "background 0.15s", cursor: "default" }}
-                    onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = "#182440")}
-                    onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.background = "transparent")}
+                    className="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent active:bg-accent"
                   >
-                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: getColor(i), flexShrink: 0 }} />
+                    <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: getColor(i) }} />
                     {editingIdx === i ? (
                       <>
                         <input
                           ref={editInputRef}
                           value={editingVal}
-                          onChange={e => setEditingVal(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingIdx(null); }}
+                          onChange={(e) => setEditingVal(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingIdx(null); }}
                           onBlur={commitEdit}
-                          style={{ flex: 1, height: 26, padding: "0 8px", background: "#060B14", border: "1px solid #7C5CFC", borderRadius: 6, color: "#E8EDF8", fontFamily: "'Space Grotesk', sans-serif", fontSize: 12, outline: "none" }}
+                          className="h-6 flex-1 rounded border border-primary bg-background px-2 text-xs text-foreground outline-none"
                         />
-                        <button onClick={commitEdit} style={{ background: "none", border: "none", cursor: "pointer", color: "#00C896", padding: 0 }}><Check size={13} /></button>
+                        <button onClick={commitEdit} className="text-primary hover:opacity-70" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                          <Check className="h-3 w-3" />
+                        </button>
                       </>
                     ) : (
                       <>
-                        <span style={{ flex: 1, fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                        <span className="flex-1 truncate text-sm font-medium text-foreground">{name}</span>
                         <button
                           onClick={() => startEdit(i)}
-                          title="Rename"
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7FA3", padding: 0, opacity: 0, transition: "opacity 0.15s" }}
-                          className="edit-btn"
-                        ><Pencil size={11} /></button>
+                          className="text-muted-foreground hover:text-primary transition-colors sm:hidden"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
                         <button
                           onClick={() => removeParticipant(i)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7FA3", padding: 0, opacity: 0, transition: "opacity 0.15s", fontSize: 16, lineHeight: 1 }}
-                          className="del-btn"
-                        ><X size={13} /></button>
+                          className="text-muted-foreground hover:text-destructive transition-colors sm:hidden"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => startEdit(i)}
+                          className="hidden text-muted-foreground hover:text-primary sm:group-hover:block transition-colors"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => removeParticipant(i)}
+                          className="hidden text-muted-foreground hover:text-destructive sm:group-hover:block transition-colors"
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </>
                     )}
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Spin History */}
           {winHistory.length > 0 && (
-            <div style={{ background: "#0D1526", border: "1px solid #1E2E4A", borderRadius: 14, overflow: "hidden" }}>
-              <div style={{ padding: "12px 16px", borderBottom: "1px solid #1E2E4A", display: "flex", alignItems: "center", fontSize: 13, fontWeight: 700 }}>
-                <Trophy size={14} style={{ color: "#FFD166", marginRight: 8 }} /> Spin History
-                <button
-                  onClick={() => setWinHistory([])}
-                  style={{ marginLeft: "auto", fontSize: 11, color: "#6B7FA3", background: "none", border: "none", cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif" }}
-                  onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.color = "#FF3B5C")}
-                  onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.color = "#6B7FA3")}
-                >
-                  Clear all
-                </button>
-              </div>
-              <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6, maxHeight: 190, overflowY: "auto" }}>
-                {winHistory.map((w, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
-                      borderRadius: 8, background: "rgba(255,209,102,0.06)", border: "1px solid rgba(255,209,102,0.12)",
-                    }}
+            <Card className="bg-surface-card border-surface overflow-hidden" style={{ borderRadius: 14 }}>
+              <CardHeader className="pb-3 border-b border-surface">
+                <CardTitle className="flex items-center gap-2 text-sm text-foreground">
+                  <Trophy className="h-3.5 w-3.5 text-primary" /> Spin History
+                  <button
+                    onClick={() => setWinHistory([])}
+                    className="ml-auto text-[11px] font-normal text-muted-foreground hover:text-destructive transition-colors"
+                    style={{ background: "none", border: "none", cursor: "pointer" }}
                   >
-                    <span style={{ fontSize: 14 }}>{i === 0 ? "👑" : "🏅"}</span>
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#FFD166", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{w.name}</span>
-                    {w.ts && <span style={{ fontSize: 10, color: "#6B7FA3" }}>{w.ts}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
+                    Clear all
+                  </button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-1.5 p-3">
+                <div className="flex max-h-44 flex-col gap-1.5 overflow-y-auto">
+                  {winHistory.map((w, i) => (
+                    <div
+                      key={i}
+                      className="history-row flex items-center gap-2 rounded-lg px-3 py-2"
+                    >
+                      <span className="text-sm">{i === 0 ? "👑" : "🏅"}</span>
+                      <span className="flex-1 truncate text-sm font-semibold text-primary">{w.name}</span>
+                      {w.ts && <span className="shrink-0 text-[10px] text-muted-foreground">{w.ts}</span>}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Settings */}
-          <div style={{ background: "#0D1526", border: "1px solid #1E2E4A", borderRadius: 14, overflow: "hidden" }}>
+          <Card className="bg-surface-card border-surface overflow-hidden" style={{ borderRadius: 14 }}>
             <button
-              onClick={() => setShowSettings(s => !s)}
-              style={{
-                width: "100%", padding: "12px 16px", display: "flex", alignItems: "center", gap: 8,
-                fontSize: 13, fontWeight: 700, background: "none", border: "none",
-                color: "#E8EDF8", cursor: "pointer", fontFamily: "'Space Grotesk', sans-serif",
-              }}
+              onClick={() => setShowSettings((s) => !s)}
+              className="flex w-full items-center gap-2 px-4 py-3 text-sm font-bold transition-colors hover:bg-accent text-foreground"
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
             >
-              <Settings size={14} style={{ color: "#6B7FA3" }} /> Settings
-              <span style={{ marginLeft: "auto", color: "#6B7FA3", fontSize: 12 }}>{showSettings ? "▲" : "▼"}</span>
+              <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+              Settings
+              <span className="ml-auto text-xs text-muted-foreground">{showSettings ? "▲" : "▼"}</span>
             </button>
             {showSettings && (
-              <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12, borderTop: "1px solid #1E2E4A" }}>
+              <CardContent className="flex flex-col gap-3 pb-4 pt-0 border-t border-surface">
                 {[
                   { label: "Auto-remove winner after spin", val: autoRemove, set: setAutoRemove },
-                  { label: "Celebration confetti on win", val: confettiEnabled, set: setConfettiEnabled },
-                ].map(s => (
-                  <label
-                    key={s.label}
-                    style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 12 }}
-                  >
+                  { label: "Celebration confetti on win",   val: confettiEnabled, set: setConfettiEnabled },
+                ].map((s) => (
+                  <label key={s.label} className="mt-3 flex cursor-pointer items-center gap-2.5">
                     <input
                       type="checkbox"
                       checked={s.val}
-                      onChange={e => s.set(e.target.checked)}
-                      style={{ accentColor: "#7C5CFC", width: "auto", height: "auto" }}
+                      onChange={(e) => s.set(e.target.checked)}
+                      className="h-4 w-4 accent-primary"
                     />
-                    <span style={{ fontSize: 13, fontWeight: 500, color: "#E8EDF8" }}>{s.label}</span>
+                    <span className="text-sm font-medium text-foreground">{s.label}</span>
                   </label>
                 ))}
-              </div>
+              </CardContent>
             )}
-          </div>
+          </Card>
         </div>
       </div>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        div:hover .edit-btn, div:hover .del-btn { opacity: 1 !important; }
-        ::-webkit-scrollbar { width: 4px; }
+        /* ── Ambient orbs ── */
+        .room-orb-1 {
+          position: absolute; width: 500px; height: 500px; border-radius: 50%;
+          background: hsl(var(--primary)); filter: blur(130px); opacity: 0.05;
+          top: -100px; left: -80px;
+        }
+        .room-orb-2 {
+          position: absolute; width: 400px; height: 400px; border-radius: 50%;
+          background: hsl(var(--primary)); filter: blur(130px); opacity: 0.03;
+          bottom: 0; right: -60px;
+        }
+
+        /* ── Live badge ── */
+        .live-badge {
+          background: hsl(var(--primary) / 0.12) !important;
+          border: 1px solid hsl(var(--primary) / 0.3) !important;
+          color: hsl(var(--primary)) !important;
+        }
+
+        /* ── Wheel stage radial glow ── */
+        .wheel-stage-bg {
+          background: radial-gradient(circle at 50% 55%, hsl(var(--primary) / 0.06), transparent 65%);
+        }
+
+        /* ── Winner banner ── */
+        .winner-banner {
+          background: hsl(var(--primary) / 0.07);
+          border: 1px solid hsl(var(--primary) / 0.25);
+          animation: fadeUp 0.4s ease;
+        }
+
+        /* ── Spin button ── */
+        .spin-btn-active {
+          background: hsl(var(--primary)) !important;
+          color: hsl(var(--primary-foreground)) !important;
+          box-shadow: 0 4px 20px hsl(var(--primary) / 0.35);
+        }
+        .spin-btn-disabled {
+          background: hsl(var(--muted)) !important;
+          color: hsl(var(--muted-foreground)) !important;
+          box-shadow: none;
+        }
+
+        /* ── Upload strip hover ── */
+        .upload-strip:hover {
+          border-color: hsl(var(--primary)) !important;
+          color: hsl(var(--primary)) !important;
+        }
+
+        /* ── History row ── */
+        .history-row {
+          background: hsl(var(--primary) / 0.06);
+          border: 1px solid hsl(var(--primary) / 0.15);
+        }
+
+        /* ── Grid layout ── */
+        .room-grid { grid-template-columns: 1fr; }
+        @media (min-width: 768px) {
+          .room-grid { grid-template-columns: 1fr 320px; }
+        }
+
+        /* ── Animations ── */
+        @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes spin   { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+        .animate-spin { animation: spin 1s linear infinite; }
+
+        /* ── Scrollbars ── */
+        ::-webkit-scrollbar       { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1E2E4A; border-radius: 4px; }
-        @media (max-width: 800px) {
-          .room-grid { grid-template-columns: 1fr !important; }
+        ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; }
+
+        /* ── Mobile: always show participant action icons ── */
+        @media (max-width: 639px) {
+          .group .sm\\:hidden { display: block !important; }
+          .group .sm\\:group-hover\\:block { display: none !important; }
         }
       `}</style>
     </div>

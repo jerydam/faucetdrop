@@ -40,6 +40,7 @@ export function Header({
   const getActionConfig = () => {
     if (pathname.includes('/quest')) return { label: "Create Quest", path: "/quest/create-quest" };
     if (pathname.includes('/quiz')) return { label: "Create Quiz", path: "/quiz/create-quiz" };
+    if (pathname.includes('/spinner')) return { label: "Create Spinner", path: "/spinner/create" };
     return { label: "Create Faucet", path: "/faucet/create-faucet" };
   };
 

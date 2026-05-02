@@ -2,9 +2,34 @@
 import React, { useEffect, useRef } from "react";
 import Link from "next/link";
 import { SpinWheel } from "@/components/SpinWheel";
-import { Sparkles, Plus, Zap, Link2, Pencil, Trophy } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sparkles, Zap, Link2, Pencil, Trophy } from "lucide-react";
+import { Header } from "@/components/header";
 
 const DEMO_NAMES = ["Alice", "Bob", "Carol", "David", "Eve", "Frank", "Grace", "Henry"];
+
+const FEATURES = [
+  {
+    icon: <Zap size={17} />,
+    title: "Bulk File Upload",
+    desc: "Drop a .txt or .csv and we'll parse every name instantly. No copy-paste marathons.",
+  },
+  {
+    icon: <Link2 size={17} />,
+    title: "Shareable Slug",
+    desc: "Every room gets a unique URL. Share it and anyone can join and watch live.",
+  },
+  {
+    icon: <Pencil size={17} />,
+    title: "Editable Anytime",
+    desc: "Add, remove, or rename participants mid-session. The wheel updates instantly.",
+  },
+  {
+    icon: <Trophy size={17} />,
+    title: "Spin History",
+    desc: "Full winner log persisted per room. Auto-remove winners to prevent duplicates.",
+  },
+];
 
 export default function LandingPage() {
   const rotRef = useRef(0);
@@ -22,192 +47,174 @@ export default function LandingPage() {
   }, []);
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ background: "#060B14", fontFamily: "'Space Grotesk', sans-serif", color: "#E8EDF8" }}
-    >
-      {/* Ambient orbs */}
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+
+      {/* Subtle ambient — primary colour only, very low opacity */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div style={{ position: "absolute", width: 600, height: 600, borderRadius: "50%", background: "#7C5CFC", filter: "blur(120px)", opacity: 0.12, top: -150, left: -100 }} />
-        <div style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "#FF3B5C", filter: "blur(120px)", opacity: 0.1, top: 0, right: -80 }} />
-        <div style={{ position: "absolute", width: 450, height: 450, borderRadius: "50%", background: "#00C896", filter: "blur(120px)", opacity: 0.08, bottom: -50, left: "35%" }} />
+        <div className="ambient-orb-1" />
+        <div className="ambient-orb-2" />
       </div>
 
-      {/* Nav */}
-      <nav
-        style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 32px", borderBottom: "1px solid #1E2E4A",
-          background: "rgba(6,11,20,0.8)", backdropFilter: "blur(12px)",
-          position: "sticky", top: 0, zIndex: 100,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 15, letterSpacing: 0.5 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#00C896", boxShadow: "0 0 8px #00C896" }} />
-          FaucetDrops <span style={{ color: "#7C5CFC" }}>Spinner</span>
-        </div>
-        <Link href="/spinner/create">
-          <button
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "9px 20px", borderRadius: 9,
-              background: "linear-gradient(135deg, #7C5CFC, #FF3B5C)",
-              color: "#fff", fontFamily: "'Space Grotesk', sans-serif",
-              fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer",
-              boxShadow: "0 4px 16px rgba(124,92,252,0.35)",
-            }}
-          >
-            <Plus size={14} /> Create Room
-          </button>
-        </Link>
-      </nav>
+      {/* ── Nav ── */}
+      <Header pageTitle="Spin Hub" isDashboard={true} />
 
-      {/* Hero */}
-      <section
-        style={{
-          flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "60px 32px", position: "relative", zIndex: 1,
-        }}
-      >
-        <div
-          style={{
-            display: "flex", alignItems: "center", gap: 64,
-            maxWidth: 1060, width: "100%", flexWrap: "wrap", justifyContent: "center",
-          }}
-        >
+      {/* ── Hero ── */}
+      <section className="relative z-10 flex flex-1 items-center justify-center px-4 py-10 sm:px-8 sm:py-16">
+        <div className="flex w-full max-w-5xl flex-col items-center gap-10 md:flex-row md:items-center md:justify-between md:gap-16">
+
           {/* Text */}
-          <div style={{ flex: 1, minWidth: 300 }}>
-            <div
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "5px 14px", borderRadius: 20,
-                border: "1px solid rgba(0,200,150,0.3)",
-                background: "rgba(0,200,150,0.08)",
-                color: "#00C896", fontSize: 12, fontWeight: 700,
-                letterSpacing: "0.5px", marginBottom: 20,
-              }}
-            >
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#00C896", display: "inline-block", animation: "pulse 2s infinite" }} />
-              LIVE &amp; VERIFIABLY FAIR
-            </div>
+          <div className="w-full text-center md:flex-1 md:text-left" style={{ maxWidth: 520 }}>
+
+            
 
             <h1
-              style={{
-                fontSize: "clamp(38px, 6vw, 66px)", fontWeight: 900,
-                lineHeight: 1.04, marginBottom: 18, letterSpacing: "-1px",
-              }}
+              className="mb-4 font-black leading-none text-foreground"
+              style={{ fontSize: "clamp(32px, 8vw, 62px)", letterSpacing: "-1.5px" }}
             >
               The Fairest<br />
-              <span
-                style={{
-                  background: "linear-gradient(135deg, #FFD166, #FF3B5C, #7C5CFC)",
-                  WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                Spin Platform
-              </span>
+              <span className="text-primary">Spin Platform</span>
             </h1>
 
-            <p style={{ color: "#6B7FA3", fontSize: 16, lineHeight: 1.65, marginBottom: 36, maxWidth: 440 }}>
-              Create a unique spin room, upload participants via CSV or text file,
-              share the link, and let the wheel decide — random, fair, unforgettable.
+            <p
+              className="mb-8 text-sm leading-relaxed text-muted-foreground sm:text-base sm:mb-9"
+              style={{ maxWidth: 420, margin: "0 auto 2rem" }}
+            >
+              Create a unique spin room, upload participants via CSV or text file, share the link,
+              and let the wheel decide — random, fair, unforgettable.
             </p>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div className="flex justify-center md:justify-start">
               <Link href="/spinner/create">
-                <button
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "14px 30px", borderRadius: 10,
-                    background: "linear-gradient(135deg, #7C5CFC, #FF3B5C)",
-                    color: "#fff", fontFamily: "'Space Grotesk', sans-serif",
-                    fontWeight: 700, fontSize: 15, border: "none", cursor: "pointer",
-                    boxShadow: "0 4px 24px rgba(124,92,252,0.4)",
-                    transition: "transform 0.2s, box-shadow 0.2s",
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 32px rgba(124,92,252,0.55)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform = ""; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 24px rgba(124,92,252,0.4)"; }}
-                >
-                  <Sparkles size={16} /> Create Spin Room
-                </button>
+                <Button size="lg" className="gap-2 font-bold text-base px-7">
+                  <Sparkles className="h-4 w-4" /> Create Spin Room
+                </Button>
               </Link>
             </div>
 
             {/* Stats */}
-            <div style={{ display: "flex", gap: 36, marginTop: 44, flexWrap: "wrap" }}>
+            <div className="mt-10 flex flex-wrap justify-center gap-6 sm:gap-9 md:justify-start">
               {[
-                { num: "2.4K", label: "Rooms Created" },
-                { num: "18K", label: "Spins Run" },
-                { num: "99.9%", label: "Uptime" },
-              ].map(s => (
-                <div key={s.label}>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: "#E8EDF8" }}>{s.num}</div>
-                  <div style={{ fontSize: 12, color: "#6B7FA3", fontWeight: 500, marginTop: 2 }}>{s.label}</div>
+                { num: "2.4K",  label: "Rooms Created" },
+                { num: "18K",   label: "Spins Run"     },
+                { num: "99.9%", label: "Uptime"        },
+              ].map((s) => (
+                <div key={s.label} className="text-center md:text-left">
+                  <div className="text-xl font-extrabold text-foreground sm:text-2xl">{s.num}</div>
+                  <div className="mt-0.5 text-xs font-medium text-muted-foreground">{s.label}</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Wheel */}
-          <div style={{ flexShrink: 0, position: "relative" }}>
-            <div
-              style={{
-                position: "absolute", inset: -30, borderRadius: "50%",
-                background: "radial-gradient(circle, rgba(124,92,252,0.18), transparent 70%)",
-                pointerEvents: "none",
-              }}
-            />
-            <SpinWheel names={DEMO_NAMES} spinning={false} rotation={rotation} />
+          <div className="relative flex shrink-0 items-center justify-center">
+            <div className="wheel-glow" />
+            <div className="wheel-scale-wrapper">
+              <SpinWheel names={DEMO_NAMES} spinning={false} rotation={rotation} />
+            </div>
           </div>
+
         </div>
       </section>
 
-      {/* Features */}
-      <section style={{ padding: "0 32px 72px", position: "relative", zIndex: 1 }}>
+      {/* ── Feature cards ── */}
+      <section className="relative z-10 px-4 pb-16 sm:px-8 sm:pb-20">
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-            gap: 16, maxWidth: 1060, margin: "0 auto",
-          }}
+          className="mx-auto grid max-w-5xl gap-3 sm:gap-4"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}
         >
-          {[
-            { icon: <Zap size={18} />, color: "#7C5CFC", bg: "rgba(124,92,252,0.12)", title: "Bulk File Upload", desc: "Drop a .txt or .csv and we'll parse every name instantly. No copy-paste marathons." },
-            { icon: <Link2 size={18} />, color: "#00C896", bg: "rgba(0,200,150,0.12)", title: "Shareable Slug", desc: "Every room gets a unique URL. Share it and anyone can join and watch live." },
-            { icon: <Pencil size={18} />, color: "#FF3B5C", bg: "rgba(255,59,92,0.12)", title: "Editable Anytime", desc: "Add, remove, or rename participants mid-session. The wheel updates instantly." },
-            { icon: <Trophy size={18} />, color: "#FFD166", bg: "rgba(255,209,102,0.12)", title: "Spin History", desc: "Full winner log persisted per room. Auto-remove winners to prevent duplicates." },
-          ].map(f => (
+          {FEATURES.map((f) => (
             <div
               key={f.title}
-              style={{
-                background: "#0D1526", border: "1px solid #1E2E4A",
-                borderRadius: 14, padding: "22px 20px",
-                transition: "border-color 0.2s",
-              }}
-              onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.borderColor = "rgba(124,92,252,0.4)")}
-              onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.borderColor = "#1E2E4A")}
+              className="feature-card rounded-2xl p-4 sm:p-5 transition-colors duration-200 bg-surface-card border border-surface"
             >
-              <div
-                style={{
-                  width: 38, height: 38, borderRadius: 9, display: "flex",
-                  alignItems: "center", justifyContent: "center",
-                  background: f.bg, color: f.color, marginBottom: 13,
-                }}
-              >
+              <div className="feature-icon mb-3 flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg">
                 {f.icon}
               </div>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: "#E8EDF8" }}>{f.title}</div>
-              <div style={{ fontSize: 12, color: "#6B7FA3", lineHeight: 1.55 }}>{f.desc}</div>
+              <div className="mb-1.5 text-xs sm:text-sm font-bold text-foreground">{f.title}</div>
+              <div className="text-xs leading-relaxed text-muted-foreground">{f.desc}</div>
             </div>
           ))}
         </div>
       </section>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800;900&display=swap');
-        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        /* ── Ambient orbs: primary-only, theme-aware opacity ── */
+        .ambient-orb-1 {
+          position: absolute;
+          width: 500px; height: 500px;
+          border-radius: 50%;
+          background: hsl(var(--primary));
+          filter: blur(140px);
+          opacity: 0.05;
+          top: -120px; left: -80px;
+        }
+        .ambient-orb-2 {
+          position: absolute;
+          width: 400px; height: 400px;
+          border-radius: 50%;
+          background: hsl(var(--primary));
+          filter: blur(140px);
+          opacity: 0.03;
+          bottom: 0; right: -60px;
+        }
+
+        /* ── Nav live dot ── */
+        .live-dot {
+          width: 8px; height: 8px;
+          border-radius: 50%;
+          background: hsl(var(--primary));
+          box-shadow: 0 0 8px hsl(var(--primary) / 0.6);
+          flex-shrink: 0;
+        }
+
+        /* ── Live badge ── */
+        .live-badge {
+          border: 1px solid hsl(var(--primary) / 0.3);
+          background: hsl(var(--primary) / 0.08);
+          color: hsl(var(--primary));
+        }
+        .live-pulse-dot {
+          display: inline-block;
+          width: 6px; height: 6px;
+          border-radius: 50%;
+          background: hsl(var(--primary));
+          animation: livePulse 2s infinite;
+        }
+        @keyframes livePulse {
+          0%, 100% { opacity: 1; transform: scale(1);   }
+          50%       { opacity: .4; transform: scale(.7); }
+        }
+
+        /* ── Wheel glow ── */
+        .wheel-glow {
+          position: absolute;
+          inset: -30px;
+          border-radius: 50%;
+          background: radial-gradient(circle, hsl(var(--primary) / 0.12), transparent 70%);
+          pointer-events: none;
+        }
+
+        /* ── Wheel responsive scaling ── */
+        .wheel-scale-wrapper {
+          width: min(420px, calc(100vw - 48px));
+          max-width: 420px;
+        }
+        .wheel-scale-wrapper canvas {
+          width: 100% !important;
+          height: auto !important;
+        }
+
+        /* ── Feature card hover ── */
+        .feature-card:hover {
+          border-color: hsl(var(--primary) / 0.4) !important;
+        }
+
+        /* ── Feature icon tint ── */
+        .feature-icon {
+          background: hsl(var(--primary) / 0.1);
+          color: hsl(var(--primary));
+        }
       `}</style>
     </div>
   );

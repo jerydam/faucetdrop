@@ -970,19 +970,62 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                     </div>
 
                     {/* Save & Continue */}
-                    <div className="pt-8 border-t text-center">
-                        <Button
-                            size="lg"
-                            onClick={handleSaveDraft}
-                            disabled={isSavingDraft || !isPhase1Valid}
-                            className="w-full sm:w-auto"
-                        >
-                            {isSavingDraft
-                                ? <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                : <Save className="mr-2 h-5 w-5" />}
-                            Save and Continue
-                        </Button>
-                    </div>
+<div className="pt-8 border-t">
+    {isSubscribed ? (
+        // ── Subscriber: just one clean CTA, no upsell noise ──
+        <div className="text-center">
+            <Button
+                size="lg"
+                onClick={handleSaveDraft}
+                disabled={isSavingDraft || !isPhase1Valid}
+                className="w-full sm:w-auto"
+            >
+                {isSavingDraft
+                    ? <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    : <Save className="mr-2 h-5 w-5" />}
+                Save and Continue
+            </Button>
+        </div>
+    ) : (
+        // ── Non-subscriber: subscribe card + demo fallback ──
+        <div className="space-y-4">
+            {/* Subscription upsell */}
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="flex-1 space-y-1">
+                    <p className="text-sm font-semibold">Unlock Full Quest Creation</p>
+                    <p className="text-xs text-muted-foreground">
+                        Subscribe for $100 / 30 days to publish real quests with on-chain rewards.
+                    </p>
+                </div>
+                <Button
+                    size="sm"
+                    onClick={handleSaveDraft}
+                    disabled={isSavingDraft || !isPhase1Valid}
+                    className="shrink-0 w-full sm:w-auto"
+                >
+                    {isSavingDraft
+                        ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        : <Save className="mr-2 h-4 w-4" />}
+                    Save and Continue
+                </Button>
+            </div>
+
+            {/* Demo mode fallback */}
+            <p className="text-xs text-muted-foreground text-center">
+                Or{" "}
+                <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    disabled={isSavingDraft || !isPhase1Valid}
+                    className="underline underline-offset-2 hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                    continue as Demo
+                </button>
+                {" "}— demo quests are not published publicly.
+            </p>
+        </div>
+    )}
+</div>
                 </CardContent>
             </Card>
         </div>

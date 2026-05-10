@@ -728,8 +728,14 @@ const [isClaimWindowOpen, setIsClaimWindowOpen] = useState<boolean | null>(null)
 
 
 useEffect(() => {
+  if (!faucetAddress || !activeWallet || !isQuestEnded || !questData?.rawEndDate) return;
+
+  const endTime = new Date(questData.rawEndDate).getTime();
+  const claimWindowStart = endTime + (12 * 60 * 60 * 1000); // 12 hours after quest end
+  const now = Date.now();
+  const delayMs = Math.max(0, claimWindowStart - now); // 0 if already past 12h mark
+
   const checkClaimWindow = async () => {
-    if (!faucetAddress || !activeWallet) return;
     try {
       const privyProvider = await activeWallet.getEthereumProvider();
       const ethersProvider = new BrowserProvider(privyProvider);
@@ -742,22 +748,70 @@ useEffect(() => {
         ethersProvider
       );
 
-      const [active, endTime] = await Promise.all([
+      const [active, end] = await Promise.all([
         contract.isClaimActive(),
         contract.endTime(),
       ]);
 
       setIsClaimWindowOpen(active);
-      setClaimWindowEndIso(new Date(Number(endTime) * 1000).toISOString());
+      setClaimWindowEndIso(new Date(Number(end) * 1000).toISOString());
 
+      if (active) {
+        const fullContract = new Contract(
+          faucetAddress,
+          [
+            "function getClaimStatus(address user) view returns (bool claimed, bool hasRewardAmount, uint256 rewardAmount, bool canClaim, uint256 timeUntilStart, uint256 timeRemaining)",
+            "function customClaimAmounts(address) view returns (uint256)",
+          ],
+          ethersProvider
+        );
+
+        const [status, customAmount] = await Promise.all([
+          fullContract.getClaimStatus(userWalletAddress),
+          fullContract.customClaimAmounts(userWalletAddress).catch(() => 0n),
+        ]);
+
+        const actualAmount = customAmount > 0n ? customAmount : status[2];
+        const hasReward = status[1] || customAmount > 0n;
+        const formatted = hasReward
+          ? Number(formatUnits(actualAmount, 6)).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 4,
+            })
+          : null;
+
+        setClaimState({
+          isChecking: false,
+          isWinnerOnChain: hasReward,
+          hasClaimed: status[0],
+          canClaimOnChain: status[3],
+          isExpiredOnChain: false,
+          fundsWithdrawnOnChain: false,
+          claimWindowEndTimestamp: null,
+          rewardAmount: formatted,
+        });
+      }
     } catch (e) {
       console.error("isClaimActive check failed", e);
     }
   };
-  if (isQuestEnded) checkClaimWindow();
-}, [faucetAddress, activeWallet, isQuestEnded]);
 
+  let interval: NodeJS.Timeout;
 
+  // Wait until 12h after quest end, then start polling
+  const timeout = setTimeout(() => {
+    checkClaimWindow(); // immediate check at the 12h mark
+    interval = setInterval(() => {
+      if (isClaimWindowOpen) { clearInterval(interval); return; }
+      checkClaimWindow();
+    }, 30_000);
+  }, delayMs);
+
+  return () => {
+    clearTimeout(timeout);
+    clearInterval(interval);
+  };
+}, [faucetAddress, activeWallet, isQuestEnded, questData?.rawEndDate, userWalletAddress]);
 const claimStatus = useMemo(() => {
   if (!questData?.rawEndDate) return { isActive: false, message: "Not started" };
 

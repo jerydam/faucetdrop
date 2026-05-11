@@ -18,7 +18,6 @@ interface EmployeeData {
   expiry_date: string;
   photo_url?: string | null;
 }
-
 export default function AdminRegistrationPage() {
   const { ready, authenticated, login } = usePrivy();
   const { address, isConnected } = useWallet();

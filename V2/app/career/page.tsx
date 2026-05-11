@@ -18,6 +18,7 @@ interface EmployeeData {
   expiry_date: string;
   photo_url?: string | null;
 }
+
 export default function AdminRegistrationPage() {
   const { ready, authenticated, login } = usePrivy();
   const { address, isConnected } = useWallet();
@@ -174,7 +175,7 @@ export default function AdminRegistrationPage() {
   }
 
   const qrValue = employeeData
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/career/verify?id=${employeeData.id}&name=${encodeURIComponent(employeeData.name)}&role=${encodeURIComponent(employeeData.role)}`
+    ? `https://faucetdrops.io/verify?id=${employeeData.id}&name=${encodeURIComponent(employeeData.name)}&role=${encodeURIComponent(employeeData.role)}`
     : '';
 
   // --- MAIN ADMIN UI ---

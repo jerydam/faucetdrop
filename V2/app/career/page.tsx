@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Upload, Download, UserPlus, ShieldCheck, X, ImageIcon } from 'lucide-react';
 
 const API_BASE_URL = "http://127.0.0.1:8000";
-const ADMIN_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785".toLowerCase();
+const ADMIN_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_ADDRESS?.toLowerCase();
 
 interface EmployeeData {
   id: string;
@@ -185,14 +185,6 @@ export default function AdminRegistrationPage() {
       <Header pageTitle="Career Portal" />
 
       <main className="max-w-2xl mx-auto mt-8 px-4 space-y-6">
-
-        {/* Admin Badge */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            Admin · {address?.slice(0, 6)}...{address?.slice(-4)}
-          </div>
-        </div>
 
         {/* Registration Form */}
         <section className="bg-surface-card border border-surface rounded-2xl overflow-hidden shadow-sm">

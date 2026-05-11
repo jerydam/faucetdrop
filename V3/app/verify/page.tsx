@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, ShieldX, ScanLine, ExternalLink, Link } from 'lucide-react';
+import { ShieldCheck, ShieldX, ScanLine, ExternalLink } from 'lucide-react';
 
 const API_BASE_URL = "https://faucetpay-backend.koyeb.app";
 
@@ -92,17 +92,17 @@ function VerificationLogic() {
           {/* ID Card */}
           <div className="relative bg-surface-card border-2 border-green-500/40 rounded-2xl shadow-2xl shadow-green-500/10 overflow-hidden">
             {/* Top gradient stripe */}
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-linear-to-r from-green-400 via-green-500 to-emerald-400" />
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-green-400 via-green-500 to-emerald-400" />
 
             {/* Header */}
-                <div className="px-5 pt-4 pb-3 border-b border-surface flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+            <div className="px-5 pt-4 pb-3 border-b border-surface flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/darklogo.png" alt="FaucetDrops" className="w-20 h-10 object-contain" />
-                
+                <img src="/darkbg.png" alt="FaucetDrops" className="w-20 h-10 object-contain" />
               </div>
               <ShieldCheck className="w-5 h-5 text-green-500" />
             </div>
+
             {/* Card body */}
             <div className="p-5">
               <div className="flex gap-4 items-start mb-5">
@@ -160,13 +160,13 @@ function VerificationLogic() {
             {/* Footer */}
             <div className="px-5 pb-4 flex items-center justify-between">
               <p className="text-[9px] text-surface-muted uppercase tracking-widest">faucetdrops.io</p>
-              <Link
-                href="/"
+              <a
+                href="https://faucetdrops.io"
                 className="flex items-center gap-1 text-[10px] text-primary hover:underline"
               >
                 <ExternalLink className="w-2.5 h-2.5" />
                 Explore platform
-              </Link>
+              </a>
             </div>
           </div>
 
@@ -189,10 +189,9 @@ function VerificationLogic() {
           </div>
 
           <div className="relative bg-surface-card border-2 border-destructive/40 rounded-2xl shadow-2xl shadow-destructive/10 overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-linear-to-r from-red-400 via-destructive to-red-400" />
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-red-400 via-destructive to-red-400" />
 
             <div className="p-6 flex flex-col items-center text-center">
-
               <div className="w-20 h-20 bg-destructive/10 border border-destructive/20 rounded-2xl flex items-center justify-center mb-4">
                 <ShieldX className="w-10 h-10 text-destructive" />
               </div>
@@ -203,7 +202,6 @@ function VerificationLogic() {
                 This credential could not be verified against the FaucetDrops employee registry. It may be forged, expired, or tampered with.
               </p>
 
-              {/* What was scanned */}
               {(id || name || role) && (
                 <div className="w-full bg-surface-card-2 border border-surface rounded-xl p-4 text-left space-y-2 mb-4">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-surface-muted mb-2">Scanned Data</p>

@@ -24,7 +24,7 @@ export default function AdminRegistrationPage() {
   const { address, isConnected } = useWallet();
 
   const [name, setName] = useState('');
-  const [role, setRole] = useState('');
+  const [role, setRole] = useState(''); 
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
@@ -175,7 +175,7 @@ export default function AdminRegistrationPage() {
   }
 
   const qrValue = employeeData
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/career/verify?id=${employeeData.id}&name=${encodeURIComponent(employeeData.name)}&role=${encodeURIComponent(employeeData.role)}`
+    ? `https://faucetdrops.io/verify?id=${employeeData.id}&name=${encodeURIComponent(employeeData.name)}&role=${encodeURIComponent(employeeData.role)}`
     : '';
 
   // --- MAIN ADMIN UI ---

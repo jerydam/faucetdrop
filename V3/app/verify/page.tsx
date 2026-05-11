@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ShieldCheck, ShieldX, ScanLine, ExternalLink } from 'lucide-react';
+import { ShieldCheck, ShieldX, ScanLine, ExternalLink, Link } from 'lucide-react';
 
 const API_BASE_URL = "https://faucetpay-backend.koyeb.app";
 
@@ -79,10 +79,10 @@ function VerificationLogic() {
 
       {/* ── VALID ── */}
       {status === 'valid' && employee && (
-        <div className="w-full max-w-sm animate-in fade-in zoom-in-95 duration-500">
+        <div className="w-full max-w-sm animate-in fade-in zoom-in-95  duration-500">
 
           {/* Verified badge */}
-          <div className="flex justify-center mb-5">
+          <div className="flex justify-center mb-5 ">
             <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 text-green-600 text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               Cryptographically Verified
@@ -90,9 +90,9 @@ function VerificationLogic() {
           </div>
 
           {/* ID Card */}
-          <div className="relative bg-surface-card border-2 border-green-500/40 rounded-2xl shadow-2xl shadow-green-500/10 overflow-hidden">
+          <div className="relative bg-[#040c22] border-2 border-green-500/40 rounded-2xl shadow-2xl shadow-green-500/10 text-white overflow-hidden">
             {/* Top gradient stripe */}
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-green-400 via-green-500 to-emerald-400" />
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-linear-to-r from-green-400 via-green-500 to-emerald-400" />
 
             {/* Header */}
                 <div className="px-5 pt-4 pb-3 border-b border-surface flex items-center justify-between">
@@ -107,7 +107,7 @@ function VerificationLogic() {
             <div className="p-5">
               <div className="flex gap-4 items-start mb-5">
                 {/* Photo */}
-                <div className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-green-500/30 shadow-lg shadow-green-500/10 flex-shrink-0 bg-surface-card-2 flex items-center justify-center">
+                <div className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-green-500/30 shadow-lg shadow-green-500/10 shrink-0 bg-surface-card-2 flex items-center justify-center">
                   {employee.photo_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -132,7 +132,7 @@ function VerificationLogic() {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-green-600 mb-0.5">Verified Employee</p>
                   <p className="text-lg font-black text-surface-primary leading-tight">{employee.name}</p>
                   <p className="text-sm text-surface-secondary mt-0.5">{employee.role}</p>
-                  <p className="text-xs font-mono font-bold text-primary mt-1.5">{employee.id}</p>
+                  <p className="text-xs font-mono font-bold mt-1.5">{employee.id}</p>
                 </div>
               </div>
 
@@ -150,7 +150,7 @@ function VerificationLogic() {
 
               {/* Status pill */}
               <div className="flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 rounded-xl py-2.5 px-4">
-                <ShieldCheck className="w-4 h-4 text-green-500 flex-shrink-0" />
+                <ShieldCheck className="w-4 h-4 text-green-500 shrink-0" />
                 <p className="text-xs font-bold text-green-600">
                   Identity confirmed in FaucetDrops registry
                 </p>
@@ -160,17 +160,16 @@ function VerificationLogic() {
             {/* Footer */}
             <div className="px-5 pb-4 flex items-center justify-between">
               <p className="text-[9px] text-surface-muted uppercase tracking-widest">faucetdrops.io</p>
-              <a
-                href="/"
+              <Link
+               
                 className="flex items-center gap-1 text-[10px] text-primary hover:underline"
               >
-                <ExternalLink className="w-2.5 h-2.5" />
-                Explore platform
-              </a>
+                <a href="/">                <ExternalLink className="w-2.5 h-2.5 text-white" /></a>
+              </Link>
             </div>
           </div>
 
-          <p className="text-center text-xs text-surface-muted mt-4">
+          <p className="text-center text-xs text-white mt-4">
             Scanned at {new Date().toLocaleString()}
           </p>
         </div>
@@ -189,7 +188,7 @@ function VerificationLogic() {
           </div>
 
           <div className="relative bg-surface-card border-2 border-destructive/40 rounded-2xl shadow-2xl shadow-destructive/10 overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-red-400 via-destructive to-red-400" />
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-linear-to-r from-red-400 via-destructive to-red-400" />
 
             <div className="p-6 flex flex-col items-center text-center">
 
@@ -214,7 +213,7 @@ function VerificationLogic() {
               )}
 
               <div className="flex items-center justify-center gap-2 w-full bg-destructive/10 border border-destructive/20 rounded-xl py-2.5 px-4">
-                <ShieldX className="w-4 h-4 text-destructive flex-shrink-0" />
+                <ShieldX className="w-4 h-4 text-destructive shrink-0" />
                 <p className="text-xs font-bold text-destructive">Do not accept this credential</p>
               </div>
             </div>

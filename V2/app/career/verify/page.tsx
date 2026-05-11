@@ -103,7 +103,6 @@ function VerificationLogic() {
               </div>
               <ShieldCheck className="w-5 h-5 text-green-500" />
             </div>
-
             {/* Card body */}
             <div className="p-5">
               <div className="flex gap-4 items-start mb-5">

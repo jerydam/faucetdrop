@@ -10,7 +10,6 @@ import { Upload, Download, UserPlus, ShieldCheck, X, ImageIcon } from 'lucide-re
 
 const API_BASE_URL = "https://faucetpay-backend.koyeb.app";
 const ADMIN_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_ADDRESS?.toLowerCase();
-
 interface EmployeeData {
   id: string;
   name: string;

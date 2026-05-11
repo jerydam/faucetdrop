@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ShieldCheck, ShieldX, ScanLine, ExternalLink } from 'lucide-react';
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://faucetpay-backend.koyeb.app";
 
 interface EmployeeRecord {
   id: string;

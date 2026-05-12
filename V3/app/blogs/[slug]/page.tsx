@@ -99,21 +99,25 @@ export default function BlogDetailPage() {
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [liking, setLiking] = useState(false);
-  useEffect(() => {
+    useEffect(() => {
     if (!slug) return;
-    setLoading(true);
+    let cancelled = false;
     fetch(`${API}/api/blog/posts/${slug}`)
       .then(r => r.json())
       .then(d => {
+        if (cancelled) return;
         if (d.success) {
           setPost(d.post);
           setLikesCount(d.post.likes_count);
           const likedSlugs: string[] = JSON.parse(localStorage.getItem("blog_liked") || "[]");
           setLiked(likedSlugs.includes(slug));
-        } else setError(d.detail || "Post not found");
+        } else {
+          setError(d.detail || "Post not found");
+        }
       })
-      .catch(() => setError("Failed to load post"))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!cancelled) setError("Failed to load post"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [slug]);
 
   const handleLike = async () => {

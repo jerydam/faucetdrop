@@ -45,7 +45,7 @@ export default function BlogAdminPage() {
     } catch { toast.error("Failed to load posts"); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { fetchPosts(); }, [fetchPosts]);
+  useEffect(() => { void fetchPosts(); }, [fetchPosts]);
   const handleDelete = async (slug: string, title: string) => {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
     const token = getSession();

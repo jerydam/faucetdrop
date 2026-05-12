@@ -555,30 +555,32 @@ export default function CreateBlogPage() {
   };
   const [form, setForm] = useState(initialFormState);
 
-  useEffect(() => {
+ useEffect(() => {
     const token = getSession();
     if (!token) { router.replace("/blogs/login"); return; }
-    setSessionToken(token);
-    fetch(`${API}/api/blog/me?sessionToken=${token}`)
+    // Store token in a ref-safe way — read it from getSession() in handlers instead
+    const savedToken = token;
+    fetch(`${API}/api/blog/me?sessionToken=${savedToken}`)
       .then(r => r.json())
       .then(d => {
-        if (d.success) setAuthed(true);
-        else {
-          // Only redirect if form is empty — don't lose work
+        setSessionToken(savedToken);
+        if (d.success) {
+          setAuthed(true);
+        } else {
           const formIsEmpty = !form.title.trim() && !form.content.trim();
           if (formIsEmpty) {
             clearSession();
             router.replace("/blogs/login");
           } else {
-            // Session expired but user has content — warn instead of redirect
             toast.error("Session expired. Copy your content before refreshing.");
-            setAuthed(true); // let them keep editing
+            setAuthed(true);
           }
         }
       })
-      .catch(() => setChecking(false)) // network error — don't redirect
+      .catch(() => setChecking(false))
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       .finally(() => setChecking(false));
-  }, [router]);
+  }, [router]); 
 
   const set = (key: string, value: unknown) =>
     setForm(prev => ({ ...prev, [key]: value }));

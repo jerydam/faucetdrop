@@ -183,7 +183,7 @@ export default function BlogPage() {
       setLoadingMore(false);
     }
   }, []);
-  useEffect(() => { fetchPosts(1, activeTag); }, [activeTag, fetchPosts]);
+  useEffect(() => { void fetchPosts(1, activeTag); }, [activeTag, fetchPosts]);
   const hero = posts[0];
   const grid = posts.slice(1);
   return (

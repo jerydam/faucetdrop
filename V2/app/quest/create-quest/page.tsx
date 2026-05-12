@@ -186,13 +186,20 @@ function QuestCreatorContent() {
 const [isSubscribed, setIsSubscribed] = useState(false)
 
 // Fetch subscription status from your existing API
+// Replace the existing subscription useEffect with this:
 useEffect(() => {
     if (!address) return
-    fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}`)
+    
+    fetch(`${API_BASE_URL}/api/users/${address.toLowerCase()}/subscription`)
         .then(r => r.json())
-        .then(data => setIsSubscribed(data.is_subscribed ?? false))
+        .then(data => {
+            const active = data.success && data.hasActiveSubscription === true
+            setIsSubscribed(active)
+        })
         .catch(() => setIsSubscribed(false))
 }, [address])
+
+
     useEffect(() => {
         if (!address) return;
 
@@ -626,13 +633,11 @@ const { openSubscriptionModal } = useSubscriptionModal()
 
             {/* SUCCESS MODAL POPUP */}
     {showPostPhase1Modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-0 relative overflow-hidden">
-            {/* Header gradient */}
-            
-            
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-0 relative overflow-hidden">
             <div className="p-6 space-y-5">
-                {/* Success check */}
+
+                {/* Success check — always shown */}
                 <div className="flex items-center gap-3">
                     <div className="h-10 w-10 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-full flex items-center justify-center shrink-0">
                         <CheckCircle2 className="h-5 w-5" />
@@ -642,93 +647,138 @@ const { openSubscriptionModal } = useSubscriptionModal()
                         <p className="text-sm text-muted-foreground">Now configure tasks to activate your quest.</p>
                     </div>
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700/40 text-[10px] font-medium text-amber-700 dark:text-amber-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
-                        Subscription required · $100 USDT to go live
-                    </div>
-                {/* Advantages panel */}
-                <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4 space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Why subscribe?</p>
-                    <ol className="space-y-2 text-sm text-blue-900 dark:text-blue-200">
-                        {[
-                            "- Unlimited quest campaigns with full task types",
-                            "- Access to ready made task Template",
-                            "- Access to our community, enabling you to scale quest seamlessly and acquire new users.",
-                            "- On-chain verification engine for Blockchain Task",
-                            "- Full admin dashboard & submission review",
-                            "- Multi-stage quest progression system",
-                            "- Reward Distribution mechanism with smart contract that handle your distribution automatically",
-                        ].map((item, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                                <span>{item}</span>
-                            </li>
-                        ))}
-                    </ol>
-                    <div className="pt-2 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between">
-                        <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">30-day full access</span>
-                        <span className="text-lg font-black text-blue-700 dark:text-blue-300">$100 USDT</span>
-                    </div>
-                </div>
 
-                {/* Demo mode notice */}
-                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
-                    <span className="shrink-0">⚡</span>
-                    <span><strong>Demo Mode</strong> lets you add tasks and gives you limited access to participants and our verification engine. Create a demo quest to share with your team to test our platform.</span>
-                </div>
+                {isSubscribed ? (
+                    /* ── SUBSCRIBER: clean CTA, no upsell ── */
+                    <div className="space-y-3">
+                        <div className="rounded-xl border border-green-100 dark:border-green-900/40 bg-green-50 dark:bg-green-950/20 p-4 flex items-center gap-3">
+                            <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                            <div>
+                                <p className="text-sm font-semibold text-green-800 dark:text-green-300">Active Subscription</p>
+                                <p className="text-xs text-green-700 dark:text-green-400">You have full access to all quest features.</p>
+                            </div>
+                        </div>
 
-                {/* Action buttons */}
-                <div className="grid grid-cols-1 gap-3 pt-1">
-                    <Button
-                        size="lg"
-                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold shadow-md h-12"
-                        onClick={() => {
-                                setShowPostPhase1Modal(false)
-                                setPhase(2)
-                                window.scrollTo(0, 0)
-                            }}
-                    >
-                         Continue To Add Task
-                    </Button>
-
-                    <div className="grid grid-cols-2 gap-3">
                         <Button
-                            variant="outline"
-                            className="w-full h-11 font-semibold border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                            size="lg"
+                            className="w-full  text-white font-bold shadow-md h-12"
                             onClick={() => {
-                                setIsDemoMode(true)
                                 setShowPostPhase1Modal(false)
                                 setPhase(2)
                                 window.scrollTo(0, 0)
                             }}
                         >
-                            ⚡ Try Demo
+                            Continue To Add Tasks
+                            <ArrowRight className="h-4 w-4 ml-2" />
                         </Button>
 
                         <Button
-    variant="outline"
-    className="w-full h-11 font-semibold"
-    onClick={() => {
-        setShowPostPhase1Modal(false)
-        openSubscriptionModal({ onSuccess: () => setIsDemoMode(false) })
-    }}
->
-    Subscribe Now — $100/month
-</Button>
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-muted-foreground"
+                            onClick={() => {
+                                setShowPostPhase1Modal(false)
+                                const routeParam = userProfile?.username || address
+                                if (routeParam) router.push(`/dashboard/${routeParam}`)
+                            }}
+                        >
+                            Save & Continue Later
+                        </Button>
                     </div>
+                ) : (
+                    /* ── NON-SUBSCRIBER: full upsell flow ── */
+                    <div className="space-y-4">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-700/40 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+                            Subscription required · $100 USDT to go live
+                        </div>
 
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground"
-                        onClick={() => {
-                            setShowPostPhase1Modal(false)
-                            const routeParam = userProfile?.username || address
-                            if (routeParam) router.push(`/dashboard/${routeParam}`)
-                        }}
-                    >
-                        Save & Continue Later
-                    </Button>
-                </div>
+                        <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4 space-y-3">
+                            <p className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Why subscribe?</p>
+                            <ol className="space-y-2 text-sm text-blue-900 dark:text-blue-200">
+                                {[
+                                    "Unlimited quest campaigns with full task types",
+                                    "Access to ready-made task templates",
+                                    "Community access to scale quests and acquire users",
+                                    "On-chain verification engine for Blockchain tasks",
+                                    "Full admin dashboard & submission review",
+                                    "Multi-stage quest progression system",
+                                    "Automatic reward distribution via smart contract",
+                                ].map((item, i) => (
+                                    <li key={i} className="flex items-start gap-2">
+                                        <CheckCircle2 className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+                                        <span>{item}</span>
+                                    </li>
+                                ))}
+                            </ol>
+                            <div className="pt-2 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between">
+                                <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">30-day full access</span>
+                                <span className="text-lg font-black text-blue-700 dark:text-blue-300">$100 USDT</span>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                            <span className="shrink-0">⚡</span>
+                            <span><strong>Demo Mode</strong> lets you add tasks and gives limited access. Create a demo quest to test our platform with your team.</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 pt-1">
+                            <Button
+                                size="lg"
+                                className="w-full  text-white font-bold shadow-md h-12"
+                                onClick={() => {
+                                    setShowPostPhase1Modal(false)
+                                    setPhase(2)
+                                    window.scrollTo(0, 0)
+                                }}
+                            >
+                                Continue To Add Tasks
+                            </Button>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <Button
+                                    variant="outline"
+                                    className="w-full h-11 font-semibold border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                                    onClick={() => {
+                                        setIsDemoMode(true)
+                                        setShowPostPhase1Modal(false)
+                                        setPhase(2)
+                                        window.scrollTo(0, 0)
+                                    }}
+                                >
+                                    ⚡ Try Demo
+                                </Button>
+
+                                <Button
+                                    variant="outline"
+                                    className="w-full h-11 font-semibold"
+                                    onClick={() => {
+                                        setShowPostPhase1Modal(false)
+                                        openSubscriptionModal({ onSuccess: () => {
+                                            setIsSubscribed(true)
+                                            setIsDemoMode(false)
+                                        }})
+                                    }}
+                                >
+                                    Subscribe — $100/mo
+                                </Button>
+                            </div>
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-muted-foreground"
+                                onClick={() => {
+                                    setShowPostPhase1Modal(false)
+                                    const routeParam = userProfile?.username || address
+                                    if (routeParam) router.push(`/dashboard/${routeParam}`)
+                                }}
+                            >
+                                Save & Continue Later
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     </div>

@@ -905,7 +905,18 @@
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-xs font-medium uppercase text-muted-foreground">Target Stage</Label>
-                          <Select value={newTask.stage || "Beginner"} onValueChange={(v: TaskStage) => setNewTask(p => ({ ...p, stage: v, points: getDefaultPointsForStage(v) }))} disabled={!!editingTask?.isSystem}>
+                          <Select value={newTask.stage || "Beginner"} onValueChange={(v: TaskStage) => setNewTask(p => ({
+                              ...p,
+                              stage: v,
+                              points: getDefaultPointsForStage(v),
+                              targetPlatform: undefined,
+                              action: undefined,
+                              title: "",
+                              url: "",
+                              targetHandle: "",
+                              targetServerId: "",
+                              verificationType: 'manual_link',
+                            }))} disabled={!!editingTask?.isSystem}>
                             <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {TASK_STAGES.map(stage => (
@@ -1041,10 +1052,20 @@
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1">
                                 <Label className="text-xs text-blue-400">Platform</Label>
-                                <Select value={newTask.targetPlatform} onValueChange={(v: TaskStage) => {
-                                  setNewTask(p => ({ ...p, stage: v, points: getDefaultPointsForStage(v) }))
-                                  setIsCustomTask(false) // ← ADD THIS
-                                }}>
+                                <Select value={newTask.targetPlatform} onValueChange={(v: SocialPlatform) => {
+                                    const defaultAction = getAvailableActions(v)[0]
+                                    setNewTask(p => ({
+                                      ...p,
+                                      targetPlatform: v,
+                                      action: defaultAction,
+                                      title: generateSocialTaskTitle(v, defaultAction),
+                                      url: "",
+                                      targetHandle: "",
+                                      targetServerId: "",
+                                      verificationType: ['Twitter', 'Discord', 'Telegram'].includes(v) ? 'auto_social' : 'manual_link',
+                                    }))
+                                    setIsCustomTask(false)
+                                  }}>
                                   <SelectTrigger className="h-8 bg-background border-blue-500/30"><SelectValue /></SelectTrigger>
                                   <SelectContent>{SOCIAL_PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                                 </Select>

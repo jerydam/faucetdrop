@@ -7,7 +7,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "sonner"
 import { NetworkProvider } from "@/hooks/use-network"
-import { ConditionalWalletProvider } from "@/components/conditional-wallet-provider"
+import { WalletProvider } from "@/components/wallet-provider"
 import { Footer } from "@/components/footer"
 import { Providers } from "@/components/PrivyProvider"
 import { SubscriptionModalProvider } from "@/components/subscribe"
@@ -83,7 +83,7 @@ export default function RootLayout({
           {/* SINGLE PROVIDER WRAPPER - handles Privy, Wagmi, and QueryClient */}
           <Providers>
             <NetworkProvider>
-              <ConditionalWalletProvider>
+              <WalletProvider>
               <SubscriptionModalProvider>
                 <div className="min-h-screen flex flex-col">
                   <main className="flex-1">
@@ -93,7 +93,7 @@ export default function RootLayout({
                 </div>
                 <Toaster richColors position="top-center" closeButton />
               </SubscriptionModalProvider>
-            </ConditionalWalletProvider>
+            </WalletProvider>
             </NetworkProvider>
           </Providers>
         </ThemeProvider>

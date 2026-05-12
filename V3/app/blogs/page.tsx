@@ -183,7 +183,9 @@ export default function BlogPage() {
       setLoadingMore(false);
     }
   }, []);
-  useEffect(() => { void fetchPosts(1, activeTag); }, [activeTag, fetchPosts]);
+  useEffect(() => {
+    fetchPosts(1, activeTag); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [activeTag, fetchPosts]);
   const hero = posts[0];
   const grid = posts.slice(1);
   return (

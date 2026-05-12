@@ -578,9 +578,9 @@ export default function CreateBlogPage() {
         }
       })
       .catch(() => setChecking(false))
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       .finally(() => setChecking(false));
-  }, [router]); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
   const set = (key: string, value: unknown) =>
     setForm(prev => ({ ...prev, [key]: value }));

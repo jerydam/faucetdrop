@@ -721,177 +721,16 @@ export async function createCustomFaucet(
     }
 }
 
-export async function checkFaucetNameExistsAcrossAllFactories(
-  provider: Provider,
-  factoryAddresses: string[],
-  proposedName: string
-): Promise<NameValidationResult & { 
-  conflictingFaucets?: Array<{
-    address: string
-    name: string
-    owner: string
-    factoryAddress: string
-    factoryType: FactoryType
-  }>
-}> {
-  try {
-    if (!proposedName.trim()) {
-      throw new Error("Faucet name cannot be empty");
-    }
-    
-    const normalizedProposedName = proposedName.trim().toLowerCase();
-    console.log(`Checking name "${proposedName}" across ${factoryAddresses.length} factories on current network...`);
 
-    const conflictingFaucets: any[] = [];
-
-    // Check each factory address
-    for (const factoryAddress of factoryAddresses) {
-      if (!isAddress(factoryAddress)) {
-        console.warn(`Invalid factory address ${factoryAddress}, skipping`);
-        continue;
-      }
-
-      try {
-        // Check if factory contract exists
-        const code = await provider.getCode(factoryAddress);
-        if (code === "0x") {
-          console.warn(`No contract at factory address ${factoryAddress}`);
-          continue;
-        }
-
-        // Detect factory type and get appropriate ABI
-        let factoryType: FactoryType;
-        let config: FactoryConfig;
-        
-        try {
-          factoryType = await detectFactoryType(provider, factoryAddress);
-          config = getFactoryConfig(factoryType);
-          console.log(`Checking factory ${factoryAddress} (type: ${factoryType})`);
-        } catch (error) {
-          console.warn(`Could not detect factory type for ${factoryAddress}, skipping:`, error);
-          continue;
-        }
-
-        const factoryContract = new Contract(factoryAddress, config.abi, provider);
-
-        // Method 1: Try getAllFaucetDetails first (preferred method)
-        try {
-          console.log(`Attempting getAllFaucetDetails for factory ${factoryAddress}...`);
-          const allFaucetDetails: FaucetDetails[] = await factoryContract.getAllFaucetDetails();
-          
-          const conflictInThisFactory = allFaucetDetails.find(faucet => 
-            faucet.name.toLowerCase() === normalizedProposedName
-          );
-          
-          if (conflictInThisFactory) {
-            conflictingFaucets.push({
-              address: conflictInThisFactory.faucetAddress,
-              name: conflictInThisFactory.name,
-              owner: conflictInThisFactory.owner,
-              factoryAddress,
-              factoryType
-            });
-          }
-          
-        } catch (getAllError:any) {
-          console.warn(`getAllFaucetDetails failed for factory ${factoryAddress}, trying fallback method:`, getAllError.message);
-          
-          // Method 2: Fallback - Get all faucet addresses and check each individually
-          try {
-            console.log(`Attempting getAllFaucets fallback for factory ${factoryAddress}...`);
-            const faucetAddresses: string[] = await factoryContract.getAllFaucets();
-            
-            console.log(`Found ${faucetAddresses.length} faucets in factory ${factoryAddress}`);
-            
-            // Check each faucet individually (with batching for performance)
-            const batchSize = 10; // Process in smaller batches
-            
-            for (let i = 0; i < faucetAddresses.length; i += batchSize) {
-              const batch = faucetAddresses.slice(i, i + batchSize);
-              
-              // Process batch in parallel
-              const batchPromises = batch.map(async (faucetAddress) => {
-                try {
-                  const faucetDetails = await factoryContract.getFaucetDetails(faucetAddress);
-                  return {
-                    address: faucetAddress,
-                    name: faucetDetails.name,
-                    owner: faucetDetails.owner,
-                    factoryAddress,
-                    factoryType
-                  };
-                } catch (error: any) {
-                  console.warn(`Failed to get details for faucet ${faucetAddress}:`, error.message);
-                  return null;
-                }
-              });
-              
-              const batchResults = await Promise.allSettled(batchPromises);
-              
-              // Check this batch for name conflicts
-              for (const result of batchResults) {
-                if (result.status === 'fulfilled' && result.value) {
-                  const faucet = result.value;
-                  if (faucet.name.toLowerCase() === normalizedProposedName) {
-                    conflictingFaucets.push(faucet);
-                  }
-                }
-              }
-              
-              // Add delay between batches to be nice to the RPC
-              if (i + batchSize < faucetAddresses.length) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-              }
-            }
-            
-          } catch (fallbackError:any) {
-            console.warn(`Fallback method also failed for factory ${factoryAddress}:`, fallbackError.message);
-            continue;
-          }
-        }
-
-      } catch (factoryError) {
-        console.error(`Error checking factory ${factoryAddress}:`, factoryError);
-        continue;
-      }
-    }
-
-    // Return results
-    if (conflictingFaucets.length > 0) {
-      console.log(`Found ${conflictingFaucets.length} name conflicts across factories`);
-      return {
-        exists: true,
-        existingFaucet: {
-          address: conflictingFaucets[0].address,
-          name: conflictingFaucets[0].name,
-          owner: conflictingFaucets[0].owner
-        },
-        conflictingFaucets
-      };
-    }
-
-    console.log(`Name "${proposedName}" is available across all factories on current network`);
-    return { exists: false };
-    
-  } catch (error: any) {
-    console.error("Error in checkFaucetNameExistsAcrossAllFactories:", error);
-    // Don't throw, return graceful degradation
-    return { 
-      exists: false, 
-      warning: "Name validation unavailable due to network issues. Please ensure your name is unique."
-    };
-  }
-}
 
 /**
  * Enhanced version of the original checkFaucetNameExists that checks all factories
  * This replaces the single factory check with a multi-factory check
  */
 export async function checkFaucetNameExists(
-  provider: BrowserProvider,
-  network: Network, // Pass the whole network object instead of single factory address
+  chainId: number,
   proposedName: string
-): Promise<NameValidationResult & { 
+): Promise<NameValidationResult & {
   conflictingFaucets?: Array<{
     address: string
     name: string
@@ -901,25 +740,52 @@ export async function checkFaucetNameExists(
   }>
 }> {
   try {
-    if (!proposedName.trim()) {
-      throw new Error("Faucet name cannot be empty");
+    if (!proposedName.trim()) throw new Error("Faucet name cannot be empty")
+
+    console.log(`Checking name "${proposedName}" on chainId ${chainId}`)
+
+    const response = await fetch(
+      `https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/check-faucet-name?` +
+      new URLSearchParams({
+        name: proposedName.trim(),
+        chainId: String(chainId),
+      })
+    )
+
+    if (!response.ok) {
+      console.warn("Backend name check failed:", await response.json().catch(() => ({})))
+      return {
+        exists: false,
+        warning: "Name validation unavailable. Please ensure your name is unique.",
+      }
     }
 
-    console.log(`Checking name "${proposedName}" across all factories on ${network.name}`);
-    
-    // Use the new function that checks all factories
-    return await checkFaucetNameExistsAcrossAllFactories(
-      provider, 
-      network.factoryAddresses, 
-      proposedName
-    );
-    
+    const data = await response.json()
+
+    if (!data.exists) return { exists: false }
+
+    const conflicts: Array<{
+      address: string
+      name: string
+      owner: string
+      factoryAddress: string
+      factoryType: FactoryType
+    }> = data.faucets ?? (data.faucet ? [data.faucet] : [])
+
+    return {
+      exists: true,
+      existingFaucet: conflicts[0]
+        ? { address: conflicts[0].address, name: conflicts[0].name, owner: conflicts[0].owner }
+        : undefined,
+      conflictingFaucets: conflicts,
+    }
+
   } catch (error: any) {
-    console.error("Error in enhanced name check:", error);
-    return { 
-      exists: false, 
-      warning: "Unable to validate name due to network issues. Please ensure your name is unique."
-    };
+    console.error("Error in DB name check:", error)
+    return {
+      exists: false,
+      warning: "Unable to validate name due to network issues. Please ensure your name is unique.",
+    }
   }
 }
 
@@ -1066,158 +932,7 @@ export async function getAllFaucetNamesOnNetwork(
 // Alternative: Enhanced createFaucet function that includes proper validation
 // If you want to include validation in the createFaucet function, use this version instead:
 
-export async function createFaucetWithValidation(
-  provider: BrowserProvider,
-  factoryAddress: string,
-  name: string,
-  tokenAddress: string,
-  chainId: bigint,
-  networkId: bigint,
-  useBackend: boolean,
-  isCustom: boolean = false,
-  network: Network, // Add network parameter for validation
-): Promise<string> {
-  try {
-    if (!name.trim()) {
-      throw new Error("Faucet name cannot be empty");
-    }
-    if (!isAddress(tokenAddress)) {
-      throw new Error(`Invalid token address: ${tokenAddress}`);
-    }
-    if (!isAddress(factoryAddress)) {
-      throw new Error(`Invalid factory address: ${factoryAddress}`);
-    }
 
-    // Determine factory type and get appropriate config
-    const factoryType = determineFactoryType(useBackend, isCustom)
-    const config = getFactoryConfig(factoryType)
-
-    console.log(`Creating faucet with factory type: ${factoryType}`)
-
-    // Enhanced name validation with network object
-    console.log("Validating faucet name before creation...");
-    try {
-      const nameCheck = await checkFaucetNameExists(provider, network, name);
-      
-      if (nameCheck.exists && nameCheck.existingFaucet) {
-        const conflictDetails = nameCheck.conflictingFaucets 
-          ? ` Conflicts found in: ${nameCheck.conflictingFaucets.map(c => `${c.factoryType} factory`).join(', ')}`
-          : '';
-        
-        throw new Error(
-          `A faucet with the name "${nameCheck.existingFaucet.name}" already exists on this network.${conflictDetails} ` +
-          `Please choose a different name.`
-        );
-      }
-      
-      if (nameCheck.warning) {
-        console.warn("Name validation warning:", nameCheck.warning);
-        // Continue with creation but log the warning
-      }
-      
-      console.log("Name validation passed");
-    } catch (validationError: any) {
-      if (validationError.message.includes("already exists")) {
-        // Re-throw name conflict errors
-        throw validationError;
-      } else {
-        // Log validation errors but don't block creation
-        console.warn("Name validation failed, proceeding with creation:", validationError.message);
-      }
-    }
-
-    const signer = await provider.getSigner();
-    const signerAddress = await signer.getAddress();
-    const factoryContract = new Contract(factoryAddress, config.abi, signer);
-
-    const backendAddress = VALID_BACKEND_ADDRESS;
-
-    // Use the appropriate create function based on factory type
-    const data = factoryContract.interface.encodeFunctionData(config.createFunction, [
-      name,
-      tokenAddress,
-      backendAddress,
-    ]);
-    const dataWithReferral = appendDivviReferralData(data);
-
-    const gasEstimate = await provider.estimateGas({
-      to: factoryAddress,
-      data: dataWithReferral,
-      from: signerAddress,
-    });
-    const feeData = await provider.getFeeData();
-    const gasPrice = feeData.gasPrice || BigInt(0);
-    const maxFeePerGas = feeData.maxFeePerGas || undefined;
-    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
-    const gasCost = gasEstimate * gasPrice;
-
-    console.log("Create faucet params:", {
-      factoryAddress,
-      factoryType,
-      createFunction: config.createFunction,
-      name,
-      tokenAddress,
-      backendAddress,
-      useBackend,
-      isCustom,
-      chainId: chainId.toString(),
-      networkId: networkId.toString(),
-      signerAddress,
-      gasEstimate: gasEstimate.toString(),
-      gasPrice: gasPrice.toString(),
-      gasCost: gasCost.toString(),
-    });
-
-    const tx = await signer.sendTransaction({
-      to: factoryAddress,
-      data: dataWithReferral,
-      gasLimit: (gasEstimate * BigInt(12)) / BigInt(10),
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-    });
-
-    console.log("Transaction hash:", tx.hash);
-    const receipt = await tx.wait();
-    if (!receipt) {
-      throw new Error("Transaction receipt is null");
-    }
-    console.log("Transaction confirmed:", receipt.hash);
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
-
-    const event = receipt?.logs
-      ?.map((log) => {
-        try {
-          return factoryContract.interface.parseLog({ data: log.data, topics: log.topics as string[] });
-        } catch {
-          return null;
-        }
-      })
-      .find((parsed) => parsed?.name === "FaucetCreated");
-
-    if (!event || !event.args || !event.args.faucet) {
-      throw new Error("Failed to retrieve faucet address from transaction");
-    }
-
-    console.log("New faucet created:", {
-      faucetAddress: event.args.faucet,
-      factoryType,
-      backendAddress,
-      useBackend,
-      isCustom,
-    });
-
-    return event.args.faucet as string;
-  } catch (error: any) {
-    console.error("Error creating faucet:", error);
-    if (error.message?.includes("network changed")) {
-      throw new Error("Network changed during transaction. Please try again with a stable network connection.");
-    }
-    if (error.data && typeof error.data === "string") {
-      throw new Error(decodeRevertError(error.data));
-    }
-    throw new Error(error.reason || error.message || "Failed to create faucet");
-  }
-}
 
 /**
  * Utility function to safely make contract calls with fallbacks
@@ -2379,37 +2094,29 @@ export async function createFaucet(
   tokenAddress: string,
   chainId: bigint,
   networkId: bigint,
-  useBackend: boolean,
-  isCustom: boolean = false,
+  factoryType: FactoryType,  // replaces useBackend + isCustom
 ): Promise<string> {
   try {
-    if (!name.trim()) {
-      throw new Error("Faucet name cannot be empty");
-    }
-    if (!isAddress(tokenAddress)) {
-      throw new Error(`Invalid token address: ${tokenAddress}`);
-    }
-    if (!isAddress(factoryAddress)) {
-      throw new Error(`Invalid factory address: ${factoryAddress}`);
-    }
+    if (!name.trim()) throw new Error("Faucet name cannot be empty")
+    if (!isAddress(tokenAddress)) throw new Error(`Invalid token address: ${tokenAddress}`)
+    if (!isAddress(factoryAddress)) throw new Error(`Invalid factory address: ${factoryAddress}`)
 
-    const factoryType = determineFactoryType(useBackend, isCustom)
+    // ✅ No more determineFactoryType — use what was passed in directly
     const config = getFactoryConfig(factoryType)
 
     console.log(`Creating faucet with factory type: ${factoryType}`)
 
-    const signer = await provider.getSigner();
-    const signerAddress = await signer.getAddress();
-    const factoryContract = new Contract(factoryAddress, config.abi, signer);
-
-    const backendAddress = VALID_BACKEND_ADDRESS;
+    const signer = await provider.getSigner()
+    const signerAddress = await signer.getAddress()
+    const factoryContract = new Contract(factoryAddress, config.abi, signer)
+    const backendAddress = VALID_BACKEND_ADDRESS
 
     const data = factoryContract.interface.encodeFunctionData(config.createFunction, [
       name,
       tokenAddress,
       backendAddress,
-    ]);
-    const dataWithReferral = appendDivviReferralData(data);
+    ])
+    const dataWithReferral = appendDivviReferralData(data)
 
     console.log("Create faucet params:", {
       factoryAddress,
@@ -2418,59 +2125,41 @@ export async function createFaucet(
       name,
       tokenAddress,
       backendAddress,
-      useBackend,
-      isCustom,
       chainId: chainId.toString(),
-      networkId: networkId.toString(),
       signerAddress,
-    });
+    })
 
-    // Simplified transaction - let wallet handle gas
-    const tx = await signer.sendTransaction({
-      to: factoryAddress,
-      data: dataWithReferral,
-    });
+    const tx = await signer.sendTransaction({ to: factoryAddress, data: dataWithReferral })
+    console.log("Transaction hash:", tx.hash)
 
-    console.log("Transaction hash:", tx.hash);
-    const receipt = await tx.wait();
-    if (!receipt) {
-      throw new Error("Transaction receipt is null");
-    }
-    console.log("Transaction confirmed:", receipt.hash);
-    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId));
+    const receipt = await tx.wait()
+    if (!receipt) throw new Error("Transaction receipt is null")
+    console.log("Transaction confirmed:", receipt.hash)
 
-    const event = receipt?.logs
-      ?.map((log) => {
+    await reportTransactionToDivvi(tx.hash as `0x${string}`, Number(chainId))
+
+    const event = receipt.logs
+      .map((log) => {
         try {
-          return factoryContract.interface.parseLog({ data: log.data, topics: log.topics as string[] });
-        } catch {
-          return null;
-        }
+          return factoryContract.interface.parseLog({ data: log.data, topics: log.topics as string[] })
+        } catch { return null }
       })
-      .find((parsed) => parsed?.name === "FaucetCreated");
+      .find((parsed) => parsed?.name === "FaucetCreated")
 
-    if (!event || !event.args || !event.args.faucet) {
-      throw new Error("Failed to retrieve faucet address from transaction");
-    }
+    if (!event?.args?.faucet) throw new Error("Failed to retrieve faucet address from transaction")
 
-    console.log("New faucet created:", {
-      faucetAddress: event.args.faucet,
-      factoryType,
-      backendAddress,
-      useBackend,
-      isCustom,
-    });
+    console.log("New faucet created:", { faucetAddress: event.args.faucet, factoryType })
+    return event.args.faucet as string
 
-    return event.args.faucet as string;
   } catch (error: any) {
-    console.error("Error creating faucet:", error);
+    console.error("Error creating faucet:", error)
     if (error.message?.includes("network changed")) {
-      throw new Error("Network changed during transaction. Please try again with a stable network connection.");
+      throw new Error("Network changed during transaction. Please try again.")
     }
     if (error.data && typeof error.data === "string") {
-      throw new Error(decodeRevertError(error.data));
+      throw new Error(decodeRevertError(error.data))
     }
-    throw new Error(error.reason || error.message || "Failed to create faucet");
+    throw new Error(error.reason || error.message || "Failed to create faucet")
   }
 }
 

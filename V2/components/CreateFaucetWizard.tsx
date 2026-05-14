@@ -167,6 +167,7 @@ function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProp
       </div>
     )
   }
+  
 
   return (
     <div className={`${sizeClasses[size]} ${className} relative`}>
@@ -641,6 +642,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     return matched || null
   }, [effectiveChainId, networks])
 
+  
   // State declarations
   const [faucetDescription, setFaucetDescription] = useState("")
   const [faucetImageUrl, setFaucetImageUrl] = useState("")
@@ -944,109 +946,80 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     }
   }
   // Name validation
-  const validateFaucetNameAcrossFactories = useCallback(async (nameToValidate: string) => {
-    if (!nameToValidate.trim()) {
+const validateFaucetNameAcrossFactories = useCallback(async (nameToValidate: string) => {
+  if (!nameToValidate.trim()) {
+    setNameValidation({ isValidating: false, isNameAvailable: false, validationError: null })
+    return
+  }
+  if (!effectiveChainId) {
+    setNameValidation({
+      isValidating: false,
+      isNameAvailable: false,
+      validationError: "Please connect your wallet to a supported network",
+    })
+    return
+  }
+
+  // ← removed the selectedFaucetType guard entirely, DB check is type-agnostic
+
+  setNameValidation(prev => ({ ...prev, isValidating: true, validationError: null }))
+
+  try {
+    const validationResult = await checkFaucetNameExists(effectiveChainId, nameToValidate)
+
+    if (validationResult.exists && validationResult.conflictingFaucets) {
       setNameValidation({
         isValidating: false,
         isNameAvailable: false,
-        validationError: null,
+        validationError: `Name "${validationResult.existingFaucet?.name}" already exists on this network`,
+        conflictingFaucets: validationResult.conflictingFaucets.map((c) => ({
+          faucetAddress: c.address,
+          faucetName: c.name,
+          ownerAddress: c.owner ?? "",
+          factoryAddress: c.factoryAddress ?? "",
+          factoryType: (c.factoryType ?? "dropcode") as FactoryType,
+        })),
       })
       return
     }
-    if (!provider) {
-      setNameValidation({
-        isValidating: false,
-        isNameAvailable: false,
-        validationError: "Please connect your wallet to validate the name",
-      })
-      return
-    }
-    if (!effectiveChainId || !currentNetwork) {
-      setNameValidation({
-        isValidating: false,
-        isNameAvailable: false,
-        validationError: "Please connect to a supported network",
-      })
-      return
-    }
-    if (!wizardState.selectedFaucetType) {
-      setNameValidation({
-        isValidating: false,
-        isNameAvailable: false,
-        validationError: "Please select a faucet type before validating the name",
-      })
-      return
-    }
-    const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const primaryFactoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
-    if (!primaryFactoryAddress) {
-      setNameValidation({
-        isValidating: false,
-        isNameAvailable: false,
-        validationError: `${wizardState.selectedFaucetType} faucets are not available on this network`,
-      })
-      return
-    }
-    setNameValidation(prev => ({ ...prev, isValidating: true, validationError: null }))
-    try {
-      console.log(`Validating name "${nameToValidate}" across all factories on ${currentNetwork?.name}...`)
-      // Cast to 'any' to bypass the slight interface mismatch between the hook and lib
-      const validationResult = await checkFaucetNameExists(provider, currentNetwork as any, nameToValidate)
-      if (validationResult.exists && validationResult.conflictingFaucets) {
-        const conflictCount = validationResult.conflictingFaucets.length
-        const factoryTypeList = validationResult.conflictingFaucets
-          .map((conflict: ValidationConflict) => `${conflict.factoryType} factory`)
-          .join(', ')
-        setNameValidation({
-          isValidating: false,
-          isNameAvailable: false,
-          validationError: conflictCount > 1
-            ? `Name "${validationResult.existingFaucet?.name}" exists in ${conflictCount} factories: ${factoryTypeList}`
-            : `Name "${validationResult.existingFaucet?.name}" already exists in ${factoryTypeList}`,
-          conflictingFaucets: validationResult.conflictingFaucets.map((conflict: ValidationConflict) => ({
-            faucetAddress: conflict.address,
-            faucetName: conflict.name,
-            ownerAddress: conflict.owner,
-            factoryAddress: conflict.factoryAddress,
-            factoryType: conflict.factoryType,
-          })),
-        })
-        return
-      }
-      if (validationResult.warning) {
-        console.warn("Name validation warning:", validationResult.warning)
-        setNameValidation({
-          isValidating: false,
-          isNameAvailable: true,
-          validationError: null,
-          validationWarning: validationResult.warning,
-        })
-        return
-      }
+
+    if (validationResult.warning) {
       setNameValidation({
         isValidating: false,
         isNameAvailable: true,
         validationError: null,
+        validationWarning: validationResult.warning,
       })
-    } catch (error: any) {
-      console.error("Name validation error:", error)
-      setNameValidation({
-        isValidating: false,
-        isNameAvailable: false,
-        validationError: "Failed to validate name across all factories",
-      })
+      return
     }
-  }, [provider, effectiveChainId, currentNetwork, wizardState.selectedFaucetType, getFactoryAddress])
 
-  // Debounced name validation
-  useEffect(() => {
-    const validationTimer = setTimeout(() => {
-      if (wizardState.formData.faucetName.trim() && wizardState.formData.faucetName.length >= 3) {
-        validateFaucetNameAcrossFactories(wizardState.formData.faucetName)
-      }
-    }, 500)
-    return () => clearTimeout(validationTimer)
-  }, [wizardState.formData.faucetName, validateFaucetNameAcrossFactories])
+    setNameValidation({ isValidating: false, isNameAvailable: true, validationError: null })
+
+  } catch (error: any) {
+    console.error("Name validation error:", error)
+    setNameValidation({
+      isValidating: false,
+      isNameAvailable: false,
+      validationError: "Failed to validate name",
+    })
+  }
+}, [effectiveChainId])  // ← only depends on chainId now
+ // Debounced name validation — fires when name changes
+useEffect(() => {
+  const validationTimer = setTimeout(() => {
+    if (wizardState.formData.faucetName.trim() && wizardState.formData.faucetName.length >= 3) {
+      validateFaucetNameAcrossFactories(wizardState.formData.faucetName)
+    }
+  }, 500)
+  return () => clearTimeout(validationTimer)
+}, [wizardState.formData.faucetName, validateFaucetNameAcrossFactories])
+
+// ← ADD THIS: re-validate when user switches faucet type or moves between steps
+useEffect(() => {
+  if (wizardState.formData.faucetName.trim() && wizardState.formData.faucetName.length >= 3) {
+    validateFaucetNameAcrossFactories(wizardState.formData.faucetName)
+  }
+}, [wizardState.selectedFaucetType, wizardState.currentStep])
 
   // Load tokens
   useEffect(() => {
@@ -1134,16 +1107,24 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
   }
 
   const proceedToNextStep = () => {
-    if (wizardState.currentStep < 3) {
-      setWizardState(prev => ({ ...prev, currentStep: prev.currentStep + 1 }))
+  if (wizardState.currentStep < 3) {
+    setWizardState(prev => ({ ...prev, currentStep: prev.currentStep + 1 }))
+    // Reset name validation so it re-checks on step 2 entry
+    if (wizardState.currentStep === 1) {
+      setNameValidation({ isValidating: false, isNameAvailable: false, validationError: null })
     }
   }
+}
 
-  const returnToPreviousStep = () => {
-    if (wizardState.currentStep > 1) {
-      setWizardState(prev => ({ ...prev, currentStep: prev.currentStep - 1 }))
+const returnToPreviousStep = () => {
+  if (wizardState.currentStep > 1) {
+    setWizardState(prev => ({ ...prev, currentStep: prev.currentStep - 1 }))
+    // Reset so switching type then coming back re-validates
+    if (wizardState.currentStep === 2) {
+      setNameValidation({ isValidating: false, isNameAvailable: false, validationError: null })
     }
   }
+}
 
   const navigateToMainPage = () => {
     router.back()
@@ -1288,8 +1269,7 @@ const handleFaucetCreation = async () => {
       finalTokenAddress,
       BigInt(effectiveChainId),
       BigInt(effectiveChainId),
-      shouldUseBackend,
-      isCustomFaucet
+      mappedFactoryType,  // 'dropcode' | 'droplist' | 'custom' — already resolved correctly
     )
 
     if (!createdFaucetAddress) {
@@ -1454,14 +1434,25 @@ const handleFaucetCreation = async () => {
                   </div>
                   <div className="mt-2 space-y-1 text-sm">
                     <div>
-                      <span className="text-gray-500">Faucet:</span> {conflict.faucetAddress.slice(0, 8)}...{conflict.faucetAddress.slice(-6)}
+                      <span className="text-gray-500">Faucet:</span>{" "}
+                      {conflict.faucetAddress
+                        ? `${conflict.faucetAddress.slice(0, 8)}...${conflict.faucetAddress.slice(-6)}`
+                        : "N/A"}
                     </div>
                     <div>
-                      <span className="text-gray-500">Owner:</span> {conflict.ownerAddress.slice(0, 8)}...{conflict.ownerAddress.slice(-6)}
+                      <span className="text-gray-500">Owner:</span>{" "}
+                      {conflict.ownerAddress
+                        ? `${conflict.ownerAddress.slice(0, 8)}...${conflict.ownerAddress.slice(-6)}`
+                        : "N/A"}
                     </div>
-                    <div>
-                      <span className="text-gray-500">Factory:</span> {conflict.factoryAddress.slice(0, 8)}...{conflict.factoryAddress.slice(-6)}
-                    </div>
+                    {conflict.factoryType && (
+                      <div>
+                        <span className="text-gray-500">Factory:</span>{" "}
+                        {conflict.factoryAddress
+                          ? `${conflict.factoryAddress.slice(0, 8)}...${conflict.factoryAddress.slice(-6)}`
+                          : "N/A"}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

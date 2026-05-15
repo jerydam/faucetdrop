@@ -50,7 +50,7 @@ export function FaucetList() {
     else setLoadingClaims(true);
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
+      const apiUrl = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
       const response = await fetch(`${apiUrl}/api/claims?limit=5000`, {
         cache: forceRefresh ? 'no-store' : 'default'
       });
@@ -91,7 +91,7 @@ export function FaucetList() {
   const handleRefresh = async () => {
   setRefreshing(true);
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "...";
+    const apiUrl = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app"
     await fetch(`${apiUrl}/api/refresh/claims`);
     await loadClaims(true); // still reload from the claims endpoint for display
   } catch (error) {

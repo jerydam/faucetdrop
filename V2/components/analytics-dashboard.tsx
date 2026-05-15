@@ -110,7 +110,7 @@ function DashboardContent() {
   useEffect(() => {
     const fetchLiveDrops = async (forceRefresh = false) => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app"
+        const apiUrl = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app"
         // limit=1 ensures the response is instant, we just want the `json.total`
         const response = await fetch(`${apiUrl}/api/claims?limit=1`, {
           cache: forceRefresh ? 'no-store' : 'default'
@@ -136,7 +136,7 @@ function DashboardContent() {
     if (refreshing) {
       const fetchLiveDrops = async () => {
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app"
+          const apiUrl = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app"
           const response = await fetch(`${apiUrl}/api/claims?limit=1`, { cache: 'no-store' })
           if (response.ok) {
             const json = await response.json()

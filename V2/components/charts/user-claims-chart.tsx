@@ -45,7 +45,7 @@ export function UserClaimsChart() {
     }
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
+          const apiUrl = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app"
       // Fetching a large limit to ensure accurate aggregation
       const response = await fetch(`${apiUrl}/api/claims?limit=5000`, {
         cache: forceRefresh ? 'no-store' : 'default'

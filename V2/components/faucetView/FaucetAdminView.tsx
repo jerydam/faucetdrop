@@ -324,20 +324,27 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
   const calculateFee = (amount: string) => {
     try {
+      // droplist and custom pay 5%, dropcode pays 3%
+      const feePercent = (faucetType === "droplist" || faucetType === "custom") ? 5 : 3;
+      const feeDivisor = BigInt(100 - feePercent); // 95 or 97
+
       const parsedAmount = parseUnits(amount, tokenDecimals);
-      const fee = (parsedAmount * BigInt(3)) / BigInt(100);
+      const fee = (parsedAmount * BigInt(feePercent)) / BigInt(100);
       const netAmount = parsedAmount - fee;
-      const recommendedInput = (parsedAmount * BigInt(100)) / BigInt(97);
+      const recommendedInput = (parsedAmount * BigInt(100)) / feeDivisor;
       return {
         fee: formatUnits(fee, tokenDecimals),
         netAmount: formatUnits(netAmount, tokenDecimals),
         recommendedInput: Number(formatUnits(recommendedInput, tokenDecimals)).toFixed(3),
+        feePercent,
       };
     } catch {
-      return { fee: "0", netAmount: "0", recommendedInput: "0" };
+      return { fee: "0", netAmount: "0", recommendedInput: "0", feePercent: 3 };
     }
   };
-  const { fee, netAmount, recommendedInput } = calculateFee(fundAmount);
+  
+    const { fee, netAmount, recommendedInput, feePercent } = calculateFee(fundAmount);
+
 
   const validateStartTime = (value: string): boolean => {
     if (!value) { setStartTimeError(""); return false; }
@@ -1143,7 +1150,7 @@ const getEventColor = (type: string) => {
                   {fundAmount && (
                     <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1 border border-dashed">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Platform fee (3%)</span>
+                        <span className="text-muted-foreground">Platform fee ({feePercent}%)</span>
                         <span className="font-mono">{fee} {tokenSymbol}</span>
                       </div>
                       <div className="flex justify-between font-medium">
@@ -1826,7 +1833,7 @@ const getEventColor = (type: string) => {
             </div>
             <div className="rounded-lg bg-muted/40 border border-dashed p-3 text-xs space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Platform fee (3%)</span>
+                <span className="text-muted-foreground">Platform fee ({feePercent}%)</span>
                 <span className="font-mono">{fee} {tokenSymbol}</span>
               </div>
               <div className="flex justify-between font-medium">
@@ -1834,7 +1841,7 @@ const getEventColor = (type: string) => {
                 <span className="font-mono">{netAmount} {tokenSymbol}</span>
               </div>
               <p className="text-blue-500 pt-1">
-                To net exactly {fundAmount} {tokenSymbol}, deposit {recommendedInput} {tokenSymbol}
+                Tip: deposit {recommendedInput} {tokenSymbol} to net exactly {fundAmount}
               </p>
             </div>
           </div>

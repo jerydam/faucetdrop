@@ -725,81 +725,96 @@
         };
 
     const handleDeployAndFinalize = async () => {
-      const subRes = await fetch(`${API_BASE_URL}/api/users/${address?.toLowerCase()}/subscription`)
+    // ── Email gate ───────────────────────────────────────────────────────────
+    try {
+        const profileRes = await fetch(`${API_BASE_URL}/api/profile/${address?.toLowerCase()}`)
+        const profileData = await profileRes.json()
+        if (!profileData?.profile?.email) {
+            toast.error("Email required before publishing a quest.", {
+                description: "Add your email in Profile Settings to continue.",
+                action: {
+                    label: "Go to Settings",
+                    onClick: () => window.location.href = "/profile?tab=settings"
+                },
+                duration: 8000,
+            })
+            return
+        }
+    } catch {
+        // Silent fail — backend guard is the enforcer
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
-      const subData = await subRes.json()
-      const isActuallySubscribed = subData.success && subData.hasActiveSubscription === true
+    const subRes = await fetch(`${API_BASE_URL}/api/users/${address?.toLowerCase()}/subscription`)
+    const subData = await subRes.json()
+    const isActuallySubscribed = subData.success && subData.hasActiveSubscription === true
+    const shouldSkipDeploy = !isActuallySubscribed
 
-      // Override isDemoMode based on server truth, ignore client state
-      const shouldSkipDeploy = !isActuallySubscribed
-            const now = new Date();
-      // 1. Create proper Date objects using BOTH date and time
-      const startDateTimeObj = new Date(`${newQuest.startDate}T${newQuest.startTime || "00:00"}`);
-      const endDateTimeObj = new Date(`${newQuest.endDate}T${newQuest.endTime || "00:00"}`);
+    const now = new Date()
+    const startDateTimeObj = new Date(`${newQuest.startDate}T${newQuest.startTime || "00:00"}`)
+    const endDateTimeObj = new Date(`${newQuest.endDate}T${newQuest.endTime || "00:00"}`)
 
-      if (startDateTimeObj < now) {
-        toast.error("Start time must be in the future.");
-        return;
-      }
+    if (startDateTimeObj < now) {
+        toast.error("Start time must be in the future.")
+        return
+    }
 
-      setIsDeploying(true);
-      setError(null);
+    setIsDeploying(true)
+    setError(null)
 
-      try {
-        if (!isConnected) throw new Error("Please connect your wallet first.");
+    try {
+        if (!isConnected) throw new Error("Please connect your wallet first.")
 
         const computedRewardPool =
-          newQuest.distributionConfig?.model === "custom_tiers"
-            ? newQuest.distributionConfig.tiers
-                .reduce((acc: number, tier: any) => {
-                  return acc + (isNaN(tier.amount) ? 0 : Number(tier.amount));
-                }, 0)
-                .toString()
-            : newQuest.rewardPool;
+            newQuest.distributionConfig?.model === "custom_tiers"
+                ? newQuest.distributionConfig.tiers
+                    .reduce((acc: number, tier: any) => {
+                        return acc + (isNaN(tier.amount) ? 0 : Number(tier.amount))
+                    }, 0)
+                    .toString()
+                : newQuest.rewardPool
 
-        // 2. Convert to UTC ISO strings for the backend
-        const finalStartDateISO = startDateTimeObj.toISOString();
-        const finalEndDateISO = endDateTimeObj.toISOString();
+        const finalStartDateISO = startDateTimeObj.toISOString()
+        const finalEndDateISO = endDateTimeObj.toISOString()
 
         const draftPayload = {
-          creatorAddress: address,
-          title: newQuest.title.trim(),
-          description: newQuest.description,
-          imageUrl: newQuest.imageUrl,
-          rewardPool: computedRewardPool,        
-          rewardTokenType: newQuest.rewardTokenType,
-          tokenAddress: newQuest.tokenAddress,
-          tokenSymbol: newQuest.tokenSymbol,
-          token_symbol: newQuest.tokenSymbol,
-          distributionConfig: newQuest.distributionConfig,
-          faucetAddress: newQuest.faucetAddress,
-          tasks: newQuest.tasks,
-          // Optional: Good practice to save dates to the draft too
-          startDate: finalStartDateISO, 
-          endDate: finalEndDateISO,
-        };
+            creatorAddress: address,
+            title: newQuest.title.trim(),
+            description: newQuest.description,
+            imageUrl: newQuest.imageUrl,
+            rewardPool: computedRewardPool,
+            rewardTokenType: newQuest.rewardTokenType,
+            tokenAddress: newQuest.tokenAddress,
+            tokenSymbol: newQuest.tokenSymbol,
+            token_symbol: newQuest.tokenSymbol,
+            distributionConfig: newQuest.distributionConfig,
+            faucetAddress: newQuest.faucetAddress,
+            tasks: newQuest.tasks,
+            startDate: finalStartDateISO,
+            endDate: finalEndDateISO,
+        }
 
         const draftRes = await fetch(`${API_BASE_URL}/api/quests/draft`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draftPayload),
-        });
-        const draftJson = await draftRes.json();
-        const activeDraftId = draftJson.faucetAddress || newQuest.faucetAddress;
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(draftPayload),
+        })
+        const draftJson = await draftRes.json()
+        const activeDraftId = draftJson.faucetAddress || newQuest.faucetAddress
 
         const currentNetwork = networks.find(
-          (n) => Number(n.chainId) === Number(chainId)
-        );
-        const targetFactory = currentNetwork?.factories?.quest;
-        if (!targetFactory) throw new Error("Quest Factory not found for this network.");
+            (n) => Number(n.chainId) === Number(chainId)
+        )
+        const targetFactory = currentNetwork?.factories?.quest
+        if (!targetFactory) throw new Error("Quest Factory not found for this network.")
 
-        const claimValue = parseInt(newQuest.claimWindowValue || "7", 10);
+        const claimValue = parseInt(newQuest.claimWindowValue || "7", 10)
         const hoursInt =
-          newQuest.claimWindowUnit === "hours" ? claimValue : claimValue * 24;
+            newQuest.claimWindowUnit === "hours" ? claimValue : claimValue * 24
 
-        const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000) + (12 * 60 * 60);
+        const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000) + (12 * 60 * 60)
 
-        let deployedAddress: string;
+        let deployedAddress: string
 
         if (shouldSkipDeploy) {
             deployedAddress = newQuest.faucetAddress || `demo-${crypto.randomUUID()}`
@@ -816,53 +831,52 @@
         }
 
         const baseSlug = newQuest.title
-          .toLowerCase()
-          .trim()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-        const localSlug = `${baseSlug}-${deployedAddress.slice(-4).toLowerCase()}`;
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+        const localSlug = `${baseSlug}-${deployedAddress.slice(-4).toLowerCase()}`
 
         const finalizePayload = {
-          faucetAddress: deployedAddress,
-          draftId: activeDraftId,
-          slug: localSlug,
-          creatorAddress: address,
-          title: newQuest.title.trim(),
-          description: newQuest.description,
-          imageUrl: newQuest.imageUrl,
-          // 3. USE THE FORMATTED ISO STRINGS HERE
-          startDate: finalStartDateISO,
-          endDate: finalEndDateISO, 
-          claimWindowHours: hoursInt,
-          tasks: newQuest.tasks,
-          stagePassRequirements,
-          enforceStageRules: false,
-          rewardPool: computedRewardPool,        
-          rewardTokenType: newQuest.rewardTokenType,
-          tokenAddress: newQuest.tokenAddress,
-          tokenSymbol: newQuest.tokenSymbol,
-          distributionConfig: newQuest.distributionConfig,
-          chainId: Number(chainId),
-        };
+            faucetAddress: deployedAddress,
+            draftId: activeDraftId,
+            slug: localSlug,
+            creatorAddress: address,
+            title: newQuest.title.trim(),
+            description: newQuest.description,
+            imageUrl: newQuest.imageUrl,
+            startDate: finalStartDateISO,
+            endDate: finalEndDateISO,
+            claimWindowHours: hoursInt,
+            tasks: newQuest.tasks,
+            stagePassRequirements,
+            enforceStageRules: false,
+            rewardPool: computedRewardPool,
+            rewardTokenType: newQuest.rewardTokenType,
+            tokenAddress: newQuest.tokenAddress,
+            tokenSymbol: newQuest.tokenSymbol,
+            distributionConfig: newQuest.distributionConfig,
+            chainId: Number(chainId),
+        }
 
         const res = await fetch(`${API_BASE_URL}/api/quests/finalize`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(finalizePayload),
-        });
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(finalizePayload),
+        })
 
-        if (!res.ok) throw new Error("Finalization failed.");
-        const finalizeResult = await res.json();
+        if (!res.ok) throw new Error("Finalization failed.")
+        const finalizeResult = await res.json()
 
-        toast.success("Quest published successfully!");
-        if (finalizeResult.slug) router.push(`/quest/${finalizeResult.slug}`);
-        else router.push(`/quest/${deployedAddress}`);
-      } catch (e: any) {
-        console.error("Deployment Error:", e);
-        toast.error(e.message || "Deployment failed");
-        setIsDeploying(false);
-      }
-    };
+        toast.success("Quest published successfully!")
+        if (finalizeResult.slug) router.push(`/quest/${finalizeResult.slug}`)
+        else router.push(`/quest/${deployedAddress}`)
+    } catch (e: any) {
+        console.error("Deployment Error:", e)
+        toast.error(e.message || "Deployment failed")
+        setIsDeploying(false)
+    }
+}
 
 
         return (

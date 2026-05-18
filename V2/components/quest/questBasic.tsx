@@ -483,80 +483,97 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
     // ── Save draft ───────────────────────────────────────────────────────────
    // ── Save draft ───────────────────────────────────────────────────────────
     const handleSaveDraft = async () => {
-        if (!address || !isConnected || !selectedToken || titleLength < 3 || nameError || !newQuest.imageUrl) {
-            setError("Complete all required fields")
+    if (!address || !isConnected || !selectedToken || titleLength < 3 || nameError || !newQuest.imageUrl) {
+        setError("Complete all required fields")
+        return
+    }
+
+    const computedPool = computeRewardPool(newQuest.distributionConfig, newQuest.rewardPool)
+    if (computedPool <= 0) {
+        setError("Reward pool amount must be greater than zero.")
+        return
+    }
+
+    if (newQuest.distributionConfig.model === 'custom_tiers') {
+        const hasZero = newQuest.distributionConfig.tiers.some(r => (parseFloat(String(r.amount)) || 0) <= 0)
+        if (hasZero) {
+            setError("All ranks must have a reward amount greater than 0.")
             return
-        }
-
-        // ✅ Always compute from source of truth — never trust raw rewardPool for custom_tiers
-        const computedPool = computeRewardPool(newQuest.distributionConfig, newQuest.rewardPool)
-        if (computedPool <= 0) {
-            setError("Reward pool amount must be greater than zero.")
-            return
-        }
-
-        // 👇 ADD THIS NEW CHECK 👇
-        if (newQuest.distributionConfig.model === 'custom_tiers') {
-            const hasZero = newQuest.distributionConfig.tiers.some(r => (parseFloat(String(r.amount)) || 0) <= 0);
-            if (hasZero) {
-                setError("All ranks must have a reward amount greater than 0.");
-                return;
-            }
-        }
-
-        setIsSavingDraft(true)
-        try {
-            const draftId = newQuest.faucetAddress || `draft-${crypto.randomUUID()}`
-
-            // ADD THIS HELPER: Safely combine date and time into an ISO string if they exist
-            const formatToISO = (dateStr?: string, timeStr?: string) => {
-                if (!dateStr) return undefined;
-                if (dateStr.includes("T")) return dateStr; // Already an ISO string from the DB
-                const time = timeStr || "00:00";
-                try {
-                    return new Date(`${dateStr}T${time}`).toISOString();
-                } catch {
-                    return dateStr;
-                }
-            };
-            const DEFAULT_QUEST_IMAGE = "https://placehold.co/1024x1024/1e293b/94a3b8?text=Quest"
-            const DEFAULT_QUEST_DESCRIPTION = "Complete tasks to earn points and compete for rewards in this quest campaign."
-
-            const payload = {
-                creatorAddress: address,
-                title: newQuest.title.trim(),
-                description: newQuest.description?.trim() || DEFAULT_QUEST_DESCRIPTION,
-                imageUrl: newQuest.imageUrl || DEFAULT_QUEST_IMAGE,
-                rewardPool: computedPool.toString(),   // ✅ always correct
-                rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
-                tokenAddress: selectedToken.address,
-                tokenSymbol: selectedToken.symbol,
-                token_symbol: selectedToken.symbol,
-                distributionConfig: newQuest.distributionConfig,
-                faucetAddress: draftId,
-                tasks: newQuest.tasks,
-                // ADD THESE TWO LINES SO DATES ARE NOT LOST:
-                startDate: formatToISO(newQuest.startDate, newQuest.startTime),
-                endDate: formatToISO(newQuest.endDate, newQuest.endTime)
-            }
-
-            const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-
-            if (!res.ok) throw new Error(await res.text())
-
-            toast.success("Draft saved successfully!")
-            onDraftSaved(draftId)
-            console.log("DRAFT PAYLOAD:", JSON.stringify(payload, null, 2))
-        } catch (e: any) {
-            setError(e.message || "Draft save failed")
-        } finally {
-            setIsSavingDraft(false)
         }
     }
+
+    // ── Email gate ───────────────────────────────────────────────────────────
+    try {
+        const profileRes = await fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}`)
+        const profileData = await profileRes.json()
+        if (!profileData?.profile?.email) {
+            toast.error("Email required before creating a quest.", {
+                description: "Add your email in Profile Settings to continue.",
+                action: {
+                    label: "Go to Settings",
+                    onClick: () => window.location.href = "/profile?tab=settings"
+                },
+                duration: 8000,
+            })
+            return
+        }
+    } catch {
+        // Silent fail — backend guard is the enforcer
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    setIsSavingDraft(true)
+    try {
+        const draftId = newQuest.faucetAddress || `draft-${crypto.randomUUID()}`
+
+        const formatToISO = (dateStr?: string, timeStr?: string) => {
+            if (!dateStr) return undefined
+            if (dateStr.includes("T")) return dateStr
+            const time = timeStr || "00:00"
+            try {
+                return new Date(`${dateStr}T${time}`).toISOString()
+            } catch {
+                return dateStr
+            }
+        }
+
+        const DEFAULT_QUEST_IMAGE = "https://placehold.co/1024x1024/1e293b/94a3b8?text=Quest"
+        const DEFAULT_QUEST_DESCRIPTION = "Complete tasks to earn points and compete for rewards in this quest campaign."
+
+        const payload = {
+            creatorAddress: address,
+            title: newQuest.title.trim(),
+            description: newQuest.description?.trim() || DEFAULT_QUEST_DESCRIPTION,
+            imageUrl: newQuest.imageUrl || DEFAULT_QUEST_IMAGE,
+            rewardPool: computedPool.toString(),
+            rewardTokenType: selectedToken.isNative ? 'native' : 'erc20',
+            tokenAddress: selectedToken.address,
+            tokenSymbol: selectedToken.symbol,
+            token_symbol: selectedToken.symbol,
+            distributionConfig: newQuest.distributionConfig,
+            faucetAddress: draftId,
+            tasks: newQuest.tasks,
+            startDate: formatToISO(newQuest.startDate, newQuest.startTime),
+            endDate: formatToISO(newQuest.endDate, newQuest.endTime),
+        }
+
+        const res = await fetch(`${API_BASE_URL}/api/quests/draft`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+
+        if (!res.ok) throw new Error(await res.text())
+
+        toast.success("Draft saved successfully!")
+        onDraftSaved(draftId)
+        console.log("DRAFT PAYLOAD:", JSON.stringify(payload, null, 2))
+    } catch (e: any) {
+        setError(e.message || "Draft save failed")
+    } finally {
+        setIsSavingDraft(false)
+    }
+}
     // ── Derived custom_tiers totals for the summary panel ───────────────────
     const customTiersTotal = useMemo(() =>
         newQuest.distributionConfig.tiers.reduce((sum, r) => sum + (parseFloat(String(r.amount)) || 0), 0),

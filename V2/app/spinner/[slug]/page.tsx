@@ -95,21 +95,23 @@ export default function SpinnerRoom() {
 
   /* ── Fetch room ── */
 
-// In fetchRoom, after getting room data:
 const fetchRoom = useCallback(async () => {
-  const res = await fetch(`${BACKEND_URL}/api/spinners/${slug}`);
-  const data = await res.json();
-  if (data.success) {
-    setRoom(data.data);
-    setWinHistory((data.data.winners ?? []).map((name: string) => ({ name, ts: "" })));
-
-    // ── Derive admin from wallet ──────────────────────
-    const owner = (data.data.owner_address || "").toLowerCase();
-    const wallet = (address || "").toLowerCase();
-    setIsAdmin(!!owner && !!wallet && owner === wallet);
-    // ─────────────────────────────────────────────────
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/spinners/${slug}`);
+    const data = await res.json();
+    if (data.success) {
+      setRoom(data.data);
+      setWinHistory((data.data.winners ?? []).map((name: string) => ({ name, ts: "" })));
+      const owner = (data.data.owner_address || "").toLowerCase();
+      const wallet = (address || "").toLowerCase();
+      setIsAdmin(!!owner && !!wallet && owner === wallet);
+    }
+  } catch (err) {
+    console.error("Failed to fetch room:", err);
+  } finally {
+    setLoading(false); // ← this was missing entirely
   }
-}, [slug, router, address]);
+}, [slug, address]);
 
 // Re-check isAdmin whenever wallet changes (user connects/disconnects mid-session)
 useEffect(() => {

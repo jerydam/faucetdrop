@@ -11,8 +11,8 @@ import {
   Play, Pencil, Check, Settings, ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme";
+import { useAccount } from "wagmi";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
 
@@ -28,6 +28,7 @@ interface RoomData {
   name: string;
   description: string;
   participants: string[];
+  owner_address?: string;
   winners: string[];
 }
 
@@ -65,6 +66,7 @@ function Confetti() {
 export default function SpinnerRoom() {
   const { slug } = useParams() as { slug: string };
   const router = useRouter();
+  const { address } = useAccount();
 
   const [room, setRoom] = useState<RoomData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ export default function SpinnerRoom() {
   const [addingName, setAddingName] = useState("");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editingVal, setEditingVal] = useState("");
-
+  const [isAdmin, setIsAdmin] = useState(false);
   const [autoRemove, setAutoRemove] = useState(false);
   const [confettiEnabled, setConfettiEnabled] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -92,36 +94,45 @@ export default function SpinnerRoom() {
   const editInputRef = useRef<HTMLInputElement>(null);
 
   /* ── Fetch room ── */
-  const fetchRoom = useCallback(async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/spinners/${slug}`);
-      const data = await res.json();
-      if (data.success) {
-        setRoom(data.data);
-        setWinHistory((data.data.winners ?? []).map((name: string) => ({ name, ts: "" })));
-      } else {
-        toast.error("Room not found");
-        router.push("/");
-      }
-    } catch {
-      toast.error("Failed to fetch room");
-    } finally {
-      setLoading(false);
-    }
-  }, [slug, router]);
+
+// In fetchRoom, after getting room data:
+const fetchRoom = useCallback(async () => {
+  const res = await fetch(`${BACKEND_URL}/api/spinners/${slug}`);
+  const data = await res.json();
+  if (data.success) {
+    setRoom(data.data);
+    setWinHistory((data.data.winners ?? []).map((name: string) => ({ name, ts: "" })));
+
+    // ── Derive admin from wallet ──────────────────────
+    const owner = (data.data.owner_address || "").toLowerCase();
+    const wallet = (address || "").toLowerCase();
+    setIsAdmin(!!owner && !!wallet && owner === wallet);
+    // ─────────────────────────────────────────────────
+  }
+}, [slug, router, address]);
+
+// Re-check isAdmin whenever wallet changes (user connects/disconnects mid-session)
+useEffect(() => {
+  if (!room) return;
+  const owner = (room.owner_address || "").toLowerCase();
+  const wallet = (address || "").toLowerCase();
+  setIsAdmin(!!owner && !!wallet && owner === wallet);
+}, [address, room]);
 
   useEffect(() => { fetchRoom(); }, [fetchRoom]);
 
   /* ── Backend sync ── */
   const syncBackend = useCallback(async (participants: string[], winners?: string[]) => {
-    try {
-      await fetch(`${BACKEND_URL}/api/spinners/${slug}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participants, winners: winners ?? winHistory.map((w) => w.name) }),
-      });
-    } catch { /* silent */ }
-  }, [slug, winHistory]);
+  await fetch(`${BACKEND_URL}/api/spinners/${slug}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      participants,
+      winners: winners ?? winHistory.map((w) => w.name),
+      caller_address: address ?? "",   // ← ADD
+    }),
+  });
+}, [slug, winHistory, address]);
 
   /* ── File upload ── */
   const handleFile = (file: File) => {

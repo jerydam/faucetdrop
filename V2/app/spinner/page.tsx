@@ -1,13 +1,14 @@
 "use client";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { SpinWheel } from "@/components/SpinWheel";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Zap, Link2, Pencil, Trophy } from "lucide-react";
 import { Header } from "@/components/header";
+import { useAccount } from "wagmi";
 
 const DEMO_NAMES = ["Alice", "Bob", "Carol", "David", "Eve", "Frank", "Grace", "Henry"];
-
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
 const FEATURES = [
   {
     icon: <Zap size={17} />,
@@ -35,6 +36,17 @@ export default function LandingPage() {
   const rotRef = useRef(0);
   const animRef = useRef<number>(0);
   const [rotation, setRotation] = React.useState(0);
+  const { address } = useAccount();
+  const [myRooms, setMyRooms] = useState<any[]>([]);
+
+
+  useEffect(() => {
+  if (!address) return;
+  fetch(`${BACKEND_URL}/api/spinners/my-rooms?address=${address}`)
+    .then(r => r.json())
+    .then(d => { if (d.success) setMyRooms(d.rooms); })
+    .catch(() => {});
+}, [address]);
 
   useEffect(() => {
     const tick = () => {

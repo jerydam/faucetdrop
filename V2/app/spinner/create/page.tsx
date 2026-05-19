@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Sparkles, Upload, Users, FileText, X } from "lucide-react";
 import { toast } from "sonner";
-import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme";
+import { useAccount } from "wagmi";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
 
@@ -50,6 +50,7 @@ export default function CreateRoomPage() {
   const [loading, setLoading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { address } = useAccount();
 
   const parsedNames = useMemo(
     () => namesInput.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean),
@@ -91,7 +92,7 @@ export default function CreateRoomPage() {
       const res = await fetch(`${BACKEND_URL}/api/spinners`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: roomName.trim(), description: roomDesc.trim(), participants: parsedNames }),
+        body: JSON.stringify({ name: roomName.trim(), description: roomDesc.trim(), participants: parsedNames, owner_address: address ?? "" }),
       });
       const data = await res.json();
       if (data.success) {

@@ -7,7 +7,7 @@ import AnimatedBackground from "@/components/AnimatedBackground";
 import FloatingElements from "@/components/FloatingElements";
 import ChatBot from '@/components/landingPage/ChatBot';
 import ConditionalHeader from "@/components/ConditionalHeader";
-
+import { useVisitTracker } from '@/hooks/use-visit-tracker';
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
@@ -52,6 +52,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+    useVisitTracker();
   return (
     <html lang="en">
       <head>

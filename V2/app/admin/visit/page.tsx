@@ -57,11 +57,16 @@ const formatLabel = (period: Period, key: string): string => {
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 shadow-lg text-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 shadow-lg text-sm space-y-1">
             <p className="text-muted-foreground text-xs mb-1">{label}</p>
-            <p className="font-semibold text-foreground">
-                {payload[0].value.toLocaleString()} <span className="font-normal text-muted-foreground">visits</span>
-            </p>
+            {payload.map((p: any) => (
+                <p key={p.dataKey} className="font-semibold" style={{ color: p.stroke }}>
+                    {p.value?.toLocaleString() ?? "—"}{" "}
+                    <span className="font-normal text-muted-foreground">
+                        {p.dataKey === "unique" ? "unique visitors" : "visits"}
+                    </span>
+                </p>
+            ))}
         </div>
     );
 };
@@ -126,13 +131,13 @@ export default function VisitsDashboard() {
     useEffect(() => { fetchStats(); }, [range]);
 
     const chartData = useMemo(() => {
-        if (!stats) return [];
-        const rows =
-            period === "daily"   ? stats.daily.map(d => ({ key: d.date,  visits: d.visits })) :
-            period === "weekly"  ? stats.weekly.map(d => ({ key: d.week, visits: d.visits })) :
-            stats.monthly.map(d => ({ key: d.month, visits: d.visits }));
-        return rows.map(r => ({ ...r, label: formatLabel(period, r.key) }));
-    }, [stats, period]);
+    if (!stats) return [];
+    const rows =
+        period === "daily"   ? stats.daily.map(d => ({ key: d.date,  visits: d.visits, unique: (d as any).unique_visitors ?? null })) :
+        period === "weekly"  ? stats.weekly.map(d => ({ key: d.week, visits: d.visits, unique: (d as any).unique_visitors ?? null })) :
+        stats.monthly.map(d => ({ key: d.month, visits: d.visits, unique: (d as any).unique_visitors ?? null }));
+    return rows.map(r => ({ ...r, label: formatLabel(period, r.key) }));
+}, [stats, period]);
 
     const avgPerPoint = chartData.length
         ? Math.round(chartData.reduce((s, d) => s + d.visits, 0) / chartData.length)
@@ -258,6 +263,10 @@ export default function VisitsDashboard() {
                                     <stop offset="5%"  stopColor="hsl(var(--primary))" stopOpacity={0.15} />
                                     <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                                 </linearGradient>
+                                <linearGradient id="uniqueFill" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%"  stopColor="#10b981" stopOpacity={0.12} />
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                </linearGradient>
                             </defs>
                             <CartesianGrid
                                 strokeDasharray="3 3"
@@ -279,15 +288,17 @@ export default function VisitsDashboard() {
                                 tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
                             />
                             <Tooltip content={<CustomTooltip />} cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }} />
-                            <Area
-                                type="monotone"
-                                dataKey="visits"
-                                stroke="hsl(var(--primary))"
-                                strokeWidth={2}
-                                fill="url(#visitsFill)"
-                                dot={false}
-                                activeDot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }}
-                            />
+                            {/* After the existing <Area> for visits */}
+                                <Area
+                                    type="monotone"
+                                    dataKey="unique"
+                                    stroke="#10b981"
+                                    strokeWidth={2}
+                                    fill="url(#uniqueFill)"
+                                    dot={false}
+                                    activeDot={{ r: 4, fill: "#10b981", strokeWidth: 2, stroke: "hsl(var(--background))" }}
+                                    strokeDasharray="4 3"
+                                />
                         </AreaChart>
                     </ResponsiveContainer>
                 )}

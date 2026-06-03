@@ -12,6 +12,7 @@ import { Footer } from "@/components/footer"
 import { Providers } from "@/components/PrivyProvider"
 import { SubscriptionModalProvider } from "@/components/subscribe"
 import sdk from "@farcaster/miniapp-sdk"
+import { useVisitTracker } from "@/hooks/use-visit-tracker"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -20,7 +21,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  
+  useVisitTracker();
   useEffect(() => {
     const init = async () => {
       try {

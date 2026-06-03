@@ -53,7 +53,6 @@ const formatLabel = (period: Period, key: string): string => {
     });
 };
 
-// Custom tooltip for the chart
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
     return (
@@ -71,7 +70,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     );
 };
 
-// Stat card with optional trend indicator
 function StatCard({
     label, value, icon, trend, sub, colorClass,
 }: {
@@ -131,13 +129,13 @@ export default function VisitsDashboard() {
     useEffect(() => { fetchStats(); }, [range]);
 
     const chartData = useMemo(() => {
-    if (!stats) return [];
-    const rows =
-        period === "daily"   ? stats.daily.map(d => ({ key: d.date,  visits: d.visits, unique: (d as any).unique_visitors ?? null })) :
-        period === "weekly"  ? stats.weekly.map(d => ({ key: d.week, visits: d.visits, unique: (d as any).unique_visitors ?? null })) :
-        stats.monthly.map(d => ({ key: d.month, visits: d.visits, unique: (d as any).unique_visitors ?? null }));
-    return rows.map(r => ({ ...r, label: formatLabel(period, r.key) }));
-}, [stats, period]);
+        if (!stats) return [];
+        const rows =
+            period === "daily"   ? stats.daily.map(d => ({ key: d.date,  visits: d.visits, unique: (d as any).unique_visitors ?? null })) :
+            period === "weekly"  ? stats.weekly.map(d => ({ key: d.week, visits: d.visits, unique: (d as any).unique_visitors ?? null })) :
+            stats.monthly.map(d => ({ key: d.month, visits: d.visits, unique: (d as any).unique_visitors ?? null }));
+        return rows.map(r => ({ ...r, label: formatLabel(period, r.key) }));
+    }, [stats, period]);
 
     const avgPerPoint = chartData.length
         ? Math.round(chartData.reduce((s, d) => s + d.visits, 0) / chartData.length)
@@ -219,10 +217,31 @@ export default function VisitsDashboard() {
             {/* ── Chart card ── */}
             <Card className="p-5 md:p-6 border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950">
                 {/* Chart header row */}
-                <div className="flex items-center justify-between mb-5">
-                    <h2 className="text-sm font-semibold text-foreground">
-                        Visits over time
-                    </h2>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-sm font-semibold text-foreground">
+                            Visits over time
+                        </h2>
+                        {/* Legend */}
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1.5">
+                                <span className="w-4 h-0.5 bg-primary inline-block rounded" />
+                                Visits
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <span
+                                    className="inline-block"
+                                    style={{
+                                        width: 16,
+                                        height: 2,
+                                        background: "repeating-linear-gradient(90deg, #10b981 0px, #10b981 4px, transparent 4px, transparent 7px)",
+                                        borderRadius: 2,
+                                    }}
+                                />
+                                Unique
+                            </span>
+                        </div>
+                    </div>
                     {/* Period toggle */}
                     <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/60 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                         {(["daily", "weekly", "monthly"] as Period[]).map(p => (
@@ -288,17 +307,25 @@ export default function VisitsDashboard() {
                                 tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)}
                             />
                             <Tooltip content={<CustomTooltip />} cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }} />
-                            {/* After the existing <Area> for visits */}
-                                <Area
-                                    type="monotone"
-                                    dataKey="unique"
-                                    stroke="#10b981"
-                                    strokeWidth={2}
-                                    fill="url(#uniqueFill)"
-                                    dot={false}
-                                    activeDot={{ r: 4, fill: "#10b981", strokeWidth: 2, stroke: "hsl(var(--background))" }}
-                                    strokeDasharray="4 3"
-                                />
+                            <Area
+                                type="monotone"
+                                dataKey="visits"
+                                stroke="hsl(var(--primary))"
+                                strokeWidth={2}
+                                fill="url(#visitsFill)"
+                                dot={false}
+                                activeDot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }}
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="unique"
+                                stroke="#10b981"
+                                strokeWidth={2}
+                                fill="url(#uniqueFill)"
+                                dot={false}
+                                activeDot={{ r: 4, fill: "#10b981", strokeWidth: 2, stroke: "hsl(var(--background))" }}
+                                strokeDasharray="4 3"
+                            />
                         </AreaChart>
                     </ResponsiveContainer>
                 )}
@@ -315,12 +342,9 @@ export default function VisitsDashboard() {
                             );
                             return (
                                 <div key={page.path} className="flex items-center gap-3 group">
-                                    {/* Rank */}
                                     <span className="text-xs text-muted-foreground w-4 text-right shrink-0 tabular-nums">
                                         {i + 1}
                                     </span>
-
-                                    {/* Path + bar */}
                                     <div className="flex-1 min-w-0 space-y-1.5">
                                         <div className="flex items-center justify-between gap-4">
                                             <span className="text-sm font-mono text-foreground truncate">
@@ -330,7 +354,6 @@ export default function VisitsDashboard() {
                                                 {page.visits.toLocaleString()}
                                             </span>
                                         </div>
-                                        {/* Progress bar */}
                                         <div className="h-1 rounded-full bg-slate-100 dark:bg-slate-800">
                                             <div
                                                 className="h-1 rounded-full bg-primary transition-all duration-500"
@@ -346,4 +369,4 @@ export default function VisitsDashboard() {
             )}
         </div>
     );
-}
+                                }

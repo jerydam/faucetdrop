@@ -212,7 +212,7 @@ export default function VisitsDashboard() {
                     value={stats?.top_pages[0]?.visits.toLocaleString() ?? "—"}
                     icon={<LayoutGrid className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
                     colorClass="bg-amber-50 dark:bg-amber-950/40"
-                    sub={stats?.top_pages[0]?.path}
+                    sub={stats?.top_pages[0]?.path === "/" ? "Home" : stats?.top_pages[0]?.path}
                 />
             </div>
 
@@ -324,7 +324,8 @@ export default function VisitsDashboard() {
                                     <div className="flex-1 min-w-0 space-y-1.5">
                                         <div className="flex items-center justify-between gap-4">
                                             <span className="text-sm font-mono text-foreground truncate">
-                                                {page.path}
+                                                {/* Change this line: */}
+                                                {page.path === "/" ? "Home" : page.path}
                                             </span>
                                             <span className="text-sm font-semibold text-foreground shrink-0 tabular-nums">
                                                 {page.visits.toLocaleString()}

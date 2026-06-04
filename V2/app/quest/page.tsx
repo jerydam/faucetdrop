@@ -8,6 +8,7 @@ import {
     Calendar, Users, LayoutGrid, List,
     Clock, CalendarClock, Zap, Hourglass, CheckCircle2, Filter,
     Trash2, AlertTriangle, X, Sparkles,
+    Plus,
 } from 'lucide-react';
 import { useWallet } from '@/hooks/use-wallet';
 import { Header } from "@/components/header";
@@ -508,25 +509,36 @@ export default function QuestHomePage() {
 
             <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-8">
                 {/* Page header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h2 className="text-3xl font-bold tracking-tight">Explore Quests</h2>
-                        <p className="text-muted-foreground mt-1">Participate in active campaigns to earn crypto rewards.</p>
-                    </div>
-                    <div className="flex items-center gap-3 w-full md:w-auto">
-                        <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border dark:border-slate-700 hidden sm:flex">
-                            <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" className="h-8 px-2.5 shadow-none" onClick={() => setViewMode('list')} title="List View">
-                                <List className="h-4 w-4" />
-                            </Button>
-                            <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" className="h-8 px-2.5 shadow-none" onClick={() => setViewMode('grid')} title="Grid View">
-                                <LayoutGrid className="h-4 w-4" />
-                            </Button>
-                        </div>
-                        <Button variant="outline" onClick={() => router.push(address ? `/dashboard/${address}` : '/')} className="flex-1 md:flex-none">
-                            My Dashboard
-                        </Button>
-                    </div>
-                </div>
+                {/* Page header */}
+<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div>
+        <h2 className="text-3xl font-bold tracking-tight">Explore Quests</h2>
+        <p className="text-muted-foreground mt-1">Participate in active campaigns to earn crypto rewards.</p>
+    </div>
+    <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border dark:border-slate-700 hidden sm:flex">
+            <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" className="h-8 px-2.5 shadow-none" onClick={() => setViewMode('list')}>
+                <List className="h-4 w-4" />
+            </Button>
+            <Button variant={viewMode === 'grid' ? 'default' : 'ghost'} size="sm" className="h-8 px-2.5 shadow-none" onClick={() => setViewMode('grid')}>
+                <LayoutGrid className="h-4 w-4" />
+            </Button>
+        </div>
+        <Button variant="outline" onClick={() => router.push(address ? `/dashboard/${address}` : '/')} className="flex-1 md:flex-none">
+            My Dashboard
+        </Button>
+        {/* ✅ Visible on all screen sizes, complements the header icon */}
+        {address && (
+            <Button
+                onClick={() => router.push('/quest/create-quest')}
+                className="flex-1 md:flex-none font-bold"
+            >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Quest
+            </Button>
+        )}
+    </div>
+</div>
 
                 {/* Filter tabs */}
                 {!isLoading && !error && (

@@ -103,7 +103,7 @@ export function Header({
             {isConnected && (
               <>
                 <NetworkSelector />
-                {!hideAction && (
+                {!hideAction && !pathname.includes('/quest') && (
                   <Button
                       onClick={() => router.push(action.path)}
                       variant="default"
@@ -140,6 +140,16 @@ export function Header({
                 {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </Button>
             }
+            {!hideAction && !pathname.includes('/quest') && (
+              <Button
+                  onClick={() => router.push(action.path)}
+                  variant="default"
+                  className="text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-transform"
+              >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {action.label}
+              </Button>
+            )}
           </div>
         </div>
 

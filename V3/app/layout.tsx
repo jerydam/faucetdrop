@@ -8,7 +8,7 @@ import FloatingElements from "@/components/FloatingElements";
 import ChatBot from '@/components/landingPage/ChatBot';
 import ConditionalHeader from "@/components/ConditionalHeader";
 import VisitTracker from '@/components/visitTracker'; // 1. Import the new wrapper
-
+import { Suspense } from 'react';
 const inter = Inter({ subsets: ['latin'] })
 
 // Metadata works flawlessly now because this is a Server Component
@@ -47,29 +47,27 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
-  children
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
-        <meta name="talentapp:project_verification" content="b30a81da8fe68c308c2b4978535103484c8acb90b729ec9625b7eff07309c1fb86809ee621e63c5eedc5c592ddde2c2d2c2c0e8afa73980dcf6339e92b0839d7" />
+        <meta name="talentapp:project_verification" content="..." />
       </head>
       <body className={`${inter.className} antialiased relative`}>
-          {/* 2. Place the tracker component inside the body */}
-          <VisitTracker /> 
-          
-          <AnimatedBackground />
-          <FloatingElements />
-          <div className="relative z-20">
-            <SplashScreen />
-            <ConditionalHeader /> 
-            {children}
-            <ChatBot /> 
-            <Footer />
-          </div>
+
+        <Suspense fallback={null}>
+          <VisitTracker />   {/* ← wrap in Suspense */}
+        </Suspense>
+
+        <AnimatedBackground />
+        <FloatingElements />
+        <div className="relative z-20">
+          <SplashScreen />
+          <ConditionalHeader />
+          {children}
+          <ChatBot />
+          <Footer />
+        </div>
       </body>
     </html>
   )

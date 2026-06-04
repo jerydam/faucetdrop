@@ -1,4 +1,3 @@
-"use client";
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
@@ -8,9 +7,11 @@ import AnimatedBackground from "@/components/AnimatedBackground";
 import FloatingElements from "@/components/FloatingElements";
 import ChatBot from '@/components/landingPage/ChatBot';
 import ConditionalHeader from "@/components/ConditionalHeader";
-import { useVisitTracker } from '@/hooks/use-visit-tracker';
+import VisitTracker from '@/components/visitTracker'; // 1. Import the new wrapper
+
 const inter = Inter({ subsets: ['latin'] })
 
+// Metadata works flawlessly now because this is a Server Component
 export const metadata: Metadata = {
   title: {
     default: 'FaucetDrops - Automated Onchain Reward and Engagement Platform',
@@ -23,7 +24,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: '/',
   },
-  
   openGraph: {
     type: 'website',
     url: 'https://faucetdrops.io/',
@@ -45,7 +45,6 @@ export const metadata: Metadata = {
     description: 'Automated onchain reward and engagement platform 💧. Distribute tokens and drive growth through Quests and Quizzes.',
     images: ['/opengraph-image'],
   },
-  themeColor: '#020817',
 }
 
 export default function RootLayout({
@@ -53,13 +52,15 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-    useVisitTracker();
   return (
     <html lang="en">
       <head>
-      <meta name="talentapp:project_verification" content="b30a81da8fe68c308c2b4978535103484c8acb90b729ec9625b7eff07309c1fb86809ee621e63c5eedc5c592ddde2c2d2c2c0e8afa73980dcf6339e92b0839d7"></meta>
+        <meta name="talentapp:project_verification" content="b30a81da8fe68c308c2b4978535103484c8acb90b729ec9625b7eff07309c1fb86809ee621e63c5eedc5c592ddde2c2d2c2c0e8afa73980dcf6339e92b0839d7" />
       </head>
       <body className={`${inter.className} antialiased relative`}>
+          {/* 2. Place the tracker component inside the body */}
+          <VisitTracker /> 
+          
           <AnimatedBackground />
           <FloatingElements />
           <div className="relative z-20">

@@ -141,6 +141,6 @@ export function CreatorFaq() {
 }
 
 /** Legacy export — keeps any existing <Faq /> usage working */
-export function Faq({ role = "earner" }: { role?: "earner" | "creator" }) {
+export function Faq({ role = "creator" }: { role?: "earner" | "creator" }) {
   return role === "creator" ? <CreatorFaq /> : <EarnerFaq />;
 }

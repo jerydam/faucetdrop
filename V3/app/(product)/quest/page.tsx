@@ -41,8 +41,8 @@ function RoleToggle({
     <div className="flex items-center gap-1 bg-gray-800 border border-gray-700 rounded-xl p-1 w-fit">
       {(
         [
-          { id: "earner", label: "🎯  I want to earn", sub: "Complete quests & claim rewards" },
           { id: "creator", label: "🛠  I want to create", sub: "Launch quest campaigns" },
+          { id: "earner", label: "🎯  I want to earn", sub: "Complete quests & claim rewards" },
         ] as const
       ).map((opt) => (
         <button
@@ -72,11 +72,10 @@ function EarnerContent() {
       {/* Hero */}
       <section id="hero" className="space-y-6">
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl bg-linear-to-r from-blue-400 to-[#0052FF] bg-clip-text text-transparent">
-          Earn Onchain Rewards
+          Get Rewarded for Web3 Engagement.
         </h1>
         <p className="text-xl text-gray-300 max-w-2xl">
-          Complete structured tasks, climb stages, and claim tokens gaslessly — from projects
-          launching on every major EVM chain.
+          Complete tasks, climb stages, and claim Onchain rewards seamlessly. Thousands of community members earn daily through quests. 
         </p>
         <div className="relative rounded-xl border border-gray-700 overflow-hidden">
           <Image
@@ -93,7 +92,7 @@ function EarnerContent() {
           }
           className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
         >
-          Browse Active Quests
+          Browse Campaign
         </button>
       </section>
 
@@ -313,12 +312,11 @@ function CreatorContent() {
       {/* Hero */}
       <section id="creator-hero" className="space-y-6">
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl bg-linear-to-r from-blue-400 to-[#0052FF] bg-clip-text text-transparent">
-          Launch a Quest Campaign
+          A Growth engine for your Community
         </h1>
         <p className="text-xl text-gray-300 max-w-2xl">
-          Drive real community engagement across Celo, Base, Arbitrum, BNB Chain, and Lisk.
-          Configure tasks, set your reward pool, and distribute tokens automatically via smart
-          contract — no manual payouts.
+          Create campaigns that attract users, encourage participation, and help your ecosystem grow.
+          
         </p>
         <button
           onClick={() =>
@@ -326,7 +324,7 @@ function CreatorContent() {
           }
           className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
         >
-          Create a Quest
+          Create Campaign
         </button>
       </section>
 
@@ -619,7 +617,7 @@ function CreatorContent() {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function QuestPage() {
-  const [role, setRole] = useState<"earner" | "creator">("earner");
+  const [role, setRole] = useState<"earner" | "creator">("creator");
 
   const sections = role === "earner" ? earnerSections : creatorSections;
 
@@ -670,7 +668,7 @@ export default function QuestPage() {
                       onClick={() => window.open("https://app.faucetdrops.io/create/quest", "_blank", "noopener noreferrer")}
                       className="px-6 py-3 bg-[#0052FF] hover:bg-[#0047DD] text-white font-medium rounded-lg transition-colors"
                     >
-                      Create a Quest
+                      Create Campaign
                     </button>
                     <button
                       onClick={() => setRole("earner")}

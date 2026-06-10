@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from 'sonner'
 import {
     Upload, Loader2, Trash2, Check, AlertTriangle, Coins, Settings, Save,
-    Plus, Minus, DollarSign, Wallet, Users, Trophy, Medal, Award, Star
+    Plus, Minus, DollarSign, Wallet, Users, Trophy, Medal, Award, Star,
+    Zap
 } from "lucide-react"
 
 import { useWallet } from "@/hooks/use-wallet"
@@ -22,6 +23,25 @@ import { type Network } from "@/lib/faucet"
 // ==== CONFIG ====
 const API_BASE_URL = "http://127.0.0.1:8000"
 
+const SOLANA_TOKENS: TokenConfiguration[] = [
+  {
+    address: "11111111111111111111111111111111", // System Program = native SOL
+    name: "Solana",
+    symbol: "SOL",
+    decimals: 9,
+    isNative: true,
+    logoUrl: "/solana.png",
+    description: "Native SOL",
+  },
+  {
+    address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    name: "USD Coin",
+    symbol: "USDC",
+    decimals: 6,
+    logoUrl: "/usdc.jpg",
+    description: "USDC on Solana",
+  },
+]
 const networks: Network[] = [
     {
         name: "Celo", symbol: "CELO", chainId: BigInt(42220), rpcUrl: "https://forno.celo.org", blockExplorer: "https://celoscan.io", color: "#35D07F", logoUrl: "/celo.png", iconUrl: "/celo.png", explorerUrl: "https://celoscan.io",
@@ -73,9 +93,12 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
         { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", name: "USD Coin", symbol: "USDC", decimals: 18, logoUrl: "/usdc.jpg", description: "Binance-Peg USD Coin" },
         { address: "0x55d398326f99059fF775485246999027B3197955", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/usdt.jpg", description: "Binance-Peg BSC-USD" },
         { address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", name: "BUSD", symbol: "BUSD", decimals: 18, logoUrl: "/busd.png", description: "Binance-Peg BUSD Token" },
-    ]
+    ],
 }
-
+const ALL_TOKENS_BY_CHAIN_EXTENDED: Record<number, TokenConfiguration[]> = {
+  ...ALL_TOKENS_BY_CHAIN,
+  102: SOLANA_TOKENS,
+}
 const COINGECKO_IDS: Record<string, string> = {
     "CELO": "celo",
     "cUSD": "celo-dollar",
@@ -317,7 +340,8 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
 }: Phase1Props<T>) {
     const { address, isConnected, chainId } = useWallet()
     const network = useMemo(() => networks.find(n => n.chainId === BigInt(chainId || 0)) || null, [chainId])
-    const availableTokens = chainId ? ALL_TOKENS_BY_CHAIN[Number(chainId)] || [] : []
+    const isSolana = Number(chainId) === 102
+    const availableTokens = chainId ? ALL_TOKENS_BY_CHAIN_EXTENDED[Number(chainId)] || [] : []
 
     const [isCustomToken, setIsCustomToken] = useState(false)
     const [customTokenAddress, setCustomTokenAddress] = useState('')
@@ -696,7 +720,16 @@ export default function Phase1QuestDetailsRewards<T extends QuestData>({
                             </SelectContent>
                         </Select>
                     </div>
-
+                    {isSolana && (
+                        <div className="p-3 rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/20 text-xs text-teal-700 dark:text-teal-300 flex items-start gap-2">
+                            <Zap
+                             className="h-4 w-4 shrink-0 mt-0.5 text-teal-500" />
+                            <span>
+                            Solana quest — rewards are held in an Anchor program vault.
+                            Fund it after creation using the quest dashboard.
+                            </span>
+                        </div>
+                        )}
                     {/* Custom token input */}
                     {isCustomToken && (
                         <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900 border-dashed border-gray-300 dark:border-gray-700">

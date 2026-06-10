@@ -28,6 +28,18 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWallets } from "@privy-io/react-auth";
 import { getNetworkByChainId } from "@/hooks/use-network";
+// Add these imports at the top of create-quiz/page.tsx
+import { SOLANA_CHAIN_ID } from "@/hooks/use-network"
+import { createSolanaConnection } from "@/lib/solana-connection"
+import {
+  initializeQuiz as solanaInitializeQuiz,
+  fundQuiz as solanaFundQuiz,
+} from "@/lib/solana"
+import { getAnchorWalletFromPrivy } from "@/lib/privy-solana-wallet"
+import { useSolanaWallet } from "@/hooks/use-solana"
+
+// Inside the component, add alongside existing hooks:
+
 // ── On-chain error parser ──────────────────────────────────────
 function parseOnchainError(err: any): string {
   // User rejected the transaction in their wallet
@@ -711,6 +723,8 @@ export default function CreateQuizPage() {
   const chainId = activeWallet ? parseInt(activeWallet.chainId.split(":")[1] ?? "0") : 0;
   const availableTokens = ALL_TOKENS_BY_CHAIN[chainId] ?? [];
   const chainName = CHAIN_NAMES[chainId] ?? "Unknown Network";
+  const { activeSolanaWallet } = useSolanaWallet()
+  const isSolana = chainId === SOLANA_CHAIN_ID
 
   const targetNetwork = getNetworkByChainId(chainId);
   const isSupportedNetwork = !!targetNetwork?.factories?.quiz;
@@ -950,127 +964,190 @@ const handlePdfUpload = async () => {
     return null;
   };
 
-  const handleGenerateAI = async () => {
-    if (!aiTopic.trim()) { toast.error("Enter a topic!"); return; }
-    if (!userWalletAddress) { toast.error("Connect your wallet"); return; }
-    if (!isSupportedNetwork) { toast.error("Unsupported network. Switch chains."); return; }
-    
-    setIsGenerating(true);
-    setDeployStep("deploying");
-    setDeployError("");
-    
-    // 🔔 1. Start the loading toast
-    let toastId = toast.loading("⛓️ Deploying QuizReward contract...");
-    
-    try {
-      const privyProvider = await wallets[0]?.getEthereumProvider();
-      const ethersProvider = new BrowserProvider(privyProvider);
-      
-      const { contractAddress, txHash: deployTxHash } = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig());
-      setRewardContractAddress(contractAddress);
-      
-      // 🔔 2. Update toast for the AI generation phase (which takes the longest)
-      toast.loading("🤖 Contract deployed! AI is generating your questions...", { id: toastId });
-      setDeployStep("saving");
-      
-      const res = await fetch(`${API_BASE_URL}/api/quiz/generate-ai`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: aiTopic, numQuestions: aiNumQ, difficulty: aiDifficulty,
-          timePerQuestion: aiTimePerQ, creatorAddress: userWalletAddress,
-          creatorUsername, coverImageUrl: coverImageUrl || null,
-          title: title || undefined, chainId,
-          faucetAddress: contractAddress, // 🛠️ Crucial fix from earlier
-          reward: { ...buildPayload().reward, contractAddress, deployTxHash, isOnChain: true, isFunded: false },
-        }),
-      });
-      
-      const data = await res.json();
-      
-      if (data.success) {
-        setDeployStep("done"); 
-        setCreatedCode(data.code);
-        
-        // 🔔 3. Final success update!
-        toast.success(`✨ AI Quiz created! Code: ${data.code}`, { id: toastId });
-        
-        setTimeout(() => router.push(`/quiz/${data.code}`), 1500);
-      } else {
-        throw new Error(data.detail || "Generation failed");
-      }
-     } catch (err: any) {
-      setDeployStep("error");
-      const msg = parseOnchainError(err);
-      setDeployError(msg); 
-      
-      // 🔔 4. Update toast to show error
-      toast.error(`❌ Failed: ${msg}`, { id: toastId });
-    } finally { 
-      setIsGenerating(false); 
-    }
-  };
+  
 
   const handleSubmit = async () => {
-    const err = validateQuiz();
-    if (err) { toast.error(err); return; }
-    if (!userWalletAddress) { toast.error("Connect your wallet"); return; }
-    if (isUploadingCover) { toast.error("Wait for image upload"); return; }
-    if (!isSupportedNetwork) { toast.error("Switch to a supported network"); return; }
-    
-    setIsSubmitting(true);
-    setDeployStep("deploying");
-    setDeployError("");
-    
-    // 🔔 1. Start the loading toast
-    let toastId = toast.loading("⛓️ Deploying QuizReward contract...");
-    
-    try {
-      const privyProvider = await wallets[0]?.getEthereumProvider();
-      const ethersProvider = new BrowserProvider(privyProvider);
-      
-      const { contractAddress, txHash: deployTxHash } = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig());
-      setRewardContractAddress(contractAddress);
-      
-      // 🔔 2. Update toast when contract deploys
-      toast.loading("💾 Contract deployed! Saving quiz data to server...", { id: toastId });
-      setDeployStep("saving");
-      
-      const payload = {
-        ...buildPayload(),
-        faucetAddress: contractAddress, // 🛠️ Crucial fix from earlier
-        reward: { ...buildPayload().reward, contractAddress, deployTxHash, isOnChain: true, isFunded: false },
-      };
-      
-      const res = await fetch(`${API_BASE_URL}/api/quiz/create`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      
-      const data = await res.json();
-      
-      if (data.success) {
-        setDeployStep("done"); 
-        setCreatedCode(data.code);
-        
-        // 🔔 3. Final success update!
-        toast.success(`🎉 Quiz created successfully! Code: ${data.code}`, { id: toastId });
-        
-        setTimeout(() => router.push(`/quiz/${data.code}`), 1500);
-      } else {
-        throw new Error(data.detail || "Create failed");
-      }
-    } catch (err: any) {
-      setDeployStep("error");
-      const msg = parseOnchainError(err);
-      setDeployError(msg); 
-      
-      // 🔔 4. Update toast to show error
-      toast.error(`❌ Failed: ${msg}`, { id: toastId });
-    } finally { 
-      setIsSubmitting(false); 
+  const err = validateQuiz()
+  if (err) { toast.error(err); return }
+  if (!userWalletAddress) { toast.error("Connect your wallet"); return }
+  if (isUploadingCover) { toast.error("Wait for image upload"); return }
+  if (!isSupportedNetwork) { toast.error("Switch to a supported network"); return }
+
+  setIsSubmitting(true)
+  setDeployStep("deploying")
+  setDeployError("")
+  let toastId = toast.loading("⛓️ Deploying quiz contract...")
+
+  try {
+    let contractAddress = ""
+    let deployTxHash = ""
+
+    // ── Solana path ────────────────────────────────────────────
+    if (isSolana) {
+      if (!activeSolanaWallet) throw new Error("Connect your Solana wallet first.")
+      const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+      const connection = createSolanaConnection()
+
+      const quizName = (title.trim() || "Quiz Reward").slice(0, 32)
+      const tokenMint = reward.tokenAddress  // SPL mint address
+      const claimWindowSecs = reward.claimWindowDuration
+
+      const { tx, quizState } = await solanaInitializeQuiz(
+        connection,
+        anchorWallet,
+        quizName,
+        tokenMint,
+        claimWindowSecs,
+      )
+      contractAddress = quizState
+      deployTxHash = tx
+
+      // Fund immediately after deploy
+      toast.loading("💰 Funding quiz vault on Solana...", { id: toastId })
+      const decimals = reward.tokenDecimals
+      const rawAmount = Math.round(parseFloat(reward.poolAmount) * 10 ** decimals)
+      await solanaFundQuiz(connection, anchorWallet, quizState, rawAmount)
+
+    // ── EVM path ───────────────────────────────────────────────
+    } else {
+      const privyProvider = await wallets[0]?.getEthereumProvider()
+      const ethersProvider = new BrowserProvider(privyProvider)
+      const result = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig())
+      contractAddress = result.contractAddress
+      deployTxHash = result.txHash
     }
-  };
+
+    setRewardContractAddress(contractAddress)
+    toast.loading("💾 Contract deployed! Saving quiz...", { id: toastId })
+    setDeployStep("saving")
+
+    const payload = {
+      ...buildPayload(),
+      faucetAddress: contractAddress,
+      reward: {
+        ...buildPayload().reward,
+        contractAddress,
+        deployTxHash,
+        isOnChain: true,
+        isFunded: isSolana, // Solana funds at deploy time
+      },
+    }
+
+    const res = await fetch(`${API_BASE_URL}/api/quiz/create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+
+    if (data.success) {
+      setDeployStep("done")
+      setCreatedCode(data.code)
+      toast.success(`🎉 Quiz created! Code: ${data.code}`, { id: toastId })
+      setTimeout(() => router.push(`/quiz/${data.code}`), 1500)
+    } else {
+      throw new Error(data.detail || "Create failed")
+    }
+  } catch (err: any) {
+    setDeployStep("error")
+    const msg = parseOnchainError(err)
+    setDeployError(msg)
+    toast.error(`❌ Failed: ${msg}`, { id: toastId })
+  } finally {
+    setIsSubmitting(false)
+  }
+}
+
+const handleGenerateAI = async () => {
+  if (!aiTopic.trim()) { toast.error("Enter a topic!"); return }
+  if (!userWalletAddress) { toast.error("Connect your wallet"); return }
+  if (!isSupportedNetwork) { toast.error("Unsupported network."); return }
+
+  setIsGenerating(true)
+  setDeployStep("deploying")
+  setDeployError("")
+  let toastId = toast.loading("⛓️ Deploying quiz contract...")
+
+  try {
+    let contractAddress = ""
+    let deployTxHash = ""
+
+    // ── Solana path ────────────────────────────────────────────
+    if (isSolana) {
+      if (!activeSolanaWallet) throw new Error("Connect your Solana wallet first.")
+      const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+      const connection = createSolanaConnection()
+
+      const quizName = (title.trim() || aiTopic.trim()).slice(0, 32)
+      const { tx, quizState } = await solanaInitializeQuiz(
+        connection,
+        anchorWallet,
+        quizName,
+        reward.tokenAddress,
+        reward.claimWindowDuration,
+      )
+      contractAddress = quizState
+      deployTxHash = tx
+
+      toast.loading("💰 Funding quiz vault on Solana...", { id: toastId })
+      const rawAmount = Math.round(parseFloat(reward.poolAmount) * 10 ** reward.tokenDecimals)
+      await solanaFundQuiz(connection, anchorWallet, quizState, rawAmount)
+
+    // ── EVM path ───────────────────────────────────────────────
+    } else {
+      const privyProvider = await wallets[0]?.getEthereumProvider()
+      const ethersProvider = new BrowserProvider(privyProvider)
+      const result = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig())
+      contractAddress = result.contractAddress
+      deployTxHash = result.txHash
+    }
+
+    setRewardContractAddress(contractAddress)
+    toast.loading("🤖 Deployed! AI generating questions...", { id: toastId })
+    setDeployStep("saving")
+
+    const res = await fetch(`${API_BASE_URL}/api/quiz/generate-ai`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        topic: aiTopic,
+        numQuestions: aiNumQ,
+        difficulty: aiDifficulty,
+        timePerQuestion: aiTimePerQ,
+        creatorAddress: userWalletAddress,
+        creatorUsername,
+        coverImageUrl: coverImageUrl || null,
+        title: title || undefined,
+        chainId,
+        faucetAddress: contractAddress,
+        reward: {
+          ...buildPayload().reward,
+          contractAddress,
+          deployTxHash,
+          isOnChain: true,
+          isFunded: isSolana,
+        },
+      }),
+    })
+    const data = await res.json()
+
+    if (data.success) {
+      setDeployStep("done")
+      setCreatedCode(data.code)
+      toast.success(`✨ AI Quiz created! Code: ${data.code}`, { id: toastId })
+      setTimeout(() => router.push(`/quiz/${data.code}`), 1500)
+    } else {
+      throw new Error(data.detail || "Generation failed")
+    }
+  } catch (err: any) {
+    setDeployStep("error")
+    const msg = parseOnchainError(err)
+    setDeployError(msg)
+    toast.error(`❌ Failed: ${msg}`, { id: toastId })
+  } finally {
+    setIsGenerating(false)
+  }
+}
 
   const completedQuestions = questions.filter(q => q.question.trim() && q.options.every(o => o.text.trim())).length;
 

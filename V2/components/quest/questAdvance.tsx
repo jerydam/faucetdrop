@@ -21,6 +21,13 @@
         ChevronUp,
         ChevronDown
       } from "lucide-react"
+      import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react"
+      import {
+        createSolanaConnection,
+        getQuestStatePda,
+        SOLANA_CHAIN_ID,
+      } from "@/lib/solana-connection"
+      import { initializeQuest as initializeSolanaQuest } from "@/lib/solana"
       import { useWallet } from "@/hooks/use-wallet"
       import { BrowserProvider, ZeroAddress } from 'ethers'
       import { createQuestReward, type Network } from "@/lib/faucet"
@@ -516,7 +523,22 @@
       }: Phase2Props) {
         const { isConnected, chainId, address, provider } = useWallet()
         const router = useRouter()
+        const {
+          publicKey: solanaPublicKey,
+          signTransaction: solanaSigner,
+          signAllTransactions: solanaSignAll,
+          connected: solanaConnected,
+        } = useSolanaWallet()
 
+// Build an Anchor-compatible wallet object on the fly
+const anchorSolanaWallet = useMemo(() => {
+  if (!solanaPublicKey || !solanaSigner || !solanaSignAll) return null
+  return {
+    publicKey: solanaPublicKey,
+    signTransaction: solanaSigner,
+    signAllTransactions: solanaSignAll,
+  }
+}, [solanaPublicKey, solanaSigner, solanaSignAll])
         const { openSubscriptionModal } = useSubscriptionModal()
         // Inject default points for the form initial state
         const [newTask, setNewTask] = useState<Partial<QuestTask>>({ ...initialNewTaskForm, points: 100 })
@@ -724,7 +746,7 @@
           }
         };
 
-    const handleDeployAndFinalize = async () => {
+const handleDeployAndFinalize = async () => {
     // ── Email gate ───────────────────────────────────────────────────────────
     try {
         const profileRes = await fetch(`${API_BASE_URL}/api/profile/${address?.toLowerCase()}`)
@@ -765,6 +787,8 @@
     try {
         if (!isConnected) throw new Error("Please connect your wallet first.")
 
+        const isSolanaChain = Number(chainId) === SOLANA_CHAIN_ID
+
         const computedRewardPool =
             newQuest.distributionConfig?.model === "custom_tiers"
                 ? newQuest.distributionConfig.tiers
@@ -802,27 +826,63 @@
         const draftJson = await draftRes.json()
         const activeDraftId = draftJson.faucetAddress || newQuest.faucetAddress
 
-        const currentNetwork = networks.find(
-            (n) => Number(n.chainId) === Number(chainId)
-        )
-        const targetFactory = currentNetwork?.factories?.quest
-        if (!targetFactory) throw new Error("Quest Factory not found for this network.")
-
         const claimValue = parseInt(newQuest.claimWindowValue || "7", 10)
         const hoursInt =
             newQuest.claimWindowUnit === "hours" ? claimValue : claimValue * 24
 
         const questEndTimeSeconds = Math.floor(endDateTimeObj.getTime() / 1000) + (12 * 60 * 60)
 
+        // ── Only needed for EVM ──────────────────────────────────────────────
+        const currentNetwork = networks.find(
+            (n) => Number(n.chainId) === Number(chainId)
+        )
+        const targetFactory = currentNetwork?.factories?.quest
+        if (!isSolanaChain && !shouldSkipDeploy && !targetFactory) {
+            throw new Error("Quest Factory not found for this network.")
+        }
+
         let deployedAddress: string
 
         if (shouldSkipDeploy) {
+            // ── Demo / unsubscribed: skip all on-chain deployment ────────────
             deployedAddress = newQuest.faucetAddress || `demo-${crypto.randomUUID()}`
+
+        } else if (isSolanaChain) {
+            // ── Solana path: deploy via Anchor ───────────────────────────────
+            if (!anchorSolanaWallet) throw new Error("Solana wallet not connected.")
+            if (!anchorSolanaWallet.publicKey) throw new Error("Solana wallet has no public key.")
+
+            const connection = createSolanaConnection()
+
+            // Anchor program name seed — max 32 bytes
+            const questName = newQuest.title.trim().slice(0, 32)
+
+            // Native SOL uses the System Program address as the "mint"
+            const tokenMint =
+                newQuest.tokenAddress === "11111111111111111111111111111111"
+                    ? "11111111111111111111111111111111"
+                    : (newQuest.tokenAddress || "11111111111111111111111111111111")
+
+            toast.info("Confirm the transaction in your Solana wallet…")
+
+            const result = await initializeSolanaQuest(
+                connection,
+                anchorSolanaWallet,       // { publicKey, signTransaction, signAllTransactions }
+                questName,
+                tokenMint,
+                Math.floor(startDateTimeObj.getTime() / 1000),
+                hoursInt,
+            )
+
+            // questState PDA (base58) becomes our faucetAddress on Solana
+            deployedAddress = result.questState
+
         } else {
+            // ── EVM path: deploy via factory contract ────────────────────────
             if (!provider) throw new Error("Wallet provider is not ready.")
             deployedAddress = await createQuestReward(
                 provider,
-                targetFactory,
+                targetFactory!,
                 newQuest.title.trim(),
                 newQuest.tokenAddress || ZeroAddress,
                 questEndTimeSeconds,
@@ -830,6 +890,7 @@
             )
         }
 
+        // ── Slug — Solana addresses are base58, safe to slice ───────────────
         const baseSlug = newQuest.title
             .toLowerCase()
             .trim()
@@ -842,6 +903,11 @@
             draftId: activeDraftId,
             slug: localSlug,
             creatorAddress: address,
+            // For Solana quests the creator identity is the Solana pubkey;
+            // pass it alongside the EVM address so the backend can store both.
+            solanaCreatorAddress: isSolanaChain
+                ? anchorSolanaWallet?.publicKey?.toBase58() ?? null
+                : null,
             title: newQuest.title.trim(),
             description: newQuest.description,
             imageUrl: newQuest.imageUrl,
@@ -856,7 +922,7 @@
             tokenAddress: newQuest.tokenAddress,
             tokenSymbol: newQuest.tokenSymbol,
             distributionConfig: newQuest.distributionConfig,
-            chainId: Number(chainId),
+            chainId: Number(chainId),   // 102 for Solana, EVM chainId otherwise
         }
 
         const res = await fetch(`${API_BASE_URL}/api/quests/finalize`, {
@@ -871,13 +937,13 @@
         toast.success("Quest published successfully!")
         if (finalizeResult.slug) router.push(`/quest/${finalizeResult.slug}`)
         else router.push(`/quest/${deployedAddress}`)
+
     } catch (e: any) {
         console.error("Deployment Error:", e)
         toast.error(e.message || "Deployment failed")
         setIsDeploying(false)
     }
 }
-
 
         return (
           <div className="space-y-10 max-w-7xl mx-auto py-8 px-4">

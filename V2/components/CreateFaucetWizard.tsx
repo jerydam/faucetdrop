@@ -8,6 +8,17 @@ import { useNetwork, isFactoryTypeAvailable } from "@/hooks/use-network"
 import { useChainId } from 'wagmi'
 import { toast } from "sonner"
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Connection, PublicKey } from '@solana/web3.js'
+import { useWallet as useSolanaWalletAdapter } from '@solana/wallet-adapter-react'
+import {
+  initializeFaucet,
+  getFaucetStatePda,
+  PROGRAM_ID,
+} from '@/lib/solana'                       // adjust path if different
+import {
+  createSolanaConnection,
+  SOLANA_CHAIN_ID,
+} from '@/lib/solana-connection'
 import {
   createFaucet,
   checkFaucetNameExists,
@@ -283,7 +294,6 @@ const FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING: Record<FaucetType, FactoryType> = {
   [FAUCET_TYPES.CUSTOM]: 'custom',
 }
 
-const SUPPORTED_CHAIN_IDS = [42220, 1135, 42161, 8453] as const
 
 export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
   // Celo Mainnet (42220)
@@ -526,34 +536,40 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "Binance-Peg BUSD Token",
     },
 ],
- 11142220: [
-    {
-      address: "0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9",
-      name: "Celo",
-      symbol: "CELO",
-      decimals: 18,
-      isNative: true,
-      logoUrl: "/celo.jpeg",
-      description: "Native Celo token on Alfajores testnet",
-    },
-    {
-      address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
-      name: "Celo Dollar",
-      symbol: "cUSD",
-      decimals: 18,
-      logoUrl: "/cusd.png",
-      description: "USD-pegged stablecoin on Celo Alfajores",
-    },
-    {
-      address: "0x10c892A6EC43a53E45D0B916B4b7D383B1b78C0F",
-      name: "Celo Euro",
-      symbol: "cEUR",
-      decimals: 18,
-      logoUrl: "/ceur.png",
-      description: "Euro-pegged stablecoin on Celo Alfajores",
-    },
-  ]
+102: [  // SOLANA_CHAIN_ID
+  {
+    address: "So11111111111111111111111111111111111111112", // Wrapped SOL mint
+    name: "Solana",
+    symbol: "SOL",
+    decimals: 9,
+    isNative: true,
+    logoUrl: "/sol.png",
+    description: "Native Solana token",
+  },
+  {
+    address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    name: "USD Coin",
+    symbol: "USDC",
+    decimals: 6,
+    logoUrl: "/usdc.jpg",
+    description: "Native USDC on Solana",
+  },
+  {
+    address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    name: "Tether USD",
+    symbol: "USDT",
+    decimals: 6,
+    logoUrl: "/usdt.jpg",
+    description: "Tether USD on Solana",
+  },
+],
 }
+const SOLANA_FAUCET_TYPE_MAP: Record<FaucetType, 0 | 1 | 2> = {
+  open: 1,      // backend-verified open faucet
+  gated: 0,     // whitelist fixed
+  custom: 2,    // custom whitelist amounts
+};
+const WRAPPED_SOL_MINT = 'So11111111111111111111111111111111111111112'
 
 const FAUCET_USE_CASE_TEMPLATES: Record<FaucetType, Array<{
   templateName: string
@@ -631,19 +647,23 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     connect, 
     provider 
   } = useWallet();
+  const {
+    publicKey: solanaPublicKey,
+    signTransaction: solanaSignTransaction,
+    signAllTransactions: solanaSignAllTransactions,
+    connected: solanaConnected,
+  } = useSolanaWalletAdapter()
 
   const router = useRouter()
   const searchParams = useSearchParams()
   const effectiveChainId = walletChainId;
-    
+  const isSolana = effectiveChainId === SOLANA_CHAIN_ID
   const currentNetwork = useMemo(() => {
     if (!effectiveChainId) return null
-    const matched = networks.find(n => n.chainId === effectiveChainId)
-    return matched || null
+    return networks.find(n => n.chainId === effectiveChainId) || null
   }, [effectiveChainId, networks])
-
-  
-  // State declarations
+ 
+  // ── State (identical to original) ────────────────────────────────────────
   const [faucetDescription, setFaucetDescription] = useState("")
   const [faucetImageUrl, setFaucetImageUrl] = useState("")
   const [isUploadingImage, setIsUploadingImage] = useState(false)
@@ -1183,165 +1203,252 @@ const getSlugForNewFaucet = async (
 }
   // Faucet creation
 const handleFaucetCreation = async () => {
-  if (!wizardState.formData.faucetName.trim()) {
-    setCreationError("Please enter a faucet name")
-    return
-  }
-  if (!nameValidation.isNameAvailable) {
-    setCreationError("Please choose a valid faucet name")
-    return
-  }
-
-  const finalTokenAddress = getFinalTokenAddress()
-  if (!finalTokenAddress) {
-    setCreationError("Please select a token or enter a custom token address")
-    return
-  }
-  if (wizardState.formData.showCustomTokenInput && !customTokenValidation.isValid) {
-    setCreationError("Please enter a valid custom token address")
-    return
-  }
-
-  if (!effectiveChainId || !currentNetwork) {
-    setCreationError("Please connect your wallet to a supported network")
-    return
-  }
-  if (!address) {
-    setCreationError("Unable to get wallet address")
-    return
-  }
-
-  const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-  const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
-  if (!factoryAddress) {
-    setCreationError(`${wizardState.selectedFaucetType} faucets are not available on this network`)
-    return
-  }
-
-  setCreationError(null)
-
-  if (!isConnected) {
-    try {
-      await connect()
-    } catch (error) {
-      console.error("Failed to connect wallet:", error)
-      setCreationError("Failed to connect wallet. Please try again.")
+    if (!wizardState.formData.faucetName.trim()) {
+      setCreationError("Please enter a faucet name")
       return
     }
-  }
-  if (!provider) {
-    setCreationError("Wallet not connected")
-    return
-  }
-
-  setIsFaucetCreating(true)
-
-  try {
-    let shouldUseBackend = false
-    let isCustomFaucet = false
-
-    console.log("🏭 Creating faucet with selected type:", wizardState.selectedFaucetType)
-    console.log("🏭 Mapped factory type:", mappedFactoryType)
-    console.log("🏭 Factory address:", factoryAddress)
-    console.log("🏭 Final token address:", finalTokenAddress)
-
-    switch (wizardState.selectedFaucetType) {
-      case FAUCET_TYPES.OPEN:
-        shouldUseBackend = wizardState.formData.requiresDropCode
-        isCustomFaucet = false
-        break
-      case FAUCET_TYPES.GATED:
-        shouldUseBackend = false
-        isCustomFaucet = false
-        break
-      case FAUCET_TYPES.CUSTOM:
-        shouldUseBackend = false
-        isCustomFaucet = true
-        break
-      default:
-        throw new Error(`Invalid faucet type selected: ${wizardState.selectedFaucetType}`)
+    if (!nameValidation.isNameAvailable) {
+      setCreationError("Please choose a valid faucet name")
+      return
     }
-
-    const createdFaucetAddress = await createFaucet(
-      provider,
-      factoryAddress,
-      wizardState.formData.faucetName,
-      finalTokenAddress,
-      BigInt(effectiveChainId),
-      BigInt(effectiveChainId),
-      mappedFactoryType,  // 'dropcode' | 'droplist' | 'custom' — already resolved correctly
-    )
-
-    if (!createdFaucetAddress) {
-      throw new Error("Failed to get created faucet address")
+ 
+    const finalTokenAddress = getFinalTokenAddress()
+    if (!finalTokenAddress) {
+      setCreationError("Please select a token or enter a custom token address")
+      return
     }
-
-    console.log("🎉 Faucet created successfully at:", createdFaucetAddress)
-
-    // Register in backend + save metadata
-    await registerFaucetInBackend(
-      createdFaucetAddress,
-      address,
-      effectiveChainId,
-      mappedFactoryType,
-      wizardState.formData.faucetName
-    )
-
-    const networkName = currentNetwork?.name || "Unknown Network"
-    const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
-    const finalDescription = faucetDescription.trim() || 
-      `This is a faucet on ${networkName} by ${ownerShort}`
-    const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
-
-    await saveFaucetMetadata(
-      createdFaucetAddress,
-      finalDescription,
-      finalImageUrl,
-      address,
-      effectiveChainId
-    )
-
-    // === INSTANT SYNC + GET SLUG ===
-    let finalSlug = createdFaucetAddress // fallback
-    try {
-      const syncRes = await fetch(`https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app/sync-faucet/${createdFaucetAddress}`, {
-        method: "POST",
-      })
-      if (syncRes.ok) {
-        const data = await syncRes.json()
-        if (data.slug) {
-          finalSlug = data.slug
-          console.log("✅ Sync returned clean slug:", finalSlug)
-        }
+    if (wizardState.formData.showCustomTokenInput && !customTokenValidation.isValid) {
+      setCreationError("Please enter a valid custom token address")
+      return
+    }
+    if (!effectiveChainId || !currentNetwork) {
+      setCreationError("Please connect your wallet to a supported network")
+      return
+    }
+ 
+    // ── SOLANA PATH ────────────────────────────────────────────────────────
+    if (isSolana) {
+      return handleSolanaFaucetCreation(finalTokenAddress)
+    }
+    // ──────────────────────────────────────────────────────────────────────
+ 
+    // ── EVM PATH (original logic, unchanged) ─────────────────────────────
+    if (!address) {
+      setCreationError("Unable to get wallet address")
+      return
+    }
+ 
+    const mappedFactoryType =
+      FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
+    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
+    if (!factoryAddress) {
+      setCreationError(`${wizardState.selectedFaucetType} faucets are not available on this network`)
+      return
+    }
+ 
+    setCreationError(null)
+ 
+    if (!isConnected) {
+      try {
+        await connect()
+      } catch (error) {
+        setCreationError("Failed to connect wallet. Please try again.")
+        return
       }
-    } catch (syncErr) {
-      console.warn("Sync call failed (non-blocking):", syncErr)
     }
-
-    const selectedToken = getSelectedTokenConfiguration()
-    toast.success(`Faucet "${wizardState.formData.faucetName}" created successfully!`)
-
-    if (onSuccess) {
-      console.log("🔄 Triggering dashboard refresh...")
-      setTimeout(() => onSuccess(), 500)
+    if (!provider) {
+      setCreationError("Wallet not connected")
+      return
     }
-
-    if (closeModal) {
-      closeModal()
-    } else {
-      // REDIRECT USING SLUG (clean URL!)
-      window.location.href = `/faucet/${finalSlug}?networkId=${effectiveChainId}&new=true`
+ 
+    setIsFaucetCreating(true)
+ 
+    try {
+      const createdFaucetAddress = await createFaucet(
+        provider,
+        factoryAddress,
+        wizardState.formData.faucetName,
+        finalTokenAddress,
+        BigInt(effectiveChainId),
+        BigInt(effectiveChainId),
+        mappedFactoryType,
+      )
+ 
+      if (!createdFaucetAddress) throw new Error("Failed to get created faucet address")
+ 
+      await registerFaucetInBackend(
+        createdFaucetAddress,
+        address,
+        effectiveChainId,
+        mappedFactoryType,
+        wizardState.formData.faucetName,
+      )
+ 
+      const networkName = currentNetwork?.name || "Unknown Network"
+      const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
+      const finalDescription =
+        faucetDescription.trim() || `This is a faucet on ${networkName} by ${ownerShort}`
+      const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
+ 
+      await saveFaucetMetadata(
+        createdFaucetAddress,
+        finalDescription,
+        finalImageUrl,
+        address,
+        effectiveChainId,
+      )
+ 
+      let finalSlug = createdFaucetAddress
+      try {
+        const syncRes = await fetch(
+          `https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app/sync-faucet/${createdFaucetAddress}`,
+          { method: "POST" },
+        )
+        if (syncRes.ok) {
+          const data = await syncRes.json()
+          if (data.slug) finalSlug = data.slug
+        }
+      } catch {}
+ 
+      toast.success(`Faucet "${wizardState.formData.faucetName}" created successfully!`)
+      if (onSuccess) setTimeout(() => onSuccess(), 500)
+      if (closeModal) {
+        closeModal()
+      } else {
+        window.location.href = `/faucet/${finalSlug}?networkId=${effectiveChainId}&new=true`
+      }
+    } catch (error: any) {
+      const errorMessage = error.message || "Failed to create faucet"
+      toast.error("Failed to create faucet", { description: errorMessage })
+      setCreationError(errorMessage)
+    } finally {
+      setIsFaucetCreating(false)
     }
-
-  } catch (error: any) {
-    console.error("❌ Error creating faucet:", error)
-    const errorMessage = error.message || "Failed to create faucet"
-    toast.error("Failed to create faucet", { description: errorMessage })
-    setCreationError(errorMessage)
-  } finally {
-    setIsFaucetCreating(false)
   }
-}
+ 
+  // ── SOLANA: dedicated creation handler ────────────────────────────────────
+  /**
+   * Calls `initializeFaucet` from solana-program.ts.
+   *
+   * The Anchor program uses seeds ["faucet", owner, name] so the on-chain
+   * address is fully deterministic — we derive it via getFaucetStatePda
+   * immediately after the tx lands and use that as the canonical address.
+   *
+   * claimAmount / startTime / endTime are set to safe defaults here.
+   * The owner can update them from the faucet dashboard after creation.
+   */
+  const handleSolanaFaucetCreation = async (tokenMintAddress: string) => {
+    const walletShim = buildSolanaWalletShim()
+ 
+    if (!walletShim) {
+      setCreationError(
+        "Solana wallet not ready. Make sure Phantom (or another Solana wallet) is connected.",
+      )
+      return
+    }
+ 
+    if (!solanaPublicKey) {
+      setCreationError("Solana wallet not connected")
+      return
+    }
+ 
+    setCreationError(null)
+    setIsFaucetCreating(true)
+ 
+    try {
+      const connection: Connection = createSolanaConnection()
+ 
+      // Map the UI faucet type to the on-chain numeric enum
+      const solanaFaucetType =
+        SOLANA_FAUCET_TYPE_MAP[wizardState.selectedFaucetType as FaucetType] ?? 1
+ 
+      // Resolve the token mint:
+      //   - native SOL uses the Wrapped SOL mint on-chain
+      //   - every other token already has a real mint address
+      const resolvedMint =
+        tokenMintAddress === zeroAddress ||
+        tokenMintAddress === '11111111111111111111111111111111'
+          ? WRAPPED_SOL_MINT
+          : tokenMintAddress
+ 
+      // Safe defaults — owner updates these from the dashboard
+      const nowSecs = Math.floor(Date.now() / 1000)
+      const startTime = nowSecs
+      const endTime = nowSecs + 60 * 60 * 24 * 30  // 30 days
+      const claimAmountDefault = 0                   // 0 = owner sets it on-chain later
+ 
+      console.log('[Solana] Creating faucet:', {
+        name: wizardState.formData.faucetName,
+        mint: resolvedMint,
+        type: solanaFaucetType,
+      })
+ 
+      const { tx, faucetState: faucetStatePubkey } = await initializeFaucet(
+        connection,
+        walletShim,
+        wizardState.formData.faucetName,
+        resolvedMint,
+        claimAmountDefault,
+        startTime,
+        endTime,
+        solanaFaucetType,
+      )
+ 
+      console.log('✅ Solana faucet created:', faucetStatePubkey, 'tx:', tx)
+ 
+      // Register in backend using the PDA address as the canonical address
+      await registerFaucetInBackend(
+        faucetStatePubkey,
+        solanaPublicKey.toBase58(),
+        SOLANA_CHAIN_ID,
+        FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType],
+        wizardState.formData.faucetName,
+      )
+ 
+      const ownerShort = `${solanaPublicKey.toBase58().slice(0, 6)}...${solanaPublicKey.toBase58().slice(-4)}`
+      const finalDescription =
+        faucetDescription.trim() ||
+        `This is a faucet on Solana Devnet by ${ownerShort}`
+      const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
+ 
+      await saveFaucetMetadata(
+        faucetStatePubkey,
+        finalDescription,
+        finalImageUrl,
+        solanaPublicKey.toBase58(),
+        SOLANA_CHAIN_ID,
+      )
+ 
+      // Try the instant-sync endpoint (non-blocking)
+      let finalSlug = faucetStatePubkey
+      try {
+        const syncRes = await fetch(
+          `https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app/sync-faucet/${faucetStatePubkey}`,
+          { method: "POST" },
+        )
+        if (syncRes.ok) {
+          const data = await syncRes.json()
+          if (data.slug) finalSlug = data.slug
+        }
+      } catch {}
+ 
+      toast.success(`Faucet "${wizardState.formData.faucetName}" created on Solana!`)
+      if (onSuccess) setTimeout(() => onSuccess(), 500)
+      if (closeModal) {
+        closeModal()
+      } else {
+        window.location.href = `/faucet/${finalSlug}?networkId=${SOLANA_CHAIN_ID}&new=true`
+      }
+    } catch (error: any) {
+      console.error('❌ Solana faucet creation error:', error)
+      const msg = error?.message || 'Failed to create Solana faucet'
+      toast.error('Failed to create faucet', { description: msg })
+      setCreationError(msg)
+    } finally {
+      setIsFaucetCreating(false)
+    }
+  }
+ 
   const getWizardStepTitle = (step: number): string => {
     switch (step) {
       case 1: return "Choose Faucet Type"
@@ -2125,9 +2232,13 @@ const handleFaucetCreation = async () => {
 
   const renderReviewAndCreate = () => {
     const selectedTokenConfig = getSelectedTokenConfiguration()
-    const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork as any)
+    const mappedFactoryType =
+      FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
+    const factoryAddress = isSolana
+      ? PROGRAM_ID.toBase58()                          // show the program ID instead
+      : getFactoryAddress(mappedFactoryType, currentNetwork as any)
     const finalTokenAddress = getFinalTokenAddress()
+ 
     return (
       <div className="space-y-6">
         <Card>
@@ -2137,54 +2248,54 @@ const handleFaucetCreation = async () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Network */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Network</Label>
                 <div className="flex items-center space-x-2">
                   {currentNetwork && <NetworkImage network={currentNetwork} size="sm" />}
                   <span>{currentNetwork?.name || "Unknown Network"}</span>
                   {currentNetwork?.isTestnet && (
-                    <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
-                      Testnet
-                    </span>
+                    <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">Testnet</span>
                   )}
                 </div>
               </div>
+ 
+              {/* Faucet type */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Faucet Type</Label>
                 <p className="flex items-center space-x-2">
                   {wizardState.selectedFaucetType === FAUCET_TYPES.OPEN ? (
-                    <>
-                      <Globe className="h-4 w-4 text-green-600" />
-                      <span>Open Drop</span>
-                    </>
+                    <><Globe className="h-4 w-4 text-green-600" /><span>Open Drop</span></>
                   ) : wizardState.selectedFaucetType === FAUCET_TYPES.GATED ? (
-                    <>
-                      <Shield className="h-4 w-4 text-orange-600" />
-                      <span>Whitelist Drop</span>
-                    </>
+                    <><Shield className="h-4 w-4 text-orange-600" /><span>Whitelist Drop</span></>
                   ) : (
-                    <>
-                      <Settings className="h-4 w-4 text-purple-600" />
-                      <span>Custom Drop</span>
-                    </>
+                    <><Settings className="h-4 w-4 text-purple-600" /><span>Custom Drop</span></>
                   )}
                 </p>
               </div>
+ 
+              {/* Factory / Program address */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-500">Factory Address</Label>
+                <Label className="text-sm font-medium text-gray-500">
+                  {isSolana ? "Anchor Program" : "Factory Address"}
+                </Label>
                 <p className="text-sm font-mono text-gray-600">
-                  {factoryAddress ? `${factoryAddress.slice(0, 6)}...${factoryAddress.slice(-4)}` : 'N/A'}
+                  {factoryAddress
+                    ? `${factoryAddress.slice(0, 6)}...${factoryAddress.slice(-4)}`
+                    : 'N/A'}
                 </p>
               </div>
+ 
+              {/* Faucet name */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Faucet Name</Label>
                 <p className="flex items-center space-x-2">
                   <span>{wizardState.formData.faucetName}</span>
-                  {nameValidation.isNameAvailable && (
-                    <Check className="h-4 w-4 text-green-500" />
-                  )}
+                  {nameValidation.isNameAvailable && <Check className="h-4 w-4 text-green-500" />}
                 </p>
               </div>
+ 
+              {/* Token */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Token</Label>
                 <div className="flex items-center space-x-2">
@@ -2202,52 +2313,48 @@ const handleFaucetCreation = async () => {
                   {finalTokenAddress.slice(0, 8)}...{finalTokenAddress.slice(-6)}
                 </p>
               </div>
+ 
+              {/* Token source */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-500">Token Source</Label>
                 <p className="flex items-center space-x-2">
                   {wizardState.formData.showCustomTokenInput ? (
-                    <>
-                      <Plus className="h-4 w-4 text-purple-600" />
-                      <span>Custom Contract</span>
-                    </>
+                    <><Plus className="h-4 w-4 text-purple-600" /><span>Custom Contract</span></>
                   ) : (
-                    <>
-                      <Coins className="h-4 w-4 text-blue-600" />
-                      <span>Predefined Token</span>
-                    </>
+                    <><Coins className="h-4 w-4 text-blue-600" /><span>Predefined Token</span></>
                   )}
                 </p>
               </div>
-              {wizardState.selectedFaucetType === FAUCET_TYPES.OPEN && (
+ 
+              {/* Drop code (EVM open only) */}
+              {wizardState.selectedFaucetType === FAUCET_TYPES.OPEN && !isSolana && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-gray-500">Drop Code Required</Label>
                   <p className="flex items-center space-x-2">
                     {wizardState.formData.requiresDropCode ? (
-                      <>
-                        <Key className="h-4 w-4 text-green-600" />
-                        <span>Yes</span>
-                      </>
+                      <><Key className="h-4 w-4 text-green-600" /><span>Yes</span></>
                     ) : (
-                      <>
-                        <AlertCircle className="h-4 w-4 text-orange-600" />
-                        <span>No</span>
-                      </>
+                      <><AlertCircle className="h-4 w-4 text-orange-600" /><span>No</span></>
                     )}
                   </p>
                 </div>
               )}
-              {wizardState.selectedFaucetType === FAUCET_TYPES.CUSTOM && (
+ 
+              {/* Solana faucet-type note */}
+              {isSolana && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-500">Advanced Features</Label>
-                  <p className="flex items-center space-x-2">
-                    <Zap className="h-4 w-4 text-purple-600" />
-                    <span>Enabled</span>
+                  <Label className="text-sm font-medium text-gray-500">On-chain Type</Label>
+                  <p className="text-sm text-gray-600">
+                    Type {SOLANA_FAUCET_TYPE_MAP[wizardState.selectedFaucetType as FaucetType]}{' '}
+                    ({wizardState.selectedFaucetType === 'open' ? 'backend-verified' :
+                       wizardState.selectedFaucetType === 'gated' ? 'whitelist fixed' : 'custom amounts'})
                   </p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
+ 
         {creationError && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -2255,7 +2362,12 @@ const handleFaucetCreation = async () => {
             <AlertDescription>{creationError}</AlertDescription>
           </Alert>
         )}
-        {!factoryAddress && (
+ 
+        {/* Only show the "factory not available" error on EVM chains */}
+        {!isSolana && !getFactoryAddress(
+          FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType],
+          currentNetwork as any
+        ) && (
           <Alert variant="destructive">
             <XCircle className="h-4 w-4" />
             <AlertTitle>Factory Not Available</AlertTitle>
@@ -2268,6 +2380,19 @@ const handleFaucetCreation = async () => {
             </AlertDescription>
           </Alert>
         )}
+ 
+        {/* Solana creation notice */}
+        {isSolana && (
+          <Alert className="border-teal-500 bg-teal-50 dark:bg-teal-900/20">
+            <Info className="h-4 w-4 text-teal-600" />
+            <AlertTitle className="text-teal-700 dark:text-teal-300">Solana Faucet</AlertTitle>
+            <AlertDescription className="text-teal-700 dark:text-teal-300">
+              This faucet will be created via the FaucetDrops Anchor program on Solana Devnet.
+              The claim amount and timing can be configured from the faucet dashboard after creation.
+            </AlertDescription>
+          </Alert>
+        )}
+ 
         {wizardState.selectedFaucetType === FAUCET_TYPES.CUSTOM && (
           <Alert className="border-purple-500 bg-purple-50 dark:bg-purple-900/20">
             <Settings className="h-4 w-4 text-purple-600" />
@@ -2275,16 +2400,6 @@ const handleFaucetCreation = async () => {
             <AlertDescription className="text-purple-700 dark:text-purple-300">
               After creation, you'll be able to configure advanced settings including custom eligibility rules,
               dynamic claim amounts, API integrations, and more through the faucet management interface.
-            </AlertDescription>
-          </Alert>
-        )}
-        {wizardState.formData.showCustomTokenInput && (
-          <Alert className="border-purple-500 bg-purple-50 dark:bg-purple-900/20">
-            <Info className="h-4 w-4 text-purple-600" />
-            <AlertTitle className="text-purple-700 dark:text-purple-300">Custom Token Notice</AlertTitle>
-            <AlertDescription className="text-purple-700 dark:text-purple-300">
-              You're using a custom token contract. Please ensure you have sufficient tokens in your wallet
-              to fund the faucet and that the contract is legitimate and follows ERC-20 standards.
             </AlertDescription>
           </Alert>
         )}
@@ -2304,24 +2419,48 @@ const handleFaucetCreation = async () => {
   const canProceedToNextStep = (): boolean => {
     switch (wizardState.currentStep) {
       case 1:
-        return wizardState.selectedFaucetType !== '' &&
+        return (
+          wizardState.selectedFaucetType !== '' &&
           isFaucetTypeAvailableOnNetwork(wizardState.selectedFaucetType as FaucetType)
-      case 2:
-        const hasValidName = wizardState.formData.faucetName.trim() !== '' && nameValidation.isNameAvailable
+        )
+      case 2: {
+        const hasValidName =
+          wizardState.formData.faucetName.trim() !== '' && nameValidation.isNameAvailable
         const hasValidToken = wizardState.formData.showCustomTokenInput
           ? customTokenValidation.isValid
           : wizardState.formData.selectedTokenAddress !== ''
         return hasValidName && hasValidToken
-      case 3:
-        const mappedFactoryType = FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
+      }
+      case 3: {
+        // ── SOLANA: no factory address required on Solana ──────────────────
+        if (isSolana) return true
+        // ──────────────────────────────────────────────────────────────────
+        const mappedFactoryType =
+          FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
         const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork as any)
         return !!factoryAddress
+      }
       default:
         return false
     }
   }
 
-  const isActionDisabled = isFaucetCreating || !effectiveChainId || !currentNetwork
+  const buildSolanaWalletShim = useCallback(() => {
+    if (!solanaPublicKey || !solanaSignTransaction || !solanaSignAllTransactions) {
+      return null
+    }
+    return {
+      publicKey: solanaPublicKey,
+      signTransaction: solanaSignTransaction,
+      signAllTransactions: solanaSignAllTransactions,
+    }
+  }, [solanaPublicKey, solanaSignTransaction, solanaSignAllTransactions])
+
+  const isActionDisabled =
+    isFaucetCreating ||
+    !effectiveChainId ||
+    !currentNetwork ||
+    (isSolana && !solanaConnected) 
 
   if (initialLoading) {
     return <LoadingPage />

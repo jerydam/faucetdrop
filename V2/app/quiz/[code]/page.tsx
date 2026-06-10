@@ -26,7 +26,11 @@
   import { cn } from "@/lib/utils";
   import { WalletConnectButton } from "@/components/wallet-connect";
   import Loading from "@/app/loading";
-
+  import { SOLANA_CHAIN_ID } from "@/hooks/use-network"
+  import { createSolanaConnection } from "@/lib/solana-connection"
+  import { fundQuiz as solanaFundQuiz } from "@/lib/solana"
+  import { getAnchorWalletFromPrivy } from "@/lib/privy-solana-wallet"
+  import { useSolanaWallet } from "@/hooks/use-solana"
   // ── On-chain error parser ──────────────────────────────────────
   function parseOnchainError(err: any): string {
     // User rejected the transaction in their wallet
@@ -495,20 +499,26 @@
   }, [payoutsData]);
 
   const handleSwitchAndClaim = async () => {
-    if (!activeWallet || !contractInfo) { toast.error("Wallet not connected"); return; }
-    const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0");
+  if (!activeWallet || !contractInfo) { toast.error("Wallet not connected"); return }
+
+  // Solana: no chain-switching needed, go straight to claim
+  const isSolana = contractInfo.chainId === SOLANA_CHAIN_ID
+  if (!isSolana) {
+    const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0")
     if (currentChainId !== contractInfo.chainId) {
       try {
-        toast.info("Switching to the correct network...");
-        await activeWallet.switchChain(contractInfo.chainId);
-        await new Promise(r => setTimeout(r, 1500));
+        toast.info("Switching to the correct network...")
+        await activeWallet.switchChain(contractInfo.chainId)
+        await new Promise(r => setTimeout(r, 1500))
       } catch {
-        toast.error("Please switch to the correct network in your wallet");
-        return;
+        toast.error("Please switch to the correct network in your wallet")
+        return
       }
     }
-    handleClaim();
-  };
+  }
+
+  handleClaim()
+}
 
   const handleClaim = async () => {
     if (!activeWallet) { toast.error("Wallet not connected"); return; }
@@ -1515,7 +1525,7 @@
       isFunded: boolean;
       chainId?: number;
     } | null>(null);
-
+    const { activeSolanaWallet } = useSolanaWallet()
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState("");
     const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -1565,6 +1575,7 @@
     const chainId = activeWallet
       ? parseInt(activeWallet.chainId.split(":")[1] ?? "0")
       : 0;
+    const isSolana = (quizReward?.chainId ?? chainId) === SOLANA_CHAIN_ID
 
     // ── Load profile ──
     useEffect(() => {
@@ -2113,43 +2124,67 @@
       wsRef.current.send(JSON.stringify({ type: "chat_message", text }));
     };
 
-    const handleFundReward = async () => {
-      if (!quizReward) { toast.error("No reward configured"); return; }
-      if (!activeWallet) { toast.error("Wallet not ready"); return; }
+  const handleFundReward = async () => {
+  if (!quizReward) { toast.error("No reward configured"); return }
+  setIsFunding(true)
+  setFundError("")
 
-      setIsFunding(true);
-      setFundError("");
-
-      try {
-        const privyProvider = await activeWallet.getEthereumProvider();
-        const provider = new BrowserProvider(privyProvider);
-
-        const { txHash } = await fundQuizReward(provider, chainId, quizReward.contractAddress, {
-          tokenAddress: quizReward.tokenAddress,
-          tokenDecimals: quizReward.tokenDecimals,
-          isNativeToken: quizReward.isNativeToken,
-          poolAmount: quizReward.poolAmount,
-        });
-
-        setFundTxHash(txHash);
-        setIsFunded(true);
-        toast.success("Reward pool funded! 🎉");
-
-        await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ txHash, contractAddress: quizReward.contractAddress }),
-        }).catch(() => {});
-
-      } catch (err: any) {
-        console.error("Funding Error:", err);
-        const msg = parseOnchainError(err);
-        setFundError(msg);
-        toast.error(msg);
-      } finally {
-        setIsFunding(false);
+  try {
+    // ── Solana path ──────────────────────────────────────────────
+    if (isSolana) {
+      if (!activeSolanaWallet) {
+        toast.error("Connect your Solana wallet first.")
+        return
       }
-    };
+      const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+      const connection = createSolanaConnection()
+      const rawAmount = Math.round(
+        parseFloat(quizReward.poolAmount) * 10 ** quizReward.tokenDecimals
+      )
+      toast.info("Confirm funding in your Solana wallet...")
+      const txHash = await solanaFundQuiz(
+        connection,
+        anchorWallet,
+        quizReward.contractAddress,
+        rawAmount,
+      )
+      setFundTxHash(txHash)
+      setIsFunded(true)
+      toast.success("Reward pool funded! 🎉")
+      await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ txHash, contractAddress: quizReward.contractAddress }),
+      }).catch(() => {})
+      return
+    }
+
+    // ── EVM path (existing) ──────────────────────────────────────
+    if (!activeWallet) { toast.error("Wallet not ready"); return }
+    const privyProvider = await activeWallet.getEthereumProvider()
+    const provider = new BrowserProvider(privyProvider)
+    const { txHash } = await fundQuizReward(provider, chainId, quizReward.contractAddress, {
+      tokenAddress: quizReward.tokenAddress,
+      tokenDecimals: quizReward.tokenDecimals,
+      isNativeToken: quizReward.isNativeToken,
+      poolAmount: quizReward.poolAmount,
+    })
+    setFundTxHash(txHash)
+    setIsFunded(true)
+    toast.success("Reward pool funded! 🎉")
+    await fetch(`${API_BASE_URL}/api/quiz/${code}/mark-funded`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ txHash, contractAddress: quizReward.contractAddress }),
+    }).catch(() => {})
+  } catch (err: any) {
+    const msg = parseOnchainError(err)
+    setFundError(msg)
+    toast.error(msg)
+  } finally {
+    setIsFunding(false)
+  }
+}
 
     const handleSelectAnswer = (optId: string) => {
       if (!currentQ || timeLeft <= 0 || isSpectator) return;

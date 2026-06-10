@@ -63,6 +63,19 @@ import { Header } from "@/components/header";
 import { SubscriptionModal } from "@/components/subscribe";
 import Loading from "@/app/loading";
 import LoadingPage from "@/components/claimloading";
+// At the top of the file, add these imports:
+import { useNetwork, SOLANA_CHAIN_ID } from "@/hooks/use-network" // adjust path
+import { useSolanaWallet } from "@/hooks/use-solana" // adjust path
+import { createSolanaConnection } from "@/lib/solana-connection"
+import {
+  fundQuest as solanaFundQuest,
+  claimQuestReward as solanaClaimQuestReward,
+  withdrawQuest as solanaWithdrawQuest,
+  getQuestState,
+} from "@/lib/solana"
+import { getAnchorWalletFromPrivy } from "@/lib/privy-solana-wallet"
+import { PublicKey } from "@solana/web3.js"
+import { BN } from "@coral-xyz/anchor"
 
 const API_BASE_URL = "http://127.0.0.1:8000"; // <-- REPLACE WITH ACTUAL BACKEND URL
 const SUPER_ADMIN_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
@@ -354,7 +367,7 @@ export default function QuestDetailsPage() {
   // Add this hook inside both files (or extract to a shared hooks file)
   const [leaderboardLimit, setLeaderboardLimit] = useState(50);
   const rawSlug = (params.addresss || params.faucetAddress) as string | undefined;
-
+  const { activeSolanaWallet } = useSolanaWallet()
   const refreshAllStats = async () => {
     if (!faucetAddress || !userWalletAddress) return;
     try {
@@ -945,7 +958,7 @@ const claimStatus = useMemo(() => {
     if (!userWalletAddress || !faucetAddress) return;
     setIsJoining(true);
     try {
-      const payload = { walletAddress: userWalletAddress, referralCode: refCode || null };
+      const payload = { walletAddress: userWalletAddress, referralCode: refCode || null,chainId: questData?.chainId};
       const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -979,7 +992,7 @@ const claimStatus = useMemo(() => {
     if (!userWalletAddress || !faucetAddress || isCreator) return;
     setIsCheckingIn(true);
     try {
-      const payload = { walletAddress: userWalletAddress };
+      const payload = { walletAddress: userWalletAddress, chainId: questData?.chainId };
       const res = await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/checkin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1734,60 +1747,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
 
   // Import parseUnits if you haven't already
 
-const handleFundQuest = async () => {
-    if (!walletProvider || !faucetAddress) { toast.error("Wallet not connected."); return; }
-    setIsFunding(true);
 
-    try {
-      const provider = walletProvider as BrowserProvider;
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-
-      const tokenAddress = questData.tokenAddress;
-      const ERC20_ABI = [
-        "function approve(address s, uint256 a) public returns (bool)",
-        "function balanceOf(address a) public view returns (uint256)",
-        "function allowance(address o, address s) public view returns (uint256)",
-        "function decimals() public view returns (uint8)",
-      ];
-
-      const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer);
-
-      // 👇 Fetch decimals first, use them for all amount calculations
-      const decimals = await tokenContract.decimals();
-
-      const baseAmountWei = parseUnits(rewardPoolAmount.toString(), decimals);
-      const totalAmountWei = (baseAmountWei * 100n + 98n) / 99n;
-
-      const balance = await tokenContract.balanceOf(userAddress);
-
-      if (balance < totalAmountWei) throw new Error("Insufficient token balance for prize + fees.");
-
-      const currentAllowance = await tokenContract.allowance(userAddress, faucetAddress);
-      if (currentAllowance < totalAmountWei) {
-        toast.info("Approving tokens...");
-        const appTx = await tokenContract.approve(faucetAddress, totalAmountWei);
-        await appTx.wait();
-      }
-
-      const questContract = new Contract(faucetAddress, QUEST_ABI, signer);
-      const tx = await questContract.fund(totalAmountWei);
-
-      toast.info("Funding transaction sent...");
-      await tx.wait();
-
-      await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/set-funded`, { method: 'POST' });
-      toast.success("Quest funded and activated!");
-      setQuestData((prev: any) => ({ ...prev, isFunded: true }));
-      setShowFundModal(false);
-
-    } catch (error: any) {
-      console.error(error);
-      toast.error(error.reason || error.message || "Funding failed");
-    } finally {
-      setIsFunding(false);
-    }
-  };
 
   const handleSubscribe = async () => {
     if (!walletProvider || !userWalletAddress || !activeWallet) {
@@ -1884,93 +1844,224 @@ const handleFundQuest = async () => {
     return Math.abs(input - totalRequired) < 0.0001;
   }, [fundAmount, totalRequired]);
   
-  // --- PARTICIPANT: CLAIM REWARD (VIA BACKEND) ---
-  const handleClaimReward = async () => {
-    if (!activeWallet) return toast.error("Wallet not connected");
-    setIsClaiming(true);
+ // ─── FUND QUEST ──────────────────────────────────────────────────────────────
+const handleFundQuest = async () => {
+  if (!faucetAddress) { toast.error("No quest address."); return; }
+  setIsFunding(true);
 
-    try {
-      // Parse the chainId from Privy (e.g., "eip155:42220" -> 42220)
-      const currentChainId = parseInt(activeWallet.chainId.split(':')[1]);
+  try {
+    const isSolana = questData?.chainId === SOLANA_CHAIN_ID;
 
-      const res = await fetch(`${API_BASE_URL}/claim-on-quest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userAddress: activeWallet.address,
-          faucetAddress: faucetAddress,
-          chainId: currentChainId,
-          shouldWhitelist: false
-        })
-      });
-      const data = await res.json();
+    if (isSolana) {
+  if (!activeSolanaWallet) {
+    toast.error("Connect your Solana wallet first.")
+    return
+  }
 
-      if (data.success) {
-        toast.success("Reward Claimed Successfully! Tx: " + data.txHash);
-        
-        // ── ADD THIS: Instantly update local state to hide the button ──
-        setClaimState(prev => ({ 
-          ...prev, 
-          hasClaimed: true, 
-          canClaimOnChain: false 
-        }));
-        
-      } else {
-        toast.error(data.detail || "Claim failed.");
-      }
-    } catch (e: any) {
-      toast.error("Network error during claim.");
-    } finally {
-      setIsClaiming(false); // This will automatically hide your popup
+  try {
+    const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+    const connection = createSolanaConnection()
+
+    const decimals = 6 // adjust to your token mint
+    const rawAmount = Math.round(rewardPoolAmount * 10 ** decimals)
+
+    toast.info("Approving fund transaction in your Solana wallet…")
+    const tx = await solanaFundQuest(connection, anchorWallet, faucetAddress, rawAmount)
+
+    await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/set-funded`, { method: "POST" })
+    toast.success(`Quest funded! Tx: ${tx.slice(0, 8)}…`)
+    setQuestData((prev: any) => ({ ...prev, isFunded: true }))
+    setShowFundModal(false)
+  } catch (err: any) {
+    toast.error(err.message || "Funding failed")
+  }
+  return
+}
+
+    // ── EVM path (existing) ──────────────────────────────────────────────────
+    if (!walletProvider || !faucetAddress) { toast.error("Wallet not connected."); return; }
+
+    const provider = walletProvider as BrowserProvider;
+    const signer = await provider.getSigner();
+    const userAddress = await signer.getAddress();
+
+    const tokenAddress = questData.tokenAddress;
+    const ERC20_ABI = [
+      "function approve(address s, uint256 a) public returns (bool)",
+      "function balanceOf(address a) public view returns (uint256)",
+      "function allowance(address o, address s) public view returns (uint256)",
+      "function decimals() public view returns (uint8)",
+    ];
+
+    const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer);
+    const decimals = await tokenContract.decimals();
+    const baseAmountWei = parseUnits(rewardPoolAmount.toString(), decimals);
+    const totalAmountWei = (baseAmountWei * 100n + 98n) / 99n;
+
+    const balance = await tokenContract.balanceOf(userAddress);
+    if (balance < totalAmountWei) throw new Error("Insufficient token balance for prize + fees.");
+
+    const currentAllowance = await tokenContract.allowance(userAddress, faucetAddress);
+    if (currentAllowance < totalAmountWei) {
+      toast.info("Approving tokens…");
+      const appTx = await tokenContract.approve(faucetAddress, totalAmountWei);
+      await appTx.wait();
     }
-  };
 
-  // --- ADMIN: WITHDRAW FUNDS (DIRECT CONTRACT INTERACTION) ---
-  const handleAdminWithdraw = async () => {
-    if (!activeWallet) return toast.error("Wallet not connected");
-    setIsWithdrawing(true);
+    const questContract = new Contract(faucetAddress, QUEST_ABI, signer);
+    const tx = await questContract.fund(totalAmountWei);
+    toast.info("Funding transaction sent…");
+    await tx.wait();
 
-    try {
-      // 1. Ask Privy for the raw provider
-      const privyProvider = await activeWallet.getEthereumProvider();
+    await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/set-funded`, { method: "POST" });
+    toast.success("Quest funded and activated!");
+    setQuestData((prev: any) => ({ ...prev, isFunded: true }));
+    setShowFundModal(false);
 
-      // 2. Wrap it in ethers so we can use standard contract methods
-      const ethersProvider = new BrowserProvider(privyProvider);
-      const signer = await ethersProvider.getSigner();
+  } catch (error: any) {
+    console.error(error);
+    toast.error(error.reason || error.message || "Funding failed");
+  } finally {
+    setIsFunding(false);
+  }
+};
 
-      const questContract = new Contract(faucetAddress!, QUEST_ABI, signer);
+// ─── CLAIM REWARD ─────────────────────────────────────────────────────────────
+const handleClaimReward = async () => {
+  if (!faucetAddress) return toast.error("No quest address");
+  setIsClaiming(true);
 
-      let amountToWithdraw;
+  try {
+    const isSolana = questData?.chainId === SOLANA_CHAIN_ID;
 
-      // Figure out how much is left inside the contract
-      if (questData.rewardTokenType === 'native' || questData.tokenAddress === ZeroAddress) {
-        amountToWithdraw = await ethersProvider.getBalance(faucetAddress!);
-      } else {
-        // Fetch ERC20 balance
-        const erc20Abi = ["function balanceOf(address account) view returns (uint256)"];
-        const tokenContract = new Contract(questData.tokenAddress, erc20Abi, signer);
-        amountToWithdraw = await tokenContract.balanceOf(faucetAddress!);
-      }
+    if (isSolana) {
+  if (!activeSolanaWallet) {
+    toast.error("Connect your Solana wallet first.")
+    return
+  }
 
-      if (amountToWithdraw === 0n) {
-        throw new Error("No funds left to withdraw.");
-      }
+  try {
+    const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+    const connection = createSolanaConnection()
+    const onChainState = await getQuestState(connection, faucetAddress)
 
-      toast.info("Please confirm the withdrawal in your wallet...");
-      const tx = await questContract.withdraw(amountToWithdraw);
-
-      toast.info("Withdrawing funds. Waiting for confirmation...");
-      await tx.wait();
-      toast.success("Funds successfully withdrawn to your wallet!");
-
-    } catch (e: any) {
-      console.error(e);
-      const errorMsg = e.reason || e.shortMessage || e.message || "Transaction failed";
-      toast.error("Withdrawal failed: " + errorMsg);
-    } finally {
-      setIsWithdrawing(false);
+    if (onChainState.vaultBalance === BigInt(0)) {
+      throw new Error("No funds left to withdraw.")
     }
-  };
+
+    toast.info("Please confirm the withdrawal in your Solana wallet…")
+    const tx = await solanaWithdrawQuest(
+      connection,
+      anchorWallet,
+      faucetAddress,
+      Number(onChainState.vaultBalance)
+    )
+    toast.success(`Funds withdrawn! Tx: ${tx.slice(0, 8)}…`)
+  } catch (err: any) {
+    toast.error("Withdrawal failed: " + err.message)
+  }
+  return
+}
+
+    // ── EVM path (existing) ──────────────────────────────────────────────────
+    if (!activeWallet) return toast.error("Wallet not connected");
+
+    const currentChainId = parseInt(activeWallet.chainId.split(":")[1]);
+    const res = await fetch(`${API_BASE_URL}/claim-on-quest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userAddress: activeWallet.address,
+        faucetAddress,
+        chainId: currentChainId,
+        shouldWhitelist: false,
+      }),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      toast.success("Reward Claimed Successfully! Tx: " + data.txHash);
+      setClaimState(prev => ({ ...prev, hasClaimed: true, canClaimOnChain: false }));
+    } else {
+      toast.error(data.detail || "Claim failed.");
+    }
+
+  } catch (e: any) {
+    toast.error("Network error during claim.");
+  } finally {
+    setIsClaiming(false);
+  }
+};
+
+// ─── ADMIN WITHDRAW ───────────────────────────────────────────────────────────
+const handleAdminWithdraw = async () => {
+  if (!faucetAddress) return toast.error("No quest address");
+  setIsWithdrawing(true);
+
+  try {
+    const isSolana = questData?.chainId === SOLANA_CHAIN_ID;
+
+    if (isSolana) {
+  if (!activeSolanaWallet) {
+    toast.error("Connect your Solana wallet first.")
+    return
+  }
+
+  try {
+    const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+    const connection = createSolanaConnection()
+    const onChainState = await getQuestState(connection, faucetAddress)
+
+    if (onChainState.vaultBalance === BigInt(0)) {
+      throw new Error("No funds left to withdraw.")
+    }
+
+    toast.info("Please confirm the withdrawal in your Solana wallet…")
+    const tx = await solanaWithdrawQuest(
+      connection,
+      anchorWallet,
+      faucetAddress,
+      Number(onChainState.vaultBalance)
+    )
+    toast.success(`Funds withdrawn! Tx: ${tx.slice(0, 8)}…`)
+  } catch (err: any) {
+    toast.error("Withdrawal failed: " + err.message)
+  }
+  return
+}
+    // ── EVM path (existing) ──────────────────────────────────────────────────
+    if (!activeWallet) return toast.error("Wallet not connected");
+
+    const privyProvider = await activeWallet.getEthereumProvider();
+    const ethersProvider = new BrowserProvider(privyProvider);
+    const signer = await ethersProvider.getSigner();
+
+    const questContract = new Contract(faucetAddress, QUEST_ABI, signer);
+
+    let amountToWithdraw;
+    if (questData.rewardTokenType === "native" || questData.tokenAddress === ZeroAddress) {
+      amountToWithdraw = await ethersProvider.getBalance(faucetAddress);
+    } else {
+      const erc20Abi = ["function balanceOf(address account) view returns (uint256)"];
+      const tokenContract = new Contract(questData.tokenAddress, erc20Abi, signer);
+      amountToWithdraw = await tokenContract.balanceOf(faucetAddress);
+    }
+
+    if (amountToWithdraw === 0n) throw new Error("No funds left to withdraw.");
+
+    toast.info("Please confirm the withdrawal in your wallet…");
+    const tx = await questContract.withdraw(amountToWithdraw);
+    toast.info("Withdrawing funds. Waiting for confirmation…");
+    await tx.wait();
+    toast.success("Funds successfully withdrawn to your wallet!");
+
+  } catch (e: any) {
+    console.error(e);
+    toast.error("Withdrawal failed: " + (e.reason || e.shortMessage || e.message || "Transaction failed"));
+  } finally {
+    setIsWithdrawing(false);
+  }
+};
 
   const questStatusGuard = useMemo(() => {
     const now = new Date();

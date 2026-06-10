@@ -33,9 +33,7 @@ import {
   Zap,
   Menu,
   AlertCircle,
-  TrendingUp,
   Activity,
-  ChevronRight,
   Plus,
   X,
 } from "lucide-react";
@@ -92,6 +90,22 @@ import { TokenBalance } from "../token-balance";
 import { QRCodeShareDialog } from "../qrcode";
 import { cn } from "@/lib/utils";
 
+// ── Solana imports ────────────────────────────────────────────────────────────
+import { SOLANA_CHAIN_ID } from "@/hooks/use-network";
+import { createSolanaConnection } from "@/lib/solana-connection";
+import {
+  fundFaucet as solanaFundFaucet,
+  withdrawFaucet as solanaWithdrawFaucet,
+  updateFaucetConfig as solanaUpdateFaucetConfig,
+  updateFaucetName as solanaUpdateFaucetName,
+  deleteFaucet as solanaDeleteFaucet,
+  addFaucetAdmin as solanaAddFaucetAdmin,
+  removeFaucetAdmin as solanaRemoveFaucetAdmin,
+  batchAddToWhitelist,
+  batchRemoveFromWhitelist,
+} from "@/lib/solana";
+import { Connection, PublicKey } from "@solana/web3.js";
+
 type FaucetType = "dropcode" | "droplist" | "custom";
 const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
 const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
@@ -141,7 +155,106 @@ interface FaucetAdminViewProps {
     description?: string;
     imageUrl?: string;
   };
+  /** The live Privy Solana wallet object (has signTransaction etc.) */
+  activeSolanaWallet?: any;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const isSolana = (chainId: number | null) => chainId === SOLANA_CHAIN_ID;
+
+/** Convert decimal string → integer (as number) for Solana BN calls */
+function toSolanaUnits(amount: string, decimals: number): number {
+  return Math.round(parseFloat(amount) * 10 ** decimals);
+}
+
+/** Fetch transaction signatures + basic metadata from the Solana RPC */
+async function loadSolanaTransactionHistory(
+  faucetAddress: string,
+  network: any,
+  limit = 50
+): Promise<any[]> {
+  try {
+    const rpc = Array.isArray(network.rpcUrl) ? network.rpcUrl[0] : network.rpcUrl;
+    const connection = new Connection(rpc, "confirmed");
+    const pubkey = new PublicKey(faucetAddress);
+
+    const sigs = await connection.getSignaturesForAddress(pubkey, { limit });
+    if (!sigs.length) return [];
+
+    // Fetch full transactions in parallel (batch of 10 to avoid rate limits)
+    const BATCH = 10;
+    const txList: any[] = [];
+
+    for (let i = 0; i < sigs.length; i += BATCH) {
+      const batch = sigs.slice(i, i + BATCH);
+      const parsed = await Promise.allSettled(
+        batch.map((s) =>
+          connection.getParsedTransaction(s.signature, {
+            maxSupportedTransactionVersion: 0,
+          })
+        )
+      );
+
+      batch.forEach((sig, idx) => {
+        const result = parsed[idx];
+        if (result.status === "fulfilled" && result.value) {
+          const tx = result.value;
+          const meta = tx.meta;
+          const blockTime = tx.blockTime ?? 0;
+
+          // Heuristic: derive event type from log messages
+          const logs: string[] = meta?.logMessages ?? [];
+          let transactionType = "Event";
+          if (logs.some((l) => l.includes("claim_faucet") || l.includes("ClaimFaucet")))
+            transactionType = "Claim";
+          else if (logs.some((l) => l.includes("fund_faucet") || l.includes("FundFaucet")))
+            transactionType = "Fund";
+          else if (logs.some((l) => l.includes("withdraw_faucet") || l.includes("WithdrawFaucet")))
+            transactionType = "Withdraw";
+          else if (logs.some((l) => l.includes("reset_faucet_claim") || l.includes("ResetFaucetClaim")))
+            transactionType = "Reset";
+          else if (logs.some((l) => l.includes("add_to_whitelist") || l.includes("AddToWhitelist")))
+            transactionType = "Whitelist";
+
+          // Best-effort signer: first account key
+          const accounts = tx.transaction.message.accountKeys;
+          const initiator = accounts[0]?.pubkey?.toString() ?? "";
+
+          // Best-effort amount: first pre→post SOL balance delta (absolute)
+          let amount = BigInt(0);
+          if (meta?.preBalances && meta?.postBalances) {
+            const delta = Math.abs(
+              (meta.postBalances[0] ?? 0) - (meta.preBalances[0] ?? 0)
+            );
+            amount = BigInt(delta);
+          }
+
+          txList.push({
+            txHash: sig.signature,
+            transactionHash: sig.signature,
+            transactionType,
+            initiator,
+            amount,
+            timestamp: blockTime,
+            isEther: true, // SOL native
+          });
+        }
+      });
+    }
+
+    return txList.sort((a, b) => b.timestamp - a.timestamp);
+  } catch (err) {
+    console.error("[Solana] loadSolanaTransactionHistory error:", err);
+    return [];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components (unchanged from original)
+// ─────────────────────────────────────────────────────────────────────────────
 
 const getActionText = (platform: string): string => {
   switch (platform.toLowerCase()) {
@@ -173,7 +286,6 @@ const getCurrentDateTime = () => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-// ─── Stat Card ──────────────────────────────────────────────────────────────
 const StatCard = ({
   icon: Icon,
   label,
@@ -202,7 +314,6 @@ const StatCard = ({
   </div>
 );
 
-// ─── Section Wrapper ────────────────────────────────────────────────────────
 const Section = ({
   icon: Icon,
   title,
@@ -225,10 +336,13 @@ const Section = ({
   </div>
 );
 
-// ─── Spinner ─────────────────────────────────────────────────────────────────
 const Spinner = () => (
   <div className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────────────────
 
 const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   faucetAddress,
@@ -254,7 +368,11 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   provider,
   router,
   faucetMetadata,
+  activeSolanaWallet,
 }) => {
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const onSolana = isSolana(chainId);
+
   // ── UI States ──────────────────────────────────────────────────────────────
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("fund");
@@ -267,6 +385,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+
   // ── Form States ────────────────────────────────────────────────────────────
   const [fundAmount, setFundAmount] = useState("");
   const [adjustedFundAmount, setAdjustedFundAmount] = useState("");
@@ -274,14 +393,6 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const [claimAmount, setClaimAmount] = useState(
     faucetDetails?.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"
   );
-  useEffect(() => {
-  const timer = setInterval(() => {
-    setCurrentTime(Date.now());
-  }, 1000);
-
-  // Always clean up your intervals!
-  return () => clearInterval(timer);
-}, []);
   const [startTime, setStartTime] = useState(
     faucetDetails?.startTime
       ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16)
@@ -314,6 +425,12 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   const [isRetrievingSecret, setIsRetrievingSecret] = useState(false);
   const [isGeneratingNewCode, setIsGeneratingNewCode] = useState(false);
 
+  // ── Ticker ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // ── Derived ────────────────────────────────────────────────────────────────
   const shouldShowWhitelistTab = faucetType === "droplist";
   const shouldShowCustomTab = faucetType === "custom";
@@ -324,10 +441,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
   const calculateFee = (amount: string) => {
     try {
-      // droplist and custom pay 5%, dropcode pays 3%
-      const feePercent = (faucetType === "droplist" || faucetType === "custom") ? 5 : 3;
-      const feeDivisor = BigInt(100 - feePercent); // 95 or 97
-
+      const feePercent = faucetType === "droplist" || faucetType === "custom" ? 5 : 3;
+      const feeDivisor = BigInt(100 - feePercent);
       const parsedAmount = parseUnits(amount, tokenDecimals);
       const fee = (parsedAmount * BigInt(feePercent)) / BigInt(100);
       const netAmount = parsedAmount - fee;
@@ -342,9 +457,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       return { fee: "0", netAmount: "0", recommendedInput: "0", feePercent: 3 };
     }
   };
-  
-    const { fee, netAmount, recommendedInput, feePercent } = calculateFee(fundAmount);
 
+  const { fee, netAmount, recommendedInput, feePercent } = calculateFee(fundAmount);
 
   const validateStartTime = (value: string): boolean => {
     if (!value) { setStartTimeError(""); return false; }
@@ -363,74 +477,43 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     validateStartTime(e.target.value);
   };
 
-const loadTransactionHistory = useCallback(async () => {
-  if (!selectedNetwork || !faucetAddress) return;
-  setIsHistoryLoading(true);
-  console.group("🔍 loadTransactionHistory DEBUG");
-  console.log("faucetAddress:", faucetAddress);
-  console.log("selectedNetwork:", selectedNetwork);
-  console.log("faucetType:", faucetType);
-  
-  try {
-    const { JsonRpcProvider } = await import("ethers");
-    
-    const safeRpc = Array.isArray(selectedNetwork.rpcUrl)
-      ? selectedNetwork.rpcUrl[0]
-      : selectedNetwork.rpcUrl;
-    
-    console.log("safeRpc:", safeRpc);
-    
-    const rpcProvider = new JsonRpcProvider(safeRpc);
-    
-    // Test the provider first
-    try {
-      const network = await rpcProvider.getNetwork();
-      console.log("✅ RPC connected - chainId:", network.chainId.toString());
-    } catch (rpcErr) {
-      console.error("❌ RPC connection failed:", rpcErr);
-    }
+  // ── Activity log ───────────────────────────────────────────────────────────
 
-    // Test if the faucet contract exists at that address
-    try {
-      const code = await rpcProvider.getCode(faucetAddress);
-      console.log("Contract bytecode length:", code.length, code === "0x" ? "❌ NO CONTRACT at this address!" : "✅ Contract exists");
-    } catch (codeErr) {
-      console.error("❌ getCode failed:", codeErr);
-    }
+  const loadTransactionHistory = useCallback(async () => {
+    if (!selectedNetwork || !faucetAddress) return;
+    setIsHistoryLoading(true);
 
-    console.log("Calling getFaucetTransactionHistory...");
-    
-    const txs = await getFaucetTransactionHistory(
-  rpcProvider as any,
-  faucetAddress,
-  selectedNetwork,
-  faucetType || undefined,
-  address ?? undefined 
-);
-    
-    console.log("✅ Raw txs returned:", txs);
-    console.log("txs count:", txs?.length);
-    console.log("First tx sample:", txs?.[0]);
-    
-    const sorted = txs.sort((a, b) => b.timestamp - a.timestamp);
-    setTransactions(sorted);
-    
-  } catch (error: any) {
-    console.error("❌ Full error object:", error);
-    console.error("error.message:", error.message);
-    console.error("error.code:", error.code);
-    console.error("error.data:", error.data);
-    console.error("error.stack:", error.stack);
-    toast.error(`Failed to load Activity Log: ${error.message}`);
-  } finally {
-    setIsHistoryLoading(false);
-    console.groupEnd();
-  }
-}, [faucetAddress, selectedNetwork, faucetType, setTransactions, address]);
-useEffect(() => {
-  if (activeTab === "history" && selectedNetwork) loadTransactionHistory();
-}, [activeTab, selectedNetwork, loadTransactionHistory]);
-  
+    try {
+      if (onSolana) {
+        // ── Solana: fetch from RPC ───────────────────────────────────────────
+        const txs = await loadSolanaTransactionHistory(faucetAddress, selectedNetwork);
+        setTransactions(txs);
+      } else {
+        // ── EVM: existing logic ─────────────────────────────────────────────
+        const { JsonRpcProvider } = await import("ethers");
+        const safeRpc = Array.isArray(selectedNetwork.rpcUrl)
+          ? selectedNetwork.rpcUrl[0]
+          : selectedNetwork.rpcUrl;
+        const rpcProvider = new JsonRpcProvider(safeRpc);
+        const txs = await getFaucetTransactionHistory(
+          rpcProvider as any,
+          faucetAddress,
+          selectedNetwork,
+          faucetType || undefined,
+          address ?? undefined
+        );
+        setTransactions(txs.sort((a, b) => b.timestamp - a.timestamp));
+      }
+    } catch (error: any) {
+      toast.error(`Failed to load Activity Log: ${error.message}`);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [faucetAddress, selectedNetwork, faucetType, setTransactions, address, onSolana]);
+
+  useEffect(() => {
+    if (activeTab === "history" && selectedNetwork) loadTransactionHistory();
+  }, [activeTab, selectedNetwork, loadTransactionHistory]);
 
   useEffect(() => {
     if (faucetDetails) {
@@ -478,44 +561,89 @@ useEffect(() => {
     setNewSocialLinks(updated);
   };
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────────────────
+  // HANDLERS
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // ── Update Faucet Name ─────────────────────────────────────────────────────
   const handleUpdateFaucetName = async () => {
-    if (!address || !provider || !newFaucetName.trim() || !chainId || !checkNetwork()) return;
+    if (!address || !newFaucetName.trim() || !checkNetwork()) return;
+
     try {
       setIsUpdatingName(true);
-      await updateFaucetName(
-        provider as BrowserProvider, faucetAddress, newFaucetName,
-        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-      );
+
+      if (onSolana) {
+        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+        const conn = createSolanaConnection();
+        await solanaUpdateFaucetName(conn, activeSolanaWallet, faucetAddress, newFaucetName);
+      } else {
+        if (!provider || !chainId) return;
+        await updateFaucetName(
+          provider as BrowserProvider,
+          faucetAddress,
+          newFaucetName,
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+      }
+
       toast.success("Faucet name updated");
       setShowEditNameDialog(false);
       await loadFaucetDetails();
-    } catch { toast.error("Failed to update faucet name"); }
-    finally { setIsUpdatingName(false); }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update faucet name");
+    } finally {
+      setIsUpdatingName(false);
+    }
   };
 
+  // ── Delete Faucet ──────────────────────────────────────────────────────────
   const handleDeleteFaucet = async () => {
-    if (!address || !provider || !chainId || !checkNetwork()) return;
+    if (!address || !checkNetwork()) return;
+
     try {
       setIsDeletingFaucet(true);
-      await deleteFaucet(
-        provider as BrowserProvider, faucetAddress,
-        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-      );
+
+      if (onSolana) {
+        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+        const conn = createSolanaConnection();
+        await solanaDeleteFaucet(conn, activeSolanaWallet, faucetAddress);
+      } else {
+        if (!provider || !chainId) return;
+        await deleteFaucet(
+          provider as BrowserProvider,
+          faucetAddress,
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+      }
+
+      // Always clean up backend metadata
       try {
         await fetch("http://127.0.0.1:8000/delete-faucet-metadata", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),
+          body: JSON.stringify({
+            faucetAddress,
+            userAddress: address,
+            chainId: onSolana ? SOLANA_CHAIN_ID : Number(chainId),
+          }),
         });
       } catch {}
+
       toast.success("Faucet deleted successfully");
       setShowDeleteDialog(false);
       router.push("/");
-    } catch { toast.error("Failed to delete faucet"); }
-    finally { setIsDeletingFaucet(false); }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete faucet");
+    } finally {
+      setIsDeletingFaucet(false);
+    }
   };
 
+  // ── Fund ───────────────────────────────────────────────────────────────────
   const handleFund = async () => {
     if (!checkNetwork()) return;
     setAdjustedFundAmount(fundAmount);
@@ -523,60 +651,554 @@ useEffect(() => {
   };
 
   const confirmFund = async () => {
-    if (!address || !provider || !adjustedFundAmount || !chainId) return;
+    if (!address || !adjustedFundAmount) return;
+
     try {
       setIsFunding(true);
-      const amount = parseUnits(adjustedFundAmount, tokenDecimals);
-      await fundFaucet(
-        provider as BrowserProvider, faucetAddress, amount, faucetDetails.isEther,
-        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-      );
+
+      if (onSolana) {
+        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+        const conn = createSolanaConnection();
+        const amount = toSolanaUnits(adjustedFundAmount, tokenDecimals);
+        await solanaFundFaucet(conn, activeSolanaWallet, faucetAddress, amount);
+      } else {
+        if (!provider || !chainId) return;
+        const amount = parseUnits(adjustedFundAmount, tokenDecimals);
+        await fundFaucet(
+          provider as BrowserProvider,
+          faucetAddress,
+          amount,
+          faucetDetails.isEther,
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+      }
+
       toast.success("Faucet funded successfully");
       setFundAmount("");
       setShowFundPopup(false);
       await loadFaucetDetails();
       await loadTransactionHistory();
-    } catch { toast.error("Failed to fund faucet"); }
-    finally { setIsFunding(false); }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to fund faucet");
+    } finally {
+      setIsFunding(false);
+    }
   };
 
-  const getTxExplorerUrl = (txHash: string) => {
-  const explorer = selectedNetwork?.blockExplorerUrl || selectedNetwork?.explorer;
-  if (!explorer || !txHash) return null;
-  return `${explorer.replace(/\/$/, "")}/tx/${txHash}`;
-};
-
-const getEventBadgeVariant = (type: string): "default" | "secondary" | "destructive" | "outline" => {
-  const t = type?.toLowerCase();
-  if (t === "claim" || t === "drip") return "default";
-  if (t === "fund" || t === "deposit") return "secondary";
-  if (t === "withdraw") return "destructive";
-  return "outline";
-};
-
-const getEventColor = (type: string) => {
-  const t = type?.toLowerCase();
-  if (t === "claim" || t === "drip") return "text-green-600 dark:text-green-400";
-  if (t === "fund" || t === "deposit") return "text-blue-600 dark:text-blue-400";
-  if (t === "withdraw") return "text-red-500 dark:text-red-400";
-  if (t === "reset") return "text-amber-500";
-  return "text-muted-foreground";
-};
-
+  // ── Withdraw ───────────────────────────────────────────────────────────────
   const handleWithdraw = async () => {
-    if (!address || !provider || !withdrawAmount || !chainId || !checkNetwork()) return;
+    if (!address || !withdrawAmount || !checkNetwork()) return;
+
     try {
       setIsWithdrawing(true);
-      await withdrawTokens(
-        provider as BrowserProvider, faucetAddress, parseUnits(withdrawAmount, tokenDecimals),
-        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-      );
+
+      if (onSolana) {
+        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+        const conn = createSolanaConnection();
+        const amount = toSolanaUnits(withdrawAmount, tokenDecimals);
+        await solanaWithdrawFaucet(conn, activeSolanaWallet, faucetAddress, amount);
+      } else {
+        if (!provider || !chainId) return;
+        await withdrawTokens(
+          provider as BrowserProvider,
+          faucetAddress,
+          parseUnits(withdrawAmount, tokenDecimals),
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+      }
+
       toast.success("Tokens withdrawn successfully");
       setWithdrawAmount("");
       await loadFaucetDetails();
       await loadTransactionHistory();
-    } catch { toast.error("Failed to withdraw tokens"); }
-    finally { setIsWithdrawing(false); }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to withdraw tokens");
+    } finally {
+      setIsWithdrawing(false);
+    }
+  };
+
+  // ── Update Parameters ──────────────────────────────────────────────────────
+  const handleUpdateClaimParameters = async () => {
+    if (!address || !checkNetwork()) return;
+
+    const hasTaskChanges = newSocialLinks.length > 0;
+    const isTemplateChanged = customXPostTemplate !== faucetDetails.customXPostTemplate;
+    const currentClaimAmountStr =
+      faucetType !== "custom"
+        ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
+        : "0";
+    const currentStartTimeStr = faucetDetails.startTime
+      ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16)
+      : "";
+    const currentEndTimeStr = faucetDetails.endTime
+      ? new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16)
+      : "";
+    const hasBlockchainChanges =
+      (faucetType !== "custom" && claimAmount !== currentClaimAmountStr) ||
+      startTime !== currentStartTimeStr ||
+      endTime !== currentEndTimeStr;
+
+    if (!hasTaskChanges && !hasBlockchainChanges && !isTemplateChanged) {
+      toast.warning("No changes made");
+      return;
+    }
+
+    try {
+      setIsUpdatingParameters(true);
+      const results: string[] = [];
+
+      // 1. X post template (backend-stored for both chains)
+      if (isTemplateChanged) {
+        const res = await fetch("http://127.0.0.1:8000/faucet-x-template", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            faucetAddress,
+            template: customXPostTemplate,
+            userAddress: address,
+            chainId: onSolana ? SOLANA_CHAIN_ID : Number(chainId),
+          }),
+        });
+        if (!res.ok) throw new Error("Failed to save X post template");
+        results.push("share post template");
+      }
+
+      // 2. Social tasks (backend-stored for both chains)
+      if (hasTaskChanges) {
+        const formattedTasks = newSocialLinks
+          .filter((link) => link.url.trim() && link.handle.trim())
+          .map((link) => ({
+            title: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} on ${link.platform}`,
+            description: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} ${link.handle} on ${link.platform}`,
+            platform: link.platform,
+            handle: link.handle,
+            url: link.url.trim(),
+            action: link.action,
+            required: true,
+          }));
+
+        if (formattedTasks.length > 0) {
+          const taskRes = await fetch("http://127.0.0.1:8000/add-faucet-tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              faucetAddress,
+              tasks: formattedTasks,
+              userAddress: address,
+              chainId: onSolana ? SOLANA_CHAIN_ID : Number(chainId),
+            }),
+          });
+          if (!taskRes.ok) throw new Error("Failed to save social tasks");
+          results.push("social tasks");
+        } else {
+          toast.warning("No valid tasks — make sure handle and URL are filled in.");
+        }
+      }
+
+      // 3. On-chain parameter update (Solana vs EVM)
+      if (hasBlockchainChanges) {
+        const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
+        const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
+
+        if (onSolana) {
+          if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+          const conn = createSolanaConnection();
+          const newAmount =
+            faucetType === "custom"
+              ? 0
+              : toSolanaUnits(claimAmount, tokenDecimals);
+          await solanaUpdateFaucetConfig(
+            conn,
+            activeSolanaWallet,
+            faucetAddress,
+            newAmount,
+            startTimestamp,
+            endTimestamp
+          );
+        } else {
+          if (!provider || !chainId) return;
+          const claimAmountBN =
+            faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
+          await setClaimParameters(
+            provider as BrowserProvider,
+            faucetAddress,
+            claimAmountBN,
+            startTimestamp,
+            endTimestamp,
+            BigInt(chainId),
+            BigInt(Number(selectedNetwork.chainId)),
+            faucetType || undefined
+          );
+
+          // Sync to backend DB for EVM
+          await fetch("http://127.0.0.1:8000/set-claim-parameters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              faucetAddress,
+              claimAmount: (faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount, tokenDecimals)).toString(),
+              startTime: startTimestamp,
+              endTime: endTimestamp,
+              chainId: Number(chainId),
+            }),
+          });
+        }
+
+        results.push("drip parameters");
+
+        // Auto-generate new drop code for dropcode faucets
+        if (faucetType === "dropcode") {
+          try {
+            const codeEndpoint = onSolana
+              ? "http://127.0.0.1:8000/solana/generate-new-drop-code"
+              : "http://127.0.0.1:8000/generate-new-drop-code";
+            const codeRes = await fetch(codeEndpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                faucetAddress,
+                userAddress: address,
+                chainId: onSolana ? SOLANA_CHAIN_ID : Number(chainId),
+              }),
+            });
+            if (codeRes.ok) {
+              const result = await codeRes.json();
+              setNewlyGeneratedCode(result.secretCode);
+              setShowNewCodeDialog(true);
+            } else {
+              toast.warning("Parameters saved, but failed to auto-generate a new drop code.");
+            }
+          } catch {
+            toast.warning("Parameters saved, but failed to auto-generate a new drop code.");
+          }
+        }
+      }
+
+      if (results.length > 0) {
+        toast.success(`Successfully updated: ${results.join(", ")}.`);
+      }
+
+      setNewSocialLinks([]);
+      await loadFaucetDetails();
+    } catch (err: any) {
+      toast.error(`Failed to save changes: ${err.message}`);
+    } finally {
+      setIsUpdatingParameters(false);
+    }
+  };
+
+  // ── Whitelist ──────────────────────────────────────────────────────────────
+  const handleUpdateWhitelist = async () => {
+    if (!address || !whitelistAddresses.trim() || !checkNetwork()) return;
+
+    try {
+      setIsUpdatingWhitelist(true);
+      const addresses = whitelistAddresses
+        .split(/[\n,]/)
+        .map((a) => a.trim())
+        .filter(Boolean);
+      if (!addresses.length) return;
+
+      if (onSolana) {
+        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+        const conn = createSolanaConnection();
+
+        if (isWhitelistEnabled) {
+          // Add with customAmount=0 (use faucet default)
+          const entries = addresses.map((userAddress) => ({ userAddress, customAmount: 0 }));
+          await batchAddToWhitelist(conn, activeSolanaWallet, faucetAddress, entries);
+        } else {
+          await batchRemoveFromWhitelist(conn, activeSolanaWallet, faucetAddress, addresses);
+        }
+      } else {
+        if (!provider || !chainId) return;
+        await setWhitelistBatch(
+          provider as BrowserProvider,
+          faucetAddress,
+          addresses,
+          isWhitelistEnabled,
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+      }
+
+      toast.success("Drop-list updated successfully");
+      setWhitelistAddresses("");
+      await loadFaucetDetails();
+      await loadTransactionHistory();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update Drop-list");
+    } finally {
+      setIsUpdatingWhitelist(false);
+    }
+  };
+
+  // ── Custom claim amounts ───────────────────────────────────────────────────
+  const handleCustomClaimAmounts = async (
+    addresses: string[],
+    amounts: bigint[]
+  ) => {
+    if (!address || !checkNetwork()) return;
+
+    if (onSolana) {
+      if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+      const conn = createSolanaConnection();
+      // Convert bigint amounts back to number for Anchor BN
+      const entries = addresses.map((userAddress, i) => ({
+        userAddress,
+        customAmount: Number(amounts[i]),
+      }));
+      await batchAddToWhitelist(conn, activeSolanaWallet, faucetAddress, entries);
+    } else {
+      if (!provider || !chainId) return;
+      await setCustomClaimAmountsBatch(
+        provider as BrowserProvider,
+        faucetAddress,
+        addresses,
+        amounts,
+        BigInt(chainId),
+        BigInt(Number(selectedNetwork.chainId)),
+        faucetType || undefined
+      );
+    }
+  };
+
+  // ── Reset Claims ───────────────────────────────────────────────────────────
+  const handleResetAllClaims = async () => {
+    if (!address || !checkNetwork()) return;
+
+    try {
+      setIsResettingClaims(true);
+
+      if (onSolana) {
+        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+        // Solana batch-reset: we need the list of claimers.
+        // For now, call the backend which has the claimer list from its DB.
+        const res = await fetch("http://127.0.0.1:8000/solana/reset-all-claims", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            faucetAddress,
+            userAddress: address,
+            chainId: SOLANA_CHAIN_ID,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to reset claims");
+        }
+      } else {
+        if (!provider || !chainId) return;
+        await resetAllClaims(
+          provider as BrowserProvider,
+          faucetAddress,
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+      }
+
+      toast.success("All claims reset successfully");
+      await loadFaucetDetails();
+      await loadTransactionHistory();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset all claims");
+    } finally {
+      setIsResettingClaims(false);
+    }
+  };
+
+  // ── Admin Management ───────────────────────────────────────────────────────
+  const checkAdminStatus = (inputAddress: string) => {
+    if (!inputAddress.trim()) { setIsAddingAdmin(true); return; }
+    setIsAddingAdmin(!adminList.some((a) => a.toLowerCase() === inputAddress.toLowerCase()));
+  };
+
+  const handleManageAdmin = async () => {
+    if (!address || !newAdminAddress.trim() || !checkNetwork()) return;
+    if (
+      newAdminAddress.toLowerCase() === faucetDetails?.owner.toLowerCase() ||
+      (!onSolana && newAdminAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase())
+    ) {
+      toast.error("Cannot add/remove the owner as admin");
+      return;
+    }
+
+    try {
+      setIsManagingAdmin(true);
+
+      if (onSolana) {
+        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+        const conn = createSolanaConnection();
+
+        if (isAddingAdmin) {
+          await solanaAddFaucetAdmin(conn, activeSolanaWallet, faucetAddress, newAdminAddress);
+          toast.success(`${newAdminAddress} added as admin`);
+        } else {
+          await solanaRemoveFaucetAdmin(conn, activeSolanaWallet, faucetAddress, newAdminAddress);
+          toast.success(`${newAdminAddress} removed from admins`);
+        }
+      } else {
+        if (!provider || !chainId) return;
+        if (isAddingAdmin) {
+          await addAdmin(
+            provider as BrowserProvider,
+            faucetAddress,
+            newAdminAddress,
+            BigInt(chainId),
+            BigInt(Number(selectedNetwork.chainId)),
+            faucetType || undefined
+          );
+          toast.success(`${newAdminAddress} added as admin`);
+        } else {
+          removeAdmin(
+            provider as BrowserProvider,
+            faucetAddress,
+            newAdminAddress,
+            BigInt(chainId),
+            BigInt(Number(selectedNetwork.chainId)),
+            faucetType || undefined
+          );
+          toast.success(`${newAdminAddress} removed from admins`);
+        }
+      }
+
+      setNewAdminAddress("");
+      setShowAddAdminDialog(false);
+      await loadFaucetDetails();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to manage admin");
+    } finally {
+      setIsManagingAdmin(false);
+    }
+  };
+
+  // ── Secret Code ────────────────────────────────────────────────────────────
+  const handleRetrieveSecretCode = async () => {
+    if (faucetType !== "dropcode" || !faucetAddress || !address) return;
+
+    try {
+      setIsRetrievingSecret(true);
+
+      if (onSolana) {
+        const res = await fetch(
+          `http://127.0.0.1:8000/solana/get-drop-code?faucetAddress=${encodeURIComponent(faucetAddress)}&userAddress=${encodeURIComponent(address)}&chainId=${SOLANA_CHAIN_ID}`
+        );
+        if (!res.ok) throw new Error("Failed to retrieve drop code");
+        const data = await res.json();
+        if (!data.secretCode) throw new Error("No code returned");
+        setCurrentSecretCode(data.secretCode);
+      } else {
+        if (!chainId) return;
+        const data = await getSecretCodeForAdmin(address, faucetAddress, chainId);
+        if (!data.secretCode) throw new Error("No code returned");
+        setCurrentSecretCode(data.secretCode);
+      }
+
+      setShowCurrentSecretDialog(true);
+      toast.success("Drop code retrieved");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to retrieve drop code.");
+    } finally {
+      setIsRetrievingSecret(false);
+    }
+  };
+
+  const handleGenerateNewDropCode = async () => {
+    if (!faucetType || !faucetAddress || !address) return;
+    if (!isOwnerOrAdmin) {
+      toast.error("Only owner or admins can generate a new drop code");
+      return;
+    }
+
+    try {
+      setIsGeneratingNewCode(true);
+
+      const endpoint = onSolana
+        ? "http://127.0.0.1:8000/solana/generate-new-drop-code"
+        : "http://127.0.0.1:8000/generate-new-drop-code";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          faucetAddress,
+          userAddress: address,
+          chainId: onSolana ? SOLANA_CHAIN_ID : Number(chainId),
+        }),
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.detail);
+      }
+      const { secretCode } = await res.json();
+      setNewlyGeneratedCode(secretCode);
+      setShowNewCodeDialog(true);
+      toast.success("New drop code generated");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate new drop code");
+    } finally {
+      setIsGeneratingNewCode(false);
+    }
+  };
+
+  // ── Misc helpers ───────────────────────────────────────────────────────────
+  const handleCopyLink = async (type: "web" | "farcaster") => {
+    try {
+      const url =
+        type === "web"
+          ? window.location.origin + "/faucet/" + faucetAddress
+          : `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Failed to copy link");
+    }
+  };
+
+  const handleCopySecretCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success("Drop code copied!");
+      setShowNewCodeDialog(false);
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
+
+  const getTxExplorerUrl = (txHash: string) => {
+    const explorer =
+      selectedNetwork?.blockExplorerUrls ||
+      selectedNetwork?.blockExplorerUrl ||
+      selectedNetwork?.explorer;
+    if (!explorer || !txHash) return null;
+    // Solana explorers use /tx/ too (Solscan, Solana Explorer)
+    return `${String(explorer).replace(/\/$/, "")}/tx/${txHash}`;
+  };
+
+  const getEventBadgeVariant = (
+    type: string
+  ): "default" | "secondary" | "destructive" | "outline" => {
+    const t = type?.toLowerCase();
+    if (t === "claim" || t === "drip") return "default";
+    if (t === "fund" || t === "deposit") return "secondary";
+    if (t === "withdraw") return "destructive";
+    return "outline";
+  };
+
+  const getEventColor = (type: string) => {
+    const t = type?.toLowerCase();
+    if (t === "claim" || t === "drip") return "text-green-600 dark:text-green-400";
+    if (t === "fund" || t === "deposit") return "text-blue-600 dark:text-blue-400";
+    if (t === "withdraw") return "text-red-500 dark:text-red-400";
+    if (t === "reset") return "text-amber-500";
+    return "text-muted-foreground";
   };
 
   const getEstimatedLength = () => {
@@ -590,296 +1212,6 @@ const getEventColor = (type: string) => {
 
   const charCount = getEstimatedLength();
   const isOverLimit = charCount > 280;
-
-  const handleUpdateClaimParameters = async () => {
-  if (!address || !provider || !chainId || !checkNetwork()) return;
-
-  const hasTaskChanges = newSocialLinks.length > 0;
-  const isTemplateChanged = customXPostTemplate !== faucetDetails.customXPostTemplate;
-  const currentClaimAmountStr =
-    faucetType !== "custom"
-      ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
-      : "0";
-  const currentStartTimeStr = faucetDetails.startTime
-    ? new Date(Number(faucetDetails.startTime) * 1000).toISOString().slice(0, 16)
-    : "";
-  const currentEndTimeStr = faucetDetails.endTime
-    ? new Date(Number(faucetDetails.endTime) * 1000).toISOString().slice(0, 16)
-    : "";
-  const hasBlockchainChanges =
-    (faucetType !== "custom" && claimAmount !== currentClaimAmountStr) ||
-    startTime !== currentStartTimeStr ||
-    endTime !== currentEndTimeStr;
-
-  if (!hasTaskChanges && !hasBlockchainChanges && !isTemplateChanged) {
-    toast.warning("No changes made");
-    return;
-  }
-
-  try {
-    setIsUpdatingParameters(true);
-    const results: string[] = [];
-
-    // 1. Save X post template independently
-    if (isTemplateChanged) {
-      const response = await fetch(
-        "http://127.0.0.1:8000/faucet-x-template",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            faucetAddress,
-            template: customXPostTemplate,
-            userAddress: address,
-            chainId: Number(chainId),
-          }),
-        }
-      );
-      if (!response.ok) throw new Error("Failed to save X post template");
-      results.push("share post template");
-    }
-
-    // 2. Save social tasks independently
-    if (hasTaskChanges) {
-      const formattedTasks = newSocialLinks
-  .filter((link) => link.url.trim() && link.handle.trim())
-  .map((link) => ({
-    title: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} on ${link.platform}`,
-    description: `${link.action.charAt(0).toUpperCase() + link.action.slice(1)} ${link.handle} on ${link.platform}`,
-    platform: link.platform,
-    handle: link.handle,
-    url: link.url.trim(),
-    action: link.action,
-    required: true,
-  }));
-
-      if (formattedTasks.length > 0) {
-        const taskResponse = await fetch(
-          "http://127.0.0.1:8000/add-faucet-tasks",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              faucetAddress,
-              tasks: formattedTasks,
-              userAddress: address,
-              chainId: Number(chainId),
-            }),
-          }
-        );
-        if (!taskResponse.ok) throw new Error("Failed to save social tasks");
-        results.push("social tasks");
-      } else {
-        toast.warning(
-          "No valid tasks to save — make sure handle and URL are filled in."
-        );
-      }
-    }
-
-    // 3. Save blockchain parameters independently
-    if (hasBlockchainChanges) {
-      const claimAmountBN =
-        faucetType === "custom"
-          ? BigInt(0)
-          : parseUnits(claimAmount, tokenDecimals);
-      const startTimestamp = Math.floor(new Date(startTime).getTime() / 1000);
-      const endTimestamp = Math.floor(new Date(endTime).getTime() / 1000);
-
-      await setClaimParameters(
-        provider as BrowserProvider,
-        faucetAddress,
-        claimAmountBN,
-        startTimestamp,
-        endTimestamp,
-        BigInt(chainId),
-        BigInt(Number(selectedNetwork.chainId)),
-        faucetType || undefined
-      );
-
-      // Sync parameters to backend
-      await fetch(
-        "http://127.0.0.1:8000/set-claim-parameters",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            faucetAddress,
-            claimAmount: claimAmountBN.toString(),
-            startTime: startTimestamp,
-            endTime: endTimestamp,
-            chainId: Number(chainId),
-          }),
-        }
-      );
-
-      results.push("drip parameters");
-
-      // Generate new drop code automatically for dropcode faucets
-      if (faucetType === "dropcode") {
-        try {
-          const codeResponse = await fetch(
-            "http://127.0.0.1:8000/generate-new-drop-code",
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                faucetAddress,
-                userAddress: address,
-                chainId: Number(chainId),
-              }),
-            }
-          );
-          if (codeResponse.ok) {
-            const result = await codeResponse.json();
-            setNewlyGeneratedCode(result.secretCode);
-            setShowNewCodeDialog(true);
-          } else {
-            toast.warning(
-              "Parameters saved, but failed to auto-generate a new drop code. Please generate one manually."
-            );
-          }
-        } catch {
-          toast.warning(
-            "Parameters saved, but failed to auto-generate a new drop code. Please generate one manually."
-          );
-        }
-      }
-    }
-
-    if (results.length > 0) {
-      toast.success(
-        `Successfully updated: ${results.join(", ")}.`
-      );
-    }
-
-    setNewSocialLinks([]);
-    // Always refresh so tasks, template, and params are all reflected in UI
-    await loadFaucetDetails();
-  } catch (error: any) {
-    toast.error(`Failed to save changes: ${error.message}`);
-  } finally {
-    setIsUpdatingParameters(false);
-  }
-};
-
-  const handleUpdateWhitelist = async () => {
-    if (!address || !provider || !whitelistAddresses.trim() || !chainId || !checkNetwork()) return;
-    try {
-      setIsUpdatingWhitelist(true);
-      const addresses = whitelistAddresses.split(/[\n,]/).map((a) => a.trim()).filter(Boolean);
-      if (!addresses.length) return;
-      await setWhitelistBatch(
-        provider as BrowserProvider, faucetAddress, addresses, isWhitelistEnabled,
-        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-      );
-      toast.success("Drop-list updated successfully");
-      setWhitelistAddresses("");
-      await loadFaucetDetails();
-      await loadTransactionHistory();
-    } catch { toast.error("Failed to update Drop-list"); }
-    finally { setIsUpdatingWhitelist(false); }
-  };
-
-  const handleResetAllClaims = async () => {
-    if (!address || !provider || !chainId || !checkNetwork()) return;
-    try {
-      setIsResettingClaims(true);
-      await resetAllClaims(
-        provider as BrowserProvider, faucetAddress,
-        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-      );
-      toast.success("All claims reset successfully");
-      await loadFaucetDetails();
-      await loadTransactionHistory();
-    } catch { toast.error("Failed to reset all claims"); }
-    finally { setIsResettingClaims(false); }
-  };
-
-  const checkAdminStatus = (inputAddress: string) => {
-    if (!inputAddress.trim()) { setIsAddingAdmin(true); return; }
-    setIsAddingAdmin(!adminList.some((a) => a.toLowerCase() === inputAddress.toLowerCase()));
-  };
-
-  const handleManageAdmin = async () => {
-    if (!address || !provider || !newAdminAddress.trim() || !chainId || !checkNetwork()) return;
-    if (
-      newAdminAddress.toLowerCase() === faucetDetails?.owner.toLowerCase() ||
-      newAdminAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()
-    ) {
-      toast.error("Cannot add/remove the owner as admin");
-      return;
-    }
-    try {
-      setIsManagingAdmin(true);
-      if (isAddingAdmin) {
-        await addAdmin(
-          provider as BrowserProvider, faucetAddress, newAdminAddress,
-          BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-        );
-        toast.success(`${newAdminAddress} added as admin`);
-      } else {
-        removeAdmin(
-          provider as BrowserProvider, faucetAddress, newAdminAddress,
-          BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-        );
-        toast.success(`${newAdminAddress} removed from admins`);
-      }
-      setNewAdminAddress("");
-      setShowAddAdminDialog(false);
-      await loadFaucetDetails();
-    } catch { toast.error("Failed to manage admin"); }
-    finally { setIsManagingAdmin(false); }
-  };
-
-  const handleRetrieveSecretCode = async () => {
-    if (faucetType !== "dropcode" || !faucetAddress || !address || !chainId) return;
-    try {
-      setIsRetrievingSecret(true);
-      const data = await getSecretCodeForAdmin(address, faucetAddress, chainId);
-      if (!data.secretCode) throw new Error("No code returned");
-      setCurrentSecretCode(data.secretCode);
-      setShowCurrentSecretDialog(true);
-      toast.success("Drop code retrieved");
-    } catch { toast.error("Failed to retrieve drop code."); }
-    finally { setIsRetrievingSecret(false); }
-  };
-
-  const handleGenerateNewDropCode = async () => {
-    if (!faucetType || !faucetAddress || !address || !chainId) return;
-    if (!isOwnerOrAdmin) { toast.error("Only owner or admins can generate a new drop code"); return; }
-    try {
-      setIsGeneratingNewCode(true);
-      const response = await fetch("http://127.0.0.1:8000/generate-new-drop-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ faucetAddress, userAddress: address, chainId: Number(chainId) }),
-      });
-      if (!response.ok) { const e = await response.json(); throw new Error(e.detail); }
-      const { secretCode } = await response.json();
-      setNewlyGeneratedCode(secretCode);
-      setShowNewCodeDialog(true);
-      toast.success("New drop code generated");
-    } catch { toast.error("Failed to generate new drop code"); }
-    finally { setIsGeneratingNewCode(false); }
-  };
-
-  const handleCopyLink = async (type: "web" | "farcaster") => {
-    try {
-      const url = type === "web"
-        ? window.location.origin + "/faucet/" + faucetAddress
-        : `https://farcaster.xyz/miniapps/x8wlGgdqylmp/FaucetDrops?startapp/faucet=${faucetAddress}`;
-      await navigator.clipboard.writeText(url);
-      toast.success("Link copied to clipboard");
-    } catch { toast.error("Failed to copy link"); }
-  };
-
-  const handleCopySecretCode = async (code: string) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      toast.success("Drop code copied!");
-      setShowNewCodeDialog(false);
-    } catch { toast.error("Failed to copy"); }
-  };
 
   const totalPages = Math.ceil(transactions.length / 10);
   const startIndex = (currentPage - 1) * 10;
@@ -899,40 +1231,49 @@ const getEventColor = (type: string) => {
   const simulatedFaucetDetails = {
     ...faucetDetails,
     name: newFaucetName || faucetDetails.name,
-    claimAmount: faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount || "0", tokenDecimals),
+    claimAmount:
+      faucetType === "custom"
+        ? BigInt(0)
+        : (() => {
+            try { return parseUnits(claimAmount || "0", tokenDecimals); }
+            catch { return BigInt(0); }
+          })(),
     isClaimActive:
-      new Date(endTime).getTime() > Date.now() && new Date(startTime).getTime() <= Date.now(),
+      new Date(endTime).getTime() > Date.now() &&
+      new Date(startTime).getTime() <= Date.now(),
     faucetMetadata: {
-      description: faucetMetadata?.description || faucetDetails?.faucetMetadata?.description || `Preview of ${newFaucetName} Faucet`,
-      imageUrl: faucetMetadata?.imageUrl || faucetDetails?.faucetMetadata?.imageUrl || "/default.jpeg",
+      description:
+        faucetMetadata?.description ||
+        faucetDetails?.faucetMetadata?.description ||
+        `Preview of ${newFaucetName} Faucet`,
+      imageUrl:
+        faucetMetadata?.imageUrl ||
+        faucetDetails?.faucetMetadata?.imageUrl ||
+        "/default.jpeg",
     },
   };
 
-  const renderCountdown = (timestamp: number, prefix: string, startTimeMs?: number): string => {
-  if (timestamp === 0) return "N/A";
-  
-  // NEW: If we are rendering the "End" time, and the faucet hasn't started yet, 
-  // show the fixed duration instead of a moving countdown.
-  if (prefix === "End" && startTimeMs && startTimeMs > currentTime) {
+  const renderCountdown = (
+    timestamp: number,
+    prefix: string,
+    startTimeMs?: number
+  ): string => {
+    if (timestamp === 0) return "N/A";
+    if (prefix === "End" && startTimeMs && startTimeMs > currentTime) {
       const duration = timestamp * 1000 - startTimeMs;
-      const d  = Math.floor(duration / 86400000);
+      const d = Math.floor(duration / 86400000);
       const h = Math.floor((duration % 86400000) / 3600000);
-      const m  = Math.floor((duration % 3600000) / 60000);
-      return `${d}d ${h}h ${m}m (Duration)`; 
-  }
-
-  // Normal countdown logic
-  const diff = timestamp * 1000 - currentTime; 
-  
-  if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
-  
-  const days  = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  const mins  = Math.floor((diff % 3600000) / 60000);
-  const secs  = Math.floor((diff % 60000) / 1000);
-  
-  return `${days}d ${hours}h ${mins}m ${secs}s`;
-};
+      const m = Math.floor((duration % 3600000) / 60000);
+      return `${d}d ${h}h ${m}m (Duration)`;
+    }
+    const diff = timestamp * 1000 - currentTime;
+    if (diff <= 0) return prefix === "Start" ? "Active" : "Ended";
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    return `${days}d ${hours}h ${mins}m ${secs}s`;
+  };
 
   const adminTabs = [
     { value: "fund", label: "Fund", icon: Upload },
@@ -945,7 +1286,19 @@ const getEventColor = (type: string) => {
 
   const colCount = adminTabs.length;
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Solana wallet guard banner ─────────────────────────────────────────────
+  const SolanaWalletMissing = onSolana && !activeSolanaWallet && (
+    <div className="flex items-start gap-2 rounded-lg border border-amber-300/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-xs text-amber-700 dark:text-amber-400 mb-4">
+      <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+      <span>
+        Solana wallet not detected. Connect your Solana wallet to execute admin actions.
+      </span>
+    </div>
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <Card className="w-full mx-auto overflow-hidden">
       {/* ── Header ── */}
@@ -953,14 +1306,21 @@ const getEventColor = (type: string) => {
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div>
             <CardTitle className="text-lg sm:text-xl font-semibold">Admin Controls</CardTitle>
-            <CardDescription className="text-xs mt-0.5">
+            <CardDescription className="text-xs mt-0.5 flex items-center gap-1.5">
               Manage your{" "}
               <span className="font-medium capitalize text-foreground/70">{faucetType || "unknown"}</span>{" "}
               faucet — settings, parameters, and activity.
+              {onSolana && (
+                <Badge
+                  className="text-[10px] px-1.5 py-0 ml-1"
+                  style={{ backgroundColor: selectedNetwork?.color ?? "#14F195", color: "#000" }}
+                >
+                  Solana
+                </Badge>
+              )}
             </CardDescription>
           </div>
 
-          {/* Header Actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               variant="outline"
@@ -981,7 +1341,6 @@ const getEventColor = (type: string) => {
           </div>
         </div>
 
-        {/* Owner-only destructive actions */}
         {isOwner && (
           <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-dashed mt-3">
             <span className="text-xs text-muted-foreground mr-1">Owner actions:</span>
@@ -1027,7 +1386,9 @@ const getEventColor = (type: string) => {
                 <span className="text-muted-foreground text-base">Custom</span>
               ) : (
                 <>
-                  {faucetDetails.claimAmount ? formatUnits(faucetDetails.claimAmount, tokenDecimals) : "0"}{" "}
+                  {faucetDetails.claimAmount
+                    ? formatUnits(faucetDetails.claimAmount, tokenDecimals)
+                    : "0"}{" "}
                   <span className="text-base font-medium text-muted-foreground">{tokenSymbol}</span>
                 </>
               )
@@ -1061,7 +1422,6 @@ const getEventColor = (type: string) => {
           />
         </div>
 
-        {/* Token Balance row */}
         <div className="mt-3">
           <TokenBalance
             tokenAddress={faucetDetails.token}
@@ -1075,6 +1435,8 @@ const getEventColor = (type: string) => {
 
       {/* ── Tabs ── */}
       <CardContent className="px-5 sm:px-6 pt-5 pb-6">
+        {SolanaWalletMissing}
+
         <Tabs defaultValue="fund" value={activeTab} onValueChange={setActiveTab}>
           {/* Mobile dropdown */}
           <div className="md:hidden mb-4">
@@ -1089,7 +1451,9 @@ const getEventColor = (type: string) => {
                           <tab.icon className="h-4 w-4" />
                           {tab.label}
                         </>
-                      ) : "Menu";
+                      ) : (
+                        "Menu"
+                      );
                     })()}
                   </span>
                   <Menu className="h-4 w-4 text-muted-foreground" />
@@ -1142,12 +1506,17 @@ const getEventColor = (type: string) => {
                       onChange={(e) => setFundAmount(e.target.value)}
                       className="text-sm"
                     />
-                    <Button onClick={handleFund} disabled={isFunding || !fundAmount} className="shrink-0">
+                    <Button
+                      onClick={handleFund}
+                      disabled={isFunding || !fundAmount || (onSolana && !activeSolanaWallet)}
+                      className="shrink-0"
+                    >
                       {isFunding ? <Spinner /> : <Upload className="h-4 w-4" />}
                       <span className="ml-1.5 text-xs">Fund</span>
                     </Button>
                   </div>
-                  {fundAmount && (
+                  {/* EVM-only fee display (Solana fees are handled on-chain automatically) */}
+                  {!onSolana && fundAmount && (
                     <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1 border border-dashed">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Platform fee ({feePercent}%)</span>
@@ -1161,6 +1530,11 @@ const getEventColor = (type: string) => {
                         Tip: deposit {recommendedInput} {tokenSymbol} to net exactly {fundAmount}
                       </p>
                     </div>
+                  )}
+                  {onSolana && fundAmount && (
+                    <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+                      Fees (1% backend + 2% platform) are deducted automatically on-chain.
+                    </p>
                   )}
                 </div>
               </Section>
@@ -1177,7 +1551,7 @@ const getEventColor = (type: string) => {
                     />
                     <Button
                       onClick={handleWithdraw}
-                      disabled={isWithdrawing || !withdrawAmount}
+                      disabled={isWithdrawing || !withdrawAmount || (onSolana && !activeSolanaWallet)}
                       variant="outline"
                       className="shrink-0"
                     >
@@ -1186,7 +1560,9 @@ const getEventColor = (type: string) => {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Withdraw available {tokenSymbol} from the faucet balance.
+                    {onSolana
+                      ? "Only callable after the claim period ends."
+                      : `Withdraw available ${tokenSymbol} from the faucet balance.`}
                   </p>
                 </div>
               </Section>
@@ -1195,7 +1571,6 @@ const getEventColor = (type: string) => {
 
           {/* ── Parameters Tab ── */}
           <TabsContent value="parameters" className="space-y-4 mt-5">
-            {/* Drip & Timing */}
             <Section icon={Coins} title="Drip & Timing Parameters">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {faucetType !== "custom" && (
@@ -1237,36 +1612,46 @@ const getEventColor = (type: string) => {
               </div>
             </Section>
 
-            {/* Social Tasks */}
+            {/* Social Tasks — identical for both chains */}
             <Section icon={Link} title="Required Social Tasks">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
                     Users must complete these before claiming.
                   </p>
-                  <Button type="button" variant="outline" size="sm" onClick={addNewSocialLink} className="h-7 text-xs gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addNewSocialLink}
+                    className="h-7 text-xs gap-1"
+                  >
                     <Plus className="h-3 w-3" /> Add Task
                   </Button>
                 </div>
 
-                {/* Existing tasks */}
                 {dynamicTasks.length > 0 && (
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                       Saved ({dynamicTasks.length})
                     </Label>
                     {dynamicTasks.map((task, i) => (
-                      <div key={i} className="flex items-center justify-between px-3 py-2 bg-muted/40 rounded-lg text-xs border border-border/50">
+                      <div
+                        key={i}
+                        className="flex items-center justify-between px-3 py-2 bg-muted/40 rounded-lg text-xs border border-border/50"
+                      >
                         <span className="truncate">
-                          {getPlatformIcon(task.platform)} {getActionText(task.platform)} {task.handle}
+                          {getPlatformIcon(task.platform)} {getActionText(task.platform)}{" "}
+                          {task.handle}
                         </span>
-                        <Badge variant="secondary" className="text-[10px] ml-2 shrink-0">{task.platform}</Badge>
+                        <Badge variant="secondary" className="text-[10px] ml-2 shrink-0">
+                          {task.platform}
+                        </Badge>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* New tasks */}
                 {newSocialLinks.length > 0 && (
                   <div className="space-y-3">
                     <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -1277,7 +1662,9 @@ const getEventColor = (type: string) => {
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold">Task {index + 1}</span>
                           <Button
-                            type="button" variant="ghost" size="sm"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => removeNewSocialLink(index)}
                             className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                           >
@@ -1287,8 +1674,13 @@ const getEventColor = (type: string) => {
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-1">
                             <Label className="text-xs">Platform</Label>
-                            <Select value={link.platform} onValueChange={(v) => updateNewSocialLink(index, "platform", v)}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <Select
+                              value={link.platform}
+                              onValueChange={(v) => updateNewSocialLink(index, "platform", v)}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="𝕏">Twitter / 𝕏</SelectItem>
                                 <SelectItem value="telegram">Telegram</SelectItem>
@@ -1302,8 +1694,13 @@ const getEventColor = (type: string) => {
                           </div>
                           <div className="space-y-1">
                             <Label className="text-xs">Action</Label>
-                            <Select value={link.action} onValueChange={(v) => updateNewSocialLink(index, "action", v)}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <Select
+                              value={link.action}
+                              onValueChange={(v) => updateNewSocialLink(index, "action", v)}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="follow">Follow</SelectItem>
                                 <SelectItem value="subscribe">Subscribe</SelectItem>
@@ -1353,7 +1750,6 @@ const getEventColor = (type: string) => {
                     {charCount} / 280
                   </Badge>
                 </div>
-                
                 <Textarea
                   placeholder='e.g. Thanks for the tokens! {@handle} {#hashtag}'
                   value={customXPostTemplate}
@@ -1376,10 +1772,12 @@ const getEventColor = (type: string) => {
             <Button
               onClick={handleUpdateClaimParameters}
               className="w-full"
-              disabled={isUpdatingParameters}
+              disabled={isUpdatingParameters || (onSolana && !activeSolanaWallet)}
             >
               {isUpdatingParameters ? (
-                <span className="flex items-center gap-2"><Spinner /> Saving changes…</span>
+                <span className="flex items-center gap-2">
+                  <Spinner /> Saving changes…
+                </span>
               ) : (
                 <span className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4" /> Save & Update Parameters
@@ -1402,22 +1800,39 @@ const getEventColor = (type: string) => {
                         Toggle to switch between adding and removing
                       </p>
                     </div>
-                    <Switch checked={isWhitelistEnabled} onCheckedChange={setIsWhitelistEnabled} />
+                    <Switch
+                      checked={isWhitelistEnabled}
+                      onCheckedChange={setIsWhitelistEnabled}
+                    />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Addresses (one per line or comma-separated)</Label>
+                    <Label className="text-xs font-medium">
+                      Addresses (one per line or comma-separated)
+                    </Label>
                     <Textarea
                       value={whitelistAddresses}
                       onChange={(e) => setWhitelistAddresses(e.target.value)}
                       rows={6}
-                      placeholder={"0xABC...\n0xDEF...\n0x123..."}
+                      placeholder={
+                        onSolana
+                          ? "SolanaAddress1...\nSolanaAddress2...\nSolanaAddress3..."
+                          : "0xABC...\n0xDEF...\n0x123..."
+                      }
                       className="text-sm font-mono"
                     />
                   </div>
-                  <Button onClick={handleUpdateWhitelist} className="w-full" disabled={isUpdatingWhitelist}>
+                  <Button
+                    onClick={handleUpdateWhitelist}
+                    className="w-full"
+                    disabled={isUpdatingWhitelist || (onSolana && !activeSolanaWallet)}
+                  >
                     {isUpdatingWhitelist ? (
-                      <span className="flex items-center gap-2"><Spinner /> Updating…</span>
-                    ) : "Update Drop-list"}
+                      <span className="flex items-center gap-2">
+                        <Spinner /> Updating…
+                      </span>
+                    ) : (
+                      "Update Drop-list"
+                    )}
                   </Button>
                 </div>
               </Section>
@@ -1432,16 +1847,15 @@ const getEventColor = (type: string) => {
                   tokenSymbol={tokenSymbol}
                   tokenDecimals={tokenDecimals}
                   onDataParsed={async (addresses, amounts) => {
-                    if (!address || !provider || !chainId || !checkNetwork()) return;
+                    if (!address || !checkNetwork()) return;
                     try {
-                      await setCustomClaimAmountsBatch(
-                        provider as BrowserProvider, faucetAddress, addresses, amounts,
-                        BigInt(chainId), BigInt(Number(selectedNetwork.chainId)), faucetType || undefined
-                      );
+                      await handleCustomClaimAmounts(addresses, amounts);
                       toast.success("Custom claim amounts set successfully");
                       await loadFaucetDetails();
                       await loadTransactionHistory();
-                    } catch { toast.error("Failed to set custom claim amounts."); }
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to set custom claim amounts.");
+                    }
                   }}
                   onCancel={() => {}}
                 />
@@ -1488,15 +1902,28 @@ const getEventColor = (type: string) => {
               <div className="space-y-4">
                 <div className="space-y-2">
                   {adminList
-                    .filter((admin) => admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase())
+                    .filter(
+                      (admin) =>
+                        onSolana ||
+                        admin.toLowerCase() !== FACTORY_OWNER_ADDRESS.toLowerCase()
+                    )
                     .map((admin) => (
-                      <div key={admin} className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/40 border border-border/50">
+                      <div
+                        key={admin}
+                        className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/40 border border-border/50"
+                      >
                         <span className="font-mono text-xs truncate">{admin}</span>
                         <Badge
-                          variant={admin.toLowerCase() === faucetDetails?.owner.toLowerCase() ? "secondary" : "outline"}
+                          variant={
+                            admin.toLowerCase() === faucetDetails?.owner.toLowerCase()
+                              ? "secondary"
+                              : "outline"
+                          }
                           className="text-[10px] ml-2 shrink-0"
                         >
-                          {admin.toLowerCase() === faucetDetails?.owner.toLowerCase() ? "Owner" : "Admin"}
+                          {admin.toLowerCase() === faucetDetails?.owner.toLowerCase()
+                            ? "Owner"
+                            : "Admin"}
                         </Badge>
                       </div>
                     ))}
@@ -1509,21 +1936,30 @@ const getEventColor = (type: string) => {
                     </Label>
                     <div className="flex gap-2">
                       <Input
-                        placeholder="0x..."
+                        placeholder={onSolana ? "Solana address..." : "0x..."}
                         value={newAdminAddress}
-                        onChange={(e) => { setNewAdminAddress(e.target.value); checkAdminStatus(e.target.value); }}
+                        onChange={(e) => {
+                          setNewAdminAddress(e.target.value);
+                          checkAdminStatus(e.target.value);
+                        }}
                         className="text-sm font-mono"
                       />
                       <Button
                         onClick={() => setShowAddAdminDialog(true)}
-                        disabled={isManagingAdmin || !newAdminAddress.trim()}
+                        disabled={
+                          isManagingAdmin ||
+                          !newAdminAddress.trim() ||
+                          (onSolana && !activeSolanaWallet)
+                        }
                         variant={isAddingAdmin ? "default" : "destructive"}
                         className="shrink-0 text-xs"
                       >
                         {isManagingAdmin ? <Spinner /> : isAddingAdmin ? "Add" : "Remove"}
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">Owner address cannot be modified here.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Owner address cannot be modified here.
+                    </p>
                   </div>
                 )}
               </div>
@@ -1533,218 +1969,247 @@ const getEventColor = (type: string) => {
             <Section icon={RotateCcw} title="Reset Claims">
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Wipe the claim history for all users, allowing everyone to claim tokens again.
+                  Wipe the claim history for all users, allowing everyone to claim again.
                 </p>
+                {onSolana && (
+                  <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+                    On Solana, resets are processed via the backend which holds the claimer list.
+                  </p>
+                )}
                 <Button
                   onClick={handleResetAllClaims}
                   variant="destructive"
                   className="gap-2"
-                  disabled={isResettingClaims}
+                  disabled={isResettingClaims || (onSolana && !activeSolanaWallet)}
                 >
                   {isResettingClaims ? (
-                    <span className="flex items-center gap-2"><Spinner /> Resetting…</span>
+                    <span className="flex items-center gap-2">
+                      <Spinner /> Resetting…
+                    </span>
                   ) : (
-                    <><RotateCcw className="h-4 w-4" /> Reset All Claims</>
+                    <>
+                      <RotateCcw className="h-4 w-4" /> Reset All Claims
+                    </>
                   )}
                 </Button>
               </div>
             </Section>
           </TabsContent>
 
+          {/* ── Activity Log Tab ── */}
           <TabsContent value="history" className="space-y-4 mt-5">
-  <Section icon={History} title="Onchain Activity Log">
-    <div className="space-y-3">
-      {/* Refresh button */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          Live onchain events from the faucet contract.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs gap-1.5"
-          onClick={loadTransactionHistory}
-          disabled={isHistoryLoading}
-        >
-          {isHistoryLoading ? (
-            <Spinner /> // Or use the inline spinner classes below
-          ) : (
-            <RotateCcw className="h-3 w-3" />
-          )}
-          {isHistoryLoading ? "Refreshing..." : "Refresh"}
-        </Button>
-      </div>
+            <Section icon={History} title="Onchain Activity Log">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {onSolana
+                      ? "Live events fetched from Solana RPC."
+                      : "Live onchain events from the faucet contract."}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    onClick={loadTransactionHistory}
+                    disabled={isHistoryLoading}
+                  >
+                    {isHistoryLoading ? <Spinner /> : <RotateCcw className="h-3 w-3" />}
+                    {isHistoryLoading ? "Refreshing..." : "Refresh"}
+                  </Button>
+                </div>
 
-      {isHistoryLoading ? (
-        // LOADING STATE
-        <div className="text-center py-12">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-muted/50 mb-3">
-            <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-          </div>
-          <p className="text-sm font-medium text-muted-foreground">Loading activity log...</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">
-            Fetching the latest events directly from the blockchain
-          </p>
-        </div>
-      ) : transactions.length > 0 ? (
-        // TABLE STATE
-        <>
-          <div className="overflow-x-auto rounded-lg border border-border/60">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="text-xs font-semibold w-[90px]">Event</TableHead>
-                  <TableHead className="text-xs font-semibold">Address</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Amount</TableHead>
-                  <TableHead className="text-xs font-semibold hidden sm:table-cell">Date</TableHead>
-                  <TableHead className="text-xs font-semibold text-right w-[60px]">Tx</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {currentTransactions.map((tx, index) => {
-                  const explorerUrl = getTxExplorerUrl(tx.txHash || tx.transactionHash);
-                  return (
-                    <TableRow
-                      key={`${tx.txHash || tx.transactionHash || tx.timestamp}-${index}`}
-                      className="hover:bg-muted/20 transition-colors"
-                    >
-                      <TableCell className="text-xs py-2.5">
-                        <Badge
-                          variant={getEventBadgeVariant(tx.transactionType)}
-                          className={`text-[10px] font-semibold capitalize px-2 ${
-                            tx.transactionType?.toLowerCase() === "claim" ||
-                            tx.transactionType?.toLowerCase() === "drip"
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800"
-                              : tx.transactionType?.toLowerCase() === "fund" ||
-                                tx.transactionType?.toLowerCase() === "deposit"
-                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-                              : tx.transactionType?.toLowerCase() === "withdraw"
-                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800"
-                              : ""
-                          }`}
-                        >
-                          {tx.transactionType || "Event"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs font-mono text-muted-foreground py-2.5">
-                        <span
-                          className="cursor-pointer hover:text-foreground transition-colors"
-                          onClick={() => navigator.clipboard.writeText(tx.initiator).then(() => toast.success("Address copied"))}
-                          title={tx.initiator}
-                        >
-                          {tx.initiator.slice(0, 6)}…{tx.initiator.slice(-4)}
+                {isHistoryLoading ? (
+                  <div className="text-center py-12">
+                    <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-muted/50 mb-3">
+                      <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Loading activity log…
+                    </p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">
+                      {onSolana
+                        ? "Fetching signatures from Solana RPC"
+                        : "Fetching the latest events from the blockchain"}
+                    </p>
+                  </div>
+                ) : transactions.length > 0 ? (
+                  <>
+                    <div className="overflow-x-auto rounded-lg border border-border/60">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/30 hover:bg-muted/30">
+                            <TableHead className="text-xs font-semibold w-[90px]">Event</TableHead>
+                            <TableHead className="text-xs font-semibold">Address</TableHead>
+                            <TableHead className="text-xs font-semibold text-right">Amount</TableHead>
+                            <TableHead className="text-xs font-semibold hidden sm:table-cell">
+                              Date
+                            </TableHead>
+                            <TableHead className="text-xs font-semibold text-right w-[60px]">
+                              Tx
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {currentTransactions.map((tx, index) => {
+                            const explorerUrl = getTxExplorerUrl(
+                              tx.txHash || tx.transactionHash
+                            );
+                            return (
+                              <TableRow
+                                key={`${tx.txHash || tx.transactionHash || tx.timestamp}-${index}`}
+                                className="hover:bg-muted/20 transition-colors"
+                              >
+                                <TableCell className="text-xs py-2.5">
+                                  <Badge
+                                    variant={getEventBadgeVariant(tx.transactionType)}
+                                    className={`text-[10px] font-semibold capitalize px-2 ${
+                                      tx.transactionType?.toLowerCase() === "claim" ||
+                                      tx.transactionType?.toLowerCase() === "drip"
+                                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800"
+                                        : tx.transactionType?.toLowerCase() === "fund" ||
+                                          tx.transactionType?.toLowerCase() === "deposit"
+                                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                                        : tx.transactionType?.toLowerCase() === "withdraw"
+                                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800"
+                                        : ""
+                                    }`}
+                                  >
+                                    {tx.transactionType || "Event"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-xs font-mono text-muted-foreground py-2.5">
+                                  <span
+                                    className="cursor-pointer hover:text-foreground transition-colors"
+                                    onClick={() =>
+                                      navigator.clipboard
+                                        .writeText(tx.initiator)
+                                        .then(() => toast.success("Address copied"))
+                                    }
+                                    title={tx.initiator}
+                                  >
+                                    {tx.initiator.slice(0, 6)}…{tx.initiator.slice(-4)}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-xs font-mono text-right py-2.5">
+                                  <span className={getEventColor(tx.transactionType)}>
+                                    {tx.transactionType?.toLowerCase() === "withdraw" ? "−" : "+"}
+                                    {formatUnits(tx.amount, tokenDecimals)}
+                                  </span>
+                                  <span className="text-muted-foreground ml-1">
+                                    {getTokenName(tx.isEther)}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-xs text-muted-foreground hidden sm:table-cell py-2.5 whitespace-nowrap">
+                                  {new Date(tx.timestamp * 1000).toLocaleString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </TableCell>
+                                <TableCell className="text-right py-2.5">
+                                  {explorerUrl ? (
+                                    <a
+                                      href={explorerUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                      title="View on explorer"
+                                    >
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-muted-foreground/30 text-[10px]">—</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-xs text-muted-foreground">
+                          Showing {startIndex + 1}–
+                          {Math.min(startIndex + 10, transactions.length)} of{" "}
+                          {transactions.length}
                         </span>
-                      </TableCell>
-                      <TableCell className="text-xs font-mono text-right py-2.5">
-                        <span className={getEventColor(tx.transactionType)}>
-                          {tx.transactionType?.toLowerCase() === "withdraw" ? "−" : "+"}
-                          {formatUnits(tx.amount, tokenDecimals)}
-                        </span>
-                        <span className="text-muted-foreground ml-1">
-                          {getTokenName(tx.isEther)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground hidden sm:table-cell py-2.5 whitespace-nowrap">
-                        {new Date(tx.timestamp * 1000).toLocaleString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </TableCell>
-                      <TableCell className="text-right py-2.5">
-                        {explorerUrl ? (
-                          <a
-                            href={explorerUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="View on explorer"
+                        <div className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="h-7 text-xs"
                           >
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground/30 text-[10px]">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-xs text-muted-foreground">
-                Showing {startIndex + 1}–{Math.min(startIndex + 10, transactions.length)} of {transactions.length}
-              </span>
-              <div className="flex gap-1">
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="h-7 text-xs"
-                >
-                  Prev
-                </Button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  const page = totalPages <= 5 ? i + 1 : Math.max(1, currentPage - 2) + i;
-                  if (page > totalPages) return null;
-                  return (
+                            Prev
+                          </Button>
+                          {Array.from(
+                            { length: Math.min(totalPages, 5) },
+                            (_, i) => {
+                              const page =
+                                totalPages <= 5
+                                  ? i + 1
+                                  : Math.max(1, currentPage - 2) + i;
+                              if (page > totalPages) return null;
+                              return (
+                                <Button
+                                  key={page}
+                                  variant={currentPage === page ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => handlePageChange(page)}
+                                  className="h-7 w-7 text-xs p-0"
+                                >
+                                  {page}
+                                </Button>
+                              );
+                            }
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="h-7 text-xs"
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-muted/50 mb-3">
+                      <Activity className="h-6 w-6 text-muted-foreground/50" />
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      No onchain events found
+                    </p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">
+                      Events appear here once users interact with the faucet
+                    </p>
                     <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
+                      variant="outline"
                       size="sm"
-                      onClick={() => handlePageChange(page)}
-                      className="h-7 w-7 text-xs p-0"
+                      className="mt-3 h-7 text-xs gap-1.5"
+                      onClick={loadTransactionHistory}
                     >
-                      {page}
+                      <RotateCcw className="h-3 w-3" /> Try Refreshing
                     </Button>
-                  );
-                })}
-                <Button
-                  variant="outline" size="sm"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="h-7 text-xs"
-                >
-                  Next
-                </Button>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-        </>
-      ) : (
-        // EMPTY STATE
-        <div className="text-center py-12">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-muted/50 mb-3">
-            <Activity className="h-6 w-6 text-muted-foreground/50" />
-          </div>
-          <p className="text-sm font-medium text-muted-foreground">No onchain events found</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">
-            Events will appear here once users interact with the faucet
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3 h-7 text-xs gap-1.5"
-            onClick={loadTransactionHistory}
-          >
-            <RotateCcw className="h-3 w-3" /> Try Refreshing
-          </Button>
-        </div>
-      )}
-    </div>
-  </Section>
-</TabsContent>
+            </Section>
+          </TabsContent>
         </Tabs>
       </CardContent>
 
       {/* ══════════════════════ DIALOGS ══════════════════════ */}
 
-      {/* Preview Dialog */}
+      {/* Preview */}
       <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
         <DialogContent className="w-[95vw] max-w-xl max-h-[92vh] overflow-y-auto">
           <DialogHeader>
@@ -1758,13 +2223,16 @@ const getEventColor = (type: string) => {
               <div className="mt-3 p-3 bg-muted rounded-lg space-y-1.5 text-left">
                 <p className="text-xs font-semibold flex items-center gap-1">
                   <CheckCircle className="h-3.5 w-3.5 text-green-600" />
-                  {combinedPreviewTasks.length} task{combinedPreviewTasks.length !== 1 ? "s" : ""} configured
+                  {combinedPreviewTasks.length} task
+                  {combinedPreviewTasks.length !== 1 ? "s" : ""} configured
                 </p>
                 <ul className="text-xs text-muted-foreground space-y-0.5 pl-5 list-disc">
                   {combinedPreviewTasks.map((task, i) => (
                     <li key={i}>
                       {task.platform}: {getActionText(task.platform)} {task.handle}
-                      <Badge variant="outline" className="text-[9px] ml-1">{task.status}</Badge>
+                      <Badge variant="outline" className="text-[9px] ml-1">
+                        {task.status}
+                      </Badge>
                     </li>
                   ))}
                 </ul>
@@ -1796,7 +2264,10 @@ const getEventColor = (type: string) => {
               isVerifying={false}
               faucetMetadata={simulatedFaucetDetails.faucetMetadata}
               customXPostTemplate={customXPostTemplate}
-              handleBackendClaim={() => { toast.warning("Preview Mode: Claim disabled."); return Promise.resolve(); }}
+              handleBackendClaim={() => {
+                toast.warning("Preview Mode: Claim disabled.");
+                return Promise.resolve();
+              }}
               handleFollowAll={() => toast.warning("Preview Mode: Follow disabled.")}
               generateXPostContent={(a) => `Preview: ${a} ${tokenSymbol}`}
               txHash={null}
@@ -1815,7 +2286,7 @@ const getEventColor = (type: string) => {
         </DialogContent>
       </Dialog>
 
-      {/* Fund Confirmation Dialog */}
+      {/* Fund Confirmation */}
       <Dialog open={showFundPopup} onOpenChange={setShowFundPopup}>
         <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
@@ -1831,30 +2302,45 @@ const getEventColor = (type: string) => {
                 className="text-sm"
               />
             </div>
-            <div className="rounded-lg bg-muted/40 border border-dashed p-3 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Platform fee ({feePercent}%)</span>
-                <span className="font-mono">{fee} {tokenSymbol}</span>
+            {!onSolana && (
+              <div className="rounded-lg bg-muted/40 border border-dashed p-3 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Platform fee ({feePercent}%)</span>
+                  <span className="font-mono">{fee} {tokenSymbol}</span>
+                </div>
+                <div className="flex justify-between font-medium">
+                  <span className="text-muted-foreground">Net to faucet</span>
+                  <span className="font-mono">{netAmount} {tokenSymbol}</span>
+                </div>
+                <p className="text-blue-500 pt-1">
+                  Tip: deposit {recommendedInput} {tokenSymbol} to net exactly {fundAmount}
+                </p>
               </div>
-              <div className="flex justify-between font-medium">
-                <span className="text-muted-foreground">Net to faucet</span>
-                <span className="font-mono">{netAmount} {tokenSymbol}</span>
-              </div>
-              <p className="text-blue-500 pt-1">
-                Tip: deposit {recommendedInput} {tokenSymbol} to net exactly {fundAmount}
+            )}
+            {onSolana && (
+              <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+                Fees are handled on-chain automatically (1% backend + 2% platform).
               </p>
-            </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowFundPopup(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowFundPopup(false)}>
+              Cancel
+            </Button>
             <Button onClick={confirmFund} disabled={isFunding}>
-              {isFunding ? <span className="flex items-center gap-2"><Spinner /> Confirming…</span> : "Confirm Fund"}
+              {isFunding ? (
+                <span className="flex items-center gap-2">
+                  <Spinner /> Confirming…
+                </span>
+              ) : (
+                "Confirm Fund"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Name Dialog */}
+      {/* Edit Name */}
       <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
         <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
@@ -1871,73 +2357,118 @@ const getEventColor = (type: string) => {
             />
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setShowEditNameDialog(false); if (faucetDetails?.name) setNewFaucetName(faucetDetails.name); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditNameDialog(false);
+                if (faucetDetails?.name) setNewFaucetName(faucetDetails.name);
+              }}
+            >
               Cancel
             </Button>
-            <Button onClick={handleUpdateFaucetName} disabled={isUpdatingName || !newFaucetName.trim()}>
-              {isUpdatingName ? <span className="flex items-center gap-2"><Spinner /> Updating…</span> : "Update Name"}
+            <Button
+              onClick={handleUpdateFaucetName}
+              disabled={isUpdatingName || !newFaucetName.trim() || (onSolana && !activeSolanaWallet)}
+            >
+              {isUpdatingName ? (
+                <span className="flex items-center gap-2">
+                  <Spinner /> Updating…
+                </span>
+              ) : (
+                "Update Name"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
+      {/* Delete */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-destructive">Delete Faucet</DialogTitle>
             <DialogDescription>
-              This action is <strong>irreversible</strong>. The faucet and all associated data will be permanently removed.
+              This action is <strong>irreversible</strong>. The faucet and all associated data
+              will be permanently removed.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteFaucet} disabled={isDeletingFaucet}>
-              {isDeletingFaucet ? <span className="flex items-center gap-2"><Spinner /> Deleting…</span> : "Yes, Delete Faucet"}
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteFaucet}
+              disabled={isDeletingFaucet || (onSolana && !activeSolanaWallet)}
+            >
+              {isDeletingFaucet ? (
+                <span className="flex items-center gap-2">
+                  <Spinner /> Deleting…
+                </span>
+              ) : (
+                "Yes, Delete Faucet"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Add/Remove Admin Dialog */}
+      {/* Add/Remove Admin */}
       <Dialog open={showAddAdminDialog} onOpenChange={setShowAddAdminDialog}>
         <DialogContent className="w-[95vw] max-w-md">
           <DialogHeader>
             <DialogTitle>{isAddingAdmin ? "Add Admin" : "Remove Admin"}</DialogTitle>
             <DialogDescription>
-              {isAddingAdmin ? "Grant admin privileges to this address." : "Revoke admin privileges from this address."}
+              {isAddingAdmin
+                ? "Grant admin privileges to this address."
+                : "Revoke admin privileges from this address."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 py-2">
             <Label className="text-xs">Admin Address</Label>
             <Input
               value={newAdminAddress}
-              onChange={(e) => { setNewAdminAddress(e.target.value); checkAdminStatus(e.target.value); }}
-              placeholder="0x..."
+              onChange={(e) => {
+                setNewAdminAddress(e.target.value);
+                checkAdminStatus(e.target.value);
+              }}
+              placeholder={onSolana ? "Solana address..." : "0x..."}
               className="text-sm font-mono"
             />
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowAddAdminDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowAddAdminDialog(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={handleManageAdmin}
-              disabled={isManagingAdmin || !newAdminAddress.trim()}
+              disabled={isManagingAdmin || !newAdminAddress.trim() || (onSolana && !activeSolanaWallet)}
               variant={isAddingAdmin ? "default" : "destructive"}
             >
-              {isManagingAdmin
-                ? <span className="flex items-center gap-2"><Spinner /> {isAddingAdmin ? "Adding…" : "Removing…"}</span>
-                : isAddingAdmin ? "Add Admin" : "Remove Admin"}
+              {isManagingAdmin ? (
+                <span className="flex items-center gap-2">
+                  <Spinner /> {isAddingAdmin ? "Adding…" : "Removing…"}
+                </span>
+              ) : isAddingAdmin ? (
+                "Add Admin"
+              ) : (
+                "Remove Admin"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Current Secret Code Dialog */}
+      {/* Current Secret Code */}
       <Dialog open={showCurrentSecretDialog} onOpenChange={setShowCurrentSecretDialog}>
         <DialogContent className="w-[95vw] max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Key className="h-4 w-4" /> Current Drop Code</DialogTitle>
-            <DialogDescription>Share this code with your users to enable claiming.</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-4 w-4" /> Current Drop Code
+            </DialogTitle>
+            <DialogDescription>
+              Share this code with your users to enable claiming.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4 flex justify-center">
             <div className="text-2xl font-mono font-bold tracking-widest bg-muted rounded-xl px-8 py-5 border select-all">
@@ -1945,14 +2476,17 @@ const getEventColor = (type: string) => {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => handleCopySecretCode(currentSecretCode)} className="w-full gap-2">
+            <Button
+              onClick={() => handleCopySecretCode(currentSecretCode)}
+              className="w-full gap-2"
+            >
               <Copy className="h-4 w-4" /> Copy Code
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* New Code Dialog */}
+      {/* New Code */}
       <Dialog
         open={showNewCodeDialog}
         onOpenChange={(open) => {
@@ -1975,14 +2509,17 @@ const getEventColor = (type: string) => {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => handleCopySecretCode(newlyGeneratedCode)} className="w-full gap-2">
+            <Button
+              onClick={() => handleCopySecretCode(newlyGeneratedCode)}
+              className="w-full gap-2"
+            >
               <Copy className="h-4 w-4" /> Copy & Close
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* QR Code Share Dialog */}
+      {/* QR Code Share */}
       <QRCodeShareDialog
         open={showQRDialog}
         onOpenChange={setShowQRDialog}

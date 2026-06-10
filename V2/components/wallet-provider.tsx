@@ -1,398 +1,313 @@
 "use client"
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from "react"
 import { BrowserProvider, type JsonRpcSigner } from "ethers"
-import { useDisconnect, useSwitchChain, useChainId } from 'wagmi'
-import { usePrivy, useWallets, type ConnectedWallet } from '@privy-io/react-auth'
-
+import { useDisconnect, useSwitchChain, useChainId } from "wagmi"
+import { usePrivy, useWallets, type ConnectedWallet } from "@privy-io/react-auth"
 import { toast } from "sonner"
-
-// Define a local interface that extends ConnectedWallet to include the missing fields
-interface ExtendedConnectedWallet extends ConnectedWallet {
-  chainType?: 'ethereum' | 'solana';
-}
+import { useSolanaWallet } from "@/hooks/use-solana"
+import { SolanaConnectModal } from "@/components/solana-connect-modal"
 
 interface WalletContextType {
+  // EVM state
   provider: BrowserProvider | null
   signer: JsonRpcSigner | null
-  address: string | null
-  chainId: number | null
+  evmChainId: number | null          // ← pure EVM chain, never 102
+  // Shared / active state
+  address: string | null             // active address (EVM or Solana depending on mode)
+  chainId: number | null             // evmChainId OR 102 when on Solana (for legacy compat)
+  isOnSolana: boolean                // ← NEW: clean flag, no chainId=102 tricks
   isConnected: boolean
   isConnecting: boolean
-  walletType: 'embedded' | 'external' | null
+  walletType: "embedded" | "external" | null
+  // Actions
   connect: () => Promise<void>
   disconnect: () => Promise<void>
   disconnectExternalWallet: () => Promise<void>
   ensureCorrectNetwork: (requiredChainId: number) => Promise<boolean>
   switchChain: (newChainId: number) => Promise<void>
+  switchToSolana: () => Promise<void>
+  switchToEvm: (chainId: number) => Promise<void>
   refreshProvider: () => Promise<void>
 }
 
 export const WalletContext = createContext<WalletContextType>({
-  provider: null,
-  signer: null,
-  address: null,
-  chainId: null,
-  isConnected: false,
-  isConnecting: false,
-  walletType: null,
-  connect: async () => {},
-  disconnect: async () => {},
+  provider: null, signer: null, evmChainId: null,
+  address: null, chainId: null, isOnSolana: false,
+  isConnected: false, isConnecting: false, walletType: null,
+  connect: async () => {}, disconnect: async () => {},
   disconnectExternalWallet: async () => {},
   ensureCorrectNetwork: async () => false,
-  switchChain: async () => {},
-  refreshProvider: async () => {},
+  switchChain: async () => {}, switchToSolana: async () => {},
+  switchToEvm: async () => {}, refreshProvider: async () => {},
 })
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [provider, setProvider] = useState<BrowserProvider | null>(null)
-  const [signer, setSigner] = useState<JsonRpcSigner | null>(null)
-  const [walletType, setWalletType] = useState<'embedded' | 'external' | null>(null)
-  const [liveChainId, setLiveChainId] = useState<number | null>(null)
+  // ── EVM state ────────────────────────────────────────────────────────────
+  const [provider,    setProvider]    = useState<BrowserProvider | null>(null)
+  const [signer,      setSigner]      = useState<JsonRpcSigner | null>(null)
+  const [walletType,  setWalletType]  = useState<"embedded" | "external" | null>(null)
+  const [evmChainId,  setEvmChainId]  = useState<number | null>(null)
 
-  const { ready, authenticated, login, logout, user, linkWallet } = usePrivy()
+  // ── Solana mode — completely separate from EVM chain tracking ────────────
+  const [isOnSolana,  setIsOnSolana]  = useState(false)
+  const isOnSolanaRef = useRef(false)  // sync mirror, readable in effects immediately
+  const setOnSolana = useCallback((val: boolean) => {
+    isOnSolanaRef.current = val
+    setIsOnSolana(val)
+  }, [])
+
+  const [solanaConnectOpen, setSolanaConnectOpen] = useState(false)
+
+  const { ready, authenticated, login, logout, user } = usePrivy()
   const { wallets } = useWallets()
   const { disconnect: wagmiDisconnect } = useDisconnect()
   const { switchChain: wagmiSwitchChain } = useSwitchChain()
   const wagmiChainId = useChainId()
 
-  // ✅ Fix: Compute solanaWallets with type casting
- const solanaWallets = useMemo(() => {
-  // linkedAccounts has chainType, useWallets() does NOT reliably have it
-  const solanaAddresses = new Set(
+  const {
+    connectOrSwitchSolana,
+    activeSolanaAccount,
+    solanaAddress,
+  } = useSolanaWallet()
+
+  // ── Solana address set (from linkedAccounts — reliable source) ────────────
+  const solanaAddressSet = useMemo(() => new Set(
     (user?.linkedAccounts || [])
-      .filter((acc: any) => acc.type === 'wallet' && acc.chainType === 'solana')
-      .map((acc: any) => acc.address)
+      .filter((a: any) => a.type === "wallet" && a.chainType === "solana")
+      .map((a: any) => a.address as string)
+  ), [user?.linkedAccounts])
+
+  const isSolanaAddr = useCallback(
+    (addr: string) => solanaAddressSet.has(addr),
+    [solanaAddressSet]
   )
-  
-  // Match back to ConnectedWallet objects (which have getEthereumProvider etc.)
-  const matched = wallets.filter(w => solanaAddresses.has(w.address))
-  
-  // Fallback: if no match but linkedAccounts has solana wallets,
-  // it means the wallet object isn't in useWallets() yet (not connected)
-  if (matched.length === 0 && solanaAddresses.size > 0) {
-    console.warn('[WalletProvider] Solana linkedAccounts exist but no matching ConnectedWallet found.')
-    console.log('[WalletProvider] solanaAddresses:', [...solanaAddresses])
-    console.log('[WalletProvider] wallets:', wallets.map(w => ({ addr: w.address, type: w.walletClientType })))
-  }
 
-  return matched
-}, [wallets, user?.linkedAccounts])
+  // ── EVM wallet resolution (ignores Solana wallets entirely) ───────────────
+  const activeEvmWallet = useMemo(() => {
+    if (!authenticated) return null
+    const evm = wallets.filter((w) => !isSolanaAddr(w.address))
+    const ext  = evm.find((w) => w.walletClientType !== "privy")
+    const emb  = evm.find((w) => w.walletClientType === "privy")
+    return ext ?? emb ?? evm[0] ?? null
+  }, [authenticated, wallets, isSolanaAddr])
 
-const getActiveWallet = useCallback(() => {
-  if (!authenticated || wallets.length === 0) return null
+  // ── Derived active address ─────────────────────────────────────────────
+  // When on Solana, expose Solana address; otherwise EVM address
+  const address = isOnSolana
+    ? (solanaAddress ?? null)
+    : (activeEvmWallet?.address ?? null)
 
-  // ✅ KEY FIX: "external" means they have a connected external EVM wallet,
-  // NOT just that they didn't use social login.
-  const externalEvmWallet = wallets.find(
-    w => w.walletClientType !== 'privy' && 
-    (w as ExtendedConnectedWallet).chainType === 'ethereum'
-  )
-  const hasExternalEvm = !!externalEvmWallet
-
-  if (liveChainId === 102) {
-    const embeddedSolana = solanaWallets.find(w => w.walletClientType === 'privy')
-    const externalSolana = solanaWallets.find(w => w.walletClientType !== 'privy')
-
-    if (hasExternalEvm) {
-      // External user: external Solana wins, fall back to embedded
-      return externalSolana || embeddedSolana || solanaWallets[0]
-    } else {
-      // Embedded-only user: always use embedded Solana
-      return embeddedSolana || solanaWallets[0]
-    }
-  } else {
-    const embeddedEvm = wallets.find(
-      w => w.walletClientType === 'privy' && 
-      (w as ExtendedConnectedWallet).chainType === 'ethereum'
-    )
-
-    if (hasExternalEvm) {
-      return externalEvmWallet || embeddedEvm || wallets[0]
-    } else {
-      return embeddedEvm || wallets[0]
-    }
-  }
-}, [authenticated, wallets, solanaWallets, liveChainId])
-
-  const activeWallet = getActiveWallet()
-  const address = activeWallet?.address || null
-  const isConnected = ready && authenticated && !!address && (liveChainId === 102 || !!signer)
+  const isConnected  = ready && authenticated && !!address
   const isConnecting = !ready || (authenticated && wallets.length > 0 && !address)
 
-  const setupProvider = useCallback(async (wallet = activeWallet) => {
-    if (!wallet) {
-      setProvider(null)
-      setSigner(null)
-      setWalletType(null)
-      setLiveChainId(null)
+  // ── setupEvmProvider — only ever called for EVM ─────────────────────────
+  const setupEvmProvider = useCallback(async (wallet?: ConnectedWallet) => {
+    const target = wallet ?? activeEvmWallet
+    if (!target) {
+      setProvider(null); setSigner(null); setWalletType(null); setEvmChainId(null)
       return
     }
-
-    const extWallet = wallet as ExtendedConnectedWallet;
+    // Safety: never run EVM logic on a Solana wallet
+    if (isSolanaAddr(target.address)) return
 
     try {
-      // ✅ Fix: Use the casted wallet to check chainType
-      if (extWallet.chainType === 'solana') {
-        console.log('🪐 [WalletProvider] Solana wallet detected:', wallet.address)
-        setProvider(null)
-        setSigner(null)
-        setWalletType(wallet.walletClientType === 'privy' ? 'embedded' : 'external')
-        setLiveChainId(102) 
-        return
-      }
-
-      // EXISTING EVM LOGIC
-      const isEmbedded = wallet.walletClientType === 'privy'
-      const ethereumProvider = await wallet.getEthereumProvider()
-      const ethersProvider = new BrowserProvider(ethereumProvider)
-      const network = await ethersProvider.getNetwork()
-      const detectedChainId = Number(network.chainId)
-      const ethersSigner = await ethersProvider.getSigner()
+      const isEmbedded       = target.walletClientType === "privy"
+      const ethereumProvider = await target.getEthereumProvider()
+      const ethersProvider   = new BrowserProvider(ethereumProvider)
+      const network          = await ethersProvider.getNetwork()
+      const ethersSigner     = await ethersProvider.getSigner()
 
       setProvider(ethersProvider)
       setSigner(ethersSigner)
-      setWalletType(isEmbedded ? 'embedded' : 'external')
-      setLiveChainId(detectedChainId)
-    } catch (error) {
-      console.error('❌ [WalletProvider] Error setting up wallet:', error)
-      setProvider(null)
-      setSigner(null)
-      setWalletType(null)
-      setLiveChainId(null)
+      setWalletType(isEmbedded ? "embedded" : "external")
+      setEvmChainId(Number(network.chainId))
+    } catch (err) {
+      console.error("❌ [WalletProvider] setupEvmProvider error:", err)
+      setProvider(null); setSigner(null); setWalletType(null); setEvmChainId(null)
     }
-  }, [activeWallet])
+  }, [activeEvmWallet, isSolanaAddr])
 
   const refreshProvider = useCallback(async () => {
-    await setupProvider()
-  }, [setupProvider])
+    // On Solana: nothing to refresh (no ethers provider needed)
+    if (isOnSolanaRef.current) return
+    await setupEvmProvider()
+  }, [setupEvmProvider])
 
+  // ── Auto-setup EVM provider on mount / wallet change ─────────────────────
+  // CRITICAL: skip completely when on Solana — this was the main clobber path
   useEffect(() => {
-    if (authenticated && wallets.length > 0) {
-      setupProvider()
-    }
-  }, [authenticated, wallets.length, activeWallet?.address, setupProvider])
+    if (!authenticated || wallets.length === 0) return
+    if (isOnSolanaRef.current) return   // ← never clobber Solana mode
+    setupEvmProvider()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, wallets.length, activeEvmWallet?.address])
 
+  // ── EVM chain-change listener ─────────────────────────────────────────────
   useEffect(() => {
-    if (!activeWallet || (activeWallet as ExtendedConnectedWallet).chainType === 'solana') return
-    let rawProvider: any = null
+    if (!activeEvmWallet) return
+    let raw: any = null
+    const onChange = () => { if (!isOnSolanaRef.current) setupEvmProvider() }
 
-    const handleChainChange = async () => {
-      await setupProvider()
-    }
+    activeEvmWallet.getEthereumProvider()
+      .then((p) => {
+        raw = p
+        raw.on?.("chainChanged",    onChange)
+        raw.on?.("accountsChanged", onChange)
+      })
+      .catch(() => {})
 
-    const attach = async () => {
-      try {
-        rawProvider = await activeWallet.getEthereumProvider()
-        rawProvider.on?.('chainChanged', handleChainChange)
-        rawProvider.on?.('accountsChanged', refreshProvider)
-      } catch (e) {
-        console.error('[WalletProvider] Could not attach chain listener', e)
-      }
-    }
-    attach()
     return () => {
-      rawProvider?.removeListener?.('chainChanged', handleChainChange)
-      rawProvider?.removeListener?.('accountsChanged', refreshProvider)
+      raw?.removeListener?.("chainChanged",    onChange)
+      raw?.removeListener?.("accountsChanged", onChange)
     }
-  }, [activeWallet?.address, setupProvider, refreshProvider])
+  }, [activeEvmWallet?.address, setupEvmProvider])
 
-  // UI Protection
+  // ── Logout guard: only when NOT on Solana ────────────────────────────────
   useEffect(() => {
-    if (ready && authenticated && wallets.length === 0) {
-      const timer = setTimeout(() => {
-        if (wallets.length === 0) {
-          toast.error("External wallet missing. Please log in again.")
+    if (ready && authenticated && wallets.length === 0 && !isOnSolanaRef.current) {
+      const t = setTimeout(() => {
+        if (wallets.length === 0 && !isOnSolanaRef.current) {
+          toast.error("Wallet missing. Please log in again.")
           logout()
         }
       }, 2500)
-      return () => clearTimeout(timer)
+      return () => clearTimeout(t)
     }
   }, [ready, authenticated, wallets.length, logout])
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const connect = async () => {
     try { await login() } catch { toast.error("Failed to connect wallet") }
   }
 
   const disconnect = async () => {
     wagmiDisconnect()
-    setProvider(null)
-    setSigner(null)
-    setWalletType(null)
-    setLiveChainId(null)
+    setProvider(null); setSigner(null); setWalletType(null)
+    setEvmChainId(null); setOnSolana(false)
     await logout()
   }
 
   const disconnectExternalWallet = async () => {
-    const externalWallet = wallets.find(w => w.walletClientType !== 'privy')
-    if (externalWallet) {
-      await externalWallet.disconnect()
-      wagmiDisconnect()
-    }
+    const ext = wallets.find((w) => w.walletClientType !== "privy")
+    if (ext) { await ext.disconnect(); wagmiDisconnect() }
   }
 
-  const switchChain = async (newChainId: number) => {
-    if (!activeWallet) throw new Error("No wallet connected")
-      
-   if (newChainId === 102) {
-  // ADD THIS TEMPORARILY
-  console.log('[switchChain] user linkedAccounts:', user?.linkedAccounts)
-  console.log('[switchChain] all wallets:', wallets.map(w => ({ 
-    addr: w.address, 
-    type: w.walletClientType,
-    chainType: (w as any).chainType 
-  })))
-  console.log('[switchChain] solanaWallets resolved:', solanaWallets.map(w => w.address))
-  
-  const embeddedSolana = solanaWallets.find(w => w.walletClientType === 'privy')
-  const externalSolana = solanaWallets.find(w => w.walletClientType !== 'privy')
+  // ── switchToSolana ────────────────────────────────────────────────────────
+  const switchToSolana = useCallback(async () => {
+    const result = await connectOrSwitchSolana()
 
-  // ✅ KEY FIX: Determine user type by whether they have external EVM, not by
-  // what wallet is currently active (which might be mid-switch state)
-  const hasExternalEvm = wallets.some(
-    w => w.walletClientType !== 'privy' && 
-    (w as ExtendedConnectedWallet).chainType === 'ethereum'
-  )
+    switch (result.status) {
+      case "connected":
+        // Just flip the flag — EVM provider stays intact for when we switch back
+        setOnSolana(true)
+        setWalletType(result.type)
+        return
 
-  if (!hasExternalEvm) {
-  if (embeddedSolana) {
-    setLiveChainId(102)
-    await setupProvider(embeddedSolana)
-    toast.success("Switched to Solana")
-    return
-  } else {
-    // Check if it exists in linkedAccounts but not yet as ConnectedWallet
-    const solanaInLinked = (user?.linkedAccounts || []).find(
-      (acc: any) => acc.type === 'wallet' && acc.chainType === 'solana' && acc.walletClientType === 'privy'
-    )
-    if (solanaInLinked) {
-      // Wallet exists but isn't active yet — set chain ID and let setupProvider handle it
-      // Privy should auto-connect it; force a re-render
-      toast.info("Loading your Solana wallet...")
-      setLiveChainId(102)
-      // Give Privy a moment to hydrate the wallet
-      await new Promise(r => setTimeout(r, 800))
-      await setupProvider()
-      return
+      case "linking":
+        setSolanaConnectOpen(true)
+        return
+
+      case "cancelled":
+      case "error":
+        return
     }
-    toast.error("Embedded Solana wallet not found. Try logging out and back in.")
-    return
-  }
-} else {
-    // External user → prefer external Solana
-    if (externalSolana) {
-      setLiveChainId(102)
-      await setupProvider(externalSolana)
-      toast.success("Switched to Solana")
-      return
-    } else {
-      // Has external EVM but no external Solana yet → prompt to link
-      toast.info("Please link your Solana wallet (Phantom, Solflare) to use this network.")
-      linkWallet()
-      return
-    }
-  }
-}
-    // 🌐 SWITCHING FROM SOLANA BACK TO EVM
-    let evmWalletToSwitch = activeWallet;
+  }, [connectOrSwitchSolana, setOnSolana])
 
-    if ((activeWallet as ExtendedConnectedWallet).chainType === 'solana') {
-       const isCurrentlyEmbedded = activeWallet.walletClientType === 'privy'
-       const evmWallets = wallets.filter(w => (w as ExtendedConnectedWallet).chainType === 'ethereum')
-       
-       // Match external -> external, or embedded -> embedded
-       const exactMatchEvm = evmWallets.find(w => isCurrentlyEmbedded ? w.walletClientType === 'privy' : w.walletClientType !== 'privy')
-       evmWalletToSwitch = exactMatchEvm || evmWallets[0]
-
-       if (!evmWalletToSwitch) {
-          toast.error("Please connect an EVM wallet first.")
-          return
-       }
-       
-       // Update internal state instantly
-       setLiveChainId(newChainId)
-       await setupProvider(evmWalletToSwitch)
+  // ── switchToEvm ───────────────────────────────────────────────────────────
+  const switchToEvm = useCallback(async (targetChainId: number) => {
+    // If coming from Solana, flip back first
+    if (isOnSolanaRef.current) {
+      setOnSolana(false)
+      // EVM provider may already be set up from before the Solana switch;
+      // if not (first load was on Solana), set it up now
+      if (!provider) await setupEvmProvider()
     }
 
-    // Process the actual EVM provider network request
-    const hexChainId = `0x${newChainId.toString(16)}`
+    if (!activeEvmWallet) { toast.error("No EVM wallet connected."); return }
+
+    const hexChainId = `0x${targetChainId.toString(16)}`
     try {
-      const rawProvider = await evmWalletToSwitch.getEthereumProvider()
-
+      const rawProvider = await activeEvmWallet.getEthereumProvider()
       try {
         await rawProvider.request({
           method: "wallet_switchEthereumChain",
           params: [{ chainId: hexChainId }],
         })
-      } catch (switchErr: any) {
-        if (switchErr.code === 4902 || switchErr.message?.includes("Unrecognized chain ID")) {
-          await wagmiSwitchChain({ chainId: newChainId })
-        } else {
-          throw switchErr
-        }
+      } catch (err: any) {
+        if (err.code === 4902 || err.message?.includes("Unrecognized chain ID")) {
+          await wagmiSwitchChain({ chainId: targetChainId })
+        } else throw err
       }
 
-      // Verify the chain actually switched on mobile/external providers
+      // Poll until confirmed
       let confirmed = false
       for (let i = 0; i < 12; i++) {
-        await new Promise(r => setTimeout(r, 500))
+        await new Promise((r) => setTimeout(r, 500))
         try {
-          const ethProvider = new BrowserProvider(rawProvider)
-          const network = await ethProvider.getNetwork()
-          if (Number(network.chainId) === newChainId) {
-            confirmed = true
-            break
-          }
+          const net = await new BrowserProvider(rawProvider).getNetwork()
+          if (Number(net.chainId) === targetChainId) { confirmed = true; break }
         } catch {}
       }
+      if (!confirmed) toast.warning("Network may not have switched — verify in your wallet")
 
-      if (!confirmed) {
-        toast.warning("Network may not have switched — please verify in your wallet")
-      }
-
-      await setupProvider(evmWalletToSwitch)
+      await setupEvmProvider(activeEvmWallet)
       toast.success("Network switched")
-
-    } catch (error: any) {
-      if (error?.code === 4001 || error?.message?.includes("rejected")) {
+    } catch (err: any) {
+      if (err?.code === 4001 || err?.message?.includes("rejected")) {
         toast.error("Network switch cancelled")
       } else {
-        toast.error("Failed to switch network — try switching manually in your wallet")
+        toast.error("Failed to switch network")
       }
-      throw error
+      throw err
     }
-  }
+  }, [activeEvmWallet, provider, setupEvmProvider, wagmiSwitchChain, setOnSolana])
+
+  // ── switchChain: legacy unified entry-point (used by NetworkProvider) ─────
+  const switchChain = useCallback(async (newChainId: number) => {
+    if (newChainId === 102) {
+      await switchToSolana()
+    } else {
+      await switchToEvm(newChainId)
+    }
+  }, [switchToSolana, switchToEvm])
 
   const ensureCorrectNetwork = async (requiredChainId: number): Promise<boolean> => {
-    if (!isConnected) {
-      await connect()
-      return false
-    }
-    const currentChain = liveChainId ?? wagmiChainId
-    if (currentChain !== requiredChainId) {
-      await switchChain(requiredChainId)
-      return true
-    }
+    if (!isConnected) { await connect(); return false }
+    const current = isOnSolana ? 102 : (evmChainId ?? wagmiChainId)
+    if (current !== requiredChainId) await switchChain(requiredChainId)
     return true
   }
 
+  // chainId: expose 102 when on Solana, evmChainId otherwise (legacy compat)
+  const chainId = isOnSolana ? 102 : (evmChainId ?? wagmiChainId ?? null)
+
   return (
-    <WalletContext.Provider
-      value={{
-        provider,
-        signer,
-        address,
-        chainId: liveChainId ?? wagmiChainId ?? null,
-        isConnected,
-        isConnecting,
-        walletType,
-        connect,
-        disconnect,
-        disconnectExternalWallet,
-        ensureCorrectNetwork,
-        switchChain,
-        refreshProvider,
-      }}
-    >
+    <WalletContext.Provider value={{
+      provider, signer, evmChainId,
+      address, chainId, isOnSolana,
+      isConnected, isConnecting, walletType,
+      connect, disconnect, disconnectExternalWallet,
+      ensureCorrectNetwork, switchChain,
+      switchToSolana, switchToEvm,
+      refreshProvider,
+    }}>
+      <SolanaConnectModal
+        open={solanaConnectOpen}
+        onOpenChange={setSolanaConnectOpen}
+        onConnected={() => {
+          setOnSolana(true)
+          setWalletType(activeSolanaAccount?.walletClientType === "privy" ? "embedded" : "external")
+        }}
+      />
       {children}
     </WalletContext.Provider>
   )

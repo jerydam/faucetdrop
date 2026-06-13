@@ -1,9 +1,9 @@
 "use client"
 
-import { useAppKit } from '@reown/appkit/react'
+import Link from "next/link"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useWallet } from "@/components/wallet-provider"
 import { Button } from "@/components/ui/button"
-import { Wallet, ChevronDown, LayoutDashboard, Copy, ExternalLink, LogOut, User2 } from "lucide-react"
-import { useWallet } from "./wallet-provider" // Use your custom hook
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,74 +13,237 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import Link from 'next/link'
-import { useToast } from '@/hooks/use-toast'
+import { LayoutDashboard, LogOut, Copy, ChevronDown, Wallet, ShoppingBag } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
+import { usePathname } from "next/navigation"
 
-export function WalletConnectButton({ className }: { className?: string }) {
-  const { open } = useAppKit()
-  const { address, isConnected, isFarcaster } = useWallet() // Use unified context
-  const { toast } = useToast()
-  
-  const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
+const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
 
-  const handleCopyAddress = () => {
-    if (address) {
-      navigator.clipboard.writeText(address)
-      toast({ title: "Address Copied" })
+interface WalletConnectButtonProps {
+  className?: string
+}
+
+const ADMIN_ADDRESSES = ["0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785", ""].map(a => a.toLowerCase())
+
+export function WalletConnectButton({ className }: WalletConnectButtonProps) {
+  const { address, isConnected, isConnecting, connect, disconnect, walletType } = useWallet()
+  const pathname = usePathname()
+
+  const [dbUsername, setDbUsername] = useState<string | null>(null)
+  const [dbAvatarUrl, setDbAvatarUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const hasSyncedRef = useRef(false)
+
+  const isStorePage = pathname?.startsWith("/store")
+  const isAdmin = !!address && ADMIN_ADDRESSES.includes(address.toLowerCase())
+
+  useEffect(() => {
+    if (!isConnected || !address) {
+      setDbUsername(null)
+      setDbAvatarUrl(null)
+      hasSyncedRef.current = false
+      return
     }
-  }
 
-  // 1. FARCASTER STATE
-  // If we are in a Farcaster frame, we don't need a "Connect" button, 
-  // we just show the connected state (simplified).
-  if (isFarcaster && isConnected && address) {
-     return (
-        <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-full border border-border/50">
-           <div className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
-           <span className="font-mono text-xs text-muted-foreground">FC: {formatAddress(address)}</span>
-        </div>
-     )
-  }
+    let isMounted = true
+    setLoading(true)
 
-  // 2. DISCONNECTED
-  if (!isConnected || !address) {
+    const fetchOrSyncProfile = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/users/${address.toLowerCase()}`)
+        let profileExists = false
+
+        if (response.ok) {
+          const data = await response.json()
+          const profileData = data.profile || (data.username ? data : null)
+          if (profileData && profileData.username && profileData.username !== "New User") {
+            profileExists = true
+            if (isMounted) {
+              setDbUsername(profileData.username)
+              setDbAvatarUrl(profileData.avatar_url || profileData.avatarUrl || "")
+            }
+          }
+        }
+
+        if (!profileExists && !hasSyncedRef.current) {
+          hasSyncedRef.current = true
+          const fallbackUsername = `user_${address.slice(-4)}`
+
+          const syncRes = await fetch(`${API_BASE_URL}/api/profile/sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wallet_address: address,
+              username: fallbackUsername,
+              avatar_url: "",
+              email: ""
+            })
+          })
+
+          const syncData = await syncRes.json()
+          if (syncData.success && syncData.profile && isMounted) {
+            setDbUsername(syncData.profile.username)
+            setDbAvatarUrl(syncData.profile.avatar_url)
+            window.dispatchEvent(new CustomEvent('profileUpdated', {
+              detail: { username: syncData.profile.username, avatarUrl: syncData.profile.avatar_url }
+            }))
+          }
+        }
+      } catch (error) {
+        console.error("❌ Failed to fetch/sync user profile:", error)
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    fetchOrSyncProfile()
+    return () => { isMounted = false }
+  }, [address, isConnected])
+
+  useEffect(() => {
+    const handleProfileUpdate = (event: CustomEvent) => {
+      const { username: newUsername, avatarUrl: newAvatarUrl } = event.detail
+      if (newUsername) setDbUsername(newUsername)
+      if (newAvatarUrl) setDbAvatarUrl(newAvatarUrl)
+    }
+    window.addEventListener('profileUpdated' as any, handleProfileUpdate)
+    return () => window.removeEventListener('profileUpdated' as any, handleProfileUpdate)
+  }, [])
+
+  const displayName = dbUsername || "Anonymous"
+  const displayAvatar = dbAvatarUrl || ""
+  const dashboardLink = dbUsername
+    ? `/dashboard/${dbUsername}`
+    : `/dashboard/${address?.toLowerCase() || ''}`
+
+  // Still connecting / not ready
+  if (isConnecting) {
     return (
-      <Button onClick={() => open()} size="sm" className="flex items-center gap-2 font-semibold">
-        <Wallet className="h-4 w-4" />
-        Connect Wallet
+      <Button
+        size="sm"
+        disabled
+        variant="outline"
+        className={cn("text-xs font-bold uppercase tracking-widest px-6 opacity-50 border-border", className)}
+      >
+        Connecting...
       </Button>
     )
   }
 
-  // 3. STANDARD CONNECTED
+  if (!isConnected) {
+    return (
+      <Button
+        onClick={connect}
+        size="sm"
+        variant="default"
+        className={cn("text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-all", className)}
+      >
+        Get Started
+      </Button>
+    )
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="flex items-center gap-2 border-primary/20">
-          <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="font-mono text-xs sm:text-sm">{formatAddress(address)}</span>
-          <ChevronDown className="h-3 w-3 opacity-50" />
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn("flex items-center gap-2 p-1 sm:pr-3 border-primary/20 hover:bg-primary/5 transition-all rounded-full h-9 relative", className)}
+        >
+          <div className="relative">
+            <Avatar className="h-7 w-7 border border-background shadow-sm">
+              <AvatarImage src={displayAvatar} className="object-cover" />
+              <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+                {loading ? <span className="animate-pulse">...</span> : displayName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            {walletType === 'external' && (
+              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-blue-500 rounded-full border border-background flex items-center justify-center">
+                <Wallet className="h-2 w-2 text-white" />
+              </div>
+            )}
+          </div>
+          <span className="hidden sm:block text-xs sm:text-sm font-medium max-w-[100px] truncate">
+            {loading ? "..." : displayName}
+          </span>
+          <ChevronDown className="hidden sm:block h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">My Account</DropdownMenuLabel>
-        <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
-             <Link href="/faucet/dashboard" className="cursor-pointer flex items-center gap-2">
-               <LayoutDashboard className="h-4 w-4" />
-               <span>Dashboard</span>
-             </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleCopyAddress} className="cursor-pointer flex items-center gap-2">
-             <Copy className="h-4 w-4" />
-             <span>Copy Address</span>
-          </DropdownMenuItem>
-          {/* ... other items ... */}
-        </DropdownMenuGroup>
+
+      <DropdownMenuContent align="end" className="w-56 z-[200]" sideOffset={8}>
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col space-y-1">
+            <p className="text-sm font-medium leading-none truncate">{displayName}</p>
+            {address && (
+              <div className="flex items-center gap-1">
+                <p className="text-xs leading-none text-muted-foreground font-mono">
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                </p>
+                {walletType === 'external' && (
+                  <span className="text-[10px] bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">
+                    External
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </DropdownMenuLabel>
+
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => open()} className="cursor-pointer flex items-center gap-2">
-             <ExternalLink className="h-4 w-4" />
-             <span>Wallet Settings</span>
+
+        <DropdownMenuGroup>
+          {isStorePage ? (
+            isAdmin ? (
+              <DropdownMenuItem asChild>
+                <Link href="/store/admin" className="cursor-pointer flex items-center gap-2">
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Admin</span>
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem asChild>
+                <Link href="/store/orders" className="cursor-pointer flex items-center gap-2">
+                  <ShoppingBag className="h-4 w-4" />
+                  <span>My Orders</span>
+                </Link>
+              </DropdownMenuItem>
+            )
+          ) : (
+            <DropdownMenuItem asChild>
+              <Link
+                href={dashboardLink}
+                className={cn(
+                  "cursor-pointer flex items-center gap-2",
+                  (loading || !dbUsername) && "pointer-events-none opacity-50"
+                )}
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                <span>{loading ? "Loading..." : dbUsername ? "Profile" : "Dashboard"}</span>
+              </Link>
+            </DropdownMenuItem>
+          )}
+
+          {address && (
+            <DropdownMenuItem
+              onClick={() => { navigator.clipboard.writeText(address); toast.success("Address copied!") }}
+              className="cursor-pointer flex items-center gap-2"
+            >
+              <Wallet className="h-4 w-4" />
+              <span>Copy Address</span>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuGroup>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={disconnect}
+          className="cursor-pointer flex items-center gap-2 text-red-600 focus:text-red-600 focus:bg-red-50"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>Disconnect</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

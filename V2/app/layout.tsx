@@ -1,57 +1,168 @@
-import type { Metadata } from "next"
+"use client"
+
+import type React from "react"
+import { useEffect, useMemo } from "react"
 import { Inter } from "next/font/google"
 import "./globals.css"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "sonner"
+import { NetworkProvider } from "@/hooks/use-network"
+import { WalletProvider } from "@/components/wallet-provider"
 import { Footer } from "@/components/footer"
-import { Providers } from "@/components/providers" // Import the new component
+// Add this import at the top
+import { LuminaProvider } from "@jerydam/lumina-sdk"
+import { SubscriptionModalProvider } from "@/components/subscribe"
+import { DEFAULT_CHAIN_ID, luminaConfig, supportedChains } from "@/config/lumina"
+import { useVisitTracker } from "@/hooks/use-visit-tracker"
+import { celo, base, arbitrum } from 'viem/chains'
+import { PrivyProvider } from '@privy-io/react-auth'
+// ── Solana wallet adapter ─────────────────────────────────────────────────────
+import {
+  ConnectionProvider,
+  WalletProvider as SolanaWalletProvider,
+} from "@solana/wallet-adapter-react"
+import { WalletModalProvider } from "@solana/wallet-adapter-react-ui"
+import {
+  PhantomWalletAdapter,
+  SolflareWalletAdapter,
+  TorusWalletAdapter,
+} from "@solana/wallet-adapter-wallets"
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const inter = Inter({ subsets: ["latin"] })
 
-// Define the MiniApp metadata for the head tag
-// This tells Farcaster clients how to launch your frame
-const appUrl = process.env.NEXT_PUBLIC_URL || "https://app.faucetdrops.io";
+// Solana providers are extracted into their own component so the `useMemo`
+// for wallet adapters runs in a proper client component without touching the
+// root layout's server-component boundary.
+function SolanaProviders({ children }: { children: React.ReactNode }) {
+  // Memoised so adapter instances are stable across re-renders
+  const wallets = useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter(),
+      new TorusWalletAdapter(),
+    ],
+    []
+  )
 
-const frameMetadata = JSON.stringify({
-  version: "next",
-  imageUrl: `${appUrl}/opengraph-image.png`, // Make sure this image exists
-  button: {
-    title: "Drip Tokens 💧",
-    action: {
-      type: "launch_frame",
-      name: "FaucetDrops",
-      url: appUrl,
-      splashImageUrl: `${appUrl}/splash.png`,
-      splashBackgroundColor: "#020817",
-    },
-  },
-});
+  const endpoint =
+    process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com"
 
-export const metadata: Metadata = {
-  title: "FaucetDrops ",
-  description: "Token Drops Made Easy 💧",
-  icons: {
-    icon: "/favicon.png",
-  },
-  other: {
-    "fc:frame": frameMetadata,
-  },
-};
+  return (
+    <ConnectionProvider endpoint={endpoint}>
+      <SolanaWalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>{children}</WalletModalProvider>
+      </SolanaWalletProvider>
+    </ConnectionProvider>
+  )
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  useVisitTracker()
+
+ 
+
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.ico" />
+
+        {/* Primary Meta Tags */}
+        <title>FaucetDrops - Automated Onchain Reward and Engagement Platform</title>
+        <meta name="title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
+        <meta
+          name="description"
+          content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains."
+        />
+        <meta
+          name="talentapp:project_verification"
+          content="b30a81da8fe68c308c2b4978535103484c8acb90b729ec9625b7eff07309c1fb86809ee621e63c5eedc5c592ddde2c2d2c2c0e8afa73980dcf6339e92b0839d7"
+        />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://app.faucetdrops.io/" />
+        <meta property="og:site_name" content="app.faucetdrops" />
+        <meta property="og:title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
+        <meta
+          property="og:description"
+          content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains."
+        />
+        <meta property="og:image" content="https://app.faucetdrops.io/opengraph-image" />
+        <meta property="og:image:secure_url" content="https://app.faucetdrops.io/opengraph-image" />
+        <meta property="og:image:type" content="image/jpeg" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta
+          property="og:image:alt"
+          content="app.faucetdrops - Automated onchain reward and engagement platform"
+        />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:url" content="https://app.faucetdrops.io/" />
+        <meta name="twitter:title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
+        <meta
+          name="twitter:description"
+          content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains."
+        />
+        <meta name="twitter:image" content="https://app.faucetdrops.io/opengraph-image" />
+        <meta
+          name="twitter:image:alt"
+          content="app.faucetdrops - Automated onchain reward and engagement platform"
+        />
+
+        {/* Additional SEO */}
+        <meta
+          name="keywords"
+          content="token drops, crypto faucet, onchain rewards, web3 engagement, token distribution, blockchain rewards"
+        />
+        <meta name="author" content="FaucetDrops" />
+        <link rel="canonical" href="https://app.faucetdrops.io/" />
+        <meta name="theme-color" content="#020817" />
+      </head>
       <body className={inter.className}>
-        <Providers>
-          <div className="min-h-screen flex flex-col">
-            <main className="flex-1">
-              {children}
-            </main>
-            <Footer />
-          </div>
-        </Providers>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          
+                    <PrivyProvider
+            appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID!}
+            config={{
+            loginMethods: ['email'],  // ← required by Privy, won't show in your UI
+            appearance: { theme: 'dark' },
+          }}
+          >
+          <LuminaProvider
+            apiKey={process.env.NEXT_PUBLIC_LUMINA_API_KEY!}
+            defaultChainId={String(DEFAULT_CHAIN_ID)}
+            supportedChainIds={supportedChains.map(c => String(c.id))}
+            // now includes all 5: celo, base, arbitrum, lisk, bsc
+          >
+            <SolanaProviders>
+              <NetworkProvider>
+                <WalletProvider>
+                  <SubscriptionModalProvider>
+                    <div className="min-h-screen flex flex-col">
+                      <main className="flex-1">{children}</main>
+                      <Footer />
+                    </div>
+                    <Toaster richColors position="top-center" closeButton />
+                  </SubscriptionModalProvider>
+                </WalletProvider>
+              </NetworkProvider>
+            </SolanaProviders>
+          </LuminaProvider>
+          </PrivyProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

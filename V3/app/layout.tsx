@@ -1,46 +1,73 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-// import { headers } from 'next/headers' // added
-// import ContextProvider from '@/context'
-import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SplashScreen from "@/components/SplashScreen";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import FloatingElements from "@/components/FloatingElements";
-import CursorFollower from "@/components/CursorFollower";
-
+import ChatBot from '@/components/landingPage/ChatBot';
+import ConditionalHeader from "@/components/ConditionalHeader";
+import VisitTracker from '@/components/visitTracker'; // 1. Import the new wrapper
+import { Suspense } from 'react';
 const inter = Inter({ subsets: ['latin'] })
 
+// Metadata works flawlessly now because this is a Server Component
 export const metadata: Metadata = {
-  title: 'FaucetDrops',
-  description: 'FaucetDrops - Get test tokens for your development needs',
-  icons: '/favicon.ico'
+  title: {
+    default: 'FaucetDrops - Automated Onchain Reward and Engagement Platform',
+    template: '%s | FaucetDrops'
+  },
+  description: 'Automated onchain reward and engagement platform 💧. Quest, Quiz, and distribute tokens effortlessly across multiple chains.',
+  keywords: ['token drops', 'crypto faucet', 'onchain rewards', 'web3 engagement', 'token distribution', 'blockchain rewards', 'quests', 'quizzes'],
+  authors: [{ name: 'FaucetDrops' }],
+  metadataBase: new URL('https://faucetdrops.io'),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    url: 'https://faucetdrops.io/',
+    siteName: 'FaucetDrops',
+    title: 'FaucetDrops - Automated Onchain Reward and Engagement Platform',
+    description: 'Automated onchain reward and engagement platform 💧. Distribute tokens and drive growth through Quests and Quizzes.',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'FaucetDrops - Automated onchain reward and engagement platform',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'FaucetDrops - Automated Onchain Reward and Engagement Platform',
+    description: 'Automated onchain reward and engagement platform 💧. Distribute tokens and drive growth through Quests and Quizzes.',
+    images: ['/opengraph-image'],
+  },
 }
 
-export default async function RootLayout({
-  children
-}: Readonly<{
-  children: React.ReactNode
-}>) {
-
-  // const headersObj = await headers();
-  // const cookies = headersObj.get('cookie')
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <meta name="talentapp:project_verification" content="..." />
+      </head>
       <body className={`${inter.className} antialiased relative`}>
-        {/* <ContextProvider cookies={cookies}> */}
-          <AnimatedBackground />
-          <FloatingElements />
-          <CursorFollower />
-          <div className="relative z-20">
-            <SplashScreen />
-            <Header />
-            {children}
-            <Footer />
-          </div>
-        {/* </ContextProvider> */}
+
+        <Suspense fallback={null}>
+          <VisitTracker />   {/* ← wrap in Suspense */}
+        </Suspense>
+
+        <AnimatedBackground />
+        <FloatingElements />
+        <div className="relative z-20">
+          <SplashScreen />
+          <ConditionalHeader />
+          {children}
+          <ChatBot />
+          <Footer />
+        </div>
       </body>
     </html>
   )

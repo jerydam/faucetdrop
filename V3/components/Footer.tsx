@@ -3,37 +3,7 @@
 import Link from 'next/link';
 import { siX, siGithub, siTelegram, siGmail, siYoutube } from 'simple-icons/icons'
 import Image from 'next/image';
-
-interface IconProps {
-  path: string;
-  title?: string;
-}
-
-interface SimpleIconProps {
-  icon: IconProps;
-  size?: number | string;
-  className?: string;
-}
-
-const SimpleIcon: React.FC<SimpleIconProps> = ({ 
-  icon, 
-  size = 24, 
-  className = 'text-white' 
-}) => {
-  return (
-    <svg
-      role="img"
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      className={className}
-      fill="currentColor"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d={icon.path} />
-    </svg>
-  );
-};
+import { SimpleIcon } from './ui/simpleIcons';
 
 const Footer = () => {
 
@@ -41,19 +11,20 @@ const Footer = () => {
     {
       title: 'Product',
       links: [
-        { name: 'Features', href: '/coming-soon' },
-        { name: 'Pricing', href: '/coming-soon' },
-        { name: 'Templates', href: '/coming-soon' },
-        { name: 'Integrations', href: '/coming-soon' },
+        { name: 'Faucets', href: 'https://app.faucetdrops.io/faucet/create-faucet', external: true },
+        { name: 'Quests', href: '/quest', external: false },
+        { name: 'Quizzes', href: '/quiz' },
+        { name: 'Enterprise', href: '/coming-soon' },
       ],
     },
     {
       title: 'Company',
       links: [
-        { name: 'About Us', href: '/coming-soon' },
+        { name: 'About Us', href: '/aboutUs' },
         { name: 'Careers', href: '/coming-soon' },
-        { name: 'Blog', href: '/coming-soon' },
-        { name: 'Press', href: '/coming-soon' },
+        { name: 'Blog', href: '/blogs' },
+        { name: 'Pricing', href: '/pricing' },
+        
       ],
     },
     {
@@ -61,7 +32,7 @@ const Footer = () => {
       links: [
         { name: 'Documentation', href: '/coming-soon' },
         { name: 'Guides', href: '/coming-soon' },
-        { name: 'API Status', href: '/coming-soon' },
+        // { name: 'API Status', href: '/coming-soon' },
         { name: 'Help Center', href: '/coming-soon' },
       ],
     },
@@ -69,7 +40,7 @@ const Footer = () => {
 
   const socialLinks = [
     { icon: <SimpleIcon icon={siX} size={20} />, href: 'https://x.com/faucetdrops', label: 'Twitter' },
-    { icon: <SimpleIcon icon={siGithub} size={20} />, href: 'https://github.com/Priveedores-de-soluciones/Faucet_drops', label: 'GitHub' },
+    { icon: <SimpleIcon icon={siGithub} size={20} />, href: 'https://github.com/priveedores-de-solucione/FaucetDrops', label: 'GitHub' },
     { icon: <SimpleIcon icon={siTelegram} size={20} />, href: 'https://t.me/faucetdropschat', label: 'Telegram' },
     { icon: <SimpleIcon icon={siGmail} size={20} />, href: 'mailto:drops.faucet@gmail.com', label: 'Email' },
     { icon: <SimpleIcon icon={siYoutube} size={20} />, href: 'https://www.youtube.com/@Faucet_Drops', label: 'Youtube' },
@@ -83,7 +54,7 @@ const Footer = () => {
           <div className="lg:col-span-4">
             <div className="flex items-center space-x-2 mb-4">
               <Image 
-                src='/white_FaucetDrops.png'
+                src='/logo.png'
                 alt='Logo'
                 className='w-fit h-16'
                 width={1000}
@@ -91,7 +62,7 @@ const Footer = () => {
               />
             </div>
             <p className={`mb-6 text-[#94A3B8]`}>
-            Free, Fast, Fair & Frictionless Token Distribution 💧.
+            Free, Fast, Fair & Frictionless Token Distribution 💧
             </p>
 
             {/* Social links */}
@@ -141,13 +112,13 @@ const Footer = () => {
             &copy; {new Date().getFullYear()} FaucetDrops. All rights reserved.
           </p>
           <div className="flex flex-wrap justify-center md:justify-end gap-4 mt-4 md:mt-0">
-            <Link href="/coming-soon" className="text-sm hover:text-[#2563EB] transition-colors">
+            <Link href="/privacy" className="text-sm hover:text-[#2563EB] transition-colors">
               Privacy Policy
             </Link>
-            <Link href="/coming-soon" className="text-sm hover:text-[#2563EB] transition-colors">
+            <Link href="/terms" className="text-sm hover:text-[#2563EB] transition-colors">
               Terms of Service
             </Link>
-            <Link href="/coming-soon" className="text-sm hover:text-[#2563EB] transition-colors">
+            <Link href="/cookie-policy" className="text-sm hover:text-[#2563EB] transition-colors">
               Cookie Policy
             </Link>
           </div>

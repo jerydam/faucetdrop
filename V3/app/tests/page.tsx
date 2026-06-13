@@ -1,9 +1,12 @@
-'use client'
-import React from "react";
-export default function Tests() {
+import WhyFaucetDrops from '@/components/landingPage/WhyFaucetDrops'
+import React from 'react'
+
+
+export default function Test() {
   return (
-    <div className="flex flex-col items-center justify-center h-screen">
-      Testing page for any new features      
+    <div className='container mx-auto h-screen'>
+      <WhyFaucetDrops />
+
     </div>
-  );
+  )
 }

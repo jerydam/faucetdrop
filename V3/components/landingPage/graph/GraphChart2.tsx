@@ -1,145 +1,190 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { RechartsDevtools } from '@recharts/devtools';
 
-type PieData = {
-  networkData: { name: string; value: number }[];
-  timeData: { name: string; value: number }[];
-};
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
-
-const RADIAN = Math.PI / 180;
-const renderCustomizedLabel = ({
-  cx,
-  cy,
-  midAngle,
-  innerRadius,
-  outerRadius,
-  percent,
-  index,
-  name
-}: any) => {
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN) * 1.3;
-  const y = cy + radius * Math.sin(-midAngle * RADIAN) * 1.3;
-
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="white"
-      textAnchor="middle"
-      dominantBaseline="central"
-      className="text-xs font-medium"
-    >
-      {`${(percent * 100).toFixed(0)}%`}
-    </text>
-  );
-};
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white p-3 border border-gray-200 rounded shadow-lg">
-        <p className="font-semibold">{payload[0].name}</p>
-        <p className="text-sm">
-          Claims: <span className="font-medium">{payload[0].value}</span>
-        </p>
-        <p className="text-sm">
-          {`${((payload[0].value / payload[0].payload.total) * 100).toFixed(1)}% of total`}
-        </p>
-      </div>
-    );
+// #region Sample data
+const data = [
+  {
+    name: 'Base',
+    faucets: 2400,
+    quests: 1900,
+    quizzes: 1300,
+  },
+  {
+    name: 'Celo',
+    faucets: 3200,
+    quests: 2800,
+    quizzes: 2100,
+  },
+  {
+    name: 'Lisk',
+    faucets: 1600,
+    quests: 1300,
+    quizzes: 900,
+  },
+  {
+    name: 'Arbitrum',
+    faucets: 1800,
+    quests: 1500,
+    quizzes: 1200,
   }
-  return null;
-};
+];
 
-// In GraphChart2.tsx
-const TwoLevelPieChart = ({ 
-  data = { networkData: [], timeData: [] } ,
-}: { 
-  data: PieData 
-}) => {
-  // Ensure we have valid data
-  const { networkData = [], timeData = [] } = data || {};
-  
-
-
-// const TwoLevelPieChart = ({ data }: { data: PieData }) => {
-//   const { networkData = [], timeData = [] } = data;
-
-  // Calculate total for percentage calculations
-  const networkTotal = networkData.reduce((sum, item) => sum + item.value, 0);
-  const timeTotal = timeData.reduce((sum, item) => sum + item.value, 0);
-
-  // Add percentage and total to each data point
-  const enhancedNetworkData = networkData.map(item => ({
-    ...item,
-    percent: (item.value / networkTotal) * 100,
-    total: networkTotal
-  }));
-
-  const enhancedTimeData = timeData.map(item => ({
-    ...item,
-    percent: (item.value / timeTotal) * 100,
-    total: timeTotal
-  }));
-
+// #endregion
+const StackedAreaChart = () => {
   return (
-    <div className="w-full h-[500px] flex flex-col md:flex-row gap-8 p-4 justify-center items-center">
-      <div className="w-full md:w-1/2 h-[400px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={enhancedNetworkData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={renderCustomizedLabel}
-              outerRadius={120}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {enhancedNetworkData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      
-      {/* <div className="w-full md:w-1/2 h-[400px]">
-        <h3 className="text-center font-medium mb-2">Distribution by Time of Day</h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={enhancedTimeData}
-              cx="50%"
-              cy="50%"
-              labelLine={false}
-              label={renderCustomizedLabel}
-              outerRadius={120}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {enhancedTimeData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={COLORS[(index + 3) % COLORS.length]} 
-                />
-              ))}
-            </Pie>
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-      </div> */}
-    </div>
+    <AreaChart
+      style={{ width: '100%', maxWidth: '700px', maxHeight: '70vh', aspectRatio: 1.618 }}
+      responsive
+      data={data}
+      margin={{
+        top: 20,
+        right: 0,
+        left: 0,
+        bottom: 0,
+      }}
+    >
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="name" />
+      <YAxis width="auto" />
+      <Tooltip />
+      <Area type="monotone" dataKey="faucets" stackId="2" stroke="#0298d8" fill="#017dc5" />
+      <Area type="monotone" dataKey="quests" stackId="2" stroke="#0052ff" fill="#2563eb" />
+      <Area type="monotone" dataKey="quizzes" stackId="2" stroke="#47d9f5" fill="#05baee" />
+      <RechartsDevtools />
+    </AreaChart>
   );
 };
 
-export default TwoLevelPieChart;
+export default StackedAreaChart;
+
+//Real Data Version
+// 'use client'
+// import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+// import { Loader2 } from 'lucide-react';
+// import { useDashboard } from '@/hooks/use-dashboard';
+
+// const CustomTooltip = ({ active, payload, label }: any) => {
+//   if (!active || !payload?.length) return null;
+//   return (
+//     <div className="rounded-xl border border-blue-500/30 shadow-xl px-4 py-3 min-w-[160px]"
+//       style={{ background: '#0d1f40' }}
+//     >
+//       <p className="text-xs text-blue-300 font-semibold mb-2">{label}</p>
+//       {payload.map((entry: any) => (
+//         <div key={entry.dataKey} className="flex items-center justify-between gap-4">
+//           <span className="text-xs text-white/60 capitalize">{entry.name}</span>
+//           <span className="text-sm font-bold" style={{ color: entry.color }}>
+//             {entry.value.toLocaleString()}
+//           </span>
+//         </div>
+//       ))}
+//     </div>
+//   );
+// };
+
+// const StackedAreaChart = () => {
+//   const { data, loading, error } = useDashboard();
+
+//   if (loading) return (
+//     <div className="flex items-center justify-center h-full">
+//       <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+//     </div>
+//   );
+
+//   if (error || !data) return (
+//     <div className="flex items-center justify-center h-full text-red-400 text-sm">
+//       Failed to load data
+//     </div>
+//   );
+
+//   // Merge network_faucets + network_transactions by network name
+//   const chartData = data.network_faucets.map((nf) => {
+//     const txRow = data.network_transactions.find(
+//       (nt) => nt.name.toLowerCase() === nf.network.toLowerCase()
+//     );
+//     // Count faucet rankings for this network as "active faucets"
+//     const activeFaucets = data.faucet_rankings.filter(
+//       (fr) => fr.network.toLowerCase() === nf.network.toLowerCase()
+//     ).length;
+
+//     return {
+//       name:            nf.network,
+//       faucets:         nf.faucets,
+//       transactions:    txRow?.totalTransactions ?? 0,
+//       activeFaucets,
+//     };
+//   });
+
+//   return (
+//     <ResponsiveContainer width="100%" height="100%">
+//       <AreaChart
+//         data={chartData}
+//         margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
+//       >
+//         <defs>
+//           <linearGradient id="gradFaucets" x1="0" y1="0" x2="0" y2="1">
+//             <stop offset="5%"  stopColor="#0052FF" stopOpacity={0.6} />
+//             <stop offset="95%" stopColor="#0052FF" stopOpacity={0.05} />
+//           </linearGradient>
+//           <linearGradient id="gradTransactions" x1="0" y1="0" x2="0" y2="1">
+//             <stop offset="5%"  stopColor="#00d4ff" stopOpacity={0.6} />
+//             <stop offset="95%" stopColor="#00d4ff" stopOpacity={0.05} />
+//           </linearGradient>
+//           <linearGradient id="gradActive" x1="0" y1="0" x2="0" y2="1">
+//             <stop offset="5%"  stopColor="#35D07F" stopOpacity={0.6} />
+//             <stop offset="95%" stopColor="#35D07F" stopOpacity={0.05} />
+//           </linearGradient>
+//         </defs>
+
+//         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+//         <XAxis
+//           dataKey="name"
+//           tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 12 }}
+//           axisLine={false}
+//           tickLine={false}
+//         />
+//         <YAxis
+//           tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
+//           axisLine={false}
+//           tickLine={false}
+//           width={45}
+//         />
+//         <Tooltip content={<CustomTooltip />} />
+//         <Legend
+//           wrapperStyle={{ color: 'rgba(255,255,255,0.7)', fontSize: '12px', paddingTop: '12px' }}
+//         />
+
+//         <Area
+//           type="monotone"
+//           dataKey="faucets"
+//           name="Faucets"
+//           stackId="1"
+//           stroke="#0052FF"
+//           fill="url(#gradFaucets)"
+//           strokeWidth={2}
+//         />
+//         <Area
+//           type="monotone"
+//           dataKey="transactions"
+//           name="Transactions"
+//           stackId="1"
+//           stroke="#00d4ff"
+//           fill="url(#gradTransactions)"
+//           strokeWidth={2}
+//         />
+//         <Area
+//           type="monotone"
+//           dataKey="activeFaucets"
+//           name="Active Faucets"
+//           stackId="1"
+//           stroke="#35D07F"
+//           fill="url(#gradActive)"
+//           strokeWidth={2}
+//         />
+//       </AreaChart>
+//     </ResponsiveContainer>
+//   );
+// };
+
+// export default StackedAreaChart;

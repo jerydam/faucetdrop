@@ -6,14 +6,13 @@
   },
   "frame": {
     "version": "1",
-    "name": "Faucetdrops",
-    "description": "Free, Fast, Fair & Frictionless Token Distribution 💧",
-    "iconUrl": "https://faucetdrops.com/logo.png",
-    "splashImageUrl": "https://faucetdrops.com/splash.png",
-    "splashBackgroundColor": "#212127",
-    "url": "https://faucetdrops.com",
-    "homeUrl": "https://faucetdrops.com",
-    "requiredChains": [42220, 44787, 1135],
-    "requiredCapabilities": ["eth_sendTransaction", "eth_signTypedData_v4"]
+    "name": "FaucetDrops",
+    "iconUrl": "https://app.FaucetDrops.io/icon.png",
+    "homeUrl": "https://app.FaucetDrops.io",
+    "imageUrl": "https://app.FaucetDrops.io/image.png",
+    "buttonTitle": "Start dripping",
+    "splashImageUrl": "https://app.FaucetDrops.io/splash.png",
+    "splashBackgroundColor": "#020817",
+    "webhookUrl": "https://app.FaucetDrops.io/api/webhook"
   }
 }

@@ -33,10 +33,10 @@ import { QUIZ_HUB_ABI } from "@/lib/abis";
 // Config
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetpay-backend.koyeb.app";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 const QUIZ_HUB_ADDRESS = (
-  process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0x9088298cd07BE0cAA1e256d3f3761313e1a1447E"
+  process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0x349A019b4721DDF9C4E4CCDE46dd048632A41F8F"
 ) as `0x${string}`;
 
 // DROPS token on Celo — 18 decimals
@@ -225,7 +225,7 @@ export default function CreateChallengePage() {
       address:      QUIZ_HUB_ADDRESS,
       abi:          QUIZ_HUB_ABI,
       functionName: "createQuiz",
-      args:         [quizId, stakeWei],   // (bytes32, uint256) — no token address
+      args:         [quizId],   // (bytes32, uint256) — no token address
       account,
       chain: celo,
     });

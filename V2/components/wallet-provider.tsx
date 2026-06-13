@@ -102,7 +102,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const isConnected = !!(session?.signer_address ?? session?.evm_address)
   const address = isOnSolana
     ? (session?.solana_address ?? null)
-    : (session?.smart_account_address ?? session?.evm_address ?? null)
+    : (session?.signer_address ?? session?.evm_address ?? null) 
 
   const chainId = isOnSolana ? SOLANA_CHAIN_ID : (evmChainId ?? null)
   const resolvedWalletType: "embedded" | "external" | null =
@@ -114,8 +114,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   if (!raw) return
   try {
     const s: LuminaSession = JSON.parse(raw)
-    s.signer_address        = s.signer_address        ?? s.evm_address
-    s.smart_account_address = s.smart_account_address ?? s.evm_address
+    s.signer_address        = s.evm_signer ?? s.evm_address 
+    s.smart_account_address = s.evm_address
     setSession(s)
     const sessionChainId = s.chain_id
     setEvmChainId(
@@ -371,18 +371,18 @@ const switchToEvm = useCallback(async (targetChainId: number) => {
             chainId={String(DEFAULT_CHAIN_ID)}
             onRequestExport={exportWallet}        // ← add this line
             onSuccess={(raw: any) => {
-              const normalized: LuminaSession = {
-                ...raw,
-                signer_address:        raw.evm_address,
-                smart_account_address: raw.evm_address,
-                chain_id: raw.chain_id ?? String(DEFAULT_CHAIN_ID),
-              }
-              localStorage.setItem(SESSION_KEY, JSON.stringify(normalized))
-              setSession(normalized)
-              setEvmChainId(parseInt(normalized.chain_id, 10))
-              setShowLoginModal(false)
-              toast.success("Wallet connected!")
-            }}
+            const normalized: LuminaSession = {
+              ...raw,
+              signer_address:        raw.evm_signer ?? raw.evm_address,   // ← the actual key (0xe5f093...)
+              smart_account_address: raw.evm_address,                     // ← the smart account (0x1e41...)
+              chain_id: raw.chain_id ?? String(DEFAULT_CHAIN_ID),
+            }
+            localStorage.setItem(SESSION_KEY, JSON.stringify(normalized))
+            setSession(normalized)
+            setEvmChainId(parseInt(normalized.chain_id, 10))
+            setShowLoginModal(false)
+            toast.success("Wallet connected!")
+          }}
             onError={(err) => toast.error(err.message)}
             onClose={() => setShowLoginModal(false)}
           />

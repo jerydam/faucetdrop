@@ -15,8 +15,8 @@ importers:
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.79.0(react@19.2.7))
       '@jerydam/lumina-sdk':
-        specifier: ^1.0.14
-        version: 1.0.15(49d93fb76c302914c0e8013f3ae1cecd)
+        specifier: ^1.0.17
+        version: 1.0.17(49d93fb76c302914c0e8013f3ae1cecd)
       '@lit/react':
         specifier: ^1.0.8
         version: 1.0.8(@types/react@19.2.17)
@@ -937,8 +937,8 @@ packages:
     resolution: {integrity: sha512-RQgQ4uQ+pLbqXfOmieB91ejmLwvSgv9nLx6sT6sD83s7umBypgg+OIBOBbEUiJXrfpnp9j0mRhYYdzp9uqq3lA==}
     engines: {node: '>=12'}
 
-  '@jerydam/lumina-sdk@1.0.15':
-    resolution: {integrity: sha512-V/yDDvDcnTh4d9S6CKJ60aqAedNSHr0gT5O7QMFi0PncD04DmhL1f8x2RTIhUqtXnKbrtDxzbq+eZKRJ+ZNvPw==}
+  '@jerydam/lumina-sdk@1.0.17':
+    resolution: {integrity: sha512-iCWaYKlZ6nN/GIKcRtGHGj9yhZVMxiFdOFQt/+V1BHRliJ4x0ROQDKoEeTRQuTG/PsqhTVFpUwZmunGNHhztrQ==}
     peerDependencies:
       next: '>=13'
       react: '>=18'
@@ -10135,7 +10135,7 @@ snapshots:
 
   '@isaacs/ttlcache@1.4.1': {}
 
-  '@jerydam/lumina-sdk@1.0.15(49d93fb76c302914c0e8013f3ae1cecd)':
+  '@jerydam/lumina-sdk@1.0.17(49d93fb76c302914c0e8013f3ae1cecd)':
     dependencies:
       '@privy-io/react-auth': 3.30.0(9f1d7e9301e745983ae737a821d354e9)
       '@turnkey/crypto': 2.10.0

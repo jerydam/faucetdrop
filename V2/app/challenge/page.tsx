@@ -16,8 +16,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import Loading from "../loading/page";
+import { BottomNav } from "@/components/bottom-nav";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetpay-backend.koyeb.app";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 const CELO_CHAIN_ID = 42220;
 
 interface LobbyChallenge {
@@ -106,61 +107,57 @@ export default function QuizListPage() {
   const totalWon = useMemo(()=>wins.reduce((s,h)=>s+h.stake_amount*2,0),[wins]);
 
   const handleJoinAction = async (code: string) => {
-  if (code.length < 4) return;
-  setNavigating(code);
+    if (code.length < 4) return;
+    setNavigating(code);
 
-  if (!userWalletAddress) {
-    router.push(`/challenge/${code}/pre-lobby`);
-    setNavigating(null);
-    return;
-  }
-
-  try {
-    const res  = await fetch(`${API_BASE_URL}/api/challenge/${code}`);
-    const data = await res.json();
-
-    if (data.success && data.challenge) {
-      const c           = data.challenge;
-      const w           = userWalletAddress.toLowerCase();
-      const playerKeys  = Object.keys(c.players || {});
-      const isCreator   = c.creator?.toLowerCase() === w;
-      const isPlayer    = playerKeys.some((p: string) => p.toLowerCase() === w);
-      const isFull      = playerKeys.length >= 2;
-
-      // Already a participant — go straight to lobby/game
-      if (isCreator || isPlayer) {
-        router.push(`/challenge/${code}`);
-        return;
-      }
-
-      // Challenge is full and this user has no slot
-      if (isFull) {
-        setShowFullModal(true);
-        setNavigating(null);
-        return;
-      }
-
-      // Challenge is no longer accepting players
-      if (c.status === "active" || c.status === "finished") {
-        toast.error("This challenge is no longer open.");
-        setNavigating(null);
-        return;
-      }
-
-      // Open slot — go negotiate in pre-lobby
+    if (!userWalletAddress) {
       router.push(`/challenge/${code}/pre-lobby`);
-    } else {
+      setNavigating(null);
+      return;
+    }
+
+    try {
+      const res  = await fetch(`${API_BASE_URL}/api/challenge/${code}`);
+      const data = await res.json();
+
+      if (data.success && data.challenge) {
+        const c           = data.challenge;
+        const w           = userWalletAddress.toLowerCase();
+        const playerKeys  = Object.keys(c.players || {});
+        const isCreator   = c.creator?.toLowerCase() === w;
+        const isPlayer    = playerKeys.some((p: string) => p.toLowerCase() === w);
+        const isFull      = playerKeys.length >= 2;
+
+        if (isCreator || isPlayer) {
+          router.push(`/challenge/${code}`);
+          return;
+        }
+
+        if (isFull) {
+          setShowFullModal(true);
+          setNavigating(null);
+          return;
+        }
+
+        if (c.status === "active" || c.status === "finished") {
+          toast.error("This challenge is no longer open.");
+          setNavigating(null);
+          return;
+        }
+
+        router.push(`/challenge/${code}/pre-lobby`);
+      } else {
+        router.push(`/challenge/${code}/pre-lobby`);
+      }
+    } catch {
       router.push(`/challenge/${code}/pre-lobby`);
     }
-  } catch {
-    router.push(`/challenge/${code}/pre-lobby`);
-  }
-};
+  };
 
   return (
     <>
       <style>{S}</style>
-      <div className="dd-page" style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", paddingBottom:80 }}>
+      <div className="dd-page" style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", paddingBottom:100 }}>
         <Header pageTitle="Duel Arena"/>
 
         <div style={{ padding:"16px 20px", display:"flex", flexDirection:"column", gap:16 }}>
@@ -312,62 +309,66 @@ export default function QuizListPage() {
           )}
         </div>
       </div>
+
       {/* Floating Support Button */}
-{/* Floating Support Button */}
-<button
-  onClick={() => router.push("/support")}
-  style={{
-    position: "fixed",
-    bottom: 100,
-    right: 20,
-    width: 44,
-    height: 44,
-    borderRadius: "50%",
-    background: "var(--dd-blue)",
-    color: "#fff",
-    border: "none",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: "0 4px 16px rgba(37,99,235,0.4)",
-    zIndex: 999,
-    transition: "transform .2s, box-shadow .2s",
-  }}
-  onMouseEnter={e => {
-    (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)";
-    (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(37,99,235,0.5)";
-  }}
-  onMouseLeave={e => {
-    (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
-    (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 16px rgba(37,99,235,0.4)";
-  }}
->
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-  <circle cx="12" cy="12" r="10"/>
-  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-  <line x1="12" y1="17" x2="12.01" y2="17"/>
-  </svg>
-</button>
-{showFullModal && (
-  <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, padding:'0 24px' }}>
-    <div style={{ background:'var(--dd-bg)', borderRadius:20, padding:28, maxWidth:340, width:'100%', border:'1.5px solid var(--dd-card-border)', textAlign:'center' }}>
-      <div style={{ fontSize:48, marginBottom:12 }}>🔒</div>
-      <h2 className="d" style={{ fontSize:22, fontWeight:900, color:'var(--dd-text)', marginBottom:8 }}>Challenge Full</h2>
-      <p style={{ fontSize:13, color:'var(--dd-text-dim)', marginBottom:24, lineHeight:1.5 }}>
-        This duel already has two players. Create your own challenge to start a new game.
-      </p>
-      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        <button className="btn-blue" onClick={() => { setShowFullModal(false); router.push('/challenge/create-challenge'); }} style={{ height:46, borderRadius:12, fontSize:14 }}>
-          Create New Challenge
-        </button>
-        <button className="btn-ghost" onClick={() => setShowFullModal(false)} style={{ height:40, borderRadius:12, fontSize:13 }}>
-          Go Back
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      <button
+        onClick={() => router.push("/support")}
+        style={{
+          position: "fixed",
+          bottom: 100,
+          right: 20,
+          width: 44,
+          height: 44,
+          borderRadius: "50%",
+          background: "var(--dd-blue)",
+          color: "#fff",
+          border: "none",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 4px 16px rgba(37,99,235,0.4)",
+          zIndex: 999,
+          transition: "transform .2s, box-shadow .2s",
+        }}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-3px)";
+          (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(37,99,235,0.5)";
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
+          (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 4px 16px rgba(37,99,235,0.4)";
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </button>
+
+      {/* Full Modal */}
+      {showFullModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, padding:'0 24px' }}>
+          <div style={{ background:'var(--dd-bg)', borderRadius:20, padding:28, maxWidth:340, width:'100%', border:'1.5px solid var(--dd-card-border)', textAlign:'center' }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🔒</div>
+            <h2 className="d" style={{ fontSize:22, fontWeight:900, color:'var(--dd-text)', marginBottom:8 }}>Challenge Full</h2>
+            <p style={{ fontSize:13, color:'var(--dd-text-dim)', marginBottom:24, lineHeight:1.5 }}>
+              This duel already has two players. Create your own challenge to start a new game.
+            </p>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <button className="btn-blue" onClick={() => { setShowFullModal(false); router.push('/challenge/create-challenge'); }} style={{ height:46, borderRadius:12, fontSize:14 }}>
+                Create New Challenge
+              </button>
+              <button className="btn-ghost" onClick={() => setShowFullModal(false)} style={{ height:40, borderRadius:12, fontSize:13 }}>
+                Go Back
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <BottomNav />
     </>
   );
 }

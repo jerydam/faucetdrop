@@ -1,32 +1,4 @@
-/**
- * challenge/[code]/page.tsx — DROPS-only patch
- *
- * WHAT CHANGED vs. original:
- *
- * 1.  stakeOnChain() → redeemDrops()
- *     Old: ERC20 approve → QuizHub.stake()
- *     New: DropsToken.redeem(stakeWei, code)
- *     No approval needed — redeem() burns directly from caller's balance.
- *
- * 2.  handleClaim()
- *     Old: walletClient.writeContract({ functionName: "claimReward" }) on QuizHub
- *     New: POST /api/challenge/claim  — backend signs & calls DropsToken.claim()
- *          The backend mints stake*2 (winner) or stake (tie) to the caller.
- *
- * 3.  handleStake()
- *     Calls redeemDrops() instead of stakeOnChain().
- *     Passes the resulting tx hash into sendStakeConfirmed() exactly as before.
- *
- * 4.  Escrow info panel
- *     Removed platform fee line — DROPS flow has no platform fee.
- *     "Funds held in smart contract" copy updated to reflect burn/mint model.
- *
- * 5.  TOKEN_ADDRESSES / DROPS_ADDRESS
- *     Only DROPS address is needed now.
- *
- * Everything else (WS, game loop, chat, rematch, countdown, etc.) is unchanged.
- * Only the four sections marked ── CHANGED ── differ from the original.
- */
+
 
 "use client";
 
@@ -66,7 +38,7 @@ import { RematchPopup, RematchInvite } from "@/components/RematchPopup";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetpay-backend.koyeb.app";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 function getWsBaseUrl(): string {
   if (typeof window === "undefined") return "wss://127.0.0.1:8000";

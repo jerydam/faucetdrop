@@ -129,7 +129,8 @@ export function Header({
               <MiniNetworkIndicator className="h-9 w-9 border border-border rounded-md" />
             )}
 
-            {!isDashboardPage && isConnected && 
+            {!isDashboardPage && isConnected &&
+              !pathname.includes('/quiz') && !pathname.includes('/challenge') && (
               <Button
                 ref={buttonRef}
                 variant="outline"
@@ -139,8 +140,12 @@ export function Header({
               >
                 {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </Button>
-            }
-            {!hideAction && !pathname.includes('/quest') && (
+            )}
+
+            {!hideAction &&
+              !pathname.includes('/quest') &&
+              !pathname.includes('/quiz') &&
+              !pathname.includes('/challenge') && (
               <Button
                   onClick={() => router.push(action.path)}
                   variant="default"

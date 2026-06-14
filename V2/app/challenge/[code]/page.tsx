@@ -1,5 +1,3 @@
-
-
 "use client";
 
 // ── All imports same as original ──────────────────────────────────────────────
@@ -47,15 +45,12 @@ function getWsBaseUrl(): string {
     : "wss://faucetpay-backend.koyeb.app";
 }
 
-const CELO_CHAIN_ID  = 42220;
+const CELO_CHAIN_ID    = 42220;
 const QUIZ_HUB_ADDRESS = (process.env.NEXT_PUBLIC_STAKE_CONTRACT ?? "0x9088298cd07BE0cAA1e256d3f3761313e1a1447E") as `0x${string}`;
+const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0xF8F6D74E61A0FC2dd2feCd41dE384ba2fbf91b9D") as `0x${string}`;
+const DROPS_DECIMALS   = 18;
+const DROPS_SYMBOL     = "DROPS";
 
-// ── CHANGED 1/4 ── Only DROPS token address is needed now ────────────────────
-const DROPS_ADDRESS  = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0xF8F6D74E61A0FC2dd2feCd41dE384ba2fbf91b9D") as `0x${string}`;
-const DROPS_DECIMALS = 18;
-const DROPS_SYMBOL   = "DROPS";
-
-// ABI fragment for DropsToken.redeem(uint256 amount, string rewardId)
 const DROPS_REDEEM_ABI = [
   {
     inputs: [
@@ -69,7 +64,7 @@ const DROPS_REDEEM_ABI = [
   },
 ] as const;
 
-// ── Types (unchanged) ─────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type GamePhase =
   | "loading" | "lobby" | "countdown" | "question"
@@ -98,7 +93,7 @@ const OPTION_STYLES: Record<string, { bg: string; shape: string; ring: string }>
   D: { bg: "bg-green-500 hover:bg-green-600", shape: "■", ring: "ring-green-400" },
 };
 
-// ── Helpers (unchanged) ───────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function LinearTimer({ seconds, total }: { seconds: number; total: number }) {
   const pct   = Math.max(0, (seconds / total) * 100);
@@ -144,10 +139,6 @@ function Confetti({ active }: { active: boolean }) {
   );
 }
 
-// ── CHANGED 2/4 ── redeemDrops replaces stakeOnChain ─────────────────────────
-// Old flow: approve ERC20 → QuizHub.stake()
-// New flow: DropsToken.redeem(stakeWei, code)  — burns directly, no approval
-
 async function ensureCeloNetwork(): Promise<void> {
   if (!window.ethereum) throw new Error("No wallet detected.");
   if ((window.ethereum as any).isMiniPay) return;
@@ -175,6 +166,7 @@ async function ensureCeloNetwork(): Promise<void> {
   }
 }
 
+// redeemDrops — calls DropsToken.redeem(amount, quizCode) which burns DROPS
 async function redeemDrops(
   challengeCode: string,
   stakeAmount:   number,
@@ -186,8 +178,6 @@ async function redeemDrops(
 
   const stakeWei = parseUnits(stakeAmount.toString(), DROPS_DECIMALS);
 
-  // DropsToken.redeem(amount, rewardId)
-  // rewardId is the 6-char challenge code — backend listens for PointsRedeemed events
   const txHash = await walletClient.writeContract({
     address:      DROPS_ADDRESS,
     abi:          DROPS_REDEEM_ABI,
@@ -201,7 +191,7 @@ async function redeemDrops(
   return receipt.transactionHash;
 }
 
-// ── FloatingChat (unchanged) ──────────────────────────────────────────────────
+// ── FloatingChat ──────────────────────────────────────────────────────────────
 
 interface FloatingChatProps {
   messages: any[]; myWallet: string; chatInput: string;
@@ -273,8 +263,6 @@ function FloatingChat({ messages, myWallet, chatInput, setChatInput, onSend, cha
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-// All hooks, state, WS logic, and non-stake rendering is identical to original.
-// Only handleStake, handleClaim, and the escrow info panel differ.
 
 export default function ChallengePage() {
   const params  = useParams();
@@ -447,7 +435,7 @@ export default function ChallengePage() {
           if (prev.some(p => p.walletAddress.toLowerCase() === userWalletAddress.toLowerCase())) return prev;
           return [...prev, { walletAddress: userWalletAddress, username, points: 0, ready: false, txVerified: false, avatarUrl: avatarUrl ?? "" }];
         });
-        if (d.success) toast.info(`Stake agreed at ${agreedStake} ${DROPS_SYMBOL} — approve the transaction to burn it!`);
+        if (d.success) toast.info(`Stake agreed at ${agreedStake} ${DROPS_SYMBOL} — approve the transaction to stake it!`);
       })
       .catch(console.error);
   }, [cameFromPreLobby, agreedStake, userWalletAddress, challenge, code, username]);
@@ -596,7 +584,6 @@ export default function ChallengePage() {
           if (msg.acceptorWallet?.toLowerCase() !== currentMyWallet) {
             clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
             toast.success(`${msg.acceptorName} accepted! Creating challenge…`);
-            // handleRematchCreate imported from module scope
           }
           break;
         }
@@ -622,6 +609,7 @@ export default function ChallengePage() {
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
 
+  // Fetch pending claims when game is over
   useEffect(() => {
     if (phase !== "game_over" || !myWallet) return;
     fetch(`${API_BASE_URL}/api/challenge/${myWallet}/pending-claims`)
@@ -630,16 +618,22 @@ export default function ChallengePage() {
       .catch(() => {});
   }, [phase, myWallet]);
 
-  // ── CHANGED 3/4 ── handleStake: calls redeemDrops() instead of stakeOnChain()
+  // ── FIX 3: handleStake — call /confirm-burn after redeemDrops succeeds ──────
+  // Previously: redeemDrops() → sendStakeConfirmed() via WS
+  // WS handler (_handle_stake_confirmed) is now a no-op on the backend.
+  // The backend only sets txVerified=true via the REST /confirm-burn endpoint.
+  // Flow: redeemDrops() → POST /confirm-burn → backend verifies on-chain →
+  //       broadcasts stake_verified WS → frontend unlocks Ready button.
   const handleStake = useCallback(async () => {
     if (!userWalletAddress || !challenge) return;
     setIsStaking(true);
     try {
       const stakeAmt = agreedStake ? parseFloat(agreedStake) : challenge.stake;
-      toast.info(`Burn ${stakeAmt} DROPS to stake — confirm in your wallet…`);
+      toast.info(`Staking ${stakeAmt} DROPS — confirm in your wallet…`);
 
       const txHash = await redeemDrops(code, stakeAmt);
 
+      // Join the challenge if not already in it
       if (!hasJoined) {
         const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/join`, {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -650,12 +644,32 @@ export default function ChallengePage() {
         setHasJoined(true);
         setPlayers(prev => {
           if (prev.some(p => p.walletAddress.toLowerCase() === myWallet)) return prev;
-          return [...prev, { walletAddress: userWalletAddress, username, points: 0, ready: false, txVerified: true, avatarUrl: avatarUrl ?? "" }];
+          return [...prev, { walletAddress: userWalletAddress, username, points: 0, ready: false, txVerified: false, avatarUrl: avatarUrl ?? "" }];
         });
       }
-      sendStakeConfirmed(txHash);
-      toast.success("DROPS burned! Click Ready to start.");
+
+      // FIX 3: call /confirm-burn so backend can verify on-chain and set txVerified
+      toast.loading("Verifying stake on-chain…", { id: "confirm-burn" });
+      const burnRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/confirm-burn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: userWalletAddress, txHash }),
+      });
+      const burnData = await burnRes.json();
+      toast.dismiss("confirm-burn");
+
+      if (!burnData.success && !burnData.alreadyVerified) {
+        // Burn verification failed — fall back to sync-stake for recovery
+        toast.error("Could not verify burn automatically. Use 'Already staked? Sync my stake' below.");
+        // Still send the WS signal so the backend logs it
+        sendStakeConfirmed(txHash);
+        return;
+      }
+
+      // stake_verified WS message will arrive from backend and unlock the Ready button
+      toast.success("DROPS staked! Click Ready to start.");
     } catch (err: any) {
+      toast.dismiss("confirm-burn");
       toast.error(err?.message ?? "Stake failed.");
     } finally {
       setIsStaking(false);
@@ -680,10 +694,9 @@ export default function ChallengePage() {
     setChatInput("");
   }, [chatInput, userWalletAddress, username]);
 
-  // ── CHANGED 4/4 ── handleClaim: backend signs + calls DropsToken.claim() ─────
-  // Old: walletClient.writeContract({ functionName: "claimReward" }) on QuizHub
-  // New: POST /api/challenge/claim → backend mints via DropsToken.claim(amount, ts, sig)
+  // FIX 4: handleClaim — POST to /api/challenge/claim, mark locally
   const handleClaim = useCallback(async (claimCode: string) => {
+    if (claimedCodes.has(claimCode)) return;
     setIsClaiming(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/challenge/claim`, {
@@ -692,15 +705,17 @@ export default function ChallengePage() {
         body: JSON.stringify({ code: claimCode, walletAddress: userWalletAddress }),
       });
       const d = await res.json();
-      if (!d.success) throw new Error(d.detail ?? "Claim failed");
-      toast.success("DROPS minted to your wallet! 🏆");
+      if (!d.success && !d.alreadyClaimed) throw new Error(d.detail ?? "Claim failed");
+      toast.success("DROPS claimed to your wallet! 🏆");
       setClaimedCodes(prev => new Set(prev).add(claimCode));
+      // Remove from pending list
+      setPendingClaims(prev => prev.filter(c => c.code !== claimCode));
     } catch (err: any) {
       toast.error(err?.message ?? "Claim failed");
     } finally {
       setIsClaiming(false);
     }
-  }, [userWalletAddress]);
+  }, [userWalletAddress, claimedCodes]);
 
   const handleSyncStake = useCallback(async () => {
     if (!userWalletAddress || !challenge) return;
@@ -730,6 +745,7 @@ export default function ChallengePage() {
     }
   }, [userWalletAddress, challenge, code, username, hasJoined]);
 
+  // FIX 4: myClaim derived from pendingClaims
   const myClaim   = pendingClaims.find(c => c.code === code);
   const totalPool = challenge
     ? (agreedStake ? (parseFloat(agreedStake) * 2).toFixed(0) : (challenge.stake * 2).toFixed(0))
@@ -771,9 +787,6 @@ export default function ChallengePage() {
 
   if (phase === "loading") return <div className="flex flex-col min-h-screen bg-background"><Header pageTitle="Challenge" /><Loading /></div>;
 
-  // game_over, countdown, question/reveal, round_end phases — identical to original
-  // (omitted here for brevity — paste from original file, only escrow panel differs)
-
   // ── Lobby ──────────────────────────────────────────────────────────────────
   const amCreator = challenge && userWalletAddress && challenge.creator?.toLowerCase() === userWalletAddress.toLowerCase();
   if (!hasJoined && !amCreator && phase === "lobby") { if (typeof window !== "undefined") router.replace(`/challenge/${code}/pre-lobby`); return null; }
@@ -781,12 +794,132 @@ export default function ChallengePage() {
   const allVerified = players.length >= 2 && players.every(p => p.txVerified);
   const allReady    = allVerified && players.every(p => p.ready);
 
+  // ── FIX 4: game_over phase — render claim button when myClaim exists ────────
+  if (phase === "game_over") {
+    const iWon = winner && winner.toLowerCase() === myWallet;
+    return (
+      <>
+        {globalOverlays}
+        <Confetti active={showConfetti} />
+        <div className="min-h-screen bg-background flex flex-col">
+          <Header pageTitle="Game Over" />
+          <div className="max-w-2xl mx-auto w-full px-4 py-8 space-y-5">
+
+            {/* Outcome banner */}
+            <div className={cn(
+              "rounded-3xl border-2 p-6 text-center space-y-2",
+              gameOutcome === "winner" && iWon
+                ? "bg-emerald-500/10 border-emerald-400/50"
+                : gameOutcome === "tie"
+                ? "bg-blue-500/10 border-blue-400/50"
+                : "bg-muted/50 border-border",
+            )}>
+              <div className="text-6xl">
+                {gameOutcome === "winner" && iWon ? "🏆" : gameOutcome === "tie" ? "🤝" : "😤"}
+              </div>
+              <h2 className="text-2xl font-black text-foreground">
+                {gameOutcome === "winner" && iWon
+                  ? "You Won!"
+                  : gameOutcome === "tie"
+                  ? "It's a Tie!"
+                  : "Better luck next time"}
+              </h2>
+              {gameOutcome === "winner" && !iWon && winner && (
+                <p className="text-sm text-muted-foreground">
+                  {finalScores[winner]?.username ?? "Opponent"} won this round.
+                </p>
+              )}
+            </div>
+
+            {/* Scores */}
+            {Object.keys(finalScores).length > 0 && (
+              <div className="bg-card border-2 border-border rounded-3xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border">
+                  <h3 className="font-black text-foreground">Final Scores</h3>
+                </div>
+                <div className="divide-y divide-border">
+                  {Object.entries(finalScores)
+                    .sort(([, a], [, b]) => b.points - a.points)
+                    .map(([wallet, score]) => (
+                      <div key={wallet} className="flex items-center justify-between px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          {wallet.toLowerCase() === winner?.toLowerCase() && (
+                            <Trophy className="h-4 w-4 text-yellow-500 shrink-0" />
+                          )}
+                          <span className={cn(
+                            "font-bold text-sm",
+                            wallet.toLowerCase() === myWallet ? "text-primary" : "text-foreground",
+                          )}>
+                            {score.username}
+                            {wallet.toLowerCase() === myWallet && (
+                              <span className="ml-1 text-[10px] text-muted-foreground">(you)</span>
+                            )}
+                          </span>
+                        </div>
+                        <span className="font-black text-foreground tabular-nums">{score.points.toLocaleString()} pts</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* FIX 4: Claim button — only shown to winner with an unclaimed reward */}
+            {myClaim && !claimedCodes.has(code) && (
+              <div className="bg-emerald-500/10 border-2 border-emerald-400/50 rounded-3xl p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-emerald-500" />
+                  <p className="font-black text-foreground">Your prize is waiting!</p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  You won <strong className="text-foreground">{myClaim.win_amount} {myClaim.token_symbol}</strong>.
+                  Claim it to your wallet now.
+                </p>
+                <Button
+                  onClick={() => handleClaim(code)}
+                  disabled={isClaiming}
+                  className="w-full h-12 font-black rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                >
+                  {isClaiming
+                    ? <><Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> Claiming…</>
+                    : <><Trophy className="inline mr-2 h-4 w-4" /> Claim {myClaim.win_amount} {myClaim.token_symbol}</>
+                  }
+                </Button>
+              </div>
+            )}
+
+            {/* Already claimed */}
+            {claimedCodes.has(code) && (
+              <div className="flex items-center gap-3 px-5 py-4 rounded-3xl bg-muted/50 border-2 border-border">
+                <Check className="h-5 w-5 text-emerald-500 shrink-0" />
+                <p className="text-sm font-bold text-muted-foreground">Prize claimed successfully!</p>
+              </div>
+            )}
+
+            {/* Navigation */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => router.push("/challenge")}
+                className="flex-1 py-3 rounded-2xl border-2 border-border bg-card font-bold text-sm text-foreground hover:bg-muted transition-all"
+              >
+                <Home className="inline mr-2 h-4 w-4" /> Hub
+              </button>
+              <button
+                onClick={() => router.push("/challenge/create-quiz")}
+                className="flex-1 py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm hover:opacity-90 transition-all"
+              >
+                <Plus className="inline mr-2 h-4 w-4" /> New Challenge
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       {globalOverlays}
       <div className="min-h-screen bg-background flex flex-col">
-        {/* sticky header, player grid, share button — all identical to original */}
-
         <div className="max-w-4xl mx-auto w-full px-4 py-6 pb-32 space-y-5">
           {hasJoined && (
             <div className="space-y-3 pt-2">
@@ -798,15 +931,15 @@ export default function ChallengePage() {
                     disabled={isStaking || stakeVerifying}
                   >
                     {isStaking ? (
-                      <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Burning DROPS…</>
+                      <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Staking DROPS…</>
                     ) : stakeVerifying ? (
                       <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Verifying on-chain…</>
                     ) : (
-                      <><Zap className="mr-2 h-6 w-6" /> Burn {displayStake} DROPS to Play</>
+                      <><Zap className="mr-2 h-6 w-6" /> Stake {displayStake} DROPS to Play</>
                     )}
                   </Button>
                   <button onClick={handleSyncStake} disabled={isSyncing} className="w-full text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors py-1">
-                    {isSyncing ? "Checking on-chain…" : "Already burned? Sync my stake"}
+                    {isSyncing ? "Checking on-chain…" : "Already staked? Sync my stake"}
                   </button>
                 </>
               )}
@@ -826,7 +959,7 @@ export default function ChallengePage() {
                 </div>
               )}
 
-              {/* ── CHANGED: escrow info panel ── no platform fee, burn/mint language */}
+              {/* Escrow info — stake/burn language */}
               {!myTxVerified && (
                 <div className="flex gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-2xl p-4">
                   <div className="shrink-0 mt-0.5">
@@ -836,25 +969,25 @@ export default function ChallengePage() {
                   </div>
                   <div className="flex flex-col gap-2 min-w-0">
                     <p className="text-xs font-black text-blue-800 dark:text-blue-200 uppercase tracking-wide">
-                      Burn-to-Play · Mint-to-Win
+                      Stake-to-Play · Claim-to-Win
                     </p>
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-blue-600 dark:text-blue-400">You burn</span>
+                        <span className="text-xs text-blue-600 dark:text-blue-400">You stake</span>
                         <span className="text-xs font-bold text-blue-800 dark:text-blue-200 font-mono">
                           {displayStake} DROPS
                         </span>
                       </div>
                       <div className="h-px bg-blue-200 dark:bg-blue-800/60" />
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-blue-600 dark:text-blue-400">Winner gets minted</span>
+                        <span className="text-xs text-blue-600 dark:text-blue-400">Winner gets</span>
                         <span className="text-xs font-bold text-blue-800 dark:text-blue-200 font-mono">
                           {totalPool} DROPS
                         </span>
                       </div>
                     </div>
                     <p className="text-[10px] text-blue-500 dark:text-blue-500 leading-relaxed pt-0.5">
-                      Stakes are burned on-chain. Winner's payout is minted by the backend — no escrow, no custody, no platform fee.
+                      Drops burned on stake, winner claims the pool — no custody, no platform fee.
                     </p>
                   </div>
                 </div>

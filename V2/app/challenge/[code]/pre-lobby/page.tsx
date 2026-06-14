@@ -5,6 +5,13 @@
  *
  * Negotiation arena. Challengers arrive, submit stake offers, and the creator
  * can accept OR counter a specific challenger's offer.
+ *
+ * FIXES APPLIED:
+ *   1. _handleSubmitOfferGuard return value is now checked — invalid amounts
+ *      are blocked before the fetch fires.
+ *   2. WebSocket handler now processes `pre_lobby_offers_snapshot` so a
+ *      reconnecting user immediately sees all live offers (backend must send
+ *      this on connect — see main.py fix).
  */
 
 import React, {
@@ -24,7 +31,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-const MIN_STAKE = 10
+const MIN_STAKE = 10;
+
 function getWsBase() {
   if (typeof window === "undefined") return "wss://127.0.0.1:8000";
   return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -42,8 +50,6 @@ function timeAgo(iso: string) {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   return `${Math.floor(diff / 3600)}h ago`;
 }
-
-
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -234,7 +240,6 @@ function OfferCard({
 }
 
 // ── Stake Amount Input (shared) ───────────────────────────────────────────────
-// Free-type input that clamps on blur, with +/- buttons stepping by 0.01
 
 function StakeInput({
   value,
@@ -249,34 +254,30 @@ function StakeInput({
   token: string;
   label?: string;
   borderClass?: string;
-  min? : number;
+  min?: number;
 }) {
   const [raw, setRaw] = useState(String(value));
 
-  // Keep raw in sync when value changes externally (e.g. quick-pick)
   useEffect(() => {
     setRaw(String(value));
   }, [value]);
-  const MIN_STAKE = 10;
-  
+
   const commit = (str: string) => {
-  const parsed = parseFloat(str);
-  const clamped = isNaN(parsed) || parsed < MIN_STAKE ? MIN_STAKE : Math.round(parsed * 100) / 100;
-  onChange(clamped);
-  setRaw(String(clamped));
-};
+    const parsed = parseFloat(str);
+    const clamped = isNaN(parsed) || parsed < min ? min : Math.round(parsed * 100) / 100;
+    onChange(clamped);
+    setRaw(String(clamped));
+  };
 
   return (
     <div className="flex items-center gap-3">
-      {/* Decrement */}
       <button
-        onClick={() => { const next = Math.max(MIN_STAKE, Math.round((value - 0.01) * 100) / 100); onChange(next); setRaw(String(next)); }}
+        onClick={() => { const next = Math.max(min, Math.round((value - 0.01) * 100) / 100); onChange(next); setRaw(String(next)); }}
         className="w-12 h-12 rounded-2xl border-2 border-border bg-card hover:bg-muted flex items-center justify-center active:scale-95 transition-all shrink-0"
       >
         <ChevronDown className="h-5 w-5 text-muted-foreground" />
       </button>
 
-      {/* Input */}
       <div className="flex-1 relative">
         {label && (
           <span className="absolute left-3 top-2.5 text-[10px] font-black uppercase tracking-wider pointer-events-none"
@@ -285,20 +286,18 @@ function StakeInput({
           </span>
         )}
         <input
-            type="number"
-            
-            step="0.01"
-            value={raw}
-            onChange={e => {
-              setRaw(e.target.value);
-              // ← ADD THIS: update parent live while typing
-              const parsed = parseFloat(e.target.value);
-              if (!isNaN(parsed) && parsed >= MIN_STAKE) {
-                onChange(Math.round(parsed * 100) / 100);
-              }
-            }}
-            onBlur={e => commit(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") commit((e.target as HTMLInputElement).value); }}
+          type="number"
+          step="0.01"
+          value={raw}
+          onChange={e => {
+            setRaw(e.target.value);
+            const parsed = parseFloat(e.target.value);
+            if (!isNaN(parsed) && parsed >= min) {
+              onChange(Math.round(parsed * 100) / 100);
+            }
+          }}
+          onBlur={e => commit(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") commit((e.target as HTMLInputElement).value); }}
           className={cn(
             "w-full h-16 rounded-2xl border-2 bg-background text-center",
             "text-3xl font-black text-foreground outline-none transition-colors focus:border-primary/60",
@@ -311,7 +310,6 @@ function StakeInput({
         </span>
       </div>
 
-      {/* Increment */}
       <button
         onClick={() => { const next = Math.round((value + 0.01) * 100) / 100; onChange(next); setRaw(String(next)); }}
         className="w-12 h-12 rounded-2xl border-2 border-border bg-card hover:bg-muted flex items-center justify-center active:scale-95 transition-all shrink-0"
@@ -343,30 +341,31 @@ export default function PreLobbyPage() {
       })
       .catch(() => {});
   }, [avatarCache]);
-  const [challenge, setChallenge]     = useState<Challenge | null>(null);
-  const [username, setUsername]       = useState("");
-  const [pageState, setPageState]     = useState<PageState>("loading");
-  const [offers, setOffers]           = useState<Offer[]>([]);
-  const [myOffer, setMyOffer]         = useState<number>(0);
-  const [submitting, setSubmitting]   = useState(false);
-  const [accepting, setAccepting]     = useState(false);
-  const [countdown, setCountdown]     = useState(120);
+
+  const [challenge, setChallenge]       = useState<Challenge | null>(null);
+  const [username, setUsername]         = useState("");
+  const [pageState, setPageState]       = useState<PageState>("loading");
+  const [offers, setOffers]             = useState<Offer[]>([]);
+  const [myOffer, setMyOffer]           = useState<number>(0);
+  const [submitting, setSubmitting]     = useState(false);
+  const [accepting, setAccepting]       = useState(false);
+  const [countdown, setCountdown]       = useState(120);
   const [lockedAmount, setLockedAmount] = useState<number | null>(null);
 
   const [pendingCounter, setPendingCounter] = useState<CounterOffer | null>(null);
   const [counterTarget, setCounterTarget]   = useState<Offer | null>(null);
+
   const amCreator = useMemo(
     () => challenge?.creator?.toLowerCase() === myWallet,
     [challenge, myWallet],
   );
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const amCreatorRef = useRef(amCreator);
-  const challengeRef = useRef(challenge);
+  const wsRef         = useRef<WebSocket | null>(null);
+  const amCreatorRef  = useRef(amCreator);
+  const challengeRef  = useRef(challenge);
   useEffect(() => { amCreatorRef.current = amCreator; }, [amCreator]);
   useEffect(() => { challengeRef.current = challenge; }, [challenge]);
 
-  
   // ── Load challenge ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!code) return;
@@ -386,13 +385,14 @@ export default function PreLobbyPage() {
       })
       .catch(() => { toast.error("Failed to load challenge"); setPageState("error"); });
   }, [code, router]);
-  useEffect(() => {
-  if (challenge?.creator) fetchAvatar(challenge.creator);
-}, [challenge?.creator]);
 
-useEffect(() => {
-  offers.forEach(o => fetchAvatar(o.wallet));
-}, [offers]);
+  useEffect(() => {
+    if (challenge?.creator) fetchAvatar(challenge.creator);
+  }, [challenge?.creator]);
+
+  useEffect(() => {
+    offers.forEach(o => fetchAvatar(o.wallet));
+  }, [offers]);
 
   // ── Username ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -418,106 +418,117 @@ useEffect(() => {
     return () => clearTimeout(t);
   }, [countdown, pageState]);
 
-    //  WebSocket useEffect ─────────────────────────
-useEffect(() => {
-  if (!code || !myWallet) return;
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!code || !myWallet) return;
 
-  const ws = new WebSocket(`${getWsBase()}/ws/challenge/${code}`);
-  wsRef.current = ws;
+    const ws = new WebSocket(`${getWsBase()}/ws/challenge/${code}`);
+    wsRef.current = ws;
 
-  ws.onmessage = (ev) => {
-    try {
-      const msg = JSON.parse(ev.data);
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        const currentAmCreator = amCreatorRef.current;
+        const currentChallenge = challengeRef.current;
 
-      // Always read from refs — never from the closure snapshot
-      const currentAmCreator = amCreatorRef.current;
-      const currentChallenge = challengeRef.current;
+        if (msg.type === "pre_lobby_offer") {
+          const incoming: Offer = {
+            wallet:   msg.wallet,
+            username: msg.username,
+            amount:   msg.amount,
+            sentAt:   msg.sentAt ?? new Date().toISOString(),
+          };
+          setOffers(prev => {
+            const without = prev.filter(
+              o => o.wallet.toLowerCase() !== incoming.wallet.toLowerCase(),
+            );
+            return [incoming, ...without].sort((a, b) => b.amount - a.amount);
+          });
+        }
 
-      if (msg.type === "pre_lobby_offer") {
-        const incoming: Offer = {
-          wallet:   msg.wallet,
-          username: msg.username,
-          amount:   msg.amount,
-          sentAt:   msg.sentAt ?? new Date().toISOString(),
-        };
-        setOffers(prev => {
-          const without = prev.filter(
-            o => o.wallet.toLowerCase() !== incoming.wallet.toLowerCase(),
-          );
-          return [incoming, ...without].sort((a, b) => b.amount - a.amount);
-        });
-      }
+        // FIX 2: snapshot on reconnect — backend sends this when a new WS
+        // client joins the pre-lobby room so they see all existing offers.
+        if (msg.type === "pre_lobby_offers_snapshot") {
+          const snapped: Offer[] = (msg.offers ?? []).map((o: any) => ({
+            wallet:   o.wallet,
+            username: o.username,
+            amount:   o.amount,
+            sentAt:   o.sentAt ?? new Date().toISOString(),
+          }));
+          setOffers(snapped.sort((a, b) => b.amount - a.amount));
+        }
 
-      if (msg.type === "pre_lobby_counter") {
-        const counter: CounterOffer = {
-          fromWallet:   msg.fromWallet,
-          fromName:     msg.fromName ?? "Creator",
-          amount:       msg.amount,
-          sentAt:       msg.sentAt ?? new Date().toISOString(),
-          targetWallet: msg.targetWallet,
-        };
-        // Only show the counter to the specific challenger it was aimed at
+        if (msg.type === "pre_lobby_counter") {
+          const counter: CounterOffer = {
+            fromWallet:   msg.fromWallet,
+            fromName:     msg.fromName ?? "Creator",
+            amount:       msg.amount,
+            sentAt:       msg.sentAt ?? new Date().toISOString(),
+            targetWallet: msg.targetWallet,
+          };
+          if (
+            !currentAmCreator &&
+            counter.targetWallet?.toLowerCase() === myWallet
+          ) {
+            setPendingCounter(counter);
+            setMyOffer(counter.amount);
+            setPageState("countered");
+            toast.info(
+              `${counter.fromName} countered with ${fmt(counter.amount)} ${currentChallenge?.token}`,
+            );
+          }
+        }
+
         if (
-          !currentAmCreator &&
-          counter.targetWallet?.toLowerCase() === myWallet
+          msg.type === "offer_accepted" ||
+          msg.type === "pre_lobby_accepted"
         ) {
-          setPendingCounter(counter);
-          setMyOffer(counter.amount);
-          setPageState("countered");
-          toast.info(
-            `${counter.fromName} countered with ${fmt(counter.amount)} ${currentChallenge?.token}`,
-          );
+          const winner = (msg.winner ?? msg.challenger ?? "").toLowerCase();
+          const amount: number = msg.amount;
+          setLockedAmount(amount);
+
+          const iWon = currentAmCreator ? true : winner === myWallet;
+
+          if (iWon) {
+            setPageState("accepted");
+            toast.success("🎉 Deal locked! Heading to lobby…");
+            setTimeout(
+              () => router.push(`/challenge/${code}?stake=${amount}&agreed=1`),
+              1800,
+            );
+          } else {
+            setPageState("rejected");
+          }
         }
-      }
 
-      if (
-        msg.type === "offer_accepted" ||
-        msg.type === "pre_lobby_accepted"
-      ) {
-        const winner = (msg.winner ?? msg.challenger ?? "").toLowerCase();
-        const amount: number = msg.amount;
-        setLockedAmount(amount);
-
-        // creator always wins the routing; challenger wins only if their
-        // wallet matches the accepted wallet
-        const iWon = currentAmCreator ? true : winner === myWallet;
-
-        if (iWon) {
-          setPageState("accepted");
-          toast.success("🎉 Deal locked! Heading to lobby…");
-          setTimeout(
-            () => router.push(`/challenge/${code}?stake=${amount}&agreed=1`),
-            1800,
-          );
-        } else {
-          setPageState("rejected");
+        if (msg.type === "pre_lobby_offers_snapshot") {
+          setOffers(msg.offers ?? []);
         }
-      }
+      } catch {}
+    };
 
-      if (msg.type === "pre_lobby_offers_snapshot") {
-        setOffers(msg.offers ?? []);
-      }
-    } catch {}
-  };
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [code, myWallet, router]);
 
-  return () => {
-    ws.close();
-    wsRef.current = null;
-  };
-  // ── ONLY reconnect when the room or the user changes ─────────────────────
-  // challenge and amCreator are intentionally excluded — they are accessed
-  // via refs above. Including them caused the WS to close/reopen on every
-  // state update, creating a window where pre_lobby_accepted was missed.
-}, [code, myWallet, router]);
   // ── Actions ───────────────────────────────────────────────────────────────
-function _handleSubmitOfferGuard(amount: number): string | null {
-  if (amount < 10) return "Minimum stake is 10 DROPS";
-  return null;
-}
+
+  // FIX 1: guard now returns a string on failure and we check it before proceeding.
+  function _handleSubmitOfferGuard(amount: number): string | null {
+    if (amount < MIN_STAKE) return `Minimum stake is ${MIN_STAKE} DROPS`;
+    return null;
+  }
+
   const handleSubmitOffer = useCallback(async (amount: number) => {
-    
-     _handleSubmitOfferGuard(amount);
-      
+    // FIX 1: actually gate on the guard result
+    const guardErr = _handleSubmitOfferGuard(amount);
+    if (guardErr) {
+      toast.error(guardErr);
+      return;
+    }
+
     if (!myWallet || submitting || amCreator) return;
     setSubmitting(true);
     try {
@@ -528,22 +539,17 @@ function _handleSubmitOfferGuard(amount: number): string | null {
       });
       const d = await res.json();
       if (!d.success) throw new Error(d.detail ?? "Offer failed");
-      if (d.accepted) {
-        setLockedAmount(d.amount);
-        setPageState("accepted");
-        toast.success(`✅ Deal at ${fmt(d.amount)} ${challenge?.token}!`);
-        setTimeout(() => router.push(`/challenge/${code}?stake=${d.amount}&agreed=1`), 1800);
-      } else {
-        setPendingCounter(null);
-        setPageState("pending");
-        toast.info(`Offer sent: ${fmt(amount)} ${challenge?.token}`);
-      }
+      // backend never returns accepted:true here — the accepted state
+      // arrives via the pre_lobby_accepted WS message instead.
+      setPendingCounter(null);
+      setPageState("pending");
+      toast.info(`Offer sent: ${fmt(amount)} ${challenge?.token}`);
     } catch (err: any) {
       toast.error(err?.message ?? "Could not send offer");
     } finally {
       setSubmitting(false);
     }
-  }, [myWallet, submitting, amCreator, challenge, code, username, router]);
+  }, [myWallet, submitting, amCreator, challenge, code, username]);
 
   const handleSendCounter = useCallback(async (amount: number, target: Offer) => {
     if (!myWallet || submitting) return;
@@ -602,7 +608,6 @@ function _handleSubmitOfferGuard(amount: number): string | null {
     setMyOffer(offer.amount);
   }, []);
 
-  // ── Quick pick amounts — never show values below min stake ────────────────
   const quickPicks = useMemo(() => {
     if (!challenge) return [];
     const s = challenge.stake;
@@ -610,9 +615,7 @@ function _handleSubmitOfferGuard(amount: number): string | null {
       .filter(v => v >= MIN_STAKE);
   }, [challenge]);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER STATES
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Render states ─────────────────────────────────────────────────────────
 
   if (pageState === "loading" || !challenge) {
     return (
@@ -691,9 +694,7 @@ function _handleSubmitOfferGuard(amount: number): string | null {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // MAIN PRE-LOBBY UI
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Main pre-lobby UI ─────────────────────────────────────────────────────
 
   const isCreatorView   = pageState === "creator";
   const hasPendingOffer = pageState === "pending";
@@ -858,13 +859,11 @@ function _handleSubmitOfferGuard(amount: number): string | null {
                   <StakeInput
                     value={myOffer}
                     onChange={setMyOffer}
-                     
                     token={challenge.token}
                     label={myOffer === counterTarget.amount ? "= Their offer" : undefined}
                     borderClass="border-blue-400/50"
                   />
 
-                  {/* Quick picks */}
                   <div className="flex gap-1.5 flex-wrap">
                     {quickPicks.map(v => (
                       <button
@@ -936,7 +935,6 @@ function _handleSubmitOfferGuard(amount: number): string | null {
                 <StakeInput
                   value={myOffer}
                   onChange={setMyOffer}
-                  
                   token={challenge.token}
                 />
                 <button
@@ -994,17 +992,14 @@ function _handleSubmitOfferGuard(amount: number): string | null {
             </div>
 
             <div className="px-5 py-4 space-y-3">
-              {/* Free-type input with clamped step */}
               <StakeInput
                 value={myOffer}
                 onChange={setMyOffer}
                 token={challenge.token}
-                
                 label={myOffer === challenge.stake ? "= Opening" : undefined}
                 borderClass={myOffer === challenge.stake ? "border-emerald-400/50" : "border-border"}
               />
 
-              {/* Quick picks: opening, 1.5×, 2×, 3× — all ≥ 0.01 */}
               <div className="flex gap-1.5 flex-wrap">
                 {quickPicks.map(v => (
                   <button

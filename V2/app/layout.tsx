@@ -12,10 +12,8 @@ import { Footer } from "@/components/footer"
 // Add this import at the top
 import { LuminaProvider } from "@jerydam/lumina-sdk"
 import { SubscriptionModalProvider } from "@/components/subscribe"
-import { DEFAULT_CHAIN_ID, luminaConfig, supportedChains } from "@/config/lumina"
 import { useVisitTracker } from "@/hooks/use-visit-tracker"
-import { celo, base, arbitrum } from 'viem/chains'
-import { PrivyProvider } from '@privy-io/react-auth'
+import { Providers } from "@/components/privyProvider"
 // ── Solana wallet adapter ─────────────────────────────────────────────────────
 import {
   ConnectionProvider,
@@ -134,22 +132,12 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           
-                    <PrivyProvider
-            appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID!}
-            config={{
-            loginMethods: ['email'],  // ← required by Privy, won't show in your UI
-            appearance: { theme: 'dark' },
-          }}
-          >
-          <LuminaProvider
-            apiKey={process.env.NEXT_PUBLIC_LUMINA_API_KEY!}
-            defaultChainId={String(DEFAULT_CHAIN_ID)}
-            supportedChainIds={supportedChains.map(c => String(c.id))}
-            // now includes all 5: celo, base, arbitrum, lisk, bsc
-          >
+          
+        
             <SolanaProviders>
               <NetworkProvider>
-                <WalletProvider>
+                <WalletProvider >
+                  <Providers>
                   <SubscriptionModalProvider>
                     <div className="min-h-screen flex flex-col">
                       <main className="flex-1">{children}</main>
@@ -157,11 +145,11 @@ export default function RootLayout({
                     </div>
                     <Toaster richColors position="top-center" closeButton />
                   </SubscriptionModalProvider>
+                  </Providers>
                 </WalletProvider>
               </NetworkProvider>
             </SolanaProviders>
-          </LuminaProvider>
-          </PrivyProvider>
+          
         </ThemeProvider>
       </body>
     </html>

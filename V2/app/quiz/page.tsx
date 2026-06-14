@@ -221,7 +221,7 @@ export default function QuizListPage() {
   const [itemsPerPage, setItemsPerPage]   = useState(3);
 
   useEffect(() => {
-    const update = () => setItemsPerPage(window.innerWidth >= 640 ? 6 : 3);
+    const update = () => setItemsPerPage(window.innerWidth >= 640 ? 8 : 3);
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);

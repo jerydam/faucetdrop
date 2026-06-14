@@ -481,7 +481,7 @@ export default function CreateChallengePage() {
           <div className="text-5xl">💰</div>
           <h2 className="text-xl font-black text-foreground">Set the stake</h2>
           <p className="text-sm text-muted-foreground">
-            Both players burn this amount. Winner gets minted 2× back.
+            Both players stake this amount. Winner claim the pool
           </p>
         </div>
 
@@ -586,9 +586,9 @@ export default function CreateChallengePage() {
         <p className="font-black text-foreground text-[11px] uppercase tracking-widest mb-1">
           How it works
         </p>
-        <p>1. Quiz is registered on QuizHub (this tx).</p>
-        <p>2. You & your opponent each call <code>DROPS.redeem(stake, code)</code> to burn your stake.</p>
-        <p>3. Winner gets <code>DROPS.claim(stake × 2)</code> minted to their wallet.</p>
+        <p>1. Quiz is registered on chain.</p>
+        <p>2. You & your opponent each  stake Drop Token</p>
+        <p>3. Winner Claim the Total pool.</p>
       </div>
 
       <button

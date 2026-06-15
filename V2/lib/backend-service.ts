@@ -1,5 +1,5 @@
 import { BrowserProvider } from 'ethers';
-import { appendDivviReferralData, reportTransactionToDivvi } from './divvi-integration';
+
 import { FAUCET_ABI_CUSTOM } from './abis';
 
 const API_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
@@ -223,130 +223,6 @@ async function getRobustChainId(provider: BrowserProvider): Promise<number> {
   }
 }
 
-// ─── Divvi ───────────────────────────────────────────────────────────────────
-async function processDivviReferralData(chainId: number, userAddress: string): Promise<{
-  data?: string;
-  error?: string;
-  debugInfo: DebugInfo;
-}> {
-  const debugInfo: DebugInfo = {
-    chainId,
-    isSupportedNetwork: isSupportedNetwork(chainId),
-    enabled: ENABLE_DIVVI_REFERRAL,
-    timestamp: new Date().toISOString()
-  };
-
-  if (!ENABLE_DIVVI_REFERRAL) {
-    debugLog('Divvi referral is disabled globally');
-    return { debugInfo: { ...debugInfo, reason: 'disabled' } };
-  }
-
-  if (!isSupportedNetwork(chainId)) {
-    debugLog(`Network not supported by Divvi (chainId: ${chainId}). Bypassing Divvi integration.`);
-    return { debugInfo: { ...debugInfo, reason: 'unsupported_network' } };
-  }
-
-  if (DIVVI_DISABLED_CHAINS.includes(chainId)) {
-    debugLog(`Divvi disabled for specific chain: ${chainId}`);
-    return { debugInfo: { ...debugInfo, reason: 'chain_disabled' } };
-  }
-
-  if (!userAddress) {
-    debugLog('No user address provided for Divvi referral');
-    return { debugInfo: { ...debugInfo, reason: 'no_user_address' } };
-  }
-
-  try {
-    debugLog('Attempting to get Divvi referral data...', { userAddress, chainId });
-
-    const rawData = appendDivviReferralData('', userAddress as `0x${string}`);
-
-    debugInfo.rawData = {
-      value: rawData,
-      type: typeof rawData,
-      length: rawData?.length || 0,
-      isEmpty: !rawData || rawData.trim() === ''
-    };
-
-    debugLog('Raw Divvi data received:', debugInfo.rawData);
-
-    if (!rawData || rawData.trim() === '') {
-      const error = 'appendDivviReferralData returned empty or null data';
-      debugLog(error);
-      return { error, debugInfo: { ...debugInfo, reason: 'empty_data' } };
-    }
-
-    const validation = validateAndFixHexData(rawData);
-    debugInfo.validation = validation;
-
-    if (!validation.isValid) {
-      const error = `Invalid hex data: ${validation.error}`;
-      errorLog(error, { rawData, validation });
-      return { error, debugInfo: { ...debugInfo, reason: 'invalid_hex' } };
-    }
-
-    successLog('Successfully processed Divvi referral data', {
-      userAddress,
-      chainId,
-      original: rawData,
-      fixed: validation.fixed,
-      length: validation.fixed.length
-    });
-
-    return {
-      data: validation.fixed,
-      debugInfo: { ...debugInfo, reason: 'success', processedData: validation.fixed }
-    };
-
-  } catch (error: any) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    errorLog('Failed to process Divvi referral data', { error: errorMessage, stack: error instanceof Error ? error.stack : undefined });
-
-    return {
-      error: errorMessage,
-      debugInfo: {
-        ...debugInfo,
-        reason: 'exception',
-        errorType: error instanceof Error ? error.constructor.name : typeof error,
-        errorMessage
-      }
-    };
-  }
-}
-
-async function reportToDivvi(txHash: string, chainId: number): Promise<void> {
-  if (!shouldUseDivvi(chainId)) {
-    debugLog(`Skipping Divvi reporting - ${!ENABLE_DIVVI_REFERRAL ? 'disabled globally' : 'unsupported chain'} (chainId: ${chainId})`);
-    return;
-  }
-
-  try {
-    debugLog(`Reporting transaction to Divvi: ${txHash} on chain ${chainId}`);
-    await reportTransactionToDivvi(txHash as `0x${string}`, chainId);
-    successLog('Transaction reported to Divvi successfully');
-  } catch (error: any) {
-    errorLog('Failed to report transaction to Divvi', error);
-
-    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-      console.error(`
-🚫 CORS Error Detected - Transaction reporting to Divvi failed
-📋 Error Details:
-   - This is a Cross-Origin Resource Sharing (CORS) issue
-   - The Divvi API doesn't allow requests from your current domain
-   - Your main transaction was still successful!
-
-💡 Recommended Solutions:
-   1. Move Divvi reporting to your backend server (recommended)
-   2. Contact Divvi support to allowlist your domain
-   3. Use a proxy server for development
-   4. Skip Divvi reporting in development mode
-
-🔧 Quick Fix for Development:
-   Set ENABLE_DIVVI_REFERRAL=false or add domain check
-      `);
-    }
-  }
-}
 
 // ─── Admin ───────────────────────────────────────────────────────────────────
 export async function getSecretCodeForAdmin(
@@ -662,22 +538,6 @@ export async function claimCustomViaBackend(
       chainId
     };
 
-    if (shouldUseDivvi(chainId)) {
-      const divviResult = await processDivviReferralData(chainId, cleanUserAddress);
-
-      if (divviResult.data) {
-        payload.divviReferralData = divviResult.data;
-        successLog('Added Divvi referral data to custom claim payload', {
-          length: divviResult.data.length,
-          preview: `${divviResult.data.slice(0, 20)}...`
-        });
-      } else if (divviResult.error) {
-        debugLog(`Proceeding without Divvi data: ${divviResult.error}`);
-      }
-    } else {
-      debugLog(`Skipping Divvi integration for unsupported chain: ${chainId}`);
-    }
-
     const requestLog: RequestLogData = {
       userAddress: cleanUserAddress,
       faucetAddress: cleanFaucetAddress,
@@ -711,7 +571,7 @@ export async function claimCustomViaBackend(
     successLog('Custom drop request successful', { success: result.success, txHash: result.txHash });
 
     if (result.success && result.txHash && shouldUseDivvi(chainId)) {
-      setTimeout(() => { reportToDivvi(result.txHash, chainId); }, 100);
+      setTimeout(() => { result.txHash, chainId; }, 100);
     } else if (result.success && result.txHash) {
       debugLog(`Custom claim successful but not reporting to Divvi (unsupported chain: ${chainId})`);
     }
@@ -816,21 +676,7 @@ export async function claimNoCodeViaBackend(
       chainId
     };
 
-    if (shouldUseDivvi(chainId)) {
-      const divviResult = await processDivviReferralData(chainId, cleanUserAddress);
-
-      if (divviResult.data) {
-        payload.divviReferralData = divviResult.data;
-        successLog('Added Divvi referral data to payload', {
-          length: divviResult.data.length,
-          preview: `${divviResult.data.slice(0, 20)}...`
-        });
-      } else if (divviResult.error) {
-        debugLog(`Proceeding without Divvi data: ${divviResult.error}`);
-      }
-    } else {
-      debugLog(`Skipping Divvi integration for unsupported chain: ${chainId}`);
-    }
+   
 
     const requestLog: RequestLogData = {
       userAddress: cleanUserAddress,
@@ -863,7 +709,7 @@ export async function claimNoCodeViaBackend(
     successLog('Drop request without code successful', { success: result.success, txHash: result.txHash });
 
     if (result.success && result.txHash && shouldUseDivvi(chainId)) {
-      setTimeout(() => { reportToDivvi(result.txHash, chainId); }, 100);
+      setTimeout(() => { result.txHash, chainId }, 100);
     } else if (result.success && result.txHash) {
       debugLog(`No-code claim successful but not reporting to Divvi (unsupported chain: ${chainId})`);
     }
@@ -923,26 +769,7 @@ export async function claimViaBackend(
       chainId
     };
 
-    if (shouldUseDivvi(chainId)) {
-      const divviResult = await processDivviReferralData(chainId, cleanUserAddress);
-
-      if (divviResult.data) {
-        claimPayload.divviReferralData = divviResult.data;
-        successLog('Added Divvi referral data to claim payload', {
-          length: divviResult.data.length,
-          preview: `${divviResult.data.slice(0, 20)}...`
-        });
-      } else if (divviResult.error) {
-        debugLog(`Proceeding without Divvi data: ${divviResult.error}`);
-      }
-    } else {
-      debugLog(`Skipping Divvi integration for unsupported chain: ${chainId}`);
-    }
-
-    console.log('📤 Sending claim request:', {
-      ...claimPayload,
-      divviReferralData: claimPayload.divviReferralData ? 'Present' : 'Not included'
-    });
+   
 
     const claimResponse = await fetch(`${API_URL}/claim`, {
       method: "POST",
@@ -961,7 +788,7 @@ export async function claimViaBackend(
     console.log('✅ Claim successful:', claimResult);
 
     if (claimResult.txHash && shouldUseDivvi(chainId)) {
-      setTimeout(() => { reportToDivvi(claimResult.txHash, chainId); }, 100);
+      setTimeout(() => { claimResult.txHash, chainId }, 100);
     } else if (claimResult.txHash) {
       debugLog(`Claim successful but not reporting to Divvi (unsupported chain: ${chainId})`);
     }

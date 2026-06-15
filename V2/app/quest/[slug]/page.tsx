@@ -10,6 +10,7 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { useWallets } from '@privy-io/react-auth';
+import { getActiveSigner } from "@/lib/get-signer"
 import { QuestEditPanel } from "@/components/quest/questedit";
 import { QUEST_ABI } from "@/lib/abis";
 import { Button } from "@/components/ui/button";
@@ -366,6 +367,7 @@ export default function QuestDetailsPage() {
   const { address: userWalletAddress, provider: walletProvider } = useWallet();
   // Add this hook inside both files (or extract to a shared hooks file)
   const [leaderboardLimit, setLeaderboardLimit] = useState(50);
+  
   const rawSlug = (params.addresss || params.faucetAddress) as string | undefined;
   const { activeSolanaWallet } = useSolanaWallet()
   const refreshAllStats = async () => {
@@ -1747,103 +1749,85 @@ const handleRemoveAdmin = async (adminAddress: string) => {
 
   // Import parseUnits if you haven't already
 
-
-
-  const handleSubscribe = async () => {
-    if (!walletProvider || !userWalletAddress || !activeWallet) {
-      toast.error("Wallet not connected.");
-      return;
-    }
-
-    setIsFunding(true); // Reusing the funding loading state
-
-    try {
-      const privyProvider = await activeWallet.getEthereumProvider();
-      const ethersProvider = new BrowserProvider(privyProvider);
-      const signer = await ethersProvider.getSigner();
-      const userAddress = await signer.getAddress();
-
-      // ⚠️ YOUR COMPANY WALLET RECEIVER
-      const COMPANY_WALLET = "0x97841b00B8Ad031FB30495eCeF2B2DbB6FCaCE30";
-
-      // Identify the current chain
-      const currentChainId = parseInt(activeWallet.chainId.split(':')[1]);
-
-      // Smart routing: Always charge in USDT/USDC regardless of the quest reward token
-      const STABLECOINS: Record<number, { address: string, decimals: number }> = {
-        42220: { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", decimals: 6 }, // Celo USDT
-        1135: { address: "0x05D032ac25d322df992303dCa074EE7392C117b9", decimals: 6 }, // Lisk USDT
-        42161: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 }, // Arb USDT
-        8453: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 }, // Base USDC
-        56: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 }, // BNB USDT (18 decimals)
-      };
-
-      const stablecoin = STABLECOINS[currentChainId];
-      if (!stablecoin) throw new Error("Stablecoin payments not configured for this network.");
-
-      // Calculate $100 based on the token's decimals
-      const subscriptionCost = 100;
-      const amountWei = parseEther(subscriptionCost.toString()) / BigInt(10 ** (18 - stablecoin.decimals));
-
-      const ERC20_ABI = [
-        "function transfer(address to, uint256 amount) public returns (bool)",
-        "function balanceOf(address account) public view returns (uint256)"
-      ];
-
-      const tokenContract = new Contract(stablecoin.address, ERC20_ABI, signer);
-
-      // 1. Check Balance
-      const balance = await tokenContract.balanceOf(userAddress);
-      if (balance < amountWei) {
-        throw new Error("Insufficient stablecoin balance for $100 subscription.");
-      }
-
-      // 2. Execute Payment Transfer
-      toast.info("Please confirm the $100 subscription payment...");
-      const tx = await tokenContract.transfer(COMPANY_WALLET, amountWei);
-
-      toast.info("Processing payment on the blockchain...");
-      await tx.wait();
-
-      // 3. Notify Backend to Activate Subscription
-      toast.info("Activating your subscription...");
-      const res = await fetch(`${API_BASE_URL}/api/profile/subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wallet_address: userWalletAddress,
-          tx_hash: tx.hash
-        })
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        toast.success("Subscription Activated! You can now manage your quest.");
-
-        // Update local state instantly to unblock the UI
-        setUserProfile(prev => prev ? {
-          ...prev,
-          is_quest_subscribed: true,
-          quest_subscription_expires_at: data.expires_at
-        } : null);
-
-      } else {
-        throw new Error("Backend failed to activate subscription.");
-      }
-
-    } catch (error: any) {
-      console.error(error);
-      const errorMsg = error.reason || error.shortMessage || error.message || "Payment failed";
-      toast.error("Subscription failed: " + errorMsg);
-    } finally {
-      setIsFunding(false);
-    }
-  };
-  const isValidFundingAmount = useMemo(() => {
+ const isValidFundingAmount = useMemo(() => {
     const input = parseFloat(fundAmount || "0");
     return Math.abs(input - totalRequired) < 0.0001;
   }, [fundAmount, totalRequired]);
   
+
+ const handleSubscribe = async () => {
+  if (!userWalletAddress) { toast.error("Wallet not connected."); return; }
+  setIsFunding(true)
+
+  try {
+    const currentChainId = questData?.chainId
+    if (!currentChainId) throw new Error("Could not determine chain ID.")
+
+    toast.loading("Unlocking wallet...", { id: "sub-tx" })
+    const signer = await getActiveSigner(currentChainId)
+    if (!signer) throw new Error("Could not get signer — please re-login.")
+
+    const userAddress = await signer.getAddress()
+    const COMPANY_WALLET = "0x97841b00B8Ad031FB30495eCeF2B2DbB6FCaCE30"
+
+    const STABLECOINS: Record<number, { address: string; decimals: number }> = {
+      42220: { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", decimals: 6 },
+      1135:  { address: "0x05D032ac25d322df992303dCa074EE7392C117b9", decimals: 6 },
+      42161: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
+      8453:  { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
+      56:    { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
+    }
+
+    const stablecoin = STABLECOINS[currentChainId]
+    if (!stablecoin) throw new Error("Stablecoin payments not configured for this network.")
+
+    const amountWei = parseUnits("100", stablecoin.decimals)
+
+    const ERC20_ABI = [
+      "function transfer(address to, uint256 amount) public returns (bool)",
+      "function balanceOf(address account) public view returns (uint256)",
+    ]
+    const tokenContract = new Contract(stablecoin.address, ERC20_ABI, signer)
+
+    const balance = await tokenContract.balanceOf(userAddress)
+    if (balance < amountWei) throw new Error("Insufficient stablecoin balance for $100 subscription.")
+
+    toast.loading("Please confirm the $100 subscription payment...", { id: "sub-tx" })
+    const tx = await signer.sendTransaction({
+      to: stablecoin.address,
+      data: tokenContract.interface.encodeFunctionData("transfer", [COMPANY_WALLET, amountWei]),
+    })
+
+    toast.loading("Processing payment on the blockchain...", { id: "sub-tx" })
+    await tx.wait()
+
+    toast.loading("Activating your subscription...", { id: "sub-tx" })
+    const res = await fetch(`${API_BASE_URL}/api/profile/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallet_address: userWalletAddress, tx_hash: tx.hash }),
+    })
+
+    const data = await res.json()
+    if (data.success) {
+      toast.success("Subscription Activated!", { id: "sub-tx" })
+      setUserProfile(prev => prev ? {
+        ...prev,
+        is_quest_subscribed: true,
+        quest_subscription_expires_at: data.expires_at,
+      } : null)
+    } else {
+      throw new Error("Backend failed to activate subscription.")
+    }
+
+  } catch (error: any) {
+    console.error(error)
+    toast.error("Subscription failed: " + (error.reason || error.shortMessage || error.message || "Payment failed"), { id: "sub-tx" })
+  } finally {
+    setIsFunding(false)
+  }
+}
+ 
  // ─── FUND QUEST ──────────────────────────────────────────────────────────────
 const handleFundQuest = async () => {
   if (!faucetAddress) { toast.error("No quest address."); return; }
@@ -1853,223 +1837,197 @@ const handleFundQuest = async () => {
     const isSolana = questData?.chainId === SOLANA_CHAIN_ID;
 
     if (isSolana) {
-  if (!activeSolanaWallet) {
-    toast.error("Connect your Solana wallet first.")
-    return
-  }
+      if (!activeSolanaWallet) { toast.error("Connect your Solana wallet first."); return; }
+      try {
+        const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+        const connection = createSolanaConnection()
+        const decimals = 6
+        const rawAmount = Math.round(rewardPoolAmount * 10 ** decimals)
+        toast.info("Approving fund transaction in your Solana wallet…")
+        const tx = await solanaFundQuest(connection, anchorWallet, faucetAddress, rawAmount)
+        await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/set-funded`, { method: "POST" })
+        toast.success(`Quest funded! Tx: ${tx.slice(0, 8)}…`)
+        setQuestData((prev: any) => ({ ...prev, isFunded: true }))
+        setShowFundModal(false)
+      } catch (err: any) {
+        toast.error(err.message || "Funding failed")
+      }
+      return
+    }
 
-  try {
-    const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
-    const connection = createSolanaConnection()
+    // ── EVM: works for both embedded and external wallets ────────────────
+    const currentChainId = questData?.chainId
+    if (!currentChainId) throw new Error("Could not determine chain ID.")
 
-    const decimals = 6 // adjust to your token mint
-    const rawAmount = Math.round(rewardPoolAmount * 10 ** decimals)
+    toast.loading("Unlocking wallet...", { id: "fund-tx" })
+    const signer = await getActiveSigner(currentChainId)
+    if (!signer) throw new Error("Could not get signer — please re-login.")
 
-    toast.info("Approving fund transaction in your Solana wallet…")
-    const tx = await solanaFundQuest(connection, anchorWallet, faucetAddress, rawAmount)
+    const userAddress = await signer.getAddress()
+    const tokenAddress = questData.tokenAddress
 
-    await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/set-funded`, { method: "POST" })
-    toast.success(`Quest funded! Tx: ${tx.slice(0, 8)}…`)
-    setQuestData((prev: any) => ({ ...prev, isFunded: true }))
-    setShowFundModal(false)
-  } catch (err: any) {
-    toast.error(err.message || "Funding failed")
-  }
-  return
-}
-
-    // ── EVM path (existing) ──────────────────────────────────────────────────
-    if (!walletProvider || !faucetAddress) { toast.error("Wallet not connected."); return; }
-
-    const provider = walletProvider as BrowserProvider;
-    const signer = await provider.getSigner();
-    const userAddress = await signer.getAddress();
-
-    const tokenAddress = questData.tokenAddress;
     const ERC20_ABI = [
       "function approve(address s, uint256 a) public returns (bool)",
       "function balanceOf(address a) public view returns (uint256)",
       "function allowance(address o, address s) public view returns (uint256)",
       "function decimals() public view returns (uint8)",
-    ];
+    ]
 
-    const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer);
-    const decimals = await tokenContract.decimals();
-    const baseAmountWei = parseUnits(rewardPoolAmount.toString(), decimals);
-    const totalAmountWei = (baseAmountWei * 100n + 98n) / 99n;
+    const tokenContract = new Contract(tokenAddress, ERC20_ABI, signer)
+    const decimals = await tokenContract.decimals()
+    const baseAmountWei = parseUnits(rewardPoolAmount.toString(), decimals)
+    const totalAmountWei = (baseAmountWei * 100n + 98n) / 99n
 
-    const balance = await tokenContract.balanceOf(userAddress);
-    if (balance < totalAmountWei) throw new Error("Insufficient token balance for prize + fees.");
+    const balance = await tokenContract.balanceOf(userAddress)
+    if (balance < totalAmountWei) throw new Error("Insufficient token balance for prize + fees.")
 
-    const currentAllowance = await tokenContract.allowance(userAddress, faucetAddress);
+    const currentAllowance = await tokenContract.allowance(userAddress, faucetAddress)
     if (currentAllowance < totalAmountWei) {
-      toast.info("Approving tokens…");
-      const appTx = await tokenContract.approve(faucetAddress, totalAmountWei);
-      await appTx.wait();
+      toast.loading("Approving tokens…", { id: "fund-tx" })
+      const approveTx = await signer.sendTransaction({
+        to: tokenAddress,
+        data: tokenContract.interface.encodeFunctionData("approve", [faucetAddress, totalAmountWei]),
+      })
+      await approveTx.wait()
     }
 
-    const questContract = new Contract(faucetAddress, QUEST_ABI, signer);
-    const tx = await questContract.fund(totalAmountWei);
-    toast.info("Funding transaction sent…");
-    await tx.wait();
+    toast.loading("Funding quest…", { id: "fund-tx" })
+    const questContract = new Contract(faucetAddress, QUEST_ABI, signer)
+    const tx = await questContract.fund(totalAmountWei)
+    await tx.wait()
 
-    await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/set-funded`, { method: "POST" });
-    toast.success("Quest funded and activated!");
-    setQuestData((prev: any) => ({ ...prev, isFunded: true }));
-    setShowFundModal(false);
+    await fetch(`${API_BASE_URL}/api/quests/${faucetAddress}/set-funded`, { method: "POST" })
+    toast.success("Quest funded and activated!", { id: "fund-tx" })
+    setQuestData((prev: any) => ({ ...prev, isFunded: true }))
+    setShowFundModal(false)
 
   } catch (error: any) {
-    console.error(error);
-    toast.error(error.reason || error.message || "Funding failed");
+    console.error(error)
+    toast.error(error.reason || error.message || "Funding failed", { id: "fund-tx" })
   } finally {
-    setIsFunding(false);
+    setIsFunding(false)
   }
-};
+}
 
 // ─── CLAIM REWARD ─────────────────────────────────────────────────────────────
 const handleClaimReward = async () => {
-  if (!faucetAddress) return toast.error("No quest address");
-  setIsClaiming(true);
+  if (!faucetAddress) return toast.error("No quest address")
+  setIsClaiming(true)
 
   try {
-    const isSolana = questData?.chainId === SOLANA_CHAIN_ID;
+    const isSolana = questData?.chainId === SOLANA_CHAIN_ID
 
     if (isSolana) {
-  if (!activeSolanaWallet) {
-    toast.error("Connect your Solana wallet first.")
-    return
-  }
-
-  try {
-    const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
-    const connection = createSolanaConnection()
-    const onChainState = await getQuestState(connection, faucetAddress)
-
-    if (onChainState.vaultBalance === BigInt(0)) {
-      throw new Error("No funds left to withdraw.")
+      if (!activeSolanaWallet) { toast.error("Connect your Solana wallet first."); return }
+      try {
+        const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+        const connection = createSolanaConnection()
+        const onChainState = await getQuestState(connection, faucetAddress)
+        if (onChainState.vaultBalance === BigInt(0)) throw new Error("No funds left to withdraw.")
+        toast.info("Please confirm the withdrawal in your Solana wallet…")
+        const tx = await solanaWithdrawQuest(connection, anchorWallet, faucetAddress, Number(onChainState.vaultBalance))
+        toast.success(`Funds withdrawn! Tx: ${tx.slice(0, 8)}…`)
+      } catch (err: any) {
+        toast.error("Withdrawal failed: " + err.message)
+      }
+      return
     }
 
-    toast.info("Please confirm the withdrawal in your Solana wallet…")
-    const tx = await solanaWithdrawQuest(
-      connection,
-      anchorWallet,
-      faucetAddress,
-      Number(onChainState.vaultBalance)
-    )
-    toast.success(`Funds withdrawn! Tx: ${tx.slice(0, 8)}…`)
-  } catch (err: any) {
-    toast.error("Withdrawal failed: " + err.message)
-  }
-  return
-}
+    // ── EVM: works for both embedded and external wallets ────────────────
+    const currentChainId = questData?.chainId
+    if (!currentChainId) throw new Error("Could not determine chain ID.")
 
-    // ── EVM path (existing) ──────────────────────────────────────────────────
-    if (!activeWallet) return toast.error("Wallet not connected");
+    const signer = await getActiveSigner(currentChainId)
+    if (!signer) throw new Error("Could not get signer — please re-login.")
 
-    const currentChainId = parseInt(activeWallet.chainId.split(":")[1]);
+    const userAddress = await signer.getAddress()
+
     const res = await fetch(`${API_BASE_URL}/claim-on-quest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        userAddress: activeWallet.address,
+        userAddress,
         faucetAddress,
         chainId: currentChainId,
         shouldWhitelist: false,
       }),
-    });
-    const data = await res.json();
+    })
+    const data = await res.json()
 
     if (data.success) {
-      toast.success("Reward Claimed Successfully! Tx: " + data.txHash);
-      setClaimState(prev => ({ ...prev, hasClaimed: true, canClaimOnChain: false }));
+      toast.success("Reward Claimed Successfully! Tx: " + data.txHash)
+      setClaimState(prev => ({ ...prev, hasClaimed: true, canClaimOnChain: false }))
     } else {
-      toast.error(data.detail || "Claim failed.");
+      toast.error(data.detail || "Claim failed.")
     }
 
   } catch (e: any) {
-    toast.error("Network error during claim.");
+    toast.error(e.message || "Network error during claim.")
   } finally {
-    setIsClaiming(false);
+    setIsClaiming(false)
   }
-};
+}
 
 // ─── ADMIN WITHDRAW ───────────────────────────────────────────────────────────
 const handleAdminWithdraw = async () => {
-  if (!faucetAddress) return toast.error("No quest address");
-  setIsWithdrawing(true);
+  if (!faucetAddress) return toast.error("No quest address")
+  setIsWithdrawing(true)
 
   try {
-    const isSolana = questData?.chainId === SOLANA_CHAIN_ID;
+    const isSolana = questData?.chainId === SOLANA_CHAIN_ID
 
     if (isSolana) {
-  if (!activeSolanaWallet) {
-    toast.error("Connect your Solana wallet first.")
-    return
-  }
-
-  try {
-    const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
-    const connection = createSolanaConnection()
-    const onChainState = await getQuestState(connection, faucetAddress)
-
-    if (onChainState.vaultBalance === BigInt(0)) {
-      throw new Error("No funds left to withdraw.")
+      if (!activeSolanaWallet) { toast.error("Connect your Solana wallet first."); return }
+      try {
+        const anchorWallet = await getAnchorWalletFromPrivy(activeSolanaWallet)
+        const connection = createSolanaConnection()
+        const onChainState = await getQuestState(connection, faucetAddress)
+        if (onChainState.vaultBalance === BigInt(0)) throw new Error("No funds left to withdraw.")
+        toast.info("Please confirm the withdrawal in your Solana wallet…")
+        const tx = await solanaWithdrawQuest(connection, anchorWallet, faucetAddress, Number(onChainState.vaultBalance))
+        toast.success(`Funds withdrawn! Tx: ${tx.slice(0, 8)}…`)
+      } catch (err: any) {
+        toast.error("Withdrawal failed: " + err.message)
+      }
+      return
     }
 
-    toast.info("Please confirm the withdrawal in your Solana wallet…")
-    const tx = await solanaWithdrawQuest(
-      connection,
-      anchorWallet,
-      faucetAddress,
-      Number(onChainState.vaultBalance)
-    )
-    toast.success(`Funds withdrawn! Tx: ${tx.slice(0, 8)}…`)
-  } catch (err: any) {
-    toast.error("Withdrawal failed: " + err.message)
-  }
-  return
-}
-    // ── EVM path (existing) ──────────────────────────────────────────────────
-    if (!activeWallet) return toast.error("Wallet not connected");
+    // ── EVM: works for both embedded and external wallets ────────────────
+    const currentChainId = questData?.chainId
+    if (!currentChainId) throw new Error("Could not determine chain ID.")
 
-    const privyProvider = await activeWallet.getEthereumProvider();
-    const ethersProvider = new BrowserProvider(privyProvider);
-    const signer = await ethersProvider.getSigner();
+    const signer = await getActiveSigner(currentChainId)
+    if (!signer) throw new Error("Could not get signer — please re-login.")
 
-    const questContract = new Contract(faucetAddress, QUEST_ABI, signer);
+    const questContract = new Contract(faucetAddress, QUEST_ABI, signer)
 
-    let amountToWithdraw;
+    let amountToWithdraw: bigint
+    const rpcProvider = signer.provider
+    if (!rpcProvider) throw new Error("No provider on signer")
+
     if (questData.rewardTokenType === "native" || questData.tokenAddress === ZeroAddress) {
-      amountToWithdraw = await ethersProvider.getBalance(faucetAddress);
+      amountToWithdraw = await rpcProvider.getBalance(faucetAddress)
     } else {
-      const erc20Abi = ["function balanceOf(address account) view returns (uint256)"];
-      const tokenContract = new Contract(questData.tokenAddress, erc20Abi, signer);
-      amountToWithdraw = await tokenContract.balanceOf(faucetAddress);
+      const erc20Abi = ["function balanceOf(address account) view returns (uint256)"]
+      const tokenContract = new Contract(questData.tokenAddress, erc20Abi, rpcProvider)
+      amountToWithdraw = await tokenContract.balanceOf(faucetAddress)
     }
 
-    if (amountToWithdraw === 0n) throw new Error("No funds left to withdraw.");
+    if (amountToWithdraw === 0n) throw new Error("No funds left to withdraw.")
 
-    toast.info("Please confirm the withdrawal in your wallet…");
-    const tx = await questContract.withdraw(amountToWithdraw);
-    toast.info("Withdrawing funds. Waiting for confirmation…");
-    await tx.wait();
-    toast.success("Funds successfully withdrawn to your wallet!");
+    toast.info("Please confirm the withdrawal in your wallet…")
+    const tx = await questContract.withdraw(amountToWithdraw)
+    await tx.wait()
+    toast.success("Funds successfully withdrawn to your wallet!")
 
   } catch (e: any) {
-    console.error(e);
-    toast.error("Withdrawal failed: " + (e.reason || e.shortMessage || e.message || "Transaction failed"));
+    console.error(e)
+    toast.error("Withdrawal failed: " + (e.reason || e.shortMessage || e.message || "Transaction failed"))
   } finally {
-    setIsWithdrawing(false);
+    setIsWithdrawing(false)
   }
-};
+}
 
-  const questStatusGuard = useMemo(() => {
-    const now = new Date();
-    const start = questData?.startDate ? new Date(questData.startDate) : null;
-    if (!questData?.isFunded) return { blocked: true, title: "Quest Unfunded", desc: "The creator has not funded the reward pool yet." };
-    if (start && now < start) return { blocked: true, title: "Coming Soon", desc: `This quest starts on ${start.toLocaleDateString()} at ${start.toLocaleTimeString()}.` };
-    return { blocked: false };
-  }, [questData, startCountdown]); // <--- ADD START COUNTDOWN HERE
 
   // ── UPDATED getTaskStatus: uses activeStages + stagesMeta from backend ──
   const getTaskStatus = (task: QuestTask): "completed" | "pending" | "rejected" | "available" | "locked" => {

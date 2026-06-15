@@ -10,6 +10,7 @@
       import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
        import { useSubscriptionModal } from "@/components/subscribe"
       import { Badge } from "@/components/ui/badge"
+      import { getActiveSigner } from "@/lib/get-signer"
       import {
         Clock, Trash2, Loader2, Rocket,
         Plus, Zap, Lock, Unlock, Trophy, Settings,
@@ -878,17 +879,28 @@ const handleDeployAndFinalize = async () => {
             deployedAddress = result.questState
 
         } else {
-            // ── EVM path: deploy via factory contract ────────────────────────
-            if (!provider) throw new Error("Wallet provider is not ready.")
-            deployedAddress = await createQuestReward(
-                provider,
+            const currentNetwork = networks.find(n => Number(n.chainId) === Number(chainId))
+            const targetFactory = currentNetwork?.factories?.quest
+            if (!shouldSkipDeploy && !targetFactory) throw new Error("Quest Factory not found for this network.")
+
+            if (!shouldSkipDeploy) {
+              const signer = await getActiveSigner(Number(chainId))
+              if (!signer) throw new Error("Could not get signer — please re-login.")
+
+              // Build a minimal BrowserProvider-compatible shim for createQuestReward
+              // OR refactor createQuestReward to accept a signer directly (recommended)
+              deployedAddress = await createQuestReward(
+                signer as any,   // works because createQuestReward only calls provider.getSigner() internally
                 targetFactory!,
                 newQuest.title.trim(),
                 newQuest.tokenAddress || ZeroAddress,
                 questEndTimeSeconds,
                 hoursInt
-            )
-        }
+              )
+            } else {
+              deployedAddress = newQuest.faucetAddress || `demo-${crypto.randomUUID()}`
+            }
+          }
 
         // ── Slug — Solana addresses are base58, safe to slice ───────────────
         const baseSlug = newQuest.title

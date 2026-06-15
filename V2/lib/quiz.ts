@@ -6,7 +6,7 @@ import {
     parseUnits,
     ZeroAddress,
 } from "ethers";
-
+import { getActiveSigner } from "@/lib/get-signer"
 import { ERC20_ABI, QUIZ_FACTORY_ABI, QUIZ_ABI } from "./abis";
 import { BACKEND_ADDRESS} from './faucet';
 
@@ -57,7 +57,7 @@ export async function deployQuizReward(
         throw new Error("Backend wallet addresses not configured (check NEXT_PUBLIC_BACKEND_WALLET_A/B)");
     }
 
-    const signer = await provider.getSigner();
+    const signer = await getActiveSigner(chainId)
     const factory = new Contract(factoryAddress, QUIZ_FACTORY_ABI, signer);
     const tokenAddr = config.isNativeToken ? ZeroAddress : config.tokenAddress;
 
@@ -105,7 +105,8 @@ export async function fundQuizReward(
     poolAmount: string;
   }
 ): Promise<FundResult> {
-  const signer = await provider.getSigner();
+  const signer = await getActiveSigner(chainId)
+
   const signerAddress = await signer.getAddress();
 
   const quizContract = new Contract(contractAddress, QUIZ_ABI, signer);

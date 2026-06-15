@@ -221,7 +221,7 @@ const BLOCK_LOOKBACK: Record<number, number> = {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DropPointsPanel() {
-  const { address, isConnected, signer, chainId } = useWallet();
+  const { address, isConnected,  chainId, getActiveSigner } = useWallet();
 
   const [activeTab, setActiveTab]       = useState<Tab>("overview");
   const [tabsExpanded, setTabsExpanded] = useState(true); // ← collapse/expand state
@@ -239,7 +239,7 @@ export default function DropPointsPanel() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const claimLockRef = useRef(false);
-
+  
   const totalPoints = chainBalances.reduce((sum, c) => sum + c.balance, 0);
   const allLoaded   = chainBalances.every((c) => !c.loading);
   const maxBalance  = Math.max(...chainBalances.map((c) => c.balance), 1);
@@ -529,109 +529,107 @@ export default function DropPointsPanel() {
   // ── Claim ─────────────────────────────────────────────────────────────────
 
   const handleClaim = async () => {
-    if (!canClaim)    { toast.error(`Come back in ${formatCountdown(remainingMs)}`); return; }
-    if (!isConnected) { toast.warning("Connect your wallet first."); return; }
-    if (!address || !signer || !chainId) { toast.warning("Wallet not ready."); return; }
+  if (!canClaim)    { toast.error(`Come back in ${formatCountdown(remainingMs)}`); return; }
+  if (!isConnected) { toast.warning("Connect your wallet first."); return; }
+  if (!address || !chainId) { toast.warning("Wallet not ready."); return; }
 
-    const cfg = CHAIN_CONFIG[chainId];
-    if (!cfg) { toast.error("Drop Points not supported on this network."); return; }
-    if (claimLockRef.current) return;
+  const cfg = CHAIN_CONFIG[chainId];
+  if (!cfg) { toast.error("Drop Points not supported on this network."); return; }
+  if (claimLockRef.current) return;
 
-    claimLockRef.current = true;
-    setIsClaiming(true);
+  claimLockRef.current = true;
+  setIsClaiming(true);
 
-    let receipt: any = null;
+  let receipt: any = null;
 
-    try {
-      try {
-        const provider = getProvider(chainId);
-        const readOnly = new Contract(cfg.contract, POINTS_ABI, provider);
-        const eligible: boolean = await readOnly.canClaim(address);
-        if (!eligible) {
-          toast.error("Already claimed today.");
-          setCanClaim(false);
-          return;
-        }
-      } catch {}
-
-      toast.loading("Generating secure signature...", { id: "claim-tx" });
-      const sigRes = await fetch(`${API_BASE_URL}/api/droplist/generate-signature`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: address, chainId }),
-      });
-      const sigData = await sigRes.json();
-      if (!sigRes.ok) throw new Error(sigData?.detail || "Failed to generate signature");
-
-      const { amount, timestamp, signature } = sigData;
-
-      if (amount === undefined || amount === null)
-        throw new Error("Server returned missing 'amount'.");
-      if (timestamp === undefined || timestamp === null)
-        throw new Error("Server returned missing 'timestamp'.");
-      if (!signature || typeof signature !== "string" || signature.length < 10)
-        throw new Error("Server returned invalid signature.");
-
-      const sig = signature.startsWith("0x") ? signature : `0x${signature}`;
-      if (!/^0x[0-9a-fA-F]{130}$/.test(sig))
-        throw new Error(`Malformed signature (length ${sig.length}, expected 132).`);
-
-      toast.loading("Awaiting wallet confirmation...", { id: "claim-tx" });
-      const contract = new Contract(cfg.contract, POINTS_ABI, signer);
-      const tx = await contract.claim(BigInt(amount), BigInt(timestamp), sig, { from: address });
-
-      toast.loading("Confirming on-chain...", { id: "claim-tx" });
-      receipt = await tx.wait();
-
-      toast.loading("Verifying proof...", { id: "claim-tx" });
-      try {
-        const verifyData = await verifyWithRetry(receipt.hash, chainId, address);
-        await refreshAllPostClaim(verifyData, receipt, chainId);
-      } catch (verifyErr: any) {
-        console.warn("[DropPoints] Verify failed but tx confirmed:", verifyErr);
-        toast.warning("Claimed! Balance will update shortly.", { id: "claim-tx" });
-        setClaimBurst(true);
-        setTimeout(() => setClaimBurst(false), 800);
-        if (receipt?.blockNumber) {
-          try {
-            const provider = getProvider(chainId);
-            const block = await provider.getBlock(receipt.blockNumber);
-            setLastClaimAt(
-              block ? new Date(block.timestamp * 1000).toISOString() : new Date().toISOString()
-            );
-          } catch {
-            setLastClaimAt(new Date().toISOString());
-          }
-        } else {
-          setLastClaimAt(new Date().toISOString());
-        }
-        fetchChainData(address);
-        Promise.allSettled([fetchHistory()]);
-        return;
-      }
-
-      toast.success("Drop Points claimed! 🎉", { id: "claim-tx" });
-      setClaimBurst(true);
-      setTimeout(() => setClaimBurst(false), 800);
-    } catch (error: any) {
-      const msg: string = error?.reason || error?.message || "Claim failed";
-      if (msg.toLowerCase().includes("user rejected") || error?.code === 4001) {
-        toast.error("Transaction cancelled.", { id: "claim-tx" });
-      } else if (
-        msg.toLowerCase().includes("cooldown") ||
-        msg.toLowerCase().includes("already used")
-      ) {
-        toast.error("Already claimed today.", { id: "claim-tx" });
-        setCanClaim(false);
-      } else {
-        toast.error(msg, { id: "claim-tx" });
-        console.error("[DropPoints] Claim error:", error);
-      }
-    } finally {
-      setIsClaiming(false);
-      claimLockRef.current = false;
+  try {
+    // ── One line — works for both wallet types ──────────────────────────
+    toast.loading("Unlocking wallet...", { id: "claim-tx" })
+    const activeSigner = await getActiveSigner(chainId)
+    if (!activeSigner) {
+      toast.error("Could not get signer — please re-login.", { id: "claim-tx" })
+      return
     }
-  };
+
+    // ── Pre-flight ───────────────────────────────────────────────────────
+    try {
+      const readOnly = new Contract(cfg.contract, POINTS_ABI, getProvider(chainId))
+      const eligible: boolean = await readOnly.canClaim(address)
+      if (!eligible) {
+        toast.error("Already claimed today.")
+        setCanClaim(false)
+        return
+      }
+    } catch {}
+
+    // ── Signature ────────────────────────────────────────────────────────
+    toast.loading("Generating secure signature...", { id: "claim-tx" })
+    const sigRes = await fetch(`${API_BASE_URL}/api/droplist/generate-signature`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress: address, chainId }),
+    })
+    const sigData = await sigRes.json()
+    if (!sigRes.ok) throw new Error(sigData?.detail || "Failed to generate signature")
+
+    const { amount, timestamp, signature } = sigData
+    if (amount == null)     throw new Error("Server returned missing 'amount'.")
+    if (timestamp == null)  throw new Error("Server returned missing 'timestamp'.")
+    if (!signature || signature.length < 10) throw new Error("Server returned invalid signature.")
+
+    const sig = signature.startsWith("0x") ? signature : `0x${signature}`
+    if (!/^0x[0-9a-fA-F]{130}$/.test(sig))
+      throw new Error(`Malformed signature (length ${sig.length}, expected 132).`)
+
+    // ── Send tx ──────────────────────────────────────────────────────────
+    toast.loading("Sending transaction...", { id: "claim-tx" })
+    const contract = new Contract(cfg.contract, POINTS_ABI, activeSigner)
+    const tx = await contract.claim(BigInt(amount), BigInt(timestamp), sig, { from: address })
+
+    toast.loading("Confirming on-chain...", { id: "claim-tx" })
+    receipt = await tx.wait()
+
+    // ── Verify ───────────────────────────────────────────────────────────
+    toast.loading("Verifying proof...", { id: "claim-tx" })
+    try {
+      const verifyData = await verifyWithRetry(receipt.hash, chainId, address)
+      await refreshAllPostClaim(verifyData, receipt, chainId)
+    } catch (verifyErr: any) {
+      console.warn("[DropPoints] Verify failed but tx confirmed:", verifyErr)
+      toast.warning("Claimed! Balance will update shortly.", { id: "claim-tx" })
+      setClaimBurst(true)
+      setTimeout(() => setClaimBurst(false), 800)
+      try {
+        const block = await getProvider(chainId).getBlock(receipt.blockNumber)
+        setLastClaimAt(block ? new Date(block.timestamp * 1000).toISOString() : new Date().toISOString())
+      } catch {
+        setLastClaimAt(new Date().toISOString())
+      }
+      fetchChainData(address)
+      Promise.allSettled([fetchHistory()])
+      return
+    }
+
+    toast.success("Drop Points claimed! 🎉", { id: "claim-tx" })
+    setClaimBurst(true)
+    setTimeout(() => setClaimBurst(false), 800)
+
+  } catch (error: any) {
+    const msg: string = error?.reason || error?.message || "Claim failed"
+    if (msg.toLowerCase().includes("user rejected") || error?.code === 4001) {
+      toast.error("Transaction cancelled.", { id: "claim-tx" })
+    } else if (msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("already used")) {
+      toast.error("Already claimed today.", { id: "claim-tx" })
+      setCanClaim(false)
+    } else {
+      toast.error(msg, { id: "claim-tx" })
+      console.error("[DropPoints] Claim error:", error)
+    }
+  } finally {
+    setIsClaiming(false)
+    claimLockRef.current = false
+  }
+}
 
   // ── Tabs config ───────────────────────────────────────────────────────────
 

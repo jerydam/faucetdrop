@@ -8,7 +8,7 @@ import { useWallet } from '@/components/wallet-provider';
 import { toast } from 'sonner';
 import { Upload, Download, UserPlus, ShieldCheck, X, ImageIcon } from 'lucide-react';
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://faucetpay-backend.koyeb.app";
 const ADMIN_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_ADDRESS?.toLowerCase();
 interface EmployeeData {
   id: string;

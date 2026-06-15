@@ -20,14 +20,10 @@ const SOCIALS: { id: SocialProvider; label: string; icon: string; color: string;
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface ConnectModalProps {
-  /** Called after successful connection */
   onSuccess?: () => void
 }
-
 
 export function ConnectModal({ onSuccess }: ConnectModalProps) {
   const {
@@ -36,49 +32,79 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
     isConnecting,
   } = useWallet()
 
-  const [tab,           setTab]           = useState<"social" | "wallet">("social")
-  const [loadingId,     setLoadingId]     = useState<string | null>(null)
-  const [oauthWindow,   setOauthWindow]   = useState<Window | null>(null)
-  const [mounted,       setMounted]       = useState(false)
+  const [tab,       setTab]       = useState<"social" | "wallet">("social")
+  const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [mounted,   setMounted]   = useState(false)
 
   useEffect(() => setMounted(true), [])
 
-  // ── Listen for OAuth popup result ─────────────────────────────────────────
-  useEffect(() => {
-    const handler = async (e: MessageEvent) => {
-      if (e.origin !== window.location.origin) return
-      const { provider, credential } = e.data ?? {}
-      if (!provider || !credential) return
-      oauthWindow?.close()
-      setOauthWindow(null)
-      await connectSocial(provider as SocialProvider, credential)
-      onSuccess?.()
-    }
-    window.addEventListener("message", handler)
-    return () => window.removeEventListener("message", handler)
-  }, [oauthWindow, connectSocial, onSuccess])
-
-  // ── Social login: open OAuth popup ───────────────────────────────────────
+  // ── Social login ──────────────────────────────────────────────────────────
   const handleSocial = useCallback((providerId: SocialProvider) => {
-  if (providerId === "passkey") {
-    handlePasskey()
-    return
-  }
-  setLoadingId(providerId)
-  const w = window.open(
-    `${API_BASE}/api/auth/${providerId}`,
-    "oauth",
-    "width=500,height=700,left=200,top=100"
-  )
-  setOauthWindow(w)
-  const poll = setInterval(() => {
-    if (w?.closed) {
-      clearInterval(poll)
-      setLoadingId(null)
-    }
-  }, 500)
-}, [])
+    if (providerId === "passkey") { handlePasskey(); return }
 
+    setLoadingId(providerId)
+
+    const state = crypto.randomUUID()
+    const w = window.open(
+      `${API_BASE}/api/auth/${providerId}?client_state=${state}`,
+      "oauth",
+      "width=500,height=700,left=200,top=100",
+    )
+
+    if (!w) {
+      setLoadingId(null)
+      return
+    }
+
+    let settled = false
+
+    const settle = (cancelled = false) => {
+      if (settled) return
+      settled = true
+      clearInterval(pollId)
+      if (cancelled) setLoadingId(null)
+    }
+
+    // Single interval: always check session first, then check closed.
+    // This avoids the race where window.close() fires and we mistake it
+    // for a user cancellation before the session poll resolves.
+    const pollId = setInterval(async () => {
+      // ── 1. Always try the session endpoint first ──────────────────────
+      try {
+        const res  = await fetch(`${API_BASE}/api/auth/session?state=${state}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.status === "done") {
+            // Success — popup already closed itself via window.close()
+            settle(false)
+            setLoadingId(null)
+            try { w.close() } catch {}
+            await connectSocial(data.provider as SocialProvider, data.credential)
+            onSuccess?.()
+            return
+          }
+        }
+      } catch {
+        // Network hiccup — keep polling
+      }
+
+      // ── 2. Only treat closed popup as cancellation if session is still
+      //       pending (i.e. we didn't just succeed above) ─────────────────
+      try {
+        if (w.closed) settle(true)   // user manually closed without completing OAuth
+      } catch {
+        // Cross-origin frame check can throw — ignore
+      }
+    }, 800)
+
+    // Safety timeout: 3 minutes
+    setTimeout(() => {
+      try { w.close() } catch {}
+      settle(true)
+    }, 180_000)
+  }, [connectSocial, onSuccess])
+
+  // ── Passkey ───────────────────────────────────────────────────────────────
   const handlePasskey = useCallback(async () => {
     setLoadingId("passkey")
     try {
@@ -98,8 +124,7 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
           },
         },
       }) as PublicKeyCredential
-      const id = credential.id
-      await connectSocial("passkey", id)
+      await connectSocial("passkey", credential.id)
       onSuccess?.()
     } catch {
       // User cancelled or not supported
@@ -108,7 +133,7 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
     }
   }, [connectSocial, onSuccess])
 
-  // ── External wallet connect ───────────────────────────────────────────────
+  // ── External wallet ───────────────────────────────────────────────────────
   const handleExternalWallet = useCallback(async (wallet: typeof detectedWallets[number]) => {
     setLoadingId(wallet.name)
     try {
@@ -151,19 +176,14 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
 
         {/* Tab switcher */}
         <div className="px-6 mb-4">
-          <div
-            className="flex rounded-xl p-1"
-            style={{ background: "rgba(255,255,255,0.05)" }}
-          >
+          <div className="flex rounded-xl p-1" style={{ background: "rgba(255,255,255,0.05)" }}>
             {(["social", "wallet"] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
                 className={cn(
                   "flex-1 text-xs font-medium py-2 rounded-lg transition-all capitalize",
-                  tab === t
-                    ? "bg-white/10 text-white"
-                    : "text-white/40 hover:text-white/70"
+                  tab === t ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70",
                 )}
               >
                 {t === "social" ? "Social Login" : "Browser Wallet"}
@@ -197,11 +217,13 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
                   "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
                   "text-white/80 hover:text-white",
                   "border border-white/10 hover:border-white/20 hover:bg-white/5",
-                  loadingId === "passkey" && "opacity-60 pointer-events-none"
+                  loadingId === "passkey" && "opacity-60 pointer-events-none",
                 )}
               >
-                <span className="h-8 w-8 rounded-lg flex items-center justify-center text-lg"
-                  style={{ background: "rgba(255,255,255,0.06)" }}>
+                <span
+                  className="h-8 w-8 rounded-lg flex items-center justify-center text-lg"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                >
                   {loadingId === "passkey"
                     ? <Loader2 className="h-4 w-4 animate-spin" />
                     : <Fingerprint className="h-4 w-4" />}
@@ -228,11 +250,13 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
                       "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
                       "text-white/80 hover:text-white",
                       "border border-white/10 hover:border-white/20 hover:bg-white/5",
-                      loadingId === w.name && "opacity-60 pointer-events-none"
+                      loadingId === w.name && "opacity-60 pointer-events-none",
                     )}
                   >
-                    <span className="h-8 w-8 rounded-lg flex items-center justify-center text-xl"
-                      style={{ background: "rgba(255,255,255,0.06)" }}>
+                    <span
+                      className="h-8 w-8 rounded-lg flex items-center justify-center text-xl"
+                      style={{ background: "rgba(255,255,255,0.06)" }}
+                    >
                       {loadingId === w.name ? <Loader2 className="h-4 w-4 animate-spin" /> : w.icon}
                     </span>
                     <span className="flex-1 text-left">{w.name}</span>
@@ -253,12 +277,10 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SocialButton({
@@ -274,13 +296,9 @@ function SocialButton({
       className={cn(
         "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
         "border hover:scale-[1.01] active:scale-[0.99]",
-        loading || disabled ? "opacity-60 pointer-events-none" : "cursor-pointer"
+        loading || disabled ? "opacity-60 pointer-events-none" : "cursor-pointer",
       )}
-      style={{
-        color,
-        borderColor: color + "30",
-        background: bg,
-      }}
+      style={{ color, borderColor: color + "30", background: bg }}
     >
       <span
         className="h-8 w-8 rounded-lg flex items-center justify-center text-base font-bold"

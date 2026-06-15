@@ -1,13 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { usePrivy, useWallets } from "@privy-io/react-auth"
-import { useWallet } from "@/components/wallet-provider"
-import { useConnection, useWallet as useSolanaWallet } from "@solana/wallet-adapter-react"
-import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "@solana/web3.js"
-import { 
-    Dialog, DialogContent, DialogHeader, DialogTitle, 
-    DialogTrigger, DialogDescription 
+import { useWallet, API_BASE } from "@/components/wallet-provider"
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle,
+    DialogTrigger, DialogDescription
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,14 +13,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { 
-    Wallet, Send, Download, Copy, 
+import {
+    Wallet, Send, Download, Copy,
     Loader2, AlertTriangle, CheckCircle2, RefreshCw,
-    ExternalLink, ArrowUpRight
+    ExternalLink, ArrowUpRight, Eye, EyeOff
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+
 import { formatUnits, parseUnits, encodeFunctionData, type Address, zeroAddress } from "viem"
 import { type TokenConfiguration } from "@/components/CreateFaucetWizard"
+import { supportedChains, DEFAULT_CHAIN_ID, SOLANA_CHAIN_ID, STELLAR_CHAIN_ID } from "@/config/chain"
+
 
 // CoinGecko ID mapping for price fetching
 const COINGECKO_IDS: Record<string, string> = {
@@ -44,7 +44,6 @@ const COINGECKO_IDS: Record<string, string> = {
   "DEGEN": "degen-base",
   "BNB": "binancecoin",
   "BUSD": "binance-usd",
-  "SOL": "solana" // Added Solana
 }
 
 interface TokenBalance {
@@ -101,64 +100,116 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
     { address: "0x55d398326f99059fF775485246999027B3197955", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/busd.jpg", description: "Binance-Peg BSC-USD" },
     { address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", name: "BUSD", symbol: "BUSD", decimals: 18, logoUrl: "/busdt.jpg", description: "Binance-Peg BUSD Token" },
   ],
-  // Solana Devnet (102)
-  102: [
-    {
-      address: "11111111111111111111111111111111",
-      name: "Solana",
-      symbol: "SOL",
-      decimals: 9,
-      isNative: true,
-      logoUrl: "/solana.png", 
-      description: "Native Solana for transaction fees",
-    }
-  ]
 }
 
 export function EmbeddedWalletControlProduction() {
-    const { exportWallet, user } = usePrivy() // Extract user object from Privy
-    const { wallets } = useWallets()
-    const { address: evmAddress, chainId } = useWallet()
-    
-    // Solana Hooks
-    const { connection } = useConnection()
-    const { publicKey: solanaPublicKey, sendTransaction: sendSolanaTransaction } = useSolanaWallet()
-    
+    const { address: evmAddress, chainId, walletType, session, signer } = useWallet()
     const { toast } = useToast()
-
+    const [exportType,  setExportType]  = useState<"seed" | "privatekey">("privatekey")
+    const [exportedKey, setExportedKey] = useState<string | null>(null)
+    const [showKey,     setShowKey]     = useState(false)
+    const [exportChain, setExportChain] = useState<string>("")
     const [open, setOpen] = useState(false)
     const [activeTab, setActiveTab] = useState("balance")
-    
+
     // Balance State
     const [balances, setBalances] = useState<TokenBalance[]>([])
     const [loadingBalances, setLoadingBalances] = useState(false)
     const [totalUsdValue, setTotalUsdValue] = useState("0.00")
-    
+
     // Send State
     const [selectedToken, setSelectedToken] = useState<TokenConfiguration | null>(null)
     const [recipient, setRecipient] = useState("")
     const [amount, setAmount] = useState("")
     const [sending, setSending] = useState(false)
     const [txHash, setTxHash] = useState("")
-    
+
     // Export State
     const [exporting, setExporting] = useState(false)
+    const [seedPhrase, setSeedPhrase] = useState<string | null>(null)
+    const [showSeed, setShowSeed] = useState(false)
 
-    // Determine Active Address (EVM vs Solana)
-    const currentAddress = chainId === 102 ? solanaPublicKey?.toBase58() : evmAddress
+    const currentAddress = evmAddress
+    useEffect(() => {
+        if (!open) {
+            setSeedPhrase(null)
+            setShowSeed(false)
+            setExportedKey(null)   // ← add
+            setShowKey(false)      // ← add
+            setExportChain("")     // ← add
+        }
+        }, [open])
 
-    // Safely check if the user has ANY embedded wallet (EVM or Solana) attached to their account
-    // This bypasses the active session and checks their database-level linked accounts
-    const hasEmbeddedWallet = user?.linkedAccounts?.some(
-        (account: any) => 
-            (account.type === 'wallet' || account.type === 'solana_wallet') && 
-            account.connectorType === 'embedded'
-    );
+    // Derive display chain from current chainId
+const getChainDisplay = () => {
+  if (!chainId) return "EVM"
+  if (chainId === SOLANA_CHAIN_ID)  return "Solana"
+  if (chainId === STELLAR_CHAIN_ID) return "Stellar"
+  return supportedChains.find(c => c.id === chainId)?.name ?? "EVM"
+}
+
+const handleExportPrivateKey = async () => {
+  if (!session?.token) return toast({ title: "Error message", variant: "destructive", description:"Not authenticated" })
+  const targetChainId = chainId ?? DEFAULT_CHAIN_ID
+  setExporting(true)
+  setExportedKey(null)
+  try {
+    const res = await fetch(
+      `${API_BASE}/wallet/export-privatekey?chain_id=${targetChainId}`,
+      {
+        method:  "POST",
+        headers: { Authorization: `Bearer ${session.token}` },
+      }
+    )
+    if (!res.ok) throw new Error((await res.json()).detail || "Export failed")
+    const data = await res.json()
+
+    // Solana returns a byte array — convert to base58 for display
+    // For simplicity show hex for all, users can import via their wallet
+    let keyDisplay: string
+    if (data.chain === "solana") {
+      // Show the 64-byte array as comma-separated for Phantom import,
+      // or hex seed for other importers
+      keyDisplay = Array.isArray(data.private_key)
+        ? `[${data.private_key.join(",")}]`
+        : data.private_key_hex
+    } else {
+      keyDisplay = data.private_key
+    }
+
+    setExportedKey(keyDisplay)
+    setExportChain(data.chain)
+    setShowKey(false)
+  } catch (err: any) {
+    toast({ title: "Error message", variant: "destructive", description:"export failed" })
+  } finally {
+    setExporting(false)
+  }
+}
+
+const handleExportSeed = async () => {
+  if (!session?.token) return toast({ title: "Error message", variant: "destructive", description:"Not authenticated" })
+  setExporting(true)
+  try {
+    const res = await fetch(`${API_BASE}/wallet/export-seed`, {
+      method:  "POST",
+      headers: { Authorization: `Bearer ${session.token}` },
+    })
+    if (!res.ok) throw new Error("Export failed")
+    const data = await res.json()
+    setSeedPhrase(data.mnemonic)
+    setShowSeed(false)
+  } catch (err: any) {
+    toast({ title: "Error message", variant: "destructive", description:"export failed" })
+  } finally {
+    setExporting(false)
+  }
+}
 
     const fetchBalances = async () => {
         if (!currentAddress || !chainId) return;
         setLoadingBalances(true);
-        
+
         const configTokens = NETWORK_TOKENS[chainId] || [];
 
         try {
@@ -170,34 +221,17 @@ export function EmbeddedWalletControlProduction() {
             }));
 
             let backendData: BackendResponse | null = null;
-            
-            // 1. Fetch Balances: Try direct Solana RPC for Devnet, fallback to backend for EVM
-            if (chainId === 102 && solanaPublicKey) {
-                try {
-                    const lamports = await connection.getBalance(solanaPublicKey);
-                    backendData = {
-                        success: true,
-                        balances: [{
-                            token_address: "11111111111111111111111111111111",
-                            balance: lamports.toString(),
-                            is_native: true
-                        }]
-                    };
-                } catch (solError) {
-                    console.warn("Solana RPC fetch failed:", solError);
+
+            try {
+                const response = await fetch(`https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/api/wallet/balances/${chainId}/${currentAddress}`);
+                if (response.ok) {
+                    backendData = await response.json();
                 }
-            } else {
-                try {
-                    const response = await fetch(`https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/api/wallet/balances/${chainId}/${currentAddress}`);
-                    if (response.ok) {
-                        backendData = await response.json();
-                    }
-                } catch (backendError) {
-                    console.warn("Backend balance fetch failed, defaulting to 0s:", backendError);
-                }
+            } catch (backendError) {
+                console.warn("Backend balance fetch failed, defaulting to 0s:", backendError);
             }
 
-            // 2. Fetch prices from CoinGecko safely
+            // Fetch prices from CoinGecko safely
             let prices: Record<string, { usd: number }> = {};
             try {
                 const uniqueSymbols = [...new Set(configTokens.map(t => t.symbol))];
@@ -217,24 +251,23 @@ export function EmbeddedWalletControlProduction() {
             }
 
             let totalValue = 0;
-            
-            // 3. Merge everything together
+
             const finalBalances = defaultBalances.map((item) => {
                 const backendMatch = backendData?.balances?.find(
                     (b) => b.token_address.toLowerCase() === item.token.address.toLowerCase()
                 );
-                
+
                 const rawBalance = backendMatch ? backendMatch.balance : "0";
                 const formatted = formatUnits(BigInt(rawBalance), item.token.decimals);
-                
+
                 const coingeckoId = COINGECKO_IDS[item.token.symbol];
                 const price = coingeckoId && prices[coingeckoId] ? prices[coingeckoId].usd : 0;
-                
+
                 const balanceNum = parseFloat(formatted);
                 const usdValue = (balanceNum * price).toFixed(2);
-                
+
                 totalValue += parseFloat(usdValue);
-                
+
                 return {
                     token: item.token,
                     balance: rawBalance,
@@ -253,19 +286,20 @@ export function EmbeddedWalletControlProduction() {
             }));
             setBalances(fallbackBalances);
             setTotalUsdValue("0.00");
-            
-            toast({ 
-                title: "Network Error", 
+
+            toast({
+                title: "Network Error",
                 description: "Showing local tokens with 0 balances. Refresh to try again.",
-                variant: "destructive" 
+                variant: "destructive"
             });
         } finally {
             setLoadingBalances(false);
         }
     };
 
+    
     const handleSend = async () => {
-        if (!selectedToken || !recipient || !amount || !currentAddress) {
+        if (!selectedToken || !recipient || !amount || !currentAddress || !signer) {
             toast({ title: "Please fill all fields", variant: "destructive" })
             return
         }
@@ -275,76 +309,40 @@ export function EmbeddedWalletControlProduction() {
 
         try {
             let hash = ""
-            
-            if (chainId === 102) {
-                // =============== SOLANA SEND LOGIC ===============
-                if (!solanaPublicKey || !sendSolanaTransaction) {
-                    throw new Error("Solana wallet not properly connected");
-                }
-                
-                let toPubkey: PublicKey;
-                try {
-                    toPubkey = new PublicKey(recipient);
-                } catch {
-                    throw new Error("Invalid Solana recipient address");
-                }
 
-                // Create the transfer transaction
-                const lamports = Math.floor(parseFloat(amount) * LAMPORTS_PER_SOL);
-                const transaction = new Transaction().add(
-                    SystemProgram.transfer({
-                        fromPubkey: solanaPublicKey,
-                        toPubkey,
-                        lamports: BigInt(lamports) 
-                    })
-                );
+            if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
+                throw new Error("Invalid EVM recipient address");
+            }
 
-                // Fetch recent blockhash
-                const { blockhash } = await connection.getLatestBlockhash();
-                transaction.recentBlockhash = blockhash;
-                transaction.feePayer = solanaPublicKey;
+            const amountWei = parseUnits(amount, selectedToken.decimals);
 
-                // Send and sign via the adapter
-                hash = await sendSolanaTransaction(transaction, connection);
-                
+            if (selectedToken.isNative) {
+                const tx = await signer.sendTransaction({
+                    to: recipient as Address,
+                    value: amountWei,
+                });
+                hash = tx.hash
             } else {
-                // =============== EVM SEND LOGIC ===============
-                const evmEmbeddedWallet = wallets.find(w => w.walletClientType === 'privy' && (w.chainType === 'ethereum' || !w.chainType));
-                if (!evmEmbeddedWallet) throw new Error("No EVM embedded wallet found");
+                const data = encodeFunctionData({
+                    abi: [{
+                        name: 'transfer', type: 'function', stateMutability: 'nonpayable',
+                        inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
+                        outputs: [{ type: 'bool' }]
+                    }],
+                    functionName: 'transfer',
+                    args: [recipient as Address, amountWei]
+                });
 
-                if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
-                    throw new Error("Invalid EVM recipient address");
-                }
-
-                const amountWei = parseUnits(amount, selectedToken.decimals);
-                const provider = await evmEmbeddedWallet.getEthereumProvider();
-
-                if (selectedToken.isNative) {
-                    const txRequest = {
-                        to: recipient,
-                        value: `0x${amountWei.toString(16)}`,
-                        from: evmAddress
-                    };
-                    hash = await provider.request({ method: 'eth_sendTransaction', params: [txRequest] }) as string;
-                } else {
-                    const data = encodeFunctionData({
-                        abi: [{
-                            name: 'transfer', type: 'function', stateMutability: 'nonpayable',
-                            inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
-                            outputs: [{ type: 'bool' }]
-                        }],
-                        functionName: 'transfer',
-                        args: [recipient as Address, amountWei]
-                    });
-
-                    const txRequest = { to: selectedToken.address, data, from: evmAddress };
-                    hash = await provider.request({ method: 'eth_sendTransaction', params: [txRequest] }) as string;
-                }
+                const tx = await signer.sendTransaction({
+                    to: selectedToken.address as Address,
+                    data,
+                });
+                hash = tx.hash
             }
 
             setTxHash(hash)
-            toast({ 
-                title: "Transaction sent!", 
+            toast({
+                title: "Transaction sent!",
                 description: `${amount} ${selectedToken.symbol} sent successfully`
             })
 
@@ -355,10 +353,10 @@ export function EmbeddedWalletControlProduction() {
         } catch (error: any) {
             console.error("Send error:", error)
             const errorMessage = error instanceof Error ? error.message : "Please try again"
-            toast({ 
-                title: "Transaction failed", 
+            toast({
+                title: "Transaction failed",
                 description: errorMessage,
-                variant: "destructive" 
+                variant: "destructive"
             })
         } finally {
             setSending(false)
@@ -366,13 +364,18 @@ export function EmbeddedWalletControlProduction() {
     }
 
     const handleExportKey = async () => {
+        if (!session?.token) return toast({ title: "Not authenticated", variant: "destructive" })
         setExporting(true)
         try {
-            // Privy's export UI handles both EVM and Solana automatically for embedded users
-            await exportWallet() 
-            toast({ title: "Export flow completed", description: "You have successfully accessed your private key." })
+            const res = await fetch(`${API_BASE}/wallet/export-seed`, {
+                method: "POST",   // ← add this
+                headers: { Authorization: `Bearer ${session.token}` },
+            })
+            if (!res.ok) throw new Error("Export failed")
+            const data = await res.json()
+            setSeedPhrase(data.mnemonic)
+            setShowSeed(false)
         } catch (error: any) {
-            console.error("Export error:", error)
             toast({ title: "Export failed", description: error.message || "Failed to export", variant: "destructive" })
         } finally {
             setExporting(false)
@@ -385,9 +388,6 @@ export function EmbeddedWalletControlProduction() {
     }
 
     const getExplorerUrl = (hash: string) => {
-        if (chainId === 102) {
-            return `https://solscan.io/tx/${hash}?cluster=devnet`
-        }
         const explorers: Record<number, string> = {
             42220: "https://celoscan.io/tx/",
             1135: "https://blockscout.lisk.com/tx/",
@@ -395,7 +395,7 @@ export function EmbeddedWalletControlProduction() {
             8453: "https://basescan.org/tx/",
             56: "https://bscscan.com/tx/"
         }
-        return explorers[chainId || 42220] + hash
+        return (explorers[chainId || 42220] || explorers[42220]) + hash
     }
 
     useEffect(() => {
@@ -403,8 +403,16 @@ export function EmbeddedWalletControlProduction() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, chainId, currentAddress])
 
-    // Hide UI entirely if the user does NOT have an embedded wallet linked to their account
-    if (!hasEmbeddedWallet) {
+    // Reset seed visibility when dialog closes
+    useEffect(() => {
+        if (!open) {
+            setSeedPhrase(null)
+            setShowSeed(false)
+        }
+    }, [open])
+
+    // Only show this control for embedded wallets
+    if (walletType !== "embedded") {
         return null
     }
 
@@ -532,7 +540,7 @@ export function EmbeddedWalletControlProduction() {
 
                         <div className="space-y-2">
                             <Label htmlFor="recipient" className="text-xs sm:text-sm">Recipient Address</Label>
-                            <Input id="recipient" placeholder={chainId === 102 ? "Enter Solana Address" : "0x..."} value={recipient} onChange={(e) => setRecipient(e.target.value)} className="text-xs sm:text-sm h-9 sm:h-10" />
+                            <Input id="recipient" placeholder="0x..." value={recipient} onChange={(e) => setRecipient(e.target.value)} className="text-xs sm:text-sm h-9 sm:h-10" />
                         </div>
 
                         <div className="space-y-2">
@@ -575,22 +583,164 @@ export function EmbeddedWalletControlProduction() {
 
                     {/* EXPORT KEY TAB */}
                     <TabsContent value="export" className="space-y-3 sm:space-y-4">
-                        <Alert variant="destructive">
-                            <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <AlertDescription className="text-[10px] sm:text-sm">
-                                <strong>Warning:</strong> Never share your private key. It gives full access to your wallet.
-                            </AlertDescription>
-                        </Alert>
+  <Alert variant="destructive">
+    <AlertTriangle className="h-3 w-3 sm:h-4 sm:w-4" />
+    <AlertDescription className="text-[10px] sm:text-sm">
+      <strong>Warning:</strong> Never share your private key or seed phrase. Anyone with it has full access to your wallet.
+    </AlertDescription>
+  </Alert>
 
-                        <div className="space-y-3 sm:space-y-4">
-                            <p className="text-xs sm:text-sm text-muted-foreground">
-                                Click below to securely reveal and export your private key.
-                            </p>
-                            <Button onClick={handleExportKey} disabled={exporting} className="w-full text-xs sm:text-sm h-9 sm:h-10" variant="outline">
-                                {exporting ? <><Loader2 className="mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" /> Opening Secure Export...</> : <><Download className="mr-2 h-3 w-3 sm:h-4 sm:w-4" /> Reveal Private Key</>}
-                            </Button>
-                        </div>
-                    </TabsContent>
+  {/* Export type toggle */}
+  <div className="grid grid-cols-2 gap-2">
+    <Button
+      variant={exportType === "privatekey" ? "default" : "outline"}
+      size="sm"
+      onClick={() => { setExportType("privatekey"); setExportedKey(null); setSeedPhrase(null) }}
+      className="text-xs"
+    >
+      Private Key
+    </Button>
+    <Button
+      variant={exportType === "seed" ? "default" : "outline"}
+      size="sm"
+      onClick={() => { setExportType("seed"); setExportedKey(null); setSeedPhrase(null) }}
+      className="text-xs"
+    >
+      Seed Phrase
+    </Button>
+  </div>
+
+  {/* Private Key export */}
+  {exportType === "privatekey" && (
+    <>
+      <p className="text-xs text-muted-foreground">
+        Exporting private key for{" "}
+        <span className="font-semibold text-foreground">{getChainDisplay()}</span>.
+        Switch chains to export for a different network.
+      </p>
+
+      {!exportedKey ? (
+        <Button
+          onClick={handleExportPrivateKey}
+          disabled={exporting}
+          className="w-full text-xs sm:text-sm h-9 sm:h-10"
+          variant="outline"
+        >
+          {exporting
+            ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Exporting…</>
+            : <><Download className="mr-2 h-3 w-3" /> Export {getChainDisplay()} Private Key</>}
+        </Button>
+      ) : (
+        <div className="space-y-3">
+          {/* Chain badge */}
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs capitalize">{exportChain}</Badge>
+            <span className="text-xs text-muted-foreground">private key</span>
+          </div>
+
+          {/* Key display */}
+          <div className="relative">
+            <div className={`p-3 rounded-lg border bg-muted/50 font-mono text-xs break-all leading-relaxed ${!showKey ? "blur-sm select-none" : ""}`}>
+              {exportedKey}
+            </div>
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => setShowKey(s => !s)}
+              className="absolute top-2 right-2 h-7 w-7 p-0"
+            >
+              {showKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            </Button>
+          </div>
+
+          {/* Solana format hint */}
+          {exportChain === "solana" && (
+            <p className="text-[10px] text-muted-foreground">
+              Format: 64-byte array — paste into Phantom → Import Private Key
+            </p>
+          )}
+          {exportChain === "stellar" && (
+            <p className="text-[10px] text-muted-foreground">
+              Format: Stellar secret key (S...) — importable into Lobstr, Freighter, etc.
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline" size="sm"
+              onClick={() => copyToClipboard(exportedKey, "Private key")}
+              disabled={!showKey}
+              className="flex-1 text-xs"
+            >
+              <Copy className="mr-2 h-3 w-3" /> Copy
+            </Button>
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => { setExportedKey(null); setShowKey(false) }}
+              className="flex-1 text-xs"
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  )}
+
+  {/* Seed phrase export (unchanged logic, new placement) */}
+  {exportType === "seed" && (
+
+    <>
+   
+      {!seedPhrase ? (
+        <Button
+          onClick={handleExportSeed}
+          disabled={exporting}
+          className="w-full text-xs sm:text-sm h-9 sm:h-10"
+          variant="outline"
+        >
+          {exporting
+            ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" /> Revealing…</>
+            : <><Download className="mr-2 h-3 w-3" /> Reveal Seed Phrase</>}
+        </Button>
+      ) : (
+        <div className="space-y-3">
+          <div className="relative">
+            <div className={`p-3 rounded-lg border bg-muted/50 font-mono text-xs break-words leading-relaxed ${!showSeed ? "blur-sm select-none" : ""}`}>
+              {seedPhrase}
+            </div>
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => setShowSeed(s => !s)}
+              className="absolute top-2 right-2 h-7 w-7 p-0"
+            >
+              {showSeed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Import into any wallet using derivation paths: EVM m/44'/60'/0'/0/0 · Solana m/44'/501'/0'/0' · Stellar m/44'/148'/0'
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline" size="sm"
+              onClick={() => copyToClipboard(seedPhrase, "Seed phrase")}
+              disabled={!showSeed}
+              className="flex-1 text-xs"
+            >
+              <Copy className="mr-2 h-3 w-3" /> Copy
+            </Button>
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => { setSeedPhrase(null); setShowSeed(false) }}
+              className="flex-1 text-xs"
+            >
+              Hide & Clear
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  )}
+</TabsContent>
 
                 </Tabs>
             </DialogContent>

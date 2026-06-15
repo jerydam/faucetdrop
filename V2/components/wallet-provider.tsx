@@ -4,7 +4,7 @@ import {
   createContext, useContext, useEffect, useRef,
   useState, useCallback, type ReactNode,
 } from "react"
-import { BrowserProvider, type JsonRpcSigner } from "ethers"
+import { BrowserProvider, ethers, JsonRpcProvider, Wallet, type JsonRpcSigner } from "ethers"
 import { toast } from "sonner"
 import { supportedChains, DEFAULT_CHAIN_ID, CHAIN_RPC } from "@/config/chain"
 
@@ -16,22 +16,29 @@ export type SocialProvider = "google" | "twitter" | "telegram" | "discord" | "gi
 
 
 export interface WalletSession {
-  address:       string          // the wallet address (EOA for embedded, signer for external)
-  walletType:    "embedded" | "external"
-  provider?:     string          // e.g. "google", "twitter", "metamask", "rabby"
-  chainId:       number
-  token?:        string          // JWT from backend (embedded wallets only)
+  address:        string
+  walletType:     "embedded" | "external"
+  provider?:      string
+  chainId:        number
+  token?:         string
   linkedSocials?: SocialProvider[]
+  solanaAddress?:  string | null
+  stellarAddress?: string | null
+  // ── Legacy Privy import fields ──
+  legacyFound?:       boolean
+  legacyPrivyId?:     string | null
+  legacyEvmAddress?:  string | null
+  legacySolAddress?:  string | null
+  needsSeedImport?:   boolean
 }
 
 interface DetectedWallet {
   name:     string
   icon:     string
-  provider: any                  // window.ethereum or sub-provider
+  provider: any
 }
 
 interface WalletContextType {
-  // State
   session:          WalletSession | null
   address:          string | null
   chainId:          number | null
@@ -42,8 +49,18 @@ interface WalletContextType {
   signer:           JsonRpcSigner | null
   detectedWallets:  DetectedWallet[]
   showModal:        boolean
+  solanaAddress:    string | null
+  stellarAddress:   string | null
+  legacyFound?:       boolean
+  legacyPrivyId?:     string | null
+  legacyEvmAddress?:  string | null
+  legacySolAddress?:  string | null
+  getEmbeddedSigner: (chainId: number) => Promise<Wallet | null>
+getActiveSigner:   (chainId?: number) => Promise<JsonRpcSigner | Wallet | null>
 
-  // Actions
+  clearLegacy:      () => void
+  fetchNonEvmAddresses: () => Promise<void>
+
   setShowModal:             (val: boolean) => void
   connectExternalWallet:    (wallet: DetectedWallet) => Promise<void>
   connectSocial:            (provider: SocialProvider, credential: string) => Promise<void>
@@ -65,15 +82,12 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:800
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Returns all EIP-1193 providers the browser exposes */
 function detectWallets(): DetectedWallet[] {
   if (typeof window === "undefined") return []
   const eth = (window as any).ethereum
   if (!eth) return []
 
   const wallets: DetectedWallet[] = []
-
-  // Multi-injected providers (EIP-6963 is the future, but providers[].isXxx covers today)
   const providers: any[] = eth.providers ?? [eth]
 
   for (const p of providers) {
@@ -88,7 +102,6 @@ function detectWallets(): DetectedWallet[] {
     else                               wallets.push({ name: "Browser Wallet",  icon: "🌐", provider: p })
   }
 
-  // De-dupe by name
   return wallets.filter((w, i, arr) => arr.findIndex(x => x.name === w.name) === i)
 }
 
@@ -109,6 +122,14 @@ function loadSession(): WalletSession | null {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") } catch { return null }
 }
 
+/** Wipe all per-address import-dismissed markers from sessionStorage */
+function clearImportSessionKeys() {
+  if (typeof window === "undefined") return
+  Object.keys(sessionStorage)
+    .filter(k => k.startsWith("privy_import_dismissed_"))
+    .forEach(k => sessionStorage.removeItem(k))
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Context
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,12 +141,78 @@ export const WalletContext = createContext<WalletContextType>({
   setShowModal: () => {},
   connectExternalWallet: async () => {},
   connectSocial: async () => {},
+  getEmbeddedSigner: async () => null,
   disconnect: () => {},
   switchChain: async () => {},
   ensureCorrectNetwork: async () => false,
   linkSocial: async () => {},
   refreshProvider: async () => {},
+  solanaAddress:  null,
+  stellarAddress: null,
+  clearLegacy:      () => {},
+  fetchNonEvmAddresses: async () => {},
+  getActiveSigner:   async () => null,
+  
 })
+
+export async function openOAuthPopup(
+  apiBase: string,
+  provider: string,
+  onCancel?: () => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const state = crypto.randomUUID()
+    const popup = window.open(
+      `${apiBase}/api/auth/${provider}?client_state=${state}`,
+      `${provider}_oauth`,
+      "width=520,height=640,left=400,top=100",
+    )
+    if (!popup) {
+      reject(new Error("Popup blocked — allow popups and try again"))
+      return
+    }
+
+    let settled    = false
+    let popupReady = false
+
+    const settle = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      clearInterval(pollSession)
+      clearInterval(pollClosed)
+      fn()
+    }
+
+    setTimeout(() => { popupReady = true }, 3000)
+
+    const pollSession = setInterval(async () => {
+      try {
+        const res  = await fetch(`${apiBase}/api/auth/session?state=${state}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.status === "pending") return
+        popup.close()
+        if (data.status === "done") settle(() => resolve(data.credential))
+        else settle(() => reject(new Error("OAuth failed")))
+      } catch { /* keep polling */ }
+    }, 1000)
+
+    const pollClosed = setInterval(() => {
+      if (!popupReady) return
+      if (popup.closed) {
+        settle(() => {
+          onCancel?.()
+          reject(new Error("cancelled"))
+        })
+      }
+    }, 500)
+
+    setTimeout(() => {
+      popup.close()
+      settle(() => reject(new Error("OAuth timed out")))
+    }, 180_000)
+  })
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider
@@ -140,7 +227,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [detectedWallets, setDetectedWallets] = useState<DetectedWallet[]>([])
   const rawProviderRef = useRef<any>(null)
 
-  // ── Derived ───────────────────────────────────────────────────────────────
   const isConnected = !!session?.address
   const address     = session?.address ?? null
   const chainId     = session?.chainId ?? null
@@ -150,7 +236,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setDetectedWallets(detectWallets())
 
-    // EIP-6963: listen for wallets that announce themselves after load
     const handler = (e: any) => {
       const { info, provider: p } = e.detail
       setDetectedWallets(prev => {
@@ -162,12 +247,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     window.addEventListener("eip6963:announceProvider", handler)
     window.dispatchEvent(new Event("eip6963:requestProvider"))
 
-    // Restore session
     const saved = loadSession()
     if (saved) {
       setSession(saved)
       if (saved.walletType === "external") {
-        // Re-establish ethers provider for external wallets
         const wallets = detectWallets()
         if (wallets.length > 0) {
           buildProvider(wallets[0].provider).then(result => {
@@ -183,6 +266,43 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     return () => window.removeEventListener("eip6963:announceProvider", handler)
   }, [])
+
+  // ── Fetch Solana + Stellar addresses from backend ─────────────────────────
+  const fetchNonEvmAddresses = useCallback(async () => {
+    const s = session
+    if (!s?.token || s.walletType !== "embedded") return
+    if (s.solanaAddress !== undefined) return
+
+    try {
+      const res  = await fetch(`${API_BASE}/wallet/addresses`, {
+        headers: { Authorization: `Bearer ${s.token}` },
+      })
+      if (!res.ok) return
+      const data = await res.json()
+
+      const updated: WalletSession = {
+        ...s,
+        solanaAddress:  data.solana  ?? null,
+        stellarAddress: data.stellar ?? null,
+      }
+      setSession(updated)
+      saveSession(updated)
+    } catch {
+      // non-fatal
+    }
+  }, [session])
+
+  useEffect(() => {
+    if (session?.walletType === "embedded" && session.solanaAddress === undefined) {
+      fetchNonEvmAddresses()
+    }
+  }, [session?.address, session?.walletType, session?.solanaAddress])
+
+  useEffect(() => {
+    if (session?.walletType === "embedded" && session.solanaAddress === undefined) {
+      fetchNonEvmAddresses()
+    }
+  }, [session?.address, session?.walletType])
 
   // ── External wallet listeners ─────────────────────────────────────────────
   useEffect(() => {
@@ -216,12 +336,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setProvider(result.provider)
       setSigner(result.signer)
 
+      const res = await fetch(`${API_BASE}/wallet/external-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: result.signer.address }),
+      })
+      const data = await res.json()
+
+      // Clear any stale import state from a previous user
+      clearImportSessionKeys()
+      localStorage.removeItem(SESSION_KEY)
+
       const newSession: WalletSession = {
         address:    result.signer.address,
         walletType: "external",
         provider:   wallet.name,
         chainId:    result.chainId,
+        token:      data.token,
+        linkedSocials: data.linked_socials,
       }
+
       setSession(newSession)
       saveSession(newSession)
       setShowModal(false)
@@ -235,6 +369,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Add this inside WalletProvider, before the return
+const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
+  if (!session?.token || session.walletType !== "embedded") return null
+  try {
+    const res = await fetch(
+      `${API_BASE}/wallet/export-privatekey?chain_id=${targetChainId}`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.token}` },
+      }
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data.private_key) return null
+    const provider = new JsonRpcProvider(CHAIN_RPC[targetChainId])
+    return new ethers.Wallet(data.private_key, provider)
+  } catch {
+    return null
+  }
+}, [session?.token, session?.walletType])
+const getActiveSigner = useCallback(async (targetChainId?: number) => {
+  // External wallet — already has injected signer
+  if (session?.walletType === "external" && signer) return signer
+
+  // Embedded wallet — fetch private key and build local signer
+  const cid = targetChainId ?? chainId
+  if (!cid) return null
+  return getEmbeddedSigner(cid)
+}, [session?.walletType, signer, chainId, getEmbeddedSigner])
   // ── Connect social (embedded wallet via backend) ──────────────────────────
   const connectSocial = useCallback(async (socialProvider: SocialProvider, credential: string) => {
     setIsConnecting(true)
@@ -248,16 +411,42 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const err = await res.json()
         throw new Error(err.detail ?? "Social login failed")
       }
-      const data: { address: string; token: string; linked_socials: SocialProvider[] } = await res.json()
+
+      const data: {
+        address:            string
+        token:              string
+        linked_socials:     SocialProvider[]
+        legacy_found:       boolean
+        legacy_privy_id:    string | null
+        legacy_evm_address: string | null
+        legacy_sol_address: string | null
+        stellar_address:    string | null
+        needs_seed_import:  boolean
+      } = await res.json()
+
+      // ── Clear ALL stale import/session state from any previous user ──
+      clearImportSessionKeys()
+      localStorage.removeItem(SESSION_KEY)
 
       const newSession: WalletSession = {
-        address:       data.address,
-        walletType:    "embedded",
-        provider:      socialProvider,
-        chainId:       DEFAULT_CHAIN_ID,
-        token:         data.token,
-        linkedSocials: data.linked_socials,
+        address:        data.address,
+        walletType:     "embedded",
+        provider:       socialProvider,
+        chainId:        DEFAULT_CHAIN_ID,
+        token:          data.token,
+        linkedSocials:  data.linked_socials,
+        // Start as undefined so fetchNonEvmAddresses runs, but if backend
+        // already returned stellar/solana from the login response, use it.
+        solanaAddress:  undefined,
+        stellarAddress: data.stellar_address ?? undefined,
+        // ── Legacy fields ──
+        legacyFound:      data.legacy_found || data.needs_seed_import,
+        legacyEvmAddress: data.legacy_evm_address ?? data.address,
+        legacyPrivyId:    data.legacy_privy_id,
+        legacySolAddress: data.legacy_sol_address,
+        needsSeedImport:  data.needs_seed_import,
       }
+
       setSession(newSession)
       saveSession(newSession)
       setProvider(null)
@@ -265,15 +454,34 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setShowModal(false)
       toast.success("Wallet ready!")
     } catch (err: any) {
-      toast.error(err.message ?? "Login failed")
+      if (err.message !== "cancelled") {
+        toast.error(err.message ?? "Login failed")
+      }
       throw err
     } finally {
       setIsConnecting(false)
     }
   }, [])
 
+  const clearLegacy = useCallback(() => {
+    setSession(prev => {
+      if (!prev) return prev
+      const updated = {
+        ...prev,
+        legacyFound:      false,
+        legacyPrivyId:    null,
+        legacyEvmAddress: null,
+        legacySolAddress: null,
+        needsSeedImport:  false,
+      }
+      saveSession(updated)
+      return updated
+    })
+  }, [])
+
   // ── Disconnect ────────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
+    clearImportSessionKeys()
     localStorage.removeItem(SESSION_KEY)
     setSession(null)
     setProvider(null)
@@ -288,7 +496,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!viemChain) { toast.error("Unsupported chain"); return }
 
     if (walletType === "embedded") {
-      // For embedded wallets, the chain is a UI concept — just update session
       const updated = { ...session!, chainId: targetChainId }
       setSession(updated)
       saveSession(updated)
@@ -296,7 +503,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    // External wallet: request switch
     const raw = rawProviderRef.current
     if (!raw) return
     const hexId = `0x${targetChainId.toString(16)}`
@@ -318,7 +524,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           })
         } else throw err
       }
-      // Poll for confirmation
       for (let i = 0; i < 12; i++) {
         await new Promise(r => setTimeout(r, 500))
         const net = await new BrowserProvider(raw).getNetwork()
@@ -359,12 +564,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       })
       if (!res.ok) throw new Error((await res.json()).detail)
       const data = await res.json()
-      const updated: WalletSession = { ...session, linkedSocials: data.linked_socials }
+
+      const updated: WalletSession = {
+        ...session,
+        linkedSocials: data.linked_socials,
+      }
       setSession(updated)
       saveSession(updated)
       toast.success(`${socialProvider} linked!`)
     } catch (err: any) {
       toast.error(err.message ?? "Failed to link account")
+      throw err
     }
   }, [session])
 
@@ -382,6 +592,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setShowModal, connectExternalWallet, connectSocial,
       disconnect, switchChain, ensureCorrectNetwork,
       linkSocial, refreshProvider,
+      solanaAddress:        session?.solanaAddress  ?? null,
+      stellarAddress:       session?.stellarAddress ?? null,
+      fetchNonEvmAddresses,
+      getEmbeddedSigner,
+      getActiveSigner,
+      legacyFound:      session?.legacyFound      ?? false,
+      legacyEvmAddress: session?.legacyEvmAddress ?? null,
+      legacySolAddress: session?.legacySolAddress ?? null,
+      legacyPrivyId:    session?.legacyPrivyId    ?? null,
+      clearLegacy,
     }}>
       {children}
     </WalletContext.Provider>

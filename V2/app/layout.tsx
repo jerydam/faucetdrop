@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "sonner"
 import { NetworkProvider } from "@/hooks/use-network"
 import { WalletProvider } from "@/components/wallet-provider"
+import { PrivyProvider } from "@privy-io/react-auth"
 import { Footer } from "@/components/footer"
 // Add this import at the top
 import { LuminaProvider } from "@jerydam/lumina-sdk"
@@ -25,6 +26,8 @@ import {
   SolflareWalletAdapter,
   TorusWalletAdapter,
 } from "@solana/wallet-adapter-wallets"
+import { PrivyImportModal } from "@/components/privy_import"
+import { SignerBootstrap } from "@/components/signer-bootstrap"
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -133,10 +136,20 @@ export default function RootLayout({
         >
           
           
-        
+           <PrivyProvider
+              appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID!}
+              config={{
+                loginMethods: ["google", "twitter", "discord", "github", "email"],
+              }}
+            >
             <SolanaProviders>
               <NetworkProvider>
                 <WalletProvider >
+                  <SignerBootstrap />
+                  <PrivyImportModal
+                      onDismiss={() => console.log("skipped")}
+                      onComplete={({ evmAddress, solanaAddress }) => console.log(evmAddress, solanaAddress)}
+                    />
                   <Providers>
                   <SubscriptionModalProvider>
                     <div className="min-h-screen flex flex-col">
@@ -149,7 +162,7 @@ export default function RootLayout({
                 </WalletProvider>
               </NetworkProvider>
             </SolanaProviders>
-          
+          </PrivyProvider>
         </ThemeProvider>
       </body>
     </html>

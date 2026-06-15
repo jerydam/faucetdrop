@@ -15,7 +15,6 @@ import { LayoutDashboard, LogOut, Wallet, ShoppingBag, ChevronDown, Link2 } from
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { usePathname } from "next/navigation"
-import { API_BASE } from "./wallet-provider"
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -26,6 +25,7 @@ const ADMIN_ADDRESSES = [
 interface Props { className?: string }
 
 export function WalletConnectButton({ className }: Props) {
+  const API_BASE = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
   const {
     address, isConnected, isConnecting, walletType,
     session, disconnect, setShowModal,
@@ -165,7 +165,7 @@ export function WalletConnectButton({ className }: Props) {
                 </AvatarFallback>
               </Avatar>
               {/* Provider badge */}
-              {walletType === "external" && (
+              {walletType === "external" ? "bg-blue-500" : "bg-emerald-500" && (
                 <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-blue-500 rounded-full border border-background flex items-center justify-center">
                   <Wallet className="h-2 w-2 text-white" />
                 </div>
@@ -243,14 +243,14 @@ export function WalletConnectButton({ className }: Props) {
             )}
 
             {/* Link additional social — only available for embedded wallets */}
-            {walletType === "embedded" && (
+            
               <DropdownMenuItem
                 onClick={() => setShowModal(true)}
                 className="cursor-pointer flex items-center gap-2"
               >
                 <Link2 className="h-4 w-4" /><span>Link Account</span>
               </DropdownMenuItem>
-            )}
+            
           </DropdownMenuGroup>
 
           <DropdownMenuSeparator />

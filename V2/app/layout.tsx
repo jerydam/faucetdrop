@@ -73,7 +73,7 @@ export default function RootLayout({
 
         {/* Primary Meta Tags */}
         <title>FaucetDrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution</title>
-        <meta name="title" content="app.faucetdrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution" />
+        <meta name="title" content="FaucetDrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution" />
         <meta
           name="description"
           content="The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution 💧. Distribute rewards effortlessly across multiple chains."

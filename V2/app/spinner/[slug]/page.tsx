@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme";
-import { useAccount } from "wagmi";
+import { useWallet } from "@/hooks/use-wallet"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
 
@@ -66,7 +66,7 @@ function Confetti() {
 export default function SpinnerRoom() {
   const { slug } = useParams() as { slug: string };
   const router = useRouter();
-  const { address } = useAccount();
+  const { address } = useWallet()
 
   const [room, setRoom] = useState<RoomData | null>(null);
   const [loading, setLoading] = useState(true);

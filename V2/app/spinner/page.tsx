@@ -5,7 +5,7 @@ import { SpinWheel } from "@/components/SpinWheel";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Zap, Link2, Pencil, Trophy } from "lucide-react";
 import { Header } from "@/components/header";
-import { useAccount } from "wagmi";
+import { useWallet } from "@/components/wallet-provider"
 
 const DEMO_NAMES = ["Alice", "Bob", "Carol", "David", "Eve", "Frank", "Grace", "Henry"];
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
@@ -36,7 +36,7 @@ export default function LandingPage() {
   const rotRef = useRef(0);
   const animRef = useRef<number>(0);
   const [rotation, setRotation] = React.useState(0);
-  const { address } = useAccount();
+  const { address } = useWallet();
   const [myRooms, setMyRooms] = useState<any[]>([]);
 
 

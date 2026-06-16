@@ -33,7 +33,7 @@ import { QUIZ_HUB_ABI } from "@/lib/abis";
 // Config
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 const QUIZ_HUB_ADDRESS = (
   process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0x787b3f0916Aad56ba90a9c4638E4f748a1288551"
@@ -137,7 +137,8 @@ export default function CreateChallengePage() {
   const [createdCode, setCreatedCode] = useState<string | null>(null);
   const [totalDuels, setTotalDuels] = useState<number>(0);
   const negotiationLocked = totalDuels < 10;
-
+  const [gameDrops, setGameDrops] = useState<number>(0)
+  const [balanceLoading, setBalanceLoading] = useState(true)
   // Step 0 — Topic & Visibility
   const [topic, setTopic]                     = useState("");
   const [creatorUsername, setCreatorUsername] = useState("");
@@ -149,10 +150,11 @@ export default function CreateChallengePage() {
   const [inviteWallet, setInviteWallet]       = useState(searchParams.get("inviteWallet") ?? "");
   const [usernameStatus, setUsernameStatus]   = useState<"idle" | "loading" | "found" | "notfound">("idle");
   const [resolvedUsername, setResolvedUsername] = useState(searchParams.get("inviteUsername") ?? "");
-
+  
   // Step 1 — Stake (DROPS only)
   const [stakeAmount, setStakeAmount] = useState("");
-
+  const stakeAmt            = parseFloat(stakeAmount) || 0
+  const insufficientBalance = stakeAmt > 0 && gameDrops < stakeAmt
   // Pre-fill if arriving from Ranks page with proper params
   useEffect(() => {
     if (searchParams.get("inviteWallet") && searchParams.get("inviteUsername")) {
@@ -162,14 +164,17 @@ export default function CreateChallengePage() {
 
   // Load creator profile
   useEffect(() => {
-  if (!userWalletAddress) return;
+  if (!userWalletAddress) return
+  setBalanceLoading(true)
   fetch(`${API_BASE_URL}/api/drops/balance/${userWalletAddress}`)
     .then(r => r.json())
     .then(d => {
-      setTotalDuels(d.totalDuels ?? 0);
+      setTotalDuels(d.totalDuels ?? 0)
+      setGameDrops(d.gameDrops ?? 0)
     })
-    .catch(() => {});
-}, [userWalletAddress]);
+    .catch(() => {})
+    .finally(() => setBalanceLoading(false))
+}, [userWalletAddress])
 
 useEffect(() => {
   if (negotiationLocked) setStakeAmount(String(MIN_STAKE));
@@ -193,18 +198,18 @@ useEffect(() => {
   };
 
   const canAdvance = useCallback((): boolean => {
-    const id = STEPS[wizardStep]?.id;
-    if (id === "topic") {
-      const topicOk = topic.trim().length > 3 && !!userWalletAddress;
-      if (!isPublic) return topicOk && usernameStatus === "found";
-      return topicOk;
-    }
-    if (id === "stake") {
-      const amt = parseFloat(stakeAmount);
-      return !!stakeAmount && !isNaN(amt) && amt >= MIN_STAKE;
-    }
-    return true;
-  }, [wizardStep, topic, stakeAmount, userWalletAddress, isPublic, usernameStatus]);
+  const id = STEPS[wizardStep]?.id
+  if (id === "topic") {
+    const topicOk = topic.trim().length > 3 && !!userWalletAddress
+    if (!isPublic) return topicOk && usernameStatus === "found"
+    return topicOk
+  }
+  if (id === "stake") {
+    const amt = parseFloat(stakeAmount)
+    return !!stakeAmount && !isNaN(amt) && amt >= MIN_STAKE && !insufficientBalance
+  }
+  return true
+}, [wizardStep, topic, stakeAmount, userWalletAddress, isPublic, usernameStatus, insufficientBalance])
 
   // ── On-chain: createQuiz(quizId, stakeAmount) ──────────────────────────────
   // New QuizHub v2: args are (bytes32 quizId, uint256 stakeAmount)
@@ -303,7 +308,7 @@ useEffect(() => {
     const walletClient = createWalletClient({ chain: celo, transport: custom(window.ethereum!) })
     const publicClient = createPublicClient({ chain: celo, transport: http("https://forno.celo.org") })
     const [account]    = await walletClient.getAddresses()
-    const quizId       = deriveQuizId(code)
+    const quizId       = deriveQuizId(code as string)
 
     toast.info("Confirm quiz creation in your wallet…")
 
@@ -558,6 +563,39 @@ useEffect(() => {
           </div>
         </div>
       )}
+      {/* Balance display */}
+<div className="flex items-center justify-between px-4 py-2.5 rounded-2xl bg-muted/50 border border-border text-sm">
+  <span className="text-muted-foreground font-bold">Your Game Pouch</span>
+  {balanceLoading ? (
+    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+  ) : (
+    <span className={cn(
+      "font-black",
+      insufficientBalance ? "text-destructive" : "text-foreground"
+    )}>
+      {gameDrops.toFixed(1)} DROPS
+    </span>
+  )}
+</div>
+
+{/* Insufficient balance warning */}
+{insufficientBalance && (
+  <div className="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-destructive/10 border-2 border-destructive/30 text-xs text-destructive">
+    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+    <div>
+      <p className="font-black">Insufficient Game Pouch</p>
+      <p className="mt-0.5 opacity-80">
+        You need {stakeAmt} DROPS but only have {gameDrops.toFixed(1)}.{" "}
+        <button
+          onClick={() => router.push("/drops")}
+          className="underline font-bold"
+        >
+          Top up DROPS
+        </button>
+      </p>
+    </div>
+  </div>
+)}
 
       <div className="space-y-2">
         <Label className="text-xs font-black text-muted-foreground uppercase tracking-wider">
@@ -668,21 +706,23 @@ useEffect(() => {
       </div>
 
       <button
-        onClick={handleCreate}
-        disabled={txPhase !== "idle" || !userWalletAddress}
-        className={cn(
-          "w-full h-16 rounded-2xl font-black text-lg transition-all",
-          userWalletAddress
-            ? "bg-primary text-primary-foreground hover:opacity-90"
-            : "bg-muted text-muted-foreground",
-        )}
-      >
-        {txPhase !== "idle" ? (
-          <><Loader2 className="h-5 w-5 animate-spin mr-2 inline" /> Creating…</>
-        ) : (
-          <><Rocket className="h-5 w-5 mr-2 inline" /> Launch Duel</>
-        )}
-      </button>
+  onClick={handleCreate}
+  disabled={txPhase !== "idle" || !userWalletAddress || insufficientBalance || balanceLoading}
+  className={cn(
+    "w-full h-16 rounded-2xl font-black text-lg transition-all",
+    userWalletAddress && !insufficientBalance
+      ? "bg-primary text-primary-foreground hover:opacity-90"
+      : "bg-muted text-muted-foreground cursor-not-allowed",
+  )}
+>
+  {txPhase !== "idle" ? (
+    <><Loader2 className="h-5 w-5 animate-spin mr-2 inline" /> Creating…</>
+  ) : insufficientBalance ? (
+    <>❌ Insufficient DROPS</>
+  ) : (
+    <><Rocket className="h-5 w-5 mr-2 inline" /> Launch Duel</>
+  )}
+</button>
     </div>
   );
 

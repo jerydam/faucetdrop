@@ -1,6 +1,5 @@
 "use client";
 
-// ── All imports same as original ──────────────────────────────────────────────
 import React, {
   useState, useEffect, useRef, useCallback, useMemo,
 } from "react";
@@ -30,26 +29,25 @@ import {
 } from "viem";
 import { celo } from "viem/chains";
 import { useSearchParams } from "next/navigation";
-import { WalletConnectButton } from "@/components/wallet-connect";
 import { toast as sonnerToast } from "sonner";
 import { RematchPopup, RematchInvite } from "@/components/RematchPopup";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 function getWsBaseUrl(): string {
   if (typeof window === "undefined") return "wss://127.0.0.1:8000";
   return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
     ? "ws://127.0.0.1:8000"
-    : "wss://faucetpay-backend.koyeb.app";
+    : "wss://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 }
 
-const CELO_CHAIN_ID    = 42220;
-const QUIZ_HUB_ADDRESS = (process.env.NEXT_PUBLIC_STAKE_CONTRACT ?? "0x9088298cd07BE0cAA1e256d3f3761313e1a1447E") as `0x${string}`;
-const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x1e1FB392315B248f24Bfc35742B95d5F45e85906") as `0x${string}`;
-const DROPS_DECIMALS   = 18;
-const DROPS_SYMBOL     = "DROPS";
+const CELO_CHAIN_ID  = 42220;
+const DROPS_ADDRESS  = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x1e1FB392315B248f24Bfc35742B95d5F45e85906") as `0x${string}`;
+const DROPS_DECIMALS = 18;
+const DROPS_SYMBOL   = "DROPS";
+const BADGE_THRESHOLD = 10;
 
 const DROPS_REDEEM_ABI = [
   {
@@ -79,8 +77,8 @@ interface PlayerState {
   avatarUrl:     string;
 }
 
-interface QuizOption       { id: string; text: string }
-interface CurrentQuestion  {
+interface QuizOption      { id: string; text: string }
+interface CurrentQuestion {
   roundIndex: number; questionIndex: number; totalQuestions: number;
   question: string;   options: QuizOption[]; timeLimit: number; startedAt: number;
 }
@@ -154,10 +152,10 @@ async function ensureCeloNetwork(): Promise<void> {
         await (window.ethereum as any).request({
           method: "wallet_addEthereumChain",
           params: [{
-            chainId:     "0x" + CELO_CHAIN_ID.toString(16),
-            chainName:   "Celo Mainnet",
-            nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
-            rpcUrls:     ["https://forno.celo.org"],
+            chainId:           "0x" + CELO_CHAIN_ID.toString(16),
+            chainName:         "Celo Mainnet",
+            nativeCurrency:    { name: "CELO", symbol: "CELO", decimals: 18 },
+            rpcUrls:           ["https://forno.celo.org"],
             blockExplorerUrls: ["https://celoscan.io"],
           }],
         });
@@ -166,29 +164,54 @@ async function ensureCeloNetwork(): Promise<void> {
   }
 }
 
-// redeemDrops — calls DropsToken.redeem(amount, quizCode) which burns DROPS
-async function redeemDrops(
-  challengeCode: string,
-  stakeAmount:   number,
-): Promise<string> {
+async function redeemDrops(challengeCode: string, stakeAmount: number): Promise<string> {
   await ensureCeloNetwork();
-
   const { walletClient, publicClient } = await getViemClients();
   const [userAddr] = await walletClient.getAddresses();
-
-  const stakeWei = parseUnits(stakeAmount.toString(), DROPS_DECIMALS);
-
-  const txHash = await walletClient.writeContract({
-    address:      DROPS_ADDRESS,
-    abi:          DROPS_REDEEM_ABI,
-    functionName: "redeem",
-    args:         [stakeWei, challengeCode],
-    account:      userAddr,
-    chain:        celo,
+  const stakeWei   = parseUnits(stakeAmount.toString(), DROPS_DECIMALS);
+  const txHash     = await walletClient.writeContract({
+    address: DROPS_ADDRESS, abi: DROPS_REDEEM_ABI, functionName: "redeem",
+    args: [stakeWei, challengeCode], account: userAddr, chain: celo,
   });
-
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
   return receipt.transactionHash;
+}
+
+// ── Rematch helpers ───────────────────────────────────────────────────────────
+
+export async function sendRematchInvite(params: {
+  code: string; userWalletAddress: string;
+  setRematchPending: (v: boolean) => void;
+  setRematchCountdown: React.Dispatch<React.SetStateAction<number | null>>;
+  rematchTimerRef: React.MutableRefObject<ReturnType<typeof setInterval> | null>;
+  rematchTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+}) {
+  const { code, userWalletAddress, setRematchPending, setRematchCountdown, rematchTimerRef, rematchTimeoutRef } = params;
+  if (!userWalletAddress) return;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/rematch-invite`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requesterWallet: userWalletAddress }),
+    });
+    const d = await res.json();
+    if (!d.success) throw new Error(d.detail ?? "Could not send invite");
+    setRematchPending(true);
+    sonnerToast.info("Rematch invite sent — waiting for opponent…");
+    const TIMEOUT = 30;
+    setRematchCountdown(TIMEOUT);
+    rematchTimerRef.current = setInterval(() => {
+      setRematchCountdown(prev => {
+        if (prev === null || prev <= 1) { clearInterval(rematchTimerRef.current!); rematchTimerRef.current = null; return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    rematchTimeoutRef.current = setTimeout(() => {
+      setRematchPending(false); setRematchCountdown(null);
+      sonnerToast.info("Rematch request timed out.");
+    }, (TIMEOUT + 1) * 1000);
+  } catch (err: any) {
+    sonnerToast.error(err?.message ?? "Could not send rematch invite");
+  }
 }
 
 // ── FloatingChat ──────────────────────────────────────────────────────────────
@@ -203,11 +226,14 @@ function FloatingChat({ messages, myWallet, chatInput, setChatInput, onSend, cha
   const [isOpen, setIsOpen]           = useState(false);
   const [localUnread, setLocalUnread] = useState(0);
   useEffect(() => { if (!isOpen) setLocalUnread(unreadCount); }, [unreadCount, isOpen]);
+
   return (
     <div className="fixed bottom-6 right-6 z-[200] flex flex-col items-end gap-3">
       {isOpen && (
-        <div className="w-[calc(100vw-48px)] sm:w-80 flex flex-col bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
-          style={{ height: "min(400px, 60vh)", animation: "slideUpFade 0.2s ease-out" }}>
+        <div
+          className="w-[calc(100vw-48px)] sm:w-80 flex flex-col bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
+          style={{ height: "min(400px, 60vh)", animation: "slideUpFade 0.2s ease-out" }}
+        >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30 shrink-0">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-primary" />
@@ -228,7 +254,8 @@ function FloatingChat({ messages, myWallet, chatInput, setChatInput, onSend, cha
               return (
                 <div key={i} className={cn("flex flex-col gap-0.5", isMe ? "items-end" : "items-start")}>
                   {!isMe && <span className="text-[10px] text-muted-foreground px-1 font-semibold">{m.sender}</span>}
-                  <div className={cn("px-3 py-2 rounded-2xl text-xs max-w-[85%] break-words leading-relaxed",
+                  <div className={cn(
+                    "px-3 py-2 rounded-2xl text-xs max-w-[85%] break-words leading-relaxed",
                     isMe ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted text-foreground rounded-tl-sm"
                   )}>{m.text}</div>
                 </div>
@@ -236,20 +263,31 @@ function FloatingChat({ messages, myWallet, chatInput, setChatInput, onSend, cha
             })}
             <div ref={chatBottomRef} />
           </div>
-          <form onSubmit={e => { e.preventDefault(); onSend(); }} className="flex gap-2 px-3 py-3 border-t border-border shrink-0">
-            <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
+          <form
+            onSubmit={e => { e.preventDefault(); onSend(); }}
+            className="flex gap-2 px-3 py-3 border-t border-border shrink-0"
+          >
+            <input
+              type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
               placeholder="Say something…" maxLength={200}
-              className="flex-1 bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 transition-colors" />
-            <button type="submit" disabled={!chatInput.trim()}
-              className="w-8 h-8 rounded-xl bg-primary disabled:bg-muted/50 disabled:text-muted-foreground text-primary-foreground flex items-center justify-center transition-all active:scale-95 shrink-0">
+              className="flex-1 bg-muted/50 border border-border rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50 transition-colors"
+            />
+            <button
+              type="submit" disabled={!chatInput.trim()}
+              className="w-8 h-8 rounded-xl bg-primary disabled:bg-muted/50 disabled:text-muted-foreground text-primary-foreground flex items-center justify-center transition-all active:scale-95 shrink-0"
+            >
               <Send className="h-3.5 w-3.5" />
             </button>
           </form>
         </div>
       )}
-      <button onClick={() => { if (isOpen) setIsOpen(false); else { setIsOpen(true); setLocalUnread(0); } }}
-        className={cn("relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95",
-          isOpen ? "bg-muted text-foreground border border-border" : "bg-primary text-primary-foreground")}>
+      <button
+        onClick={() => { if (isOpen) setIsOpen(false); else { setIsOpen(true); setLocalUnread(0); } }}
+        className={cn(
+          "relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95",
+          isOpen ? "bg-muted text-foreground border border-border" : "bg-primary text-primary-foreground"
+        )}
+      >
         {isOpen ? <X className="h-5 w-5" /> : <MessageSquare className="h-5 w-5" />}
         {!isOpen && localUnread > 0 && (
           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full border-2 border-background flex items-center justify-center">
@@ -275,7 +313,7 @@ export default function ChallengePage() {
   const agreedStake      = searchParams.get("stake");
   const cameFromPreLobby = searchParams.get("agreed") === "1";
 
-  // Core state
+  // ── Core state ────────────────────────────────────────────────────────────
   const [phase, setPhase]         = useState<GamePhase>("loading");
   const [challenge, setChallenge] = useState<any>(null);
   const [players, setPlayers]     = useState<PlayerState[]>([]);
@@ -285,14 +323,14 @@ export default function ChallengePage() {
   const [isCreator, setIsCreator] = useState(false);
   const [claimedCodes, setClaimedCodes] = useState<Set<string>>(new Set());
 
-  // Staking
+  // ── Staking state ─────────────────────────────────────────────────────────
   const [isStaking, setIsStaking]           = useState(false);
   const [stakeTxHash, setStakeTxHash]       = useState<string | null>(null);
   const [stakeVerifying, setStakeVerifying] = useState(false);
   const [isSyncing, setIsSyncing]           = useState(false);
   const [isRefreshing, setIsRefreshing]     = useState(false);
 
-  // Game
+  // ── Game state ─────────────────────────────────────────────────────────────
   const [countdownVal, setCountdownVal]         = useState(3);
   const [currentQ, setCurrentQ]                 = useState<CurrentQuestion | null>(null);
   const [selectedId, setSelectedId]             = useState<string | null>(null);
@@ -309,17 +347,22 @@ export default function ChallengePage() {
   const [showConfetti, setShowConfetti]         = useState(false);
   const [canRematch, setCanRematch]             = useState(false);
 
-  // Claim
+  // ── Badge / rematch eligibility ────────────────────────────────────────────
+  const [myTotalDuels, setMyTotalDuels]             = useState<number>(0);
+  const [opponentTotalDuels, setOpponentTotalDuels] = useState<number | null>(null);
+  const [opponentWallet, setOpponentWallet]         = useState<string | null>(null);
+
+  // ── Claim ──────────────────────────────────────────────────────────────────
   const [pendingClaims, setPendingClaims] = useState<any[]>([]);
   const [isClaiming, setIsClaiming]       = useState(false);
 
-  // Chat
+  // ── Chat ───────────────────────────────────────────────────────────────────
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput]       = useState("");
   const [unreadCount, setUnreadCount]   = useState(0);
   const chatBottomRef                   = useRef<HTMLDivElement>(null);
 
-  // Refs
+  // ── Refs ───────────────────────────────────────────────────────────────────
   const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
   const cdIntervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const wsRef             = useRef<WebSocket | null>(null);
@@ -335,16 +378,32 @@ export default function ChallengePage() {
   const rematchTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const rematchTimeoutRef = useRef<ReturnType<typeof setTimeout>  | null>(null);
 
-  // Derived
+  // ── Derived ────────────────────────────────────────────────────────────────
   const myPlayerEntry = players.find(p => p.walletAddress.toLowerCase() === myWallet);
   const myTxVerified  = myPlayerEntry?.txVerified ?? false;
   const myReady       = myPlayerEntry?.ready ?? false;
   const displayStake  = agreedStake ?? challenge?.stake;
 
+  // ── Rematch eligibility ───────────────────────────────────────────────────
+  // opponentTotalDuels===null means still loading; optimistically allow so
+  // the button doesn't flicker — the server enforces the real check.
+  const myBadgeEarned       = myTotalDuels >= BADGE_THRESHOLD;
+  const opponentBadgeEarned = opponentTotalDuels === null || opponentTotalDuels >= BADGE_THRESHOLD;
+  const rematchAllowed      = canRematch && myBadgeEarned && opponentBadgeEarned;
+
+  const rematchLockReason: string | null = (() => {
+    if (!canRematch) return null; // button won't render at all
+    if (!myBadgeEarned)
+      return `Play ${BADGE_THRESHOLD - myTotalDuels} more game${BADGE_THRESHOLD - myTotalDuels !== 1 ? "s" : ""} to unlock rematches.`;
+    if (!opponentBadgeEarned && opponentTotalDuels !== null)
+      return "Your opponent hasn't earned their Rematch Badge yet.";
+    return null;
+  })();
+
   const clearRematchTimers = useCallback(() => {
     if (rematchTimerRef.current)   clearInterval(rematchTimerRef.current);
     if (rematchTimeoutRef.current) clearTimeout(rematchTimeoutRef.current);
-    rematchTimerRef.current = null;
+    rematchTimerRef.current   = null;
     rematchTimeoutRef.current = null;
   }, []);
 
@@ -362,6 +421,7 @@ export default function ChallengePage() {
   useEffect(() => () => clearRematchTimers(), [clearRematchTimers]);
   useEffect(() => () => { if (cdIntervalRef.current) clearInterval(cdIntervalRef.current); }, []);
 
+  // ── Profile ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!userWalletAddress) return;
     fetch(`${API_BASE_URL}/api/players/${userWalletAddress}`)
@@ -373,6 +433,7 @@ export default function ChallengePage() {
       .catch(() => setUsername(`User${userWalletAddress.slice(-4).toUpperCase()}`));
   }, [userWalletAddress]);
 
+  // ── Load challenge ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (!code) return;
     fetch(`${API_BASE_URL}/api/challenge/${code}`)
@@ -387,11 +448,11 @@ export default function ChallengePage() {
           })
         );
         setPlayers(entries);
-        const amCreator    = userWalletAddress && d.challenge.creator?.toLowerCase() === userWalletAddress.toLowerCase();
-        const alreadyIn    = userWalletAddress && Object.keys(d.challenge.players ?? {}).some((w: string) => w.toLowerCase() === userWalletAddress.toLowerCase());
-        if (amCreator)  { setIsCreator(true); setHasJoined(true); }
-        else if (alreadyIn) setHasJoined(true);
-        if (d.challenge.status === "active")        setPhase("question");
+        const amCreator = userWalletAddress && d.challenge.creator?.toLowerCase() === userWalletAddress.toLowerCase();
+        const alreadyIn = userWalletAddress && Object.keys(d.challenge.players ?? {}).some((w: string) => w.toLowerCase() === userWalletAddress.toLowerCase());
+        if (amCreator)      { setIsCreator(true); setHasJoined(true); }
+        else if (alreadyIn) { setHasJoined(true); }
+        if      (d.challenge.status === "active")   setPhase("question");
         else if (d.challenge.status === "finished") {
           setPhase("game_over");
           const hydratedScores: Record<string, FinalScore> = {};
@@ -440,6 +501,35 @@ export default function ChallengePage() {
       .catch(console.error);
   }, [cameFromPreLobby, agreedStake, userWalletAddress, challenge, code, username]);
 
+  // ── Pending claims + badge data on game over ───────────────────────────────
+  useEffect(() => {
+    if (phase !== "game_over" || !myWallet) return;
+
+    // Pending claims
+    fetch(`${API_BASE_URL}/api/challenge/${myWallet}/pending-claims`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPendingClaims(d.claims ?? []); })
+      .catch(() => {});
+
+    // My total_duels for badge check
+    fetch(`${API_BASE_URL}/api/players/${myWallet}`)
+      .then(r => r.json())
+      .then(d => setMyTotalDuels(d.total_duels ?? 0))
+      .catch(() => {});
+
+    // Opponent wallet = any key in finalScores that isn't mine
+    const opponentW =
+      Object.keys(finalScores).find(w => w.toLowerCase() !== myWallet) ?? null;
+    setOpponentWallet(opponentW);
+
+    if (opponentW) {
+      fetch(`${API_BASE_URL}/api/players/${opponentW}`)
+        .then(r => r.json())
+        .then(d => setOpponentTotalDuels(d.total_duels ?? 0))
+        .catch(() => {});
+    }
+  }, [phase, myWallet, finalScores]);
+
   const handleInviteDismiss = useCallback(() => {
     if (inviteTimerRef.current) clearInterval(inviteTimerRef.current);
     inviteTimerRef.current = null;
@@ -470,11 +560,13 @@ export default function ChallengePage() {
     sendWhenReady({ type: "ready", walletAddress: userWalletAddress });
   }, [userWalletAddress, sendWhenReady]);
 
+  // ── WS refs to avoid reconnect loops ─────────────────────────────────────
   const usernameRef = useRef(username);
   const myWalletRef = useRef(myWallet);
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { myWalletRef.current = myWallet; }, [myWallet]);
 
+  // ── WebSocket ──────────────────────────────────────────────────────────────
   const connectWS = useCallback(() => {
     if (!code || !userWalletAddress) return;
     if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return;
@@ -495,7 +587,8 @@ export default function ChallengePage() {
           setChallenge(c);
           setPlayers(prev => {
             const incoming: PlayerState[] = Object.entries(c.players ?? {}).map(([w, d]: [string, any]) => ({
-              walletAddress: w, username: d.username, points: d.points, ready: d.ready, txVerified: d.txVerified, avatarUrl: d.avatar_url ?? "",
+              walletAddress: w, username: d.username, points: d.points, ready: d.ready,
+              txVerified: d.txVerified, avatarUrl: d.avatar_url ?? "",
             }));
             if (prev.length === 0) return incoming;
             return incoming.map(newP => {
@@ -529,66 +622,106 @@ export default function ChallengePage() {
           if (msg.wallet.toLowerCase() === currentMyWallet) { setStakeVerifying(false); toast.error("On-chain stake verification failed. Please retry."); }
           break;
         }
-        case "player_ready":  setPlayers(prev => prev.map(p => p.walletAddress.toLowerCase() === msg.wallet.toLowerCase() ? { ...p, ready: true } : p)); break;
-        case "game_start":    toast.success(msg.message || "Game starting!"); break;
+        case "player_ready":
+          setPlayers(prev => prev.map(p => p.walletAddress.toLowerCase() === msg.wallet.toLowerCase() ? { ...p, ready: true } : p));
+          break;
+        case "game_start":
+          toast.success(msg.message || "Game starting!");
+          break;
         case "round_announce": {
           if (cdIntervalRef.current) { clearInterval(cdIntervalRef.current); cdIntervalRef.current = null; }
           setCurrentRoundName(msg.round); setPhase("countdown"); setCountdownVal(3);
-          cdIntervalRef.current = setInterval(() => setCountdownVal(prev => { if (prev <= 1) { clearInterval(cdIntervalRef.current!); cdIntervalRef.current = null; return prev; } return prev - 1; }), 1000);
+          cdIntervalRef.current = setInterval(() => setCountdownVal(prev => {
+            if (prev <= 1) { clearInterval(cdIntervalRef.current!); cdIntervalRef.current = null; return prev; }
+            return prev - 1;
+          }), 1000);
           break;
         }
         case "question": {
           if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
           if (cdIntervalRef.current) { clearInterval(cdIntervalRef.current); cdIntervalRef.current = null; }
           const localStart = Date.now();
-          setCurrentQ({ roundIndex: msg.roundIndex, questionIndex: msg.questionIndex, totalQuestions: msg.totalQuestions, question: msg.data.question, options: msg.data.options, timeLimit: msg.data.timeLimit, startedAt: localStart });
+          setCurrentQ({
+            roundIndex: msg.roundIndex, questionIndex: msg.questionIndex,
+            totalQuestions: msg.totalQuestions, question: msg.data.question,
+            options: msg.data.options, timeLimit: msg.data.timeLimit, startedAt: localStart,
+          });
           setSelectedId(null); setHasSubmitted(false); setRevealCorrectId(null); setQuestionScores({});
           setPhase("question"); startTimer(localStart, msg.data.timeLimit);
           break;
         }
         case "question_end": {
           if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-          setTimeLeft(0); setRevealCorrectId(msg.correctId); setQuestionScores(msg.questionScores ?? {}); setTotalScores(msg.totalScores ?? {});
+          setTimeLeft(0); setRevealCorrectId(msg.correctId);
+          setQuestionScores(msg.questionScores ?? {}); setTotalScores(msg.totalScores ?? {});
           setPlayers(prev => prev.map(p => ({ ...p, points: msg.totalScores?.[p.walletAddress] ?? p.points })));
           setPhase("reveal");
           break;
         }
         case "reconnect_countdown": {
-          if (msg.wallet?.toLowerCase() !== currentMyWallet) toast.warning(msg.secondsLeft > 0 ? `Opponent disconnected — ${msg.secondsLeft}s to reconnect` : "Opponent ran out of time…", { id: "reconnect-countdown", duration: 4000 });
+          if (msg.wallet?.toLowerCase() !== currentMyWallet)
+            toast.warning(
+              msg.secondsLeft > 0
+                ? `Opponent disconnected — ${msg.secondsLeft}s to reconnect or you win by forfeit`
+                : "Opponent ran out of time — awarding forfeit…",
+              { id: "reconnect-countdown", duration: 4000 }
+            );
           break;
         }
         case "player_rejoined": {
-          if (msg.wallet?.toLowerCase() !== currentMyWallet) toast.success(`${msg.username} reconnected!`, { id: "reconnect-countdown" });
+          if (msg.wallet?.toLowerCase() !== currentMyWallet)
+            toast.success(`${msg.username} reconnected!`, { id: "reconnect-countdown" });
           break;
         }
         case "round_end": setRoundScores(msg.scores ?? {}); setPhase("round_end"); break;
         case "game_over": {
-          setFinalScores(msg.finalScores ?? {}); setGameOutcome(msg.outcome); setWinner(msg.winner ?? null); setCanRematch(!!msg.canRematch); setPhase("game_over");
+          setFinalScores(msg.finalScores ?? {}); setGameOutcome(msg.outcome);
+          setWinner(msg.winner ?? null); setCanRematch(!!msg.canRematch); setPhase("game_over");
           if (msg.winner === currentMyWallet) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 6000); }
           break;
         }
-        case "rematch_declined": clearRematchTimers(); setRematchPending(false); setRematchCountdown(null); toast.error(`${msg.declinerName ?? "Opponent"} declined.`); break;
-        case "rematch_timeout": clearRematchTimers(); setRematchPending(false); setRematchCountdown(null); if (msg.requesterWallet?.toLowerCase() === currentMyWallet) toast.info("Rematch request expired."); break;
-        case "player_left": clearRematchTimers(); setRematchPending(false); setRematchCountdown(null); setRematchInvite(null); toast.error(`${msg.username ?? "Opponent"} has left.`); break;
-        case "chat": setChatMessages(prev => [...prev, msg]); setUnreadCount(prev => prev + 1); break;
+        case "rematch_declined":
+          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
+          toast.error(`${msg.declinerName ?? "Opponent"} declined the rematch.`);
+          break;
+        case "rematch_timeout":
+          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
+          if (msg.requesterWallet?.toLowerCase() === currentMyWallet) toast.info("Rematch request expired — opponent didn't respond.");
+          break;
+        case "player_left":
+          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null); setRematchInvite(null);
+          toast.error(`${msg.username ?? "Opponent"} has left the game.`);
+          break;
+        case "chat":
+          setChatMessages(prev => [...prev, msg]); setUnreadCount(prev => prev + 1);
+          break;
         case "rematch_invite": {
           if (msg.requesterWallet?.toLowerCase() !== currentMyWallet) {
-            setRematchInvite({ originalCode: msg.originalCode, topic: msg.topic, stakeAmount: msg.stakeAmount, tokenSymbol: msg.tokenSymbol, requesterWallet: msg.requesterWallet, requesterName: msg.requesterName });
+            setRematchInvite({
+              originalCode: msg.originalCode, topic: msg.topic, stakeAmount: msg.stakeAmount,
+              tokenSymbol: msg.tokenSymbol, requesterWallet: msg.requesterWallet, requesterName: msg.requesterName,
+            });
             setInviteCountdown(30);
             if (inviteTimerRef.current) clearInterval(inviteTimerRef.current);
-            inviteTimerRef.current = setInterval(() => setInviteCountdown(prev => { if (prev === null || prev <= 1) { clearInterval(inviteTimerRef.current!); inviteTimerRef.current = null; setRematchInvite(null); return null; } return prev - 1; }), 1000);
+            inviteTimerRef.current = setInterval(() => setInviteCountdown(prev => {
+              if (prev === null || prev <= 1) { clearInterval(inviteTimerRef.current!); inviteTimerRef.current = null; setRematchInvite(null); return null; }
+              return prev - 1;
+            }), 1000);
           }
           break;
         }
         case "rematch_invite_accepted": {
           if (msg.acceptorWallet?.toLowerCase() !== currentMyWallet) {
             clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
-            toast.success(`${msg.acceptorName} accepted! Creating challenge…`);
+            toast.success(`${msg.acceptorName} accepted! Creating the challenge…`);
           }
           break;
         }
         case "rematch_ready": {
-          if (msg.requesterWallet?.toLowerCase() !== currentMyWallet) { toast.success("Rematch ready!"); router.push(`/challenge/${msg.newCode}/pre-lobby`); }
+          if (msg.requesterWallet?.toLowerCase() !== currentMyWallet) {
+            toast.success("Rematch ready! Heading to pre-lobby…");
+            router.push(`/challenge/${msg.newCode}/pre-lobby`);
+          }
           break;
         }
       }
@@ -609,21 +742,8 @@ export default function ChallengePage() {
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
 
-  // Fetch pending claims when game is over
-  useEffect(() => {
-    if (phase !== "game_over" || !myWallet) return;
-    fetch(`${API_BASE_URL}/api/challenge/${myWallet}/pending-claims`)
-      .then(r => r.json())
-      .then(d => { if (d.success) setPendingClaims(d.claims ?? []); })
-      .catch(() => {});
-  }, [phase, myWallet]);
+  // ── Actions ────────────────────────────────────────────────────────────────
 
-  // ── FIX 3: handleStake — call /confirm-burn after redeemDrops succeeds ──────
-  // Previously: redeemDrops() → sendStakeConfirmed() via WS
-  // WS handler (_handle_stake_confirmed) is now a no-op on the backend.
-  // The backend only sets txVerified=true via the REST /confirm-burn endpoint.
-  // Flow: redeemDrops() → POST /confirm-burn → backend verifies on-chain →
-  //       broadcasts stake_verified WS → frontend unlocks Ready button.
   const handleStake = useCallback(async () => {
     if (!userWalletAddress || !challenge) return;
     setIsStaking(true);
@@ -633,7 +753,6 @@ export default function ChallengePage() {
 
       const txHash = await redeemDrops(code, stakeAmt);
 
-      // Join the challenge if not already in it
       if (!hasJoined) {
         const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/join`, {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -648,25 +767,21 @@ export default function ChallengePage() {
         });
       }
 
-      // FIX 3: call /confirm-burn so backend can verify on-chain and set txVerified
       toast.loading("Verifying stake on-chain…", { id: "confirm-burn" });
       const burnRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/confirm-burn`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: userWalletAddress, txHash, success: true,  }),
+        body: JSON.stringify({ walletAddress: userWalletAddress, txHash, success: true }),
       });
       const burnData = await burnRes.json();
       toast.dismiss("confirm-burn");
 
       if (!burnData.success && !burnData.alreadyVerified) {
-        // Burn verification failed — fall back to sync-stake for recovery
         toast.error("Could not verify burn automatically. Use 'Already staked? Sync my stake' below.");
-        // Still send the WS signal so the backend logs it
         sendStakeConfirmed(txHash);
         return;
       }
 
-      // stake_verified WS message will arrive from backend and unlock the Ready button
       toast.success("DROPS staked! Click Ready to start.");
     } catch (err: any) {
       toast.dismiss("confirm-burn");
@@ -694,7 +809,6 @@ export default function ChallengePage() {
     setChatInput("");
   }, [chatInput, userWalletAddress, username]);
 
-  // FIX 4: handleClaim — POST to /api/challenge/claim, mark locally
   const handleClaim = useCallback(async (claimCode: string) => {
     if (claimedCodes.has(claimCode)) return;
     setIsClaiming(true);
@@ -708,7 +822,6 @@ export default function ChallengePage() {
       if (!d.success && !d.alreadyClaimed) throw new Error(d.detail ?? "Claim failed");
       toast.success("DROPS claimed to your wallet! 🏆");
       setClaimedCodes(prev => new Set(prev).add(claimCode));
-      // Remove from pending list
       setPendingClaims(prev => prev.filter(c => c.code !== claimCode));
     } catch (err: any) {
       toast.error(err?.message ?? "Claim failed");
@@ -745,25 +858,6 @@ export default function ChallengePage() {
     }
   }, [userWalletAddress, challenge, code, username, hasJoined]);
 
-  // FIX 4: myClaim derived from pendingClaims
-  const myClaim   = pendingClaims.find(c => c.code === code);
-  const totalPool = challenge
-    ? (agreedStake ? (parseFloat(agreedStake) * 2).toFixed(0) : (challenge.stake * 2).toFixed(0))
-    : "0";
-
-  const avatarKey = players.map(p => `${p.walletAddress}:${p.avatarUrl}`).join("|");
-  useEffect(() => {
-    if (players.length === 0) return;
-    const missing = players.filter(p => !p.avatarUrl);
-    if (missing.length === 0) return;
-    missing.forEach(p => {
-      fetch(`${API_BASE_URL}/api/players/${p.walletAddress}`).then(r => r.json()).then(d => {
-        if (d.avatar_url) setPlayers(prev => prev.map(pl => pl.walletAddress.toLowerCase() === p.walletAddress.toLowerCase() ? { ...pl, avatarUrl: d.avatar_url } : pl));
-      }).catch(() => {});
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avatarKey]);
-
   const handleRefresh = useCallback(async () => {
     if (!code || isRefreshing) return;
     setIsRefreshing(true);
@@ -772,230 +866,460 @@ export default function ChallengePage() {
       const d = await r.json();
       if (!d.success) { toast.error("Could not refresh lobby"); return; }
       setChallenge(d.challenge);
-      const incoming: PlayerState[] = Object.entries(d.challenge.players ?? {}).map(([wallet, data]: [string, any]) => ({ walletAddress: wallet, username: data.username, points: data.points, ready: data.ready, txVerified: data.txVerified, avatarUrl: data.avatar_url ?? "" }));
-      setPlayers(prev => incoming.map(newP => { const existing = prev.find(p => p.walletAddress.toLowerCase() === newP.walletAddress.toLowerCase()); return existing?.avatarUrl ? { ...newP, avatarUrl: existing.avatarUrl } : newP; }));
+      const incoming: PlayerState[] = Object.entries(d.challenge.players ?? {}).map(
+        ([wallet, data]: [string, any]) => ({
+          walletAddress: wallet, username: data.username, points: data.points,
+          ready: data.ready, txVerified: data.txVerified, avatarUrl: data.avatar_url ?? "",
+        })
+      );
+      setPlayers(prev => incoming.map(newP => {
+        const existing = prev.find(p => p.walletAddress.toLowerCase() === newP.walletAddress.toLowerCase());
+        return existing?.avatarUrl ? { ...newP, avatarUrl: existing.avatarUrl } : newP;
+      }));
       toast.success("Lobby refreshed");
     } catch { toast.error("Refresh failed"); }
     finally { setIsRefreshing(false); }
   }, [code, isRefreshing]);
 
-  const globalOverlays = rematchInvite ? (
-    <RematchPopup invite={rematchInvite} myWallet={myWallet} onDismiss={handleInviteDismiss} countdown={inviteCountdown} />
-  ) : null;
+  // ── Avatar hydration ───────────────────────────────────────────────────────
+  const avatarKey = players.map(p => `${p.walletAddress}:${p.avatarUrl}`).join("|");
+  useEffect(() => {
+    if (players.length === 0) return;
+    const missing = players.filter(p => !p.avatarUrl);
+    if (missing.length === 0) return;
+    missing.forEach(p => {
+      fetch(`${API_BASE_URL}/api/players/${p.walletAddress}`).then(r => r.json()).then(d => {
+        if (d.avatar_url) setPlayers(prev => prev.map(pl =>
+          pl.walletAddress.toLowerCase() === p.walletAddress.toLowerCase() ? { ...pl, avatarUrl: d.avatar_url } : pl
+        ));
+      }).catch(() => {});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarKey]);
 
-  // ── Early returns ──────────────────────────────────────────────────────────
+  // ── Derived values ─────────────────────────────────────────────────────────
+  const myClaim   = pendingClaims.find(c => c.code === code);
+  const totalPool = challenge
+    ? (agreedStake ? (parseFloat(agreedStake) * 2).toFixed(0) : (challenge.stake * 2).toFixed(0))
+    : "0";
 
-  if (phase === "loading") return <div className="flex flex-col min-h-screen bg-background"><Header pageTitle="Challenge" /><Loading /></div>;
-
-  // ── Lobby ──────────────────────────────────────────────────────────────────
-  const amCreator = challenge && userWalletAddress && challenge.creator?.toLowerCase() === userWalletAddress.toLowerCase();
-  if (!hasJoined && !amCreator && phase === "lobby") { if (typeof window !== "undefined") router.replace(`/challenge/${code}/pre-lobby`); return null; }
-
-  const allVerified = players.length >= 2 && players.every(p => p.txVerified);
-  const allReady    = allVerified && players.every(p => p.ready);
-  if (phase === "countdown") {
-  return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-        {currentRoundName}
-      </p>
-      <div className="text-7xl font-black text-primary">{countdownVal}</div>
-    </div>
+  // ── Global overlays ────────────────────────────────────────────────────────
+  const globalOverlays = (
+    <>
+      {rematchInvite && (
+        <RematchPopup
+          invite={rematchInvite} myWallet={myWallet}
+          onDismiss={handleInviteDismiss} countdown={inviteCountdown}
+        />
+      )}
+    </>
   );
-}
 
-if (phase === "question" || phase === "reveal") {
-  const opts = currentQ?.options ?? [];
-  const letters = ["A", "B", "C", "D"];
-  const showResult = phase === "reveal";
-  return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <LinearTimer seconds={timeLeft} total={currentQ?.timeLimit ?? 1} />
-      <div className="max-w-2xl mx-auto w-full px-4 py-6 flex-1 flex flex-col gap-6">
-        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
-          <span>{currentRoundName}</span>
-          <span>Question {(currentQ?.questionIndex ?? 0) + 1}/{currentQ?.totalQuestions}</span>
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  RENDER — early returns AFTER all hooks
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  if (phase === "loading") {
+    return (
+      <div className="flex flex-col min-h-screen bg-background">
+        <Header pageTitle="Challenge" />
+        <Loading />
+      </div>
+    );
+  }
+
+  // ── Countdown ───────────────────────────────────────────────────────────────
+  if (phase === "countdown") {
+    return (
+      <>
+        {globalOverlays}
+        <div className="fixed inset-0 bg-background flex items-center justify-center z-50">
+          <div className="text-center space-y-4">
+            <p className="text-muted-foreground text-xl uppercase tracking-widest font-black">
+              Round: {currentRoundName}
+            </p>
+            <div
+              key={countdownVal}
+              className="text-[10rem] font-black text-primary leading-none"
+              style={{ animation: "zoomFade 0.9s ease-out forwards" }}
+            >
+              {countdownVal}
+            </div>
+          </div>
+          <style>{`@keyframes zoomFade{0%{transform:scale(1.5);opacity:0}30%{transform:scale(1);opacity:1}80%{opacity:1}100%{transform:scale(0.8);opacity:0}}`}</style>
+        </div>
+      </>
+    );
+  }
+
+  // ── Question / Reveal ───────────────────────────────────────────────────────
+  if ((phase === "question" || phase === "reveal") && currentQ) {
+    const isReveal = phase === "reveal";
+    return (
+      <div className="fixed inset-0 bg-background flex flex-col overflow-hidden z-40">
+        {!isReveal && <LinearTimer seconds={timeLeft} total={currentQ.timeLimit} />}
+
+        <div className="flex items-center justify-between px-4 py-3 bg-card border-b border-border shrink-0">
+          <Badge variant="outline" className="font-mono">
+            Q{currentQ.questionIndex + 1}/{currentQ.totalQuestions}
+          </Badge>
+          <span className="text-xs font-bold text-muted-foreground capitalize">
+            {currentRoundName} round
+          </span>
+          <div className="flex items-center gap-1 font-bold text-primary bg-primary/10 px-3 py-1 rounded-full text-sm">
+            <Zap className="h-3.5 w-3.5" /> {myPlayerEntry?.points ?? 0}
+          </div>
         </div>
 
-        <h2 className="text-xl font-black text-foreground text-center py-4">
-          {currentQ?.question}
-        </h2>
+        <div className="flex-1 flex flex-col items-center justify-center px-4 overflow-y-auto">
+          <h2 className={cn(
+            "font-bold text-foreground leading-snug max-w-xl transition-all duration-500",
+            isReveal ? "text-xl mb-6" : "text-2xl md:text-3xl"
+          )}>
+            {currentQ.question}
+          </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {opts.map((opt, i) => {
-            const style      = OPTION_STYLES[letters[i] ?? "A"];
+          {isReveal && (
+            <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xl mb-6">
+                <div className="bg-muted/50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-border">
+                  Current Standings
+                </div>
+                <div className="divide-y divide-border">
+                  {[...players].sort((a, b) => b.points - a.points).map((p, i) => (
+                    <div key={p.walletAddress} className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-black text-muted-foreground w-4">{i + 1}</span>
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src={p.avatarUrl || undefined} />
+                          <AvatarFallback className="text-[8px]">{p.username.slice(0, 2)}</AvatarFallback>
+                        </Avatar>
+                        <span className={cn(
+                          "text-sm font-bold",
+                          p.walletAddress.toLowerCase() === myWallet ? "text-primary" : "text-foreground"
+                        )}>
+                          {p.username}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {questionScores[p.walletAddress] > 0 && (
+                          <span className="text-[10px] font-black text-emerald-500 animate-bounce">
+                            +{questionScores[p.walletAddress]}
+                          </span>
+                        )}
+                        <span className="font-black text-sm">{p.points}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {isReveal && (
+          <div className="flex justify-center px-4 pb-4 shrink-0">
+            <div className={cn(
+              "px-8 py-3 rounded-full font-black text-lg border-2 shadow-lg animate-in zoom-in duration-300",
+              selectedId === revealCorrectId
+                ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border-emerald-400"
+                : "bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 border-red-400"
+            )}>
+              {selectedId === revealCorrectId ? "✓ Correct!" : "✗ Incorrect"}
+            </div>
+          </div>
+        )}
+
+        <div className="w-full max-w-2xl mx-auto px-4 grid grid-cols-2 gap-3 pb-8 shrink-0">
+          {currentQ.options.map(opt => {
+            const style      = OPTION_STYLES[opt.id] ?? OPTION_STYLES.A;
             const isSelected = selectedId === opt.id;
-            const isCorrect  = revealCorrectId === opt.id;
+            const isCorrect  = isReveal && opt.id === revealCorrectId;
+            const isWrong    = isReveal && isSelected && opt.id !== revealCorrectId;
             return (
               <button
                 key={opt.id}
-                disabled={hasSubmitted || showResult}
+                disabled={isReveal || timeLeft <= 0}
                 onClick={() => handleSelectAnswer(opt.id)}
                 className={cn(
-                  "rounded-2xl px-4 py-5 text-left font-bold text-white flex items-center gap-3 transition-all disabled:cursor-not-allowed",
+                  "relative flex items-center justify-between rounded-2xl text-white font-bold transition-all duration-150 shadow-md px-3 py-4",
                   style.bg,
-                  isSelected && !showResult && `ring-4 ${style.ring}`,
-                  showResult && isCorrect && "ring-4 ring-emerald-300",
-                  showResult && isSelected && !isCorrect && "ring-4 ring-red-300 opacity-60",
-                  showResult && !isSelected && !isCorrect && "opacity-40",
+                  isSelected && !isReveal && `ring-4 ${style.ring} ring-offset-2 ring-offset-background scale-[1.02] z-10`,
+                  isReveal && !isCorrect && !isWrong && "opacity-40 grayscale",
+                  isCorrect && "ring-4 ring-white brightness-110",
+                  isWrong   && "opacity-70 ring-4 ring-red-400",
                 )}
               >
-                <span className="text-xl">{style.shape}</span>
-                <span className="flex-1">{opt.text}</span>
-                {showResult && isCorrect && <Check className="h-5 w-5 shrink-0" />}
-                {showResult && isSelected && !isCorrect && <X className="h-5 w-5 shrink-0" />}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm opacity-90">{style.shape}</span>
+                  <span className="leading-tight text-left text-sm">{opt.text}</span>
+                </div>
+                {isCorrect && <Check className="h-4 w-4 shrink-0" />}
+                {isWrong   && <X    className="h-4 w-4 shrink-0" />}
               </button>
             );
           })}
         </div>
 
-        {showResult && (
-          <div className="bg-card border-2 border-border rounded-2xl p-4 text-center space-y-1">
-            <p className="text-sm font-bold text-foreground">
-              {questionScores[myWallet] > 0 ? `+${questionScores[myWallet]} points!` : "No points this round"}
-            </p>
-            <p className="text-xs text-muted-foreground">Total: {totalScores[myWallet] ?? 0} pts</p>
-          </div>
+        {userWalletAddress && (
+          <FloatingChat
+            messages={chatMessages} myWallet={myWallet}
+            chatInput={chatInput} setChatInput={setChatInput}
+            onSend={handleSendChat} chatBottomRef={chatBottomRef}
+            unreadCount={unreadCount}
+          />
         )}
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-if (phase === "round_end") {
-  return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
-      <h2 className="text-2xl font-black text-foreground">{currentRoundName} complete</h2>
-      <div className="bg-card border-2 border-border rounded-3xl overflow-hidden w-full max-w-sm divide-y divide-border">
-        {Object.entries(roundScores).map(([wallet, pts]) => (
-          <div key={wallet} className="flex items-center justify-between px-5 py-3">
-            <span className="font-bold text-sm text-foreground">
-              {wallet.toLowerCase() === myWallet
-                ? "You"
-                : players.find(p => p.walletAddress.toLowerCase() === wallet.toLowerCase())?.username ?? "Opponent"}
-            </span>
-            <span className="font-black text-foreground tabular-nums">{pts} pts</span>
+  // ── Round end ───────────────────────────────────────────────────────────────
+  if (phase === "round_end") {
+    const sorted = Object.entries(roundScores).sort(([, a], [, b]) => b - a);
+    return (
+      <div className="fixed inset-0 bg-background flex flex-col items-center justify-center z-50 px-4">
+        <div className="w-full max-w-sm space-y-4 text-center">
+          <div className="text-4xl">📊</div>
+          <h2 className="text-2xl font-black text-foreground">Round {currentRoundName} complete</h2>
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            {sorted.map(([wallet, pts], i) => {
+              const player = players.find(p => p.walletAddress === wallet);
+              const isMe   = wallet.toLowerCase() === myWallet;
+              return (
+                <div key={wallet} className={cn("flex items-center gap-3 px-4 py-3 border-b border-border last:border-0", isMe && "bg-primary/5")}>
+                  <span className="font-black text-muted-foreground w-4">{i + 1}</span>
+                  <span className="flex-1 text-left font-bold text-foreground text-sm">
+                    {player?.username ?? wallet.slice(0, 8)}
+                    {isMe && <Badge className="ml-2 text-[9px] h-4 px-1 bg-primary text-primary-foreground border-0">YOU</Badge>}
+                  </span>
+                  <span className="font-black text-lg text-foreground">{pts}</span>
+                </div>
+              );
+            })}
           </div>
-        ))}
+          <p className="text-xs text-muted-foreground animate-pulse">Next round starting…</p>
+        </div>
       </div>
-    </div>
-  );
-}
-  // ── FIX 4: game_over phase — render claim button when myClaim exists ────────
+    );
+  }
+
+  // ── Game over ───────────────────────────────────────────────────────────────
   if (phase === "game_over") {
-    const iWon = winner && winner.toLowerCase() === myWallet;
+    const sortedPlayers = Object.entries(finalScores).sort(([, a], [, b]) => b.points - a.points);
+    const isTie    = gameOutcome === "tie";
+    const isWinner = winner?.toLowerCase() === myWallet;
+
+    if (sortedPlayers.length === 0) {
+      return (
+        <div className="flex flex-col min-h-screen bg-background">
+          <Header pageTitle="Challenge" />
+          <div className="flex flex-col items-center justify-center flex-1 gap-3 px-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground font-medium">Loading results…</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <>
         {globalOverlays}
-        <Confetti active={showConfetti} />
-        <div className="min-h-screen bg-background flex flex-col">
-          <Header pageTitle="Game Over" />
-          <div className="max-w-2xl mx-auto w-full px-4 py-8 space-y-5">
+        <div className="fixed inset-0 bg-background flex flex-col overflow-auto">
+          <Confetti active={showConfetti} />
 
-            {/* Outcome banner */}
-            <div className={cn(
-              "rounded-3xl border-2 p-6 text-center space-y-2",
-              gameOutcome === "winner" && iWon
-                ? "bg-emerald-500/10 border-emerald-400/50"
-                : gameOutcome === "tie"
-                ? "bg-blue-500/10 border-blue-400/50"
-                : "bg-muted/50 border-border",
-            )}>
-              <div className="text-6xl">
-                {gameOutcome === "winner" && iWon ? "🏆" : gameOutcome === "tie" ? "🤝" : "😤"}
+          <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border">
+            <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
+              <button
+                onClick={() => router.back()}
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm font-bold transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" /> Back
+              </button>
+              <Badge variant="outline" className="font-mono">{code}</Badge>
+            </div>
+          </div>
+
+          <div className="max-w-2xl mx-auto w-full px-4 py-8 pb-24 space-y-5">
+
+            {/* Outcome hero */}
+            <div className="text-center space-y-2">
+              <div className="text-6xl">{isTie ? "🤝" : isWinner ? "🏆" : "🎯"}</div>
+              <h1 className="text-3xl font-black text-foreground">
+                {isTie ? "It's a tie!" : isWinner ? "You won!" : "Game over"}
+              </h1>
+              <p className="text-muted-foreground text-sm">{challenge?.topic}</p>
+              <div className="inline-flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1 text-xs font-bold text-muted-foreground">
+                <span className="font-mono">{code}</span>
+                <span>·</span>
+                <span>{challenge?.stake} {DROPS_SYMBOL} each</span>
+                <span>·</span>
+                <span className="text-primary">🏆 {totalPool} {DROPS_SYMBOL} pool</span>
               </div>
-              <h2 className="text-2xl font-black text-foreground">
-                {gameOutcome === "winner" && iWon
-                  ? "You Won!"
-                  : gameOutcome === "tie"
-                  ? "It's a Tie!"
-                  : "Better luck next time"}
-              </h2>
-              {gameOutcome === "winner" && !iWon && winner && (
-                <p className="text-sm text-muted-foreground">
-                  {finalScores[winner]?.username ?? "Opponent"} won this round.
-                </p>
-              )}
             </div>
 
-            {/* Scores */}
-            {Object.keys(finalScores).length > 0 && (
-              <div className="bg-card border-2 border-border rounded-3xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-border">
-                  <h3 className="font-black text-foreground">Final Scores</h3>
-                </div>
-                <div className="divide-y divide-border">
-                  {Object.entries(finalScores)
-                    .sort(([, a], [, b]) => b.points - a.points)
-                    .map(([wallet, score]) => (
-                      <div key={wallet} className="flex items-center justify-between px-5 py-3">
-                        <div className="flex items-center gap-2">
-                          {wallet.toLowerCase() === winner?.toLowerCase() && (
-                            <Trophy className="h-4 w-4 text-yellow-500 shrink-0" />
-                          )}
-                          <span className={cn(
-                            "font-bold text-sm",
-                            wallet.toLowerCase() === myWallet ? "text-primary" : "text-foreground",
-                          )}>
-                            {score.username}
-                            {wallet.toLowerCase() === myWallet && (
-                              <span className="ml-1 text-[10px] text-muted-foreground">(you)</span>
-                            )}
-                          </span>
-                        </div>
-                        <span className="font-black text-foreground tabular-nums">{score.points.toLocaleString()} pts</span>
-                      </div>
-                    ))}
-                </div>
+            {/* Final leaderboard */}
+            <div className="bg-card rounded-2xl border border-border overflow-hidden">
+              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-blue-500" /> Final Leaderboard
+                </h2>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  {sortedPlayers.length} player{sortedPlayers.length !== 1 ? "s" : ""}
+                </span>
               </div>
-            )}
+              <div className="divide-y divide-border">
+                {sortedPlayers.map(([wallet, data], i) => {
+                  const isMe         = wallet.toLowerCase() === myWallet;
+                  const isThisWinner = wallet.toLowerCase() === winner?.toLowerCase();
+                  const medals       = ["🥇", "🥈", "🥉"];
+                  return (
+                    <div key={wallet} className={cn(
+                      "flex items-center gap-3 px-4 py-4 transition-colors",
+                      isMe && "bg-blue-50 dark:bg-blue-950/20",
+                      isThisWinner && !isMe && "bg-blue-50/50 dark:bg-blue-950/10"
+                    )}>
+                      <div className="text-xl w-8 text-center shrink-0">
+                        {medals[i] ?? `${i + 1}`}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-foreground text-sm">{data.username}</p>
+                          {isMe && (
+                            <Badge className="text-[9px] h-4 px-1.5 bg-primary text-primary-foreground border-0">YOU</Badge>
+                          )}
+                          {isThisWinner && (
+                            <Badge className="text-[9px] h-4 px-1.5 bg-blue-400 text-blue-900 border-0">WINNER</Badge>
+                          )}
+                          {isTie && (
+                            <Badge variant="outline" className="text-[9px] h-4 px-1.5">TIE</Badge>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                          {wallet.slice(0, 6)}…{wallet.slice(-4)}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-black text-2xl text-foreground leading-none">{data.points}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">pts</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
-            {/* FIX 4: Claim button — only shown to winner with an unclaimed reward */}
-            {myClaim && !claimedCodes.has(code) && (
-              <div className="bg-emerald-500/10 border-2 border-emerald-400/50 rounded-3xl p-5 space-y-3">
+            {/* Claim reward */}
+            {myClaim && (
+              <div className={cn(
+                "rounded-2xl p-4 space-y-3 border",
+                claimedCodes.has(code)
+                  ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
+                  : "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+              )}>
                 <div className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5 text-emerald-500" />
-                  <p className="font-black text-foreground">Your prize is waiting!</p>
+                  <span className="text-lg">{claimedCodes.has(code) ? "✅" : "🏆"}</span>
+                  <div>
+                    <p className={cn(
+                      "font-bold text-sm",
+                      claimedCodes.has(code) ? "text-emerald-700 dark:text-emerald-400" : "text-blue-700 dark:text-blue-400"
+                    )}>
+                      {claimedCodes.has(code) ? "Reward claimed!" : "Reward ready to claim"}
+                    </p>
+                    <p className={cn(
+                      "text-xs",
+                      claimedCodes.has(code) ? "text-emerald-600 dark:text-emerald-500" : "text-blue-600 dark:text-blue-500"
+                    )}>
+                      {myClaim.win_amount} {myClaim.token_symbol} {claimedCodes.has(code) ? "sent to your wallet" : "waiting in pool"}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  You won <strong className="text-foreground">{myClaim.win_amount} {myClaim.token_symbol}</strong>.
-                  Claim it to your wallet now.
-                </p>
                 <Button
+                  className="w-full h-11 font-bold border-0 transition-all"
                   onClick={() => handleClaim(code)}
-                  disabled={isClaiming}
-                  className="w-full h-12 font-black rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                  disabled={isClaiming || claimedCodes.has(code)}
+                  style={claimedCodes.has(code) ? { background: "#16a34a", opacity: 1, cursor: "default" } : {}}
                 >
                   {isClaiming
-                    ? <><Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> Claiming…</>
-                    : <><Trophy className="inline mr-2 h-4 w-4" /> Claim {myClaim.win_amount} {myClaim.token_symbol}</>
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Claiming…</>
+                    : claimedCodes.has(code)
+                    ? <><Check className="mr-2 h-4 w-4" /> Reward Claimed</>
+                    : "Claim Reward"
                   }
                 </Button>
               </div>
             )}
 
-            {/* Already claimed */}
-            {claimedCodes.has(code) && (
-              <div className="flex items-center gap-3 px-5 py-4 rounded-3xl bg-muted/50 border-2 border-border">
-                <Check className="h-5 w-5 text-emerald-500 shrink-0" />
-                <p className="text-sm font-bold text-muted-foreground">Prize claimed successfully!</p>
+            {/* Winner but no pending claim */}
+            {isWinner && !myClaim && phase === "game_over" && (
+              <div className="bg-muted/50 border border-border rounded-2xl p-4 text-center space-y-1">
+                <p className="text-sm font-bold text-foreground">Reward already sent ✓</p>
+                <p className="text-xs text-muted-foreground">Your winnings were transferred to your wallet.</p>
               </div>
             )}
 
-            {/* Navigation */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => router.push("/challenge")}
-                className="flex-1 py-3 rounded-2xl border-2 border-border bg-card font-bold text-sm text-foreground hover:bg-muted transition-all"
-              >
-                <Home className="inline mr-2 h-4 w-4" /> Hub
-              </button>
-              <button
-                onClick={() => router.push("/challenge/create-quiz")}
-                className="flex-1 py-3 rounded-2xl bg-primary text-primary-foreground font-bold text-sm hover:opacity-90 transition-all"
-              >
-                <Plus className="inline mr-2 h-4 w-4" /> New Challenge
-              </button>
+            {/* Actions */}
+            <div className="flex flex-col gap-3">
+
+              {/* ── Rematch button — always rendered when canRematch, badge-aware ── */}
+              {canRematch && (
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    onClick={() =>
+                      sendRematchInvite({
+                        code,
+                        userWalletAddress: userWalletAddress!,
+                        setRematchPending,
+                        setRematchCountdown,
+                        rematchTimerRef,
+                        rematchTimeoutRef,
+                      })
+                    }
+                    disabled={!rematchAllowed || isRequestingRematch || rematchPending}
+                    title={rematchLockReason ?? undefined}
+                    className={cn(
+                      "w-full h-14 rounded-2xl font-black text-base transition-all flex items-center justify-center gap-2 shadow-lg active:scale-[0.99]",
+                      rematchAllowed
+                        ? "bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        : "bg-muted text-muted-foreground border-2 border-border cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    {rematchPending ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Waiting{rematchCountdown !== null && rematchCountdown > 0 ? ` (${rematchCountdown}s)` : "…"}
+                      </>
+                    ) : isRequestingRematch ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Creating challenge…
+                      </>
+                    ) : rematchAllowed ? (
+                      <>🔁 Request Rematch</>
+                    ) : (
+                      <>
+                        <ShieldCheck className="h-5 w-5" />
+                        Rematch Locked
+                      </>
+                    )}
+                  </button>
+
+                  {/* Reason shown only when locked and no request is in-flight */}
+                  {rematchLockReason && !rematchPending && !isRequestingRematch && (
+                    <p className="text-[11px] text-center text-muted-foreground px-2">
+                      🔒 {rematchLockReason}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1 h-12" onClick={() => router.push("/challenge")}>
+                  <Home className="mr-2 h-4 w-4" /> Hub
+                </Button>
+                <Button variant="outline" className="flex-1 h-12" onClick={() => router.push("/challenge/create-challenge")}>
+                  <Plus className="mr-2 h-4 w-4" /> New
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1003,84 +1327,156 @@ if (phase === "round_end") {
     );
   }
 
+  // ── Lobby guard ─────────────────────────────────────────────────────────────
+  const amCreator = challenge && userWalletAddress &&
+    challenge.creator?.toLowerCase() === userWalletAddress.toLowerCase();
+
+  if (!hasJoined && !amCreator && phase === "lobby") {
+    if (typeof window !== "undefined") router.replace(`/challenge/${code}/pre-lobby`);
+    return null;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  LOBBY
+  // ─────────────────────────────────────────────────────────────────────────────
+  const allVerified = players.length >= 2 && players.every(p => p.txVerified);
+  const allReady    = allVerified && players.every(p => p.ready);
+
   return (
     <>
-      {globalOverlays}
+      {rematchInvite && (
+        <RematchPopup
+          invite={rematchInvite} myWallet={myWallet}
+          onDismiss={handleInviteDismiss} countdown={inviteCountdown}
+        />
+      )}
       <div className="min-h-screen bg-background flex flex-col">
-        <div className="max-w-4xl mx-auto w-full px-4 py-6 pb-32 space-y-5">
-          {hasJoined && (
-            <div className="space-y-3 pt-2">
 
-                        {/* Player roster */}
-          <div className="bg-card border-2 border-border rounded-3xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <h3 className="font-black text-foreground text-sm">
-                  Players ({players.length}/2)
-                </h3>
-              </div>
+        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md border-b border-border">
+          <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push("/challenge")}
+                className="hover:bg-muted p-2 rounded-full transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
               <button
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="hover:bg-muted p-2 rounded-full transition-colors disabled:opacity-50"
+                title="Refresh lobby"
               >
-                {isRefreshing
-                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  : <RefreshCw className="h-3.5 w-3.5" />
-                }
+                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
               </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-2xl font-black tracking-tighter">{code}</p>
+                  <Badge variant="secondary" className="text-[10px] uppercase">{DROPS_SYMBOL}</Badge>
+                </div>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{challenge?.topic}</p>
+              </div>
             </div>
-            <div className="divide-y divide-border">
-              {players.length === 0 ? (
-                <div className="px-5 py-8 text-center text-muted-foreground text-sm">
-                  Waiting for players to join…
-                </div>
-              ) : players.map(p => (
-                <div key={p.walletAddress} className="flex items-center gap-3 px-5 py-3">
-                  <Avatar className="h-9 w-9 shrink-0">
-                    <AvatarImage src={p.avatarUrl} />
-                    <AvatarFallback className="text-xs font-bold bg-muted">
-                      {p.username.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-sm text-foreground truncate">
-                        {p.username}
-                      </span>
-                      {p.walletAddress.toLowerCase() === myWallet && (
-                        <span className="text-[10px] text-muted-foreground">(you)</span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-muted-foreground font-mono">
-                      {p.walletAddress.slice(0, 6)}…{p.walletAddress.slice(-4)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {p.txVerified ? (
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                        <Check className="h-2.5 w-2.5" /> Staked
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                        Pending
-                      </span>
-                    )}
-                    {p.ready && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
-                        <Zap className="h-2.5 w-2.5" /> Ready
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase">Per Player</p>
+                <p className="font-bold text-sm">{displayStake} {DROPS_SYMBOL}</p>
+              </div>
+              <div className="bg-primary/10 border border-primary/20 px-4 py-2 rounded-2xl flex flex-col items-center min-w-[90px]">
+                <p className="text-[9px] font-black text-primary uppercase leading-none mb-1">Total Pool</p>
+                <p className="text-xl font-black text-primary leading-none">
+                  {totalPool} <span className="text-xs">{DROPS_SYMBOL}</span>
+                </p>
+              </div>
             </div>
           </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto w-full px-4 py-6 pb-32 space-y-5">
+
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <h2 className="font-bold text-foreground text-sm flex items-center gap-2">
+                <Users className="h-4 w-4 text-blue-400" /> Players
+              </h2>
+              {allReady && (
+                <span className="text-xs font-bold text-emerald-500 flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5" /> Both ready — starting!
+                </span>
+              )}
+            </div>
+            {players.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-center">
+                <Users className="h-8 w-8 text-muted-foreground/20 mb-3" />
+                <p className="text-muted-foreground text-sm">Waiting for opponent…</p>
+                <p className="text-muted-foreground/60 text-xs mt-1">Share the code above</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 p-4">
+                {players.map(p => {
+                  const isMe   = p.walletAddress.toLowerCase() === myWallet;
+                  const isHost = p.walletAddress.toLowerCase() === challenge?.creator?.toLowerCase();
+                  const statusLabel = (() => {
+                    if (p.ready)      return { text: "Ready ✓",        cls: "text-emerald-500"     };
+                    if (p.txVerified) return { text: "Stake verified",  cls: "text-blue-400"        };
+                    if (isHost)       return { text: "Awaiting stake…", cls: "text-blue-500"        };
+                    return              { text: "Awaiting stake…",     cls: "text-muted-foreground" };
+                  })();
+                  return (
+                    <div key={p.walletAddress} className={cn(
+                      "flex flex-col items-center gap-2 rounded-2xl p-4 border text-center transition-colors",
+                      p.ready
+                        ? "border-emerald-400/40 bg-emerald-500/5"
+                        : p.txVerified
+                          ? "border-blue-400/30 bg-blue-500/5"
+                          : "border-border bg-muted/20"
+                    )}>
+                      <Avatar className="h-14 w-14 border-2 border-border">
+                        <AvatarImage src={p.avatarUrl || undefined} />
+                        <AvatarFallback className="font-bold text-base">
+                          {p.username?.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <p className="font-black text-foreground text-sm">{p.username}</p>
+                      <p className={cn("text-[10px] font-semibold", statusLabel.cls)}>{statusLabel.text}</p>
+                      <div className="flex gap-1 flex-wrap justify-center">
+                        {isMe   && <Badge className="text-[9px] h-4 px-1 bg-primary text-primary-foreground border-0">YOU</Badge>}
+                        {isHost && <Badge variant="outline" className="text-[9px] h-4 px-1">Host</Badge>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {players.length < 2 && (
+                  <div className="flex flex-col items-center gap-2 rounded-2xl p-4 border border-dashed border-border text-center">
+                    <div className="h-14 w-14 rounded-full border-2 border-dashed border-border flex items-center justify-center">
+                      <Users className="h-6 w-6 text-muted-foreground/30" />
+                    </div>
+                    <p className="font-bold text-muted-foreground/50 text-sm">Waiting…</p>
+                    <p className="text-[10px] text-muted-foreground/40">Share to invite</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {players.length < 2 && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/challenge/${code}`);
+                toast.success("Invite link copied!");
+              }}
+              className="w-full h-11 rounded-2xl border border-border bg-card text-sm font-bold hover:bg-muted transition-all flex items-center justify-center gap-2 text-foreground"
+            >
+              <Share2 className="h-4 w-4" /> Copy invite link
+            </button>
+          )}
+
+          {hasJoined && (
+            <div className="space-y-3 pt-2">
               {!myTxVerified && (
                 <>
                   <Button
-                    className="w-full h-16 text-lg font-black rounded-2xl shadow-[0_4px_0_rgb(30,80,200)] active:translate-y-1 active:shadow-none transition-all"
+                    className="w-full h-16 text-lg font-black dd-btn rounded-2xl shadow-[0_4px_0_rgb(30,80,200)] active:translate-y-1 active:shadow-none transition-all"
                     onClick={handleStake}
                     disabled={isStaking || stakeVerifying}
                   >
@@ -1089,31 +1485,43 @@ if (phase === "round_end") {
                     ) : stakeVerifying ? (
                       <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Verifying on-chain…</>
                     ) : (
-                      <><Zap className="mr-2 h-6 w-6" /> Stake {displayStake} DROPS to Play</>
+                      <><Zap className="mr-2 h-6 w-6" /> Stake {displayStake} {DROPS_SYMBOL} to Play</>
                     )}
                   </Button>
-                  <button onClick={handleSyncStake} disabled={isSyncing} className="w-full text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors py-1">
+                  <button
+                    onClick={handleSyncStake}
+                    disabled={isSyncing}
+                    className="w-full text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors py-1"
+                  >
                     {isSyncing ? "Checking on-chain…" : "Already staked? Sync my stake"}
                   </button>
                 </>
               )}
 
               {myTxVerified && !myReady && (
-                <Button className="w-full h-16 text-lg font-black rounded-2xl shadow-[0_4px_0_rgb(16,120,60)] active:translate-y-1 active:shadow-none transition-all" onClick={handleReady}>
+                <Button
+                  className="w-full h-16 text-lg font-black dd-btn rounded-2xl shadow-[0_4px_0_rgb(16,120,60)] active:translate-y-1 active:shadow-none transition-all"
+                  onClick={handleReady}
+                >
                   <Check className="mr-2 h-6 w-6" /> I'm Ready
                 </Button>
               )}
 
               {myReady && (
-                <div className={cn("w-full h-16 flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed", allReady ? "bg-emerald-500/10 border-emerald-500/50" : "bg-muted/50 border-border")}>
+                <div className={cn(
+                  "w-full h-16 flex items-center justify-center gap-3 rounded-2xl border-2 border-dashed",
+                  allReady ? "bg-emerald-500/10 border-emerald-500/50" : "bg-muted/50 border-border"
+                )}>
                   <Loader2 className={cn("h-5 w-5 animate-spin", allReady ? "text-emerald-500" : "text-primary")} />
-                  <span className={cn("font-bold uppercase tracking-widest text-sm", allReady ? "text-emerald-500" : "text-muted-foreground")}>
+                  <span className={cn(
+                    "font-bold uppercase tracking-widest text-sm",
+                    allReady ? "text-emerald-500" : "text-muted-foreground"
+                  )}>
                     {allReady ? "Game Starting..." : "Waiting for Opponent..."}
                   </span>
                 </div>
               )}
 
-              {/* Escrow info — stake/burn language */}
               {!myTxVerified && (
                 <div className="flex gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-2xl p-4">
                   <div className="shrink-0 mt-0.5">
@@ -1129,14 +1537,14 @@ if (phase === "round_end") {
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs text-blue-600 dark:text-blue-400">You stake</span>
                         <span className="text-xs font-bold text-blue-800 dark:text-blue-200 font-mono">
-                          {displayStake} DROPS
+                          {displayStake} {DROPS_SYMBOL}
                         </span>
                       </div>
                       <div className="h-px bg-blue-200 dark:bg-blue-800/60" />
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs text-blue-600 dark:text-blue-400">Winner gets</span>
                         <span className="text-xs font-bold text-blue-800 dark:text-blue-200 font-mono">
-                          {totalPool} DROPS
+                          {totalPool} {DROPS_SYMBOL}
                         </span>
                       </div>
                     </div>
@@ -1151,7 +1559,12 @@ if (phase === "round_end") {
         </div>
 
         {userWalletAddress && (
-          <FloatingChat messages={chatMessages} myWallet={myWallet} chatInput={chatInput} setChatInput={setChatInput} onSend={handleSendChat} chatBottomRef={chatBottomRef} unreadCount={unreadCount} />
+          <FloatingChat
+            messages={chatMessages} myWallet={myWallet}
+            chatInput={chatInput} setChatInput={setChatInput}
+            onSend={handleSendChat} chatBottomRef={chatBottomRef}
+            unreadCount={unreadCount}
+          />
         )}
       </div>
     </>

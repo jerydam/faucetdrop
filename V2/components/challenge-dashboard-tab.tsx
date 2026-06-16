@@ -23,7 +23,7 @@ import { getGoodDollarPrice } from "@/lib/getGoodDollarPrice";
 const BACKEND_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 /** ─── Contract config ────────────────────────────────────────────────────── */
-const DROPS_REDEEM_POOL_ADDRESS = "0xb78410a33b463215CC7ac7CC7A6Cb88a5A0C0779"; // ← replace
+const DROPS_REDEEM_POOL_ADDRESS = "0x38Ae076A115bf79102DA9472C4c688DB078a4b13"; // ← replace
 const CELO_CHAIN_ID = 42220;
 const CELO_CHAIN_HEX = "0xa4ec";
 const CELO_RPC = "https://forno.celo.org";

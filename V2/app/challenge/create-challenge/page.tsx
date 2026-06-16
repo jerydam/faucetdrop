@@ -36,11 +36,11 @@ import { QUIZ_HUB_ABI } from "@/lib/abis";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 const QUIZ_HUB_ADDRESS = (
-  process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0x787b3f0916Aad56ba90a9c4638E4f748a1288551"
+  process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0xB19aA952c94faB37716131D8C3d9Bb564e6253Ed"
 ) as `0x${string}`;
 
 // DROPS token on Celo — 18 decimals
-const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x1e1FB392315B248f24Bfc35742B95d5F45e85906") as `0x${string}`;
+const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B") as `0x${string}`;
 const DROPS_DECIMALS   = 18;
 const DROPS_SYMBOL     = "DROPS";
 const CELO_CHAIN_ID    = 42220;

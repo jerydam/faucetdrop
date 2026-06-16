@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Sparkles, Upload, Users, FileText, X } from "lucide-react";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme";
-import { useAccount } from "wagmi";
+import { useWallet } from "@/hooks/use-wallet"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
 
@@ -50,7 +50,7 @@ export default function CreateRoomPage() {
   const [loading, setLoading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { address } = useAccount();
+  const { address } = useWallet()
 
   const parsedNames = useMemo(
     () => namesInput.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean),

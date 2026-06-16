@@ -41,6 +41,7 @@ function getWsBase() {
 }
 
 function fmt(n: number) {
+  if (n === undefined || n === null || isNaN(n)) return "0";
   return n % 1 === 0 ? n.toString() : n.toFixed(n < 1 ? 2 : 1);
 }
 
@@ -161,7 +162,7 @@ function CounterOfferBanner({
 // ── Offer Card ────────────────────────────────────────────────────────────────
 
 function OfferCard({
-  offer, token, onAccept, onCounter, accepting, isSelf, isCounterTarget, avatarUrl,
+  offer, token, onAccept, onCounter, accepting, isSelf, isCounterTarget, avatarUrl, counterDisabled
 }: {
   offer: Offer;
   token: string;
@@ -171,6 +172,7 @@ function OfferCard({
   isSelf: boolean;
   isCounterTarget: boolean;
   avatarUrl?: string;
+  counterDisabled?: boolean;
 }) {
   return (
     <div className={cn(
@@ -220,6 +222,7 @@ function OfferCard({
             {accepting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
             Lock In
           </button>
+           {!counterDisabled && (
           <button
             onClick={() => onCounter(offer)}
             disabled={accepting}
@@ -233,6 +236,7 @@ function OfferCard({
           >
             <Zap className="h-3 w-3" /> Counter
           </button>
+           )}
         </div>
       )}
     </div>
@@ -351,7 +355,8 @@ export default function PreLobbyPage() {
   const [accepting, setAccepting]       = useState(false);
   const [countdown, setCountdown]       = useState(120);
   const [lockedAmount, setLockedAmount] = useState<number | null>(null);
-
+  const [negotiationLocked, setNegotiationLocked] = useState(false);
+  const [myTotalDuels, setMyTotalDuels] = useState(0);
   const [pendingCounter, setPendingCounter] = useState<CounterOffer | null>(null);
   const [counterTarget, setCounterTarget]   = useState<Offer | null>(null);
 
@@ -375,7 +380,8 @@ export default function PreLobbyPage() {
         if (!d.success) { toast.error("Challenge not found"); router.push("/challenge"); return; }
         const c: Challenge = d.challenge;
         setChallenge(c);
-        setMyOffer(c.stake);
+        setNegotiationLocked(!!d.negotiationLocked);
+        setMyOffer(c.stake ?? MIN_STAKE);setMyOffer(c.stake ?? MIN_STAKE);
         if (d.challenge?.creator) fetchAvatar(d.challenge.creator);
         if (c.status === "active" || c.status === "finished") {
           router.replace(`/challenge/${code}`);
@@ -385,7 +391,13 @@ export default function PreLobbyPage() {
       })
       .catch(() => { toast.error("Failed to load challenge"); setPageState("error"); });
   }, [code, router]);
-
+  useEffect(() => {
+  if (!myWallet) return;
+  fetch(`${API_BASE_URL}/api/drops/balance/${myWallet}`)
+    .then(r => r.json())
+    .then(d => setMyTotalDuels(d.totalDuels ?? 0))
+    .catch(() => {});
+}, [myWallet]);
   useEffect(() => {
     if (challenge?.creator) fetchAvatar(challenge.creator);
   }, [challenge?.creator]);
@@ -417,11 +429,11 @@ export default function PreLobbyPage() {
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [countdown, pageState]);
-
+  const isNegotiationLocked = negotiationLocked || myTotalDuels < 10;
   // ── WebSocket ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!code || !myWallet) return;
-
+    
     const ws = new WebSocket(`${getWsBase()}/ws/challenge/${code}`);
     wsRef.current = ws;
 
@@ -826,7 +838,8 @@ export default function PreLobbyPage() {
                       offer={offer}
                       token={challenge.token}
                       onAccept={handleAcceptOffer}
-                      onCounter={handleSelectCounterTarget}
+                      onCounter={isNegotiationLocked ? () => {} : handleSelectCounterTarget}
+                      counterDisabled={isNegotiationLocked}
                       accepting={accepting}
                       isSelf={offer.wallet.toLowerCase() === myWallet}
                       isCounterTarget={counterTarget?.wallet === offer.wallet}
@@ -838,7 +851,7 @@ export default function PreLobbyPage() {
             </div>
 
             {/* Creator counter panel */}
-            {counterTarget && (
+            {counterTarget && !isNegotiationLocked && (
               <div className="bg-card border-2 border-blue-500/40 rounded-3xl overflow-hidden">
                 <div className="px-5 pt-4 pb-2 border-b border-border">
                   <div className="flex items-center justify-between">
@@ -980,89 +993,123 @@ export default function PreLobbyPage() {
             CHALLENGER — IDLE
         ═══════════════════════════════════════════════════════════════════ */}
         {pageState === "idle" && !isCreatorView && (
-          <div className="bg-card border-2 border-border rounded-3xl overflow-hidden">
-            <div className="px-5 pt-5 pb-2">
-              <h2 className="font-black text-foreground text-base flex items-center gap-2 mb-1">
-                <Zap className="h-4 w-4 text-primary" />
-                Your Stake Offer
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Accept the opening stake or propose a different amount.
-              </p>
-            </div>
+  <div className="bg-card border-2 border-border rounded-3xl overflow-hidden">
+    <div className="px-5 pt-5 pb-2">
+      <h2 className="font-black text-foreground text-base flex items-center gap-2 mb-1">
+        <Zap className="h-4 w-4 text-primary" />
+        Your Stake Offer
+      </h2>
+      <p className="text-xs text-muted-foreground">
+        {isNegotiationLocked
+          ? "Stake is fixed — negotiation unlocks after 10 games."
+          : "Accept the opening stake or propose a different amount."}
+      </p>
+    </div>
 
-            <div className="px-5 py-4 space-y-3">
-              <StakeInput
-                value={myOffer}
-                onChange={setMyOffer}
-                token={challenge.token}
-                label={myOffer === challenge.stake ? "= Opening" : undefined}
-                borderClass={myOffer === challenge.stake ? "border-emerald-400/50" : "border-border"}
-              />
+    <div className="px-5 py-4 space-y-3">
+      {isNegotiationLocked && (
+        <div className="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-amber-500/10 border-2 border-amber-400/40 text-xs text-amber-700 dark:text-amber-300">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-black">Negotiation locked</p>
+            <p className="mt-0.5 text-amber-600 dark:text-amber-400">
+              {myTotalDuels < 10
+                ? `Play ${10 - myTotalDuels} more game${10 - myTotalDuels !== 1 ? "s" : ""} to unlock stake negotiation.`
+                : "The creator hasn't unlocked negotiation yet."}
+            </p>
+          </div>
+        </div>
+      )}
 
-              <div className="flex gap-1.5 flex-wrap">
-                {quickPicks.map(v => (
-                  <button
-                    key={v}
-                    onClick={() => setMyOffer(v)}
-                    className={cn(
-                      "flex-1 min-w-[70px] py-2 rounded-xl border-2 text-xs font-black transition-all",
-                      myOffer === v
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40",
-                    )}
-                  >
-                    {v === challenge.stake ? `${fmt(v)} ✓` : fmt(v)}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/30 border border-border text-xs">
-                <span className="text-muted-foreground font-bold">Total pool if accepted</span>
-                <span className="font-black text-foreground">
-                  {totalPool} <span className="text-muted-foreground font-normal">{challenge.token}</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="px-5 pb-5 space-y-2">
-              {myOffer !== challenge.stake && (
-                <button
-                  onClick={() => handleSubmitOffer(challenge.stake)}
-                  disabled={submitting}
-                  className="w-full py-3 rounded-2xl border-2 border-emerald-400/50 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 font-black text-sm hover:bg-emerald-500/10 transition-all active:scale-[0.99]"
-                >
-                  <Check className="inline mr-2 h-4 w-4" />
-                  Accept Opening Stake ({fmt(challenge.stake)} {challenge.token})
-                </button>
-              )}
-
+      {/* Only show the input when negotiation is open */}
+      {!isNegotiationLocked && (
+        <>
+          <StakeInput
+            value={myOffer}
+            onChange={setMyOffer}
+            token={challenge.token}
+            label={myOffer === challenge.stake ? "= Opening" : undefined}
+            borderClass={myOffer === challenge.stake ? "border-emerald-400/50" : "border-border"}
+          />
+          <div className="flex gap-1.5 flex-wrap">
+            {quickPicks.map(v => (
               <button
-                onClick={() => handleSubmitOffer(myOffer)}
-                disabled={submitting}
+                key={v}
+                onClick={() => setMyOffer(v)}
                 className={cn(
-                  "w-full py-4 rounded-2xl font-black text-base transition-all active:scale-[0.99]",
-                  myOffer === challenge.stake
-                    ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
-                    : "bg-primary hover:opacity-90 text-primary-foreground shadow-lg shadow-primary/20",
-                  "disabled:opacity-50 disabled:cursor-not-allowed",
+                  "flex-1 min-w-[70px] py-2 rounded-xl border-2 text-xs font-black transition-all",
+                  myOffer === v
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40",
                 )}
               >
-                {submitting ? (
-                  <><Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> Sending…</>
-                ) : myOffer === challenge.stake ? (
-                  <><Check className="inline mr-2 h-5 w-5" /> Accept {fmt(myOffer)} {challenge.token}</>
-                ) : (
-                  <><ArrowRight className="inline mr-2 h-5 w-5" /> Offer {fmt(myOffer)} {challenge.token}</>
-                )}
+                {v === challenge.stake ? `${fmt(v)} ✓` : fmt(v)}
               </button>
-
-              <p className="text-[10px] text-center text-muted-foreground/60 pt-1">
-                First offer the creator accepts gets the lobby slot. Others are notified if it fills up.
-              </p>
-            </div>
+            ))}
           </div>
-        )}
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/30 border border-border text-xs">
+            <span className="text-muted-foreground font-bold">Total pool if accepted</span>
+            <span className="font-black text-foreground">
+              {totalPool} <span className="text-muted-foreground font-normal">{challenge.token}</span>
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+
+    <div className="px-5 pb-5 space-y-2">
+      {/* When locked, only show the accept-at-fixed-stake button */}
+      {isNegotiationLocked ? (
+        <button
+          onClick={() => handleSubmitOffer(challenge.stake)}
+          disabled={submitting}
+          className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-base transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+        >
+          {submitting
+            ? <><Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> Sending…</>
+            : <><Check className="inline mr-2 h-5 w-5" /> Accept {fmt(challenge.stake)} {challenge.token}</>
+          }
+        </button>
+      ) : (
+        <>
+          {myOffer !== challenge.stake && (
+            <button
+              onClick={() => handleSubmitOffer(challenge.stake)}
+              disabled={submitting}
+              className="w-full py-3 rounded-2xl border-2 border-emerald-400/50 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 font-black text-sm hover:bg-emerald-500/10 transition-all active:scale-[0.99]"
+            >
+              <Check className="inline mr-2 h-4 w-4" />
+              Accept Opening Stake ({fmt(challenge.stake)} {challenge.token})
+            </button>
+          )}
+          <button
+            onClick={() => handleSubmitOffer(myOffer)}
+            disabled={submitting}
+            className={cn(
+              "w-full py-4 rounded-2xl font-black text-base transition-all active:scale-[0.99]",
+              myOffer === challenge.stake
+                ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20"
+                : "bg-primary hover:opacity-90 text-primary-foreground shadow-lg shadow-primary/20",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+            )}
+          >
+            {submitting
+              ? <><Loader2 className="inline mr-2 h-4 w-4 animate-spin" /> Sending…</>
+              : myOffer === challenge.stake
+              ? <><Check className="inline mr-2 h-5 w-5" /> Accept {fmt(myOffer)} {challenge.token}</>
+              : <><ArrowRight className="inline mr-2 h-5 w-5" /> Offer {fmt(myOffer)} {challenge.token}</>
+            }
+          </button>
+        </>
+      )}
+      <p className="text-[10px] text-center text-muted-foreground/60 pt-1">
+        {isNegotiationLocked
+          ? "Stakes are fixed until both players have 10+ games played."
+          : "First offer the creator accepts gets the lobby slot. Others are notified if it fills up."}
+      </p>
+    </div>
+  </div>
+)}
 
         {/* Other challengers list */}
         {!isCreatorView && offers.length > 0 && pageState !== "countered" && (

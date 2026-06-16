@@ -365,7 +365,6 @@ export default function QuestDetailsPage() {
   const searchParams = useSearchParams();
   const refCode = searchParams.get("ref");
   const { address: userWalletAddress, provider: walletProvider } = useWallet();
-  // Add this hook inside both files (or extract to a shared hooks file)
   const [leaderboardLimit, setLeaderboardLimit] = useState(50);
   
   const rawSlug = (params.addresss || params.faucetAddress) as string | undefined;
@@ -1047,7 +1046,6 @@ const claimStatus = useMemo(() => {
 return { canCheckin: false, message: `Next check-in in ${hours}h ${minutes}m ${seconds}s` };
 };
 const [, forceUpdate] = useState(0);
-// Add this near your other state variables
   useEffect(() => {
     if (showSubmitModal && selectedTask) {
       sessionStorage.setItem(`modal_open_time_${selectedTask.id}`, Date.now().toString());
@@ -2846,7 +2844,6 @@ const handleAdminWithdraw = async () => {
                                       checkinStatus.canCheckin ? (
                                         <Button
                                           onClick={handleDailyCheckin}
-                                          // Add !creatorSubscribed to disabled conditions
                                           disabled={isCheckingIn || !checkinStatus.canCheckin || !questTiming.isLive || !creatorSubscribed}
                                           className="w-full"
                                         >

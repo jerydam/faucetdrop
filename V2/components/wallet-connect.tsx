@@ -165,11 +165,15 @@ export function WalletConnectButton({ className }: Props) {
                 </AvatarFallback>
               </Avatar>
               {/* Provider badge */}
-              {walletType === "external" ? "bg-blue-500" : "bg-emerald-500" && (
-                <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-blue-500 rounded-full border border-background flex items-center justify-center">
-                  <Wallet className="h-2 w-2 text-white" />
-                </div>
-              )}
+              {walletType === "external" ? (
+              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-blue-500 rounded-full border border-background flex items-center justify-center">
+                <Wallet className="h-2 w-2 text-white" />
+              </div>
+            ) : walletType === "embedded" ? (
+              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 bg-emerald-500 rounded-full border border-background flex items-center justify-center">
+                <Wallet className="h-2 w-2 text-white" />
+              </div>
+            ) : null}
             </div>
             <span className="hidden sm:block text-xs font-medium max-w-[100px] truncate">
               {loading ? "…" : displayName}

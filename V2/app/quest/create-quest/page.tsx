@@ -181,12 +181,10 @@ function QuestCreatorContent() {
     const [showDraftSuccessModal, setShowDraftSuccessModal] = useState(false)
     const [isDemoMode, setIsDemoMode] = useState(false)
     const [showPostPhase1Modal, setShowPostPhase1Modal] = useState(false)
-    // Add this EFFECT to fetch the profile
 
 const [isSubscribed, setIsSubscribed] = useState(false)
 
-// Fetch subscription status from your existing API
-// Replace the existing subscription useEffect with this:
+
 useEffect(() => {
     if (!address) return
     
@@ -350,8 +348,8 @@ useEffect(() => {
 
         fetchDraft()
     }, [draftId])
-    // Add this function inside QuestCreatorContent
-const saveDraftProgress = async (quest: any) => {
+
+    const saveDraftProgress = async (quest: any) => {
     if (!quest.faucetAddress || !address) return;
 
     try {

@@ -14,10 +14,10 @@ const inter = Inter({ subsets: ['latin'] })
 // Metadata works flawlessly now because this is a Server Component
 export const metadata: Metadata = {
   title: {
-    default: 'FaucetDrops - Automated Onchain Reward and Engagement Platform',
+    default: 'FaucetDrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution',
     template: '%s | FaucetDrops'
   },
-  description: 'Automated onchain reward and engagement platform 💧. Quest, Quiz, and distribute tokens effortlessly across multiple chains.',
+  description: 'The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution 💧. Quest, Quiz, and distribute rewards effortlessly across multiple chains.',
   keywords: ['token drops', 'crypto faucet', 'onchain rewards', 'web3 engagement', 'token distribution', 'blockchain rewards', 'quests', 'quizzes'],
   authors: [{ name: 'FaucetDrops' }],
   metadataBase: new URL('https://faucetdrops.io'),
@@ -28,21 +28,21 @@ export const metadata: Metadata = {
     type: 'website',
     url: 'https://faucetdrops.io/',
     siteName: 'FaucetDrops',
-    title: 'FaucetDrops - Automated Onchain Reward and Engagement Platform',
-    description: 'Automated onchain reward and engagement platform 💧. Distribute tokens and drive growth through Quests and Quizzes.',
+    title: 'FaucetDrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution',
+    description: 'The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution 💧. Distribute rewards and drive growth through Quests and Quizzes.',
     images: [
       {
         url: '/opengraph-image',
         width: 1200,
         height: 630,
-        alt: 'FaucetDrops - Automated onchain reward and engagement platform',
+        alt: 'FaucetDrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'FaucetDrops - Automated Onchain Reward and Engagement Platform',
-    description: 'Automated onchain reward and engagement platform 💧. Distribute tokens and drive growth through Quests and Quizzes.',
+    title: 'FaucetDrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution',
+    description: 'The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution 💧. Distribute rewards and drive growth through Quests and Quizzes.',
     images: ['/opengraph-image'],
   },
 }

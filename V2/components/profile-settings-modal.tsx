@@ -410,7 +410,7 @@ export function ProfileSettingsModal() {
   } = useWallet()
 
   const router        = useRouter()
-  const walletApiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+  const walletApiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
   const { openPopup } = useOAuthPopup(walletApiBase)
 
   const [isOpen,          setIsOpen]          = useState(false)

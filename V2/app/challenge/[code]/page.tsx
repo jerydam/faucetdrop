@@ -47,7 +47,7 @@ function getWsBaseUrl(): string {
 
 const CELO_CHAIN_ID    = 42220;
 const QUIZ_HUB_ADDRESS = (process.env.NEXT_PUBLIC_STAKE_CONTRACT ?? "0x9088298cd07BE0cAA1e256d3f3761313e1a1447E") as `0x${string}`;
-const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0xF8F6D74E61A0FC2dd2feCd41dE384ba2fbf91b9D") as `0x${string}`;
+const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x1e1FB392315B248f24Bfc35742B95d5F45e85906") as `0x${string}`;
 const DROPS_DECIMALS   = 18;
 const DROPS_SYMBOL     = "DROPS";
 
@@ -653,7 +653,7 @@ export default function ChallengePage() {
       const burnRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/confirm-burn`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: userWalletAddress, txHash }),
+        body: JSON.stringify({ walletAddress: userWalletAddress, txHash, success: true,  }),
       });
       const burnData = await burnRes.json();
       toast.dismiss("confirm-burn");
@@ -793,7 +793,94 @@ export default function ChallengePage() {
 
   const allVerified = players.length >= 2 && players.every(p => p.txVerified);
   const allReady    = allVerified && players.every(p => p.ready);
+  if (phase === "countdown") {
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+        {currentRoundName}
+      </p>
+      <div className="text-7xl font-black text-primary">{countdownVal}</div>
+    </div>
+  );
+}
 
+if (phase === "question" || phase === "reveal") {
+  const opts = currentQ?.options ?? [];
+  const letters = ["A", "B", "C", "D"];
+  const showResult = phase === "reveal";
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <LinearTimer seconds={timeLeft} total={currentQ?.timeLimit ?? 1} />
+      <div className="max-w-2xl mx-auto w-full px-4 py-6 flex-1 flex flex-col gap-6">
+        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          <span>{currentRoundName}</span>
+          <span>Question {(currentQ?.questionIndex ?? 0) + 1}/{currentQ?.totalQuestions}</span>
+        </div>
+
+        <h2 className="text-xl font-black text-foreground text-center py-4">
+          {currentQ?.question}
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {opts.map((opt, i) => {
+            const style      = OPTION_STYLES[letters[i] ?? "A"];
+            const isSelected = selectedId === opt.id;
+            const isCorrect  = revealCorrectId === opt.id;
+            return (
+              <button
+                key={opt.id}
+                disabled={hasSubmitted || showResult}
+                onClick={() => handleSelectAnswer(opt.id)}
+                className={cn(
+                  "rounded-2xl px-4 py-5 text-left font-bold text-white flex items-center gap-3 transition-all disabled:cursor-not-allowed",
+                  style.bg,
+                  isSelected && !showResult && `ring-4 ${style.ring}`,
+                  showResult && isCorrect && "ring-4 ring-emerald-300",
+                  showResult && isSelected && !isCorrect && "ring-4 ring-red-300 opacity-60",
+                  showResult && !isSelected && !isCorrect && "opacity-40",
+                )}
+              >
+                <span className="text-xl">{style.shape}</span>
+                <span className="flex-1">{opt.text}</span>
+                {showResult && isCorrect && <Check className="h-5 w-5 shrink-0" />}
+                {showResult && isSelected && !isCorrect && <X className="h-5 w-5 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+
+        {showResult && (
+          <div className="bg-card border-2 border-border rounded-2xl p-4 text-center space-y-1">
+            <p className="text-sm font-bold text-foreground">
+              {questionScores[myWallet] > 0 ? `+${questionScores[myWallet]} points!` : "No points this round"}
+            </p>
+            <p className="text-xs text-muted-foreground">Total: {totalScores[myWallet] ?? 0} pts</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+if (phase === "round_end") {
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
+      <h2 className="text-2xl font-black text-foreground">{currentRoundName} complete</h2>
+      <div className="bg-card border-2 border-border rounded-3xl overflow-hidden w-full max-w-sm divide-y divide-border">
+        {Object.entries(roundScores).map(([wallet, pts]) => (
+          <div key={wallet} className="flex items-center justify-between px-5 py-3">
+            <span className="font-bold text-sm text-foreground">
+              {wallet.toLowerCase() === myWallet
+                ? "You"
+                : players.find(p => p.walletAddress.toLowerCase() === wallet.toLowerCase())?.username ?? "Opponent"}
+            </span>
+            <span className="font-black text-foreground tabular-nums">{pts} pts</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
   // ── FIX 4: game_over phase — render claim button when myClaim exists ────────
   if (phase === "game_over") {
     const iWon = winner && winner.toLowerCase() === myWallet;
@@ -923,6 +1010,73 @@ export default function ChallengePage() {
         <div className="max-w-4xl mx-auto w-full px-4 py-6 pb-32 space-y-5">
           {hasJoined && (
             <div className="space-y-3 pt-2">
+
+                        {/* Player roster */}
+          <div className="bg-card border-2 border-border rounded-3xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-black text-foreground text-sm">
+                  Players ({players.length}/2)
+                </h3>
+              </div>
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {isRefreshing
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <RefreshCw className="h-3.5 w-3.5" />
+                }
+              </button>
+            </div>
+            <div className="divide-y divide-border">
+              {players.length === 0 ? (
+                <div className="px-5 py-8 text-center text-muted-foreground text-sm">
+                  Waiting for players to join…
+                </div>
+              ) : players.map(p => (
+                <div key={p.walletAddress} className="flex items-center gap-3 px-5 py-3">
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarImage src={p.avatarUrl} />
+                    <AvatarFallback className="text-xs font-bold bg-muted">
+                      {p.username.slice(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-sm text-foreground truncate">
+                        {p.username}
+                      </span>
+                      {p.walletAddress.toLowerCase() === myWallet && (
+                        <span className="text-[10px] text-muted-foreground">(you)</span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {p.walletAddress.slice(0, 6)}…{p.walletAddress.slice(-4)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {p.txVerified ? (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        <Check className="h-2.5 w-2.5" /> Staked
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        Pending
+                      </span>
+                    )}
+                    {p.ready && (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                        <Zap className="h-2.5 w-2.5" /> Ready
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
               {!myTxVerified && (
                 <>
                   <Button

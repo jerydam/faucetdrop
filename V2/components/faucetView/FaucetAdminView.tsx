@@ -577,9 +577,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         const conn = createSolanaConnection();
         await solanaUpdateFaucetName(conn, activeSolanaWallet, faucetAddress, newFaucetName);
       } else {
-        if (!provider || !chainId) return;
+        if (!chainId) { toast.error("No chain selected"); return; }
         await updateFaucetName(
-          provider as BrowserProvider,
           faucetAddress,
           newFaucetName,
           BigInt(chainId),
@@ -610,9 +609,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         const conn = createSolanaConnection();
         await solanaDeleteFaucet(conn, activeSolanaWallet, faucetAddress);
       } else {
-        if (!provider || !chainId) return;
+        if (!chainId) { toast.error("No chain selected"); return; }
         await deleteFaucet(
-          provider as BrowserProvider,
+          
           faucetAddress,
           BigInt(chainId),
           BigInt(Number(selectedNetwork.chainId)),
@@ -662,10 +661,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         const amount = toSolanaUnits(adjustedFundAmount, tokenDecimals);
         await solanaFundFaucet(conn, activeSolanaWallet, faucetAddress, amount);
       } else {
-        if (!provider || !chainId) return;
-        const amount = parseUnits(adjustedFundAmount, tokenDecimals);
-        await fundFaucet(
-          provider as BrowserProvider,
+      if (!chainId) { toast.error("No chain selected"); return; }
+      const amount = parseUnits(adjustedFundAmount, tokenDecimals);
+      await fundFaucet(
           faucetAddress,
           amount,
           faucetDetails.isEther,
@@ -700,9 +698,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         const amount = toSolanaUnits(withdrawAmount, tokenDecimals);
         await solanaWithdrawFaucet(conn, activeSolanaWallet, faucetAddress, amount);
       } else {
-        if (!provider || !chainId) return;
+        if (!chainId) { toast.error("No chain selected"); return; }
         await withdrawTokens(
-          provider as BrowserProvider,
+          
           faucetAddress,
           parseUnits(withdrawAmount, tokenDecimals),
           BigInt(chainId),
@@ -821,11 +819,11 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
             endTimestamp
           );
         } else {
-          if (!provider || !chainId) return;
+          if (!chainId) { toast.error("No chain selected"); return; }
           const claimAmountBN =
             faucetType === "custom" ? BigInt(0) : parseUnits(claimAmount, tokenDecimals);
           await setClaimParameters(
-            provider as BrowserProvider,
+            
             faucetAddress,
             claimAmountBN,
             startTimestamp,
@@ -916,9 +914,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           await batchRemoveFromWhitelist(conn, activeSolanaWallet, faucetAddress, addresses);
         }
       } else {
-        if (!provider || !chainId) return;
+        if (!chainId) { toast.error("No chain selected"); return; }
         await setWhitelistBatch(
-          provider as BrowserProvider,
+          
           faucetAddress,
           addresses,
           isWhitelistEnabled,
@@ -956,9 +954,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
       }));
       await batchAddToWhitelist(conn, activeSolanaWallet, faucetAddress, entries);
     } else {
-      if (!provider || !chainId) return;
+      if (!chainId) { toast.error("No chain selected"); return; }
       await setCustomClaimAmountsBatch(
-        provider as BrowserProvider,
+        
         faucetAddress,
         addresses,
         amounts,
@@ -994,9 +992,9 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           throw new Error(err.detail || "Failed to reset claims");
         }
       } else {
-        if (!provider || !chainId) return;
+        if (!chainId) { toast.error("No chain selected"); return; }
         await resetAllClaims(
-          provider as BrowserProvider,
+          
           faucetAddress,
           BigInt(chainId),
           BigInt(Number(selectedNetwork.chainId)),
@@ -1045,10 +1043,10 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           toast.success(`${newAdminAddress} removed from admins`);
         }
       } else {
-        if (!provider || !chainId) return;
+        if (!chainId) { toast.error("No chain selected"); return; }
         if (isAddingAdmin) {
           await addAdmin(
-            provider as BrowserProvider,
+            
             faucetAddress,
             newAdminAddress,
             BigInt(chainId),
@@ -1057,8 +1055,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           );
           toast.success(`${newAdminAddress} added as admin`);
         } else {
-          removeAdmin(
-            provider as BrowserProvider,
+          await removeAdmin(
+            
             faucetAddress,
             newAdminAddress,
             BigInt(chainId),

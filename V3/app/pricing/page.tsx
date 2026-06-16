@@ -166,7 +166,7 @@ export default function PricingPage() {
             color: "#0052FF",
           }}
         >
-           Automated onchain reward and engagement platform 💧
+           The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution 💧
         </div>
 
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.08] tracking-[-0.03em] mb-5 font-sans">

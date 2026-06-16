@@ -10,8 +10,6 @@ import { NetworkProvider } from "@/hooks/use-network"
 import { WalletProvider } from "@/components/wallet-provider"
 import { PrivyProvider } from "@privy-io/react-auth"
 import { Footer } from "@/components/footer"
-// Add this import at the top
-import { LuminaProvider } from "@jerydam/lumina-sdk"
 import { SubscriptionModalProvider } from "@/components/subscribe"
 import { useVisitTracker } from "@/hooks/use-visit-tracker"
 import { Providers } from "@/components/privyProvider"
@@ -74,11 +72,11 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
 
         {/* Primary Meta Tags */}
-        <title>FaucetDrops - Automated Onchain Reward and Engagement Platform</title>
-        <meta name="title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
+        <title>FaucetDrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution</title>
+        <meta name="title" content="app.faucetdrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution" />
         <meta
           name="description"
-          content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains."
+          content="The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution 💧. Distribute rewards effortlessly across multiple chains."
         />
         <meta
           name="talentapp:project_verification"
@@ -89,10 +87,10 @@ export default function RootLayout({
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://app.faucetdrops.io/" />
         <meta property="og:site_name" content="app.faucetdrops" />
-        <meta property="og:title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
+        <meta property="og:title" content="app.faucetdrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution" />
         <meta
           property="og:description"
-          content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains."
+          content="The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution 💧. Distribute rewards effortlessly across multiple chains."
         />
         <meta property="og:image" content="https://app.faucetdrops.io/opengraph-image" />
         <meta property="og:image:secure_url" content="https://app.faucetdrops.io/opengraph-image" />
@@ -101,21 +99,21 @@ export default function RootLayout({
         <meta property="og:image:height" content="630" />
         <meta
           property="og:image:alt"
-          content="app.faucetdrops - Automated onchain reward and engagement platform"
+          content="app.faucetdrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution"
         />
 
         {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:url" content="https://app.faucetdrops.io/" />
-        <meta name="twitter:title" content="app.faucetdrops - Automated Onchain Reward and Engagement Platform" />
+        <meta name="twitter:title" content="app.faucetdrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution" />
         <meta
           name="twitter:description"
-          content="Automated onchain reward and engagement platform 💧. Distribute tokens effortlessly across multiple chains."
+          content="The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution 💧. Distribute rewards effortlessly across multiple chains."
         />
         <meta name="twitter:image" content="https://app.faucetdrops.io/opengraph-image" />
         <meta
           name="twitter:image:alt"
-          content="app.faucetdrops - Automated onchain reward and engagement platform"
+          content="app.faucetdrops - The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution"
         />
 
         {/* Additional SEO */}

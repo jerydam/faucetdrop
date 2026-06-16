@@ -109,7 +109,7 @@ export const Footer: React.FC<FooterProps> = ({ className = "" }) => {
             <div className="hidden md:block w-px h-6 bg-slate-300 dark:bg-slate-600"></div>
             
             <span className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-              Automated onchain reward and engagement platform
+              The all-in-one stack for your Web3 User Growth, Engagement and Token Distribution
             </span>
           </div>
 

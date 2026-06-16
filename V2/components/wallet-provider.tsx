@@ -76,7 +76,7 @@ getActiveSigner:   (chainId?: number) => Promise<JsonRpcSigner | Wallet | null>
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = "wallet_session"
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -390,14 +390,29 @@ const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
   }
 }, [session?.token, session?.walletType])
 const getActiveSigner = useCallback(async (targetChainId?: number) => {
-  // External wallet — already has injected signer
-  if (session?.walletType === "external" && signer) return signer
+  // External wallet — rebuild provider if signer is stale/null
+  if (session?.walletType === "external") {
+    if (signer) return signer
+
+    // Signer is null but wallet may still be connected — try rebuilding
+    const raw = rawProviderRef.current
+    if (raw) {
+      const result = await buildProvider(raw)
+      if (result) {
+        setProvider(result.provider)
+        setSigner(result.signer)
+        return result.signer
+      }
+    }
+    return null
+  }
 
   // Embedded wallet — fetch private key and build local signer
   const cid = targetChainId ?? chainId
   if (!cid) return null
   return getEmbeddedSigner(cid)
 }, [session?.walletType, signer, chainId, getEmbeddedSigner])
+
   // ── Connect social (embedded wallet via backend) ──────────────────────────
   const connectSocial = useCallback(async (socialProvider: SocialProvider, credential: string) => {
     setIsConnecting(true)

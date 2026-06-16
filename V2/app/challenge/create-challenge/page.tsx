@@ -36,11 +36,11 @@ import { QUIZ_HUB_ABI } from "@/lib/abis";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 const QUIZ_HUB_ADDRESS = (
-  process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0x349A019b4721DDF9C4E4CCDE46dd048632A41F8F"
+  process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0x787b3f0916Aad56ba90a9c4638E4f748a1288551"
 ) as `0x${string}`;
 
 // DROPS token on Celo — 18 decimals
-const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0xF8F6D74E61A0FC2dd2feCd41dE384ba2fbf91b9D") as `0x${string}`;
+const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x1e1FB392315B248f24Bfc35742B95d5F45e85906") as `0x${string}`;
 const DROPS_DECIMALS   = 18;
 const DROPS_SYMBOL     = "DROPS";
 const CELO_CHAIN_ID    = 42220;
@@ -135,6 +135,8 @@ export default function CreateChallengePage() {
   const [wizardStep, setWizardStep]   = useState(0);
   const [txPhase, setTxPhase]         = useState<TxPhase>("idle");
   const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [totalDuels, setTotalDuels] = useState<number>(0);
+  const negotiationLocked = totalDuels < 10;
 
   // Step 0 — Topic & Visibility
   const [topic, setTopic]                     = useState("");
@@ -160,12 +162,18 @@ export default function CreateChallengePage() {
 
   // Load creator profile
   useEffect(() => {
-    if (!userWalletAddress) return;
-    fetch(`${API_BASE_URL}/api/players/${userWalletAddress}`)
-      .then(r => r.json())
-      .then(d => { if (d.username) setCreatorUsername(d.username); })
-      .catch(() => {});
-  }, [userWalletAddress]);
+  if (!userWalletAddress) return;
+  fetch(`${API_BASE_URL}/api/drops/balance/${userWalletAddress}`)
+    .then(r => r.json())
+    .then(d => {
+      setTotalDuels(d.totalDuels ?? 0);
+    })
+    .catch(() => {});
+}, [userWalletAddress]);
+
+useEffect(() => {
+  if (negotiationLocked) setStakeAmount(String(MIN_STAKE));
+}, [negotiationLocked]);
 
   const lookupUsername = async (username: string) => {
     if (!username.trim() || username.length < 3) return;
@@ -201,115 +209,163 @@ export default function CreateChallengePage() {
   // ── On-chain: createQuiz(quizId, stakeAmount) ──────────────────────────────
   // New QuizHub v2: args are (bytes32 quizId, uint256 stakeAmount)
   // No token address — DROPS-only is enforced by the contract.
-  const createQuizOnChain = async (code: string, stakeDROPS: number): Promise<void> => {
-    if (!window.ethereum) throw new Error("No wallet found. Please open inside MiniPay.");
-    await window.ethereum.request({ method: "eth_requestAccounts" });
+  const createQuizOnChain = async (code: string, stakeDROPS: number): Promise<string> => {
+  if (!window.ethereum) throw new Error("No wallet found.")
+  await window.ethereum.request({ method: "eth_requestAccounts" })
 
-    const walletClient = createWalletClient({
-      chain: celo,
-      transport: custom(window.ethereum),
-    });
-    const publicClient = createPublicClient({
-      chain: celo,
-      transport: http("https://forno.celo.org"),
-    });
+  const walletClient = createWalletClient({ chain: celo, transport: custom(window.ethereum) })
+  const publicClient = createPublicClient({ chain: celo, transport: http("https://forno.celo.org") })
 
-    const [account] = await walletClient.getAddresses();
-    const quizId    = deriveQuizId(code);
-    const stakeWei  = parseUnits(stakeDROPS.toString(), DROPS_DECIMALS);
+  const [account] = await walletClient.getAddresses()
+  const quizId    = deriveQuizId(code)
 
-    setTxPhase("creating");
-    toast.info("Confirm quiz creation in your wallet…");
+  setTxPhase("creating")
+  toast.info("Confirm quiz creation in your wallet…")
+
+  // Give MetaMask time to fully initialize before the tx prompt opens
+  await new Promise(r => setTimeout(r, 400))
+
+  const txHash = await walletClient.writeContract({
+    address:      QUIZ_HUB_ADDRESS,
+    abi:          QUIZ_HUB_ABI,
+    functionName: "createQuiz",
+    args:         [quizId],
+    account,
+    chain: celo,
+  })
+
+  toast.loading("Waiting for confirmation…", { id: "create-confirm" })
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
+
+  if (receipt.status !== "success") {
+    throw new Error("Transaction reverted on-chain")
+  }
+
+  toast.success("Quiz created on-chain! ⛓️✅", { id: "create-confirm" })
+  return receipt.transactionHash
+}
+
+  const handleCreate = async () => {
+  if (!userWalletAddress || !topic.trim() || !stakeAmount) {
+    toast.error("Please fill all required fields")
+    return
+  }
+
+  const stake = parseFloat(stakeAmount)
+  if (isNaN(stake) || stake < MIN_STAKE) {
+    toast.error(`Minimum stake is ${MIN_STAKE} ${DROPS_SYMBOL}`)
+    return
+  }
+
+  try {
+    await ensureCorrectNetwork(CELO_CHAIN_ID)
+  } catch {
+    return
+  }
+
+  setTxPhase("backend")
+  let code: string | null = null
+
+  try {
+    // 1. Register username
+    if (creatorUsername) {
+      await fetch(
+        `${API_BASE_URL}/api/players/register?wallet=${userWalletAddress}&username=${creatorUsername}`,
+        { method: "POST" },
+      ).catch(() => {})
+    }
+
+    // 2. Create challenge backend — stored as 'pending', NOT joinable yet
+    const res = await fetch(`${API_BASE_URL}/api/challenge/create`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        topic:           topic.trim(),
+        questionCount,
+        creatorAddress:  userWalletAddress,
+        creatorUsername: creatorUsername || userWalletAddress.slice(0, 8),
+        stakeAmount:     stake,
+        tokenSymbol:     DROPS_SYMBOL,
+        chainId:         CELO_CHAIN_ID,
+        isPublic,
+        inviteWallet:    !isPublic && inviteWallet.trim() ? inviteWallet.trim() : undefined,
+      }),
+    })
+
+    const data = await res.json()
+    if (!data.success) throw new Error(data.detail ?? "Challenge creation failed")
+    code = data.code
+
+    // 3. On-chain tx — user can reject here
+    setTxPhase("creating")
+    await new Promise(r => setTimeout(r, 400))
+
+    const walletClient = createWalletClient({ chain: celo, transport: custom(window.ethereum!) })
+    const publicClient = createPublicClient({ chain: celo, transport: http("https://forno.celo.org") })
+    const [account]    = await walletClient.getAddresses()
+    const quizId       = deriveQuizId(code)
+
+    toast.info("Confirm quiz creation in your wallet…")
 
     const txHash = await walletClient.writeContract({
       address:      QUIZ_HUB_ADDRESS,
       abi:          QUIZ_HUB_ABI,
       functionName: "createQuiz",
-      args:         [quizId],   // (bytes32, uint256) — no token address
+      args:         [quizId],
       account,
-      chain: celo,
-    });
+      chain:        celo,
+    })
 
-    toast.loading("Waiting for confirmation…", { id: "create-confirm" });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-    toast.success("Quiz created on-chain! ⛓️✅", { id: "create-confirm" });
+    toast.loading("Waiting for on-chain confirmation…", { id: "create-confirm" })
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
 
-    try {
-      await fetch(`${API_BASE_URL}/api/challenge/${code}/on-chain-confirmed`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          creatorWallet: userWalletAddress,
-          txHash:        receipt.transactionHash,
-        }),
-      });
-    } catch (err) {
-      console.warn("[on-chain-confirmed] failed to notify:", err);
-    }
-  };
-
-  const handleCreate = async () => {
-    if (!userWalletAddress || !topic.trim() || !stakeAmount) {
-      toast.error("Please fill all required fields");
-      return;
+    // 4. If tx reverted, clean up and bail
+    if (receipt.status !== "success") {
+      throw new Error("Transaction reverted on-chain")
     }
 
-    const stake = parseFloat(stakeAmount);
-    if (isNaN(stake) || stake < MIN_STAKE) {
-      toast.error(`Minimum stake is ${MIN_STAKE} ${DROPS_SYMBOL}`);
-      return;
+    toast.success("Quiz created on-chain! ⛓️✅", { id: "create-confirm" })
+
+    // 5. Only NOW tell the backend to activate the challenge
+    const confirmRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/on-chain-confirmed`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        creatorWallet: userWalletAddress,
+        txHash:        receipt.transactionHash,
+      }),
+    })
+
+    if (!confirmRes.ok) {
+      const err = await confirmRes.json()
+      throw new Error(err.detail ?? "Failed to confirm on-chain")
     }
 
-    try {
-      await ensureCorrectNetwork(CELO_CHAIN_ID);
-    } catch {
-      return;
-    }
+    // 6. Only reaches here if everything succeeded
+    setTxPhase("done")
+    setCreatedCode(code)
+    toast.success(`🎉 Challenge live! Code: ${code}`)
 
-    setTxPhase("backend");
+  } catch (err: any) {
+    setTxPhase("idle")
+    toast.dismiss("create-confirm")
 
-    try {
-      if (creatorUsername) {
-        await fetch(
-          `${API_BASE_URL}/api/players/register?wallet=${userWalletAddress}&username=${creatorUsername}`,
-          { method: "POST" },
-        ).catch(() => {});
-      }
-
-      const res = await fetch(`${API_BASE_URL}/api/challenge/create`, {
+    // Clean up the dangling backend record if tx was rejected or reverted
+    if (code) {
+      fetch(`${API_BASE_URL}/api/challenge/${code}/cancel`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic:           topic.trim(),
-          questionCount,
-          creatorAddress:  userWalletAddress,
-          creatorUsername: creatorUsername || userWalletAddress.slice(0, 8),
-          stakeAmount:     stake,
-          tokenSymbol:     DROPS_SYMBOL,   // always DROPS
-          chainId:         CELO_CHAIN_ID,
-          isPublic,
-          inviteWallet:    !isPublic && inviteWallet.trim() ? inviteWallet.trim() : undefined,
-        }),
-      });
-
-      const data = await res.json();
-      if (!data.success) throw new Error(data.detail ?? "Challenge creation failed");
-
-      const code: string = data.code;
-      await createQuizOnChain(code, stake);
-
-      setTxPhase("done");
-      setCreatedCode(code);
-      toast.success(`🎉 Challenge live! Code: ${code}`);
-    } catch (err: any) {
-      setTxPhase("idle");
-      if (err?.code === 4001 || err?.code === "ACTION_REJECTED") {
-        toast.error("Transaction rejected — challenge not created.");
-        return;
-      }
-      toast.error(`❌ ${err?.reason ?? err?.message ?? "Unknown error"}`);
+        body: JSON.stringify({ creatorWallet: userWalletAddress, reason: "tx_rejected" }),
+      }).catch(() => {})
     }
-  };
+
+    if (err?.code === 4001 || err?.code === "ACTION_REJECTED" || err?.message?.includes("rejected")) {
+      toast.error("Transaction rejected — challenge not created.")
+      return
+    }
+    toast.error(`❌ ${err?.reason ?? err?.message ?? "Unknown error"}`)
+  }
+}
 
   // ── Render: created ────────────────────────────────────────────────────────
 
@@ -471,53 +527,74 @@ export default function CreateChallengePage() {
   // ── Step 1: Stake ──────────────────────────────────────────────────────────
 
   const renderStepStake = () => {
-    const amt    = parseFloat(stakeAmount);
-    const belowMin = stakeAmount && !isNaN(amt) && amt > 0 && amt < MIN_STAKE;
-    const pool   = !isNaN(amt) && amt >= MIN_STAKE ? (amt * 2).toFixed(0) : "—";
+  const amt      = parseFloat(stakeAmount);
+  const belowMin = stakeAmount && !isNaN(amt) && amt > 0 && amt < MIN_STAKE;
+  const pool     = !isNaN(amt) && amt >= MIN_STAKE ? (amt * 2).toFixed(0) : "—";
 
-    return (
-      <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-        <div className="text-center space-y-2 pb-2">
-          <div className="text-5xl">💰</div>
-          <h2 className="text-xl font-black text-foreground">Set the stake</h2>
-          <p className="text-sm text-muted-foreground">
-            Both players stake this amount. Winner claim the pool
-          </p>
-        </div>
+  return (
+    <div className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
+      <div className="text-center space-y-2 pb-2">
+        <div className="text-5xl">💰</div>
+        <h2 className="text-xl font-black text-foreground">Set the stake</h2>
+        <p className="text-sm text-muted-foreground">
+          Both players stake this amount. Winner claims the pool.
+        </p>
+      </div>
 
-        {/* DROPS badge */}
-        <div className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-primary/5 border-2 border-primary/20 w-fit mx-auto">
-          <Flame className="h-4 w-4 text-primary" />
-          <span className="text-sm font-black text-primary">DROPS token only</span>
-        </div>
+      <div className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-primary/5 border-2 border-primary/20 w-fit mx-auto">
+        <Flame className="h-4 w-4 text-primary" />
+        <span className="text-sm font-black text-primary">DROPS token only</span>
+      </div>
 
-        <div className="space-y-2">
-          <Label className="text-xs font-black text-muted-foreground uppercase tracking-wider">
-            Amount per player{" "}
-            <span className="text-destructive">(min {MIN_STAKE} DROPS)</span>
-          </Label>
-          <div className="relative">
-            <Input
-              type="number"
-              value={stakeAmount}
-              onChange={e => setStakeAmount(e.target.value)}
-              placeholder="0"
-              min={MIN_STAKE}
-              step="1"
-              className="h-14 text-2xl font-black font-mono rounded-xl pr-24 border-2 text-center"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-black text-muted-foreground">
-              DROPS
-            </span>
-          </div>
-          {belowMin && (
-            <p className="text-xs text-destructive font-bold">
-              Minimum stake is {MIN_STAKE} DROPS
+      {/* NEW: locked banner */}
+      {negotiationLocked && (
+        <div className="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-amber-500/10 border-2 border-amber-400/40 text-xs text-amber-700 dark:text-amber-300">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-black">Stake locked at {MIN_STAKE} DROPS</p>
+            <p className="mt-0.5 text-amber-600 dark:text-amber-400">
+              Play {10 - totalDuels} more game{10 - totalDuels !== 1 ? "s" : ""} to unlock custom stakes and negotiation.
             </p>
-          )}
+          </div>
         </div>
+      )}
 
-        {/* Quick picks */}
+      <div className="space-y-2">
+        <Label className="text-xs font-black text-muted-foreground uppercase tracking-wider">
+          Amount per player{" "}
+          {negotiationLocked
+            ? <span className="text-amber-500">(locked at {MIN_STAKE} DROPS)</span>
+            : <span className="text-destructive">(min {MIN_STAKE} DROPS)</span>
+          }
+        </Label>
+        <div className="relative">
+          <Input
+            type="number"
+            value={stakeAmount}
+            onChange={e => { if (!negotiationLocked) setStakeAmount(e.target.value); }}
+            readOnly={negotiationLocked}
+            placeholder="0"
+            min={MIN_STAKE}
+            max={negotiationLocked ? MIN_STAKE : undefined}
+            step="1"
+            className={cn(
+              "h-14 text-2xl font-black font-mono rounded-xl pr-24 border-2 text-center",
+              negotiationLocked && "opacity-60 cursor-not-allowed bg-muted",
+            )}
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-black text-muted-foreground">
+            DROPS
+          </span>
+        </div>
+        {belowMin && !negotiationLocked && (
+          <p className="text-xs text-destructive font-bold">
+            Minimum stake is {MIN_STAKE} DROPS
+          </p>
+        )}
+      </div>
+
+      {/* Quick picks — hidden when locked */}
+      {!negotiationLocked && (
         <div className="grid grid-cols-4 gap-2">
           {[10, 25, 50, 100].map(v => (
             <button
@@ -534,18 +611,17 @@ export default function CreateChallengePage() {
             </button>
           ))}
         </div>
+      )}
 
-        {/* Pool preview */}
-        {!isNaN(amt) && amt >= MIN_STAKE && (
-          <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-muted/50 border border-border text-sm">
-            <span className="text-muted-foreground font-bold">Winner receives</span>
-            <span className="font-black text-foreground">{pool} DROPS</span>
-          </div>
-        )}
-      </div>
-    );
-  };
-
+      {!isNaN(amt) && amt >= MIN_STAKE && (
+        <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-muted/50 border border-border text-sm">
+          <span className="text-muted-foreground font-bold">Winner receives</span>
+          <span className="font-black text-foreground">{pool} DROPS</span>
+        </div>
+      )}
+    </div>
+  );
+};
   // ── Step 2: Launch ─────────────────────────────────────────────────────────
 
   const renderStepLaunch = () => (

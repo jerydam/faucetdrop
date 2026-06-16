@@ -1,78 +1,101 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useRef } from "react";
-import { useWallet } from "@/hooks/use-wallet"; // Adjust this import path if needed
+import React, {
+  createContext, useContext, useEffect, useState, useRef, useCallback,
+} from "react";
+import { useWallet } from "@/hooks/use-wallet";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-const WS_BASE  = API_BASE.replace(/^http/, "ws");
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetpay-backend.koyeb.app";
+const WS_BASE  = API_BASE.replace(/^https?/, (s) => s === "https" ? "wss" : "ws");
 
-// Create a context to hold our set of online wallets
 const PresenceContext = createContext<Set<string>>(new Set());
 
 export function PresenceProvider({ children }: { children: React.ReactNode }) {
   const { address } = useWallet();
   const [onlineSet, setOnlineSet] = useState<Set<string>>(new Set());
-  const wsRef = useRef<WebSocket | null>(null);
-  const addressRef = useRef<string | undefined>(address);
 
-  // Keep latest address available to the socket's handlers without
-  // forcing a reconnect every time the wallet value changes.
+  const wsRef        = useRef<WebSocket | null>(null);
+  const addressRef   = useRef<string | null>(null);
+  const retryTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingTimer    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const unmounted    = useRef(false);
+
+  // Keep addressRef in sync so callbacks always see the latest wallet
   useEffect(() => {
-    addressRef.current = address;
+    addressRef.current = address?.toLowerCase() ?? null;
+  }, [address]);
 
-    // If the socket is already open and we now have an address
-    // (or the address changed), send/re-send hello immediately.
+  const stopTimers = useCallback(() => {
+    if (retryTimer.current) { clearTimeout(retryTimer.current);   retryTimer.current = null; }
+    if (pingTimer.current)  { clearInterval(pingTimer.current);   pingTimer.current  = null; }
+  }, []);
+
+  const connect = useCallback(() => {
+    if (unmounted.current) return;
+    if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return; // already connecting/open
+
+    const ws = new WebSocket(`${WS_BASE}/ws/presence`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (unmounted.current) { ws.close(); return; }
+
+      // Announce ourselves if wallet is already known
+      if (addressRef.current) {
+        ws.send(JSON.stringify({ type: "hello", wallet: addressRef.current }));
+      }
+
+      // Keepalive ping every 20s so the connection doesn't idle out
+      stopTimers();
+      pingTimer.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 20_000);
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === "presence" && Array.isArray(msg.online)) {
+          setOnlineSet(new Set(msg.online.map((w: string) => w.toLowerCase())));
+        }
+      } catch {}
+    };
+
+    ws.onclose = () => {
+      stopTimers();
+      if (!unmounted.current) {
+        // Exponential-ish backoff: retry after 3s
+        retryTimer.current = setTimeout(connect, 3_000);
+      }
+    };
+
+    ws.onerror = () => {
+      ws.close(); // triggers onclose → retry
+    };
+  }, [stopTimers]);
+
+  // Re-announce when wallet changes (e.g. user connects wallet after page load)
+  useEffect(() => {
+    if (!address) return;
     const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN && address) {
-      ws.send(JSON.stringify({ type: "hello", wallet: address }));
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "hello", wallet: address.toLowerCase() }));
     }
   }, [address]);
 
+  // Mount / unmount
   useEffect(() => {
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let cancelled = false;
-
-    const connect = () => {
-      const ws = new WebSocket(`${WS_BASE}/ws/presence`);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        const current = addressRef.current;
-        if (current) {
-          ws.send(JSON.stringify({ type: "hello", wallet: current }));
-        }
-      };
-
-      ws.onmessage = (e) => {
-        try {
-          const msg = JSON.parse(e.data);
-          if (msg.type === "presence" && Array.isArray(msg.online)) {
-            setOnlineSet(new Set(msg.online.map((w: string) => w.toLowerCase())));
-          }
-        } catch {}
-      };
-
-      ws.onclose = () => {
-        if (cancelled) return;
-        // Reconnect after a short delay so presence keeps working
-        // through network blips / server restarts.
-        reconnectTimer = setTimeout(connect, 2000);
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-    };
-
+    unmounted.current = false;
     connect();
-
     return () => {
-      cancelled = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
+      unmounted.current = true;
+      stopTimers();
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, []); // Only set up the socket once per provider lifetime
+  }, [connect, stopTimers]);
 
   return (
     <PresenceContext.Provider value={onlineSet}>
@@ -81,5 +104,4 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Custom hook so any page can instantly grab the online list
 export const usePresence = () => useContext(PresenceContext);

@@ -1920,7 +1920,8 @@ export async function createQuizReward(
 
   try {
     const signer = await provider.getSigner();
-    const signerAddress = await signer.getAddress();
+    const signerAddress = await signer.getAddress()
+    const readProvider = signer.provider;
 
     const factory = new Contract(factoryAddress, QUIZ_FACTORY_ABI, signer);
 
@@ -2012,7 +2013,8 @@ export async function createQuestReward(
     const signer = "getSigner" in signerOrProvider && typeof signerOrProvider.getSigner === "function"
     ? await signerOrProvider.getSigner()
     : signerOrProvider
-    const signerAddress = await signer.getAddress();
+    const signerAddress = await signer.getAddress()
+    const readProvider = signer.provider;
 
     const factory = new Contract(factoryAddress, QUEST_FACTORY_ABI, signer);
 
@@ -2085,6 +2087,7 @@ export async function createFaucet(
   tokenAddress: string,
   chainId: bigint,
   factoryType: FactoryType,
+  signerOverride?: any  // ← accept signer directly
 ): Promise<string> {
   try {
     if (!name.trim()) throw new Error("Faucet name cannot be empty")
@@ -2093,8 +2096,8 @@ export async function createFaucet(
 
     const config = getFactoryConfig(factoryType)
 
-    // ── Works for both embedded and external wallets ──
-    const signer = await getActiveSigner(Number(chainId))
+    // Use passed signer, or fall back to registry
+    const signer = signerOverride ?? await getActiveSigner(Number(chainId))
 
     const factoryContract = new Contract(factoryAddress, config.abi, signer)
     const backendAddress = VALID_BACKEND_ADDRESS
@@ -2110,12 +2113,12 @@ export async function createFaucet(
     if (!receipt) throw new Error("Transaction receipt is null")
 
     const event = receipt.logs
-      .map((log) => {
+      .map((log: any) => {
         try {
           return factoryContract.interface.parseLog({ data: log.data, topics: log.topics as string[] })
         } catch { return null }
       })
-      .find((parsed) => parsed?.name === "FaucetCreated")
+      .find((parsed: any) => parsed?.name === "FaucetCreated")
 
     if (!event?.args?.faucet) throw new Error("Failed to retrieve faucet address from transaction")
     return event.args.faucet as string
@@ -2126,7 +2129,6 @@ export async function createFaucet(
 }
 
 export async function fundFaucet(
-  provider: BrowserProvider,
   faucetAddress: string,
   amount: bigint,
   isEther: boolean,
@@ -2139,8 +2141,8 @@ export async function fundFaucet(
   try {
     const signer = await getActiveSigner(Number(chainId))
     const signerAddress = await signer.getAddress()
-
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
+    const readProvider = signer.provider
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const isCelo = isCeloNetwork(chainId)
@@ -2206,7 +2208,6 @@ export async function fundFaucet(
 }
 
 export async function withdrawTokens(
-  provider: BrowserProvider,
   faucetAddress: string,
   amount: bigint,
   chainId: bigint,
@@ -2216,7 +2217,8 @@ export async function withdrawTokens(
   if (!checkNetwork(chainId, networkId)) throw new Error("Switch to the network to perform operation")
   try {
     const signer = await getActiveSigner(Number(chainId))
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
+    const readProvider = signer.provider
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const tx = await signer.sendTransaction({
@@ -2232,7 +2234,6 @@ export async function withdrawTokens(
 }
 
 export async function deleteFaucet(
-  provider: BrowserProvider,
   faucetAddress: string,
   chainId: bigint,
   networkId: bigint,
@@ -2242,11 +2243,12 @@ export async function deleteFaucet(
     if (!checkNetwork(chainId, networkId)) throw new Error("Switch to the correct network")
     const signer = await getActiveSigner(Number(chainId))
     const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucetAddress, signerAddress, faucetType)
+    const readProvider = signer.provider
+    const permissions = await checkPermissions(readProvider as any, faucetAddress, signerAddress, faucetType)
     if (permissions.isPaused) throw new Error("Faucet is paused and cannot be deleted")
     if (!permissions.isOwner && !permissions.isAdmin) throw new Error("Only owner or admin can delete")
 
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const tx = await faucetContract.deleteFaucet()
@@ -2262,7 +2264,7 @@ export async function deleteFaucet(
 }
 
 export async function addAdmin(
-  provider: BrowserProvider,
+  
   faucetAddress: string,
   adminAddress: string,
   chainId: bigint,
@@ -2274,10 +2276,11 @@ export async function addAdmin(
     if (!isAddress(adminAddress)) throw new Error("Invalid admin address")
     const signer = await getActiveSigner(Number(chainId))
     const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucetAddress, signerAddress, faucetType)
+    const readProvider = signer.provider
+    const permissions = await checkPermissions(readProvider as any, faucetAddress, signerAddress, faucetType)
     if (permissions.isPaused) throw new Error("Faucet is paused")
     if (!permissions.isOwner && !permissions.isAdmin) throw new Error("Only owner or admin can add admin")
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const tx = await signer.sendTransaction({
@@ -2294,7 +2297,7 @@ export async function addAdmin(
 }
 
 export async function removeAdmin(
-  provider: BrowserProvider,
+  
   faucetAddress: string,
   adminAddress: string,
   chainId: bigint,
@@ -2306,10 +2309,11 @@ export async function removeAdmin(
     if (!isAddress(adminAddress)) throw new Error("Invalid admin address")
     const signer = await getActiveSigner(Number(chainId))
     const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucetAddress, signerAddress, faucetType)
+    const readProvider = signer.provider
+    const permissions = await checkPermissions(readProvider as any, faucetAddress, signerAddress, faucetType)
     if (permissions.isPaused) throw new Error("Faucet is paused")
     if (!permissions.isOwner && !permissions.isAdmin) throw new Error("Only owner or admin can remove admin")
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const tx = await signer.sendTransaction({
@@ -2326,7 +2330,6 @@ export async function removeAdmin(
 }
 
 export async function setClaimParameters(
-  provider: BrowserProvider,
   faucetAddress: string,
   claimAmount: bigint,
   startTime: number,
@@ -2339,10 +2342,11 @@ export async function setClaimParameters(
   try {
     const signer = await getActiveSigner(Number(chainId))
     const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucetAddress, signerAddress, faucetType)
+    const readProvider = signer.provider
+    const permissions = await checkPermissions(readProvider as any, faucetAddress, signerAddress, faucetType)
     if (permissions.isPaused) throw new Error("Faucet is paused")
     if (!permissions.isOwner && !permissions.isAdmin) throw new Error("Only owner or admin can set parameters")
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const data = detectedFaucetType === "custom"
@@ -2358,7 +2362,6 @@ export async function setClaimParameters(
 }
 
 export async function updateFaucetName(
-  provider: BrowserProvider,
   faucet: string,
   name: string,
   chainId: bigint,
@@ -2370,10 +2373,11 @@ export async function updateFaucetName(
     if (!name.trim()) throw new Error("Faucet name cannot be empty")
     const signer = await getActiveSigner(Number(chainId))
     const signerAddress = await signer.getAddress()
-    const permissions = await checkPermissions(provider, faucet, signerAddress, faucetType)
+    const readProvider = signer.provider
+    const permissions = await checkPermissions(readProvider as any, faucet, signerAddress, faucetType)
     if (permissions.isPaused) throw new Error("Faucet is paused")
     if (!permissions.isOwner && !permissions.isAdmin) throw new Error("Only owner or admin can update name")
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucet)
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucet)
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucet, config.abi, signer)
     const tx = await faucetContract.updateName(name)
@@ -2387,7 +2391,7 @@ export async function updateFaucetName(
 }
 
 export async function setWhitelistBatch(
-  provider: BrowserProvider,
+  
   faucetAddress: string,
   addresses: string[],
   status: boolean,
@@ -2397,9 +2401,10 @@ export async function setWhitelistBatch(
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) throw new Error("Switch to the network to perform operation")
   try {
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
-    if (detectedFaucetType !== "droplist") throw new Error("Whitelist only available for droplist faucets")
     const signer = await getActiveSigner(Number(chainId))
+    const readProvider = signer.provider
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
+    if (detectedFaucetType !== "droplist") throw new Error("Whitelist only available for droplist faucets")
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const tx = await signer.sendTransaction({
@@ -2415,7 +2420,7 @@ export async function setWhitelistBatch(
 }
 
 export async function resetClaimedStatus(
-  provider: BrowserProvider,
+  
   faucetAddress: string,
   addresses: string[],
   status: boolean,
@@ -2425,9 +2430,10 @@ export async function resetClaimedStatus(
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) throw new Error("Switch to the network to perform operation")
   try {
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
-    if (detectedFaucetType !== "dropcode") throw new Error("Reset claimed only available for dropcode faucets")
     const signer = await getActiveSigner(Number(chainId))
+    const readProvider = signer.provider
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
+    if (detectedFaucetType !== "dropcode") throw new Error("Reset claimed only available for dropcode faucets")
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const tx = await signer.sendTransaction({
@@ -2443,7 +2449,6 @@ export async function resetClaimedStatus(
 }
 
 export async function resetAllClaims(
-  provider: BrowserProvider,
   faucetAddress: string,
   chainId: bigint,
   networkId: bigint,
@@ -2452,7 +2457,8 @@ export async function resetAllClaims(
   if (!checkNetwork(chainId, networkId)) throw new Error("Switch to the network to perform operation")
   try {
     const signer = await getActiveSigner(Number(chainId))
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
+    const readProvider = signer.provider 
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const tx = await signer.sendTransaction({
@@ -2468,7 +2474,6 @@ export async function resetAllClaims(
 }
 
 export async function setCustomClaimAmountsBatch(
-  provider: BrowserProvider,
   faucetAddress: string,
   users: string[],
   amounts: bigint[],
@@ -2478,9 +2483,10 @@ export async function setCustomClaimAmountsBatch(
 ): Promise<string> {
   if (!checkNetwork(chainId, networkId)) throw new Error("Switch to the network to perform operation")
   try {
-    const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
-    if (detectedFaucetType !== "custom") throw new Error("Custom amounts only available for custom faucets")
     const signer = await getActiveSigner(Number(chainId))
+    const readProvider = signer.provider
+    const detectedFaucetType = faucetType || await detectFaucetType(readProvider as any, faucetAddress)
+    if (detectedFaucetType !== "custom") throw new Error("Custom amounts only available for custom faucets")
     const config = getFaucetConfig(detectedFaucetType)
     const faucetContract = new Contract(faucetAddress, config.abi, signer)
     const tx = await signer.sendTransaction({

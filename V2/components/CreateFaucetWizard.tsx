@@ -644,8 +644,9 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     address, 
     isConnected, 
     chainId: walletChainId, 
-    connect, 
-    provider 
+    provider,
+    getActiveSigner,
+    setShowModal
   } = useWallet();
   const {
     publicKey: solanaPublicKey,
@@ -1203,128 +1204,119 @@ const getSlugForNewFaucet = async (
 }
   // Faucet creation
 const handleFaucetCreation = async () => {
-    if (!wizardState.formData.faucetName.trim()) {
-      setCreationError("Please enter a faucet name")
-      return
-    }
-    if (!nameValidation.isNameAvailable) {
-      setCreationError("Please choose a valid faucet name")
-      return
-    }
- 
-    const finalTokenAddress = getFinalTokenAddress()
-    if (!finalTokenAddress) {
-      setCreationError("Please select a token or enter a custom token address")
-      return
-    }
-    if (wizardState.formData.showCustomTokenInput && !customTokenValidation.isValid) {
-      setCreationError("Please enter a valid custom token address")
-      return
-    }
-    if (!effectiveChainId || !currentNetwork) {
-      setCreationError("Please connect your wallet to a supported network")
-      return
-    }
- 
-    // ── SOLANA PATH ────────────────────────────────────────────────────────
-    if (isSolana) {
-      return handleSolanaFaucetCreation(finalTokenAddress)
-    }
-    // ──────────────────────────────────────────────────────────────────────
- 
-    // ── EVM PATH (original logic, unchanged) ─────────────────────────────
-    if (!address) {
-      setCreationError("Unable to get wallet address")
-      return
-    }
- 
-    const mappedFactoryType =
-      FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
-    const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
-    if (!factoryAddress) {
-      setCreationError(`${wizardState.selectedFaucetType} faucets are not available on this network`)
-      return
-    }
- 
-    setCreationError(null)
- 
-    if (!isConnected) {
-      try {
-        await connect()
-      } catch (error) {
-        setCreationError("Failed to connect wallet. Please try again.")
-        return
-      }
-    }
-    if (!provider) {
-      setCreationError("Wallet not connected")
-      return
-    }
- 
-    setIsFaucetCreating(true)
- 
-    try {
-      const createdFaucetAddress = await createFaucet(
-        provider,
-        factoryAddress,
-        wizardState.formData.faucetName,
-        finalTokenAddress,
-        BigInt(effectiveChainId),
-        BigInt(effectiveChainId),
-        mappedFactoryType,
-      )
- 
-      if (!createdFaucetAddress) throw new Error("Failed to get created faucet address")
- 
-      await registerFaucetInBackend(
-        createdFaucetAddress,
-        address,
-        effectiveChainId,
-        mappedFactoryType,
-        wizardState.formData.faucetName,
-      )
- 
-      const networkName = currentNetwork?.name || "Unknown Network"
-      const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
-      const finalDescription =
-        faucetDescription.trim() || `This is a faucet on ${networkName} by ${ownerShort}`
-      const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
- 
-      await saveFaucetMetadata(
-        createdFaucetAddress,
-        finalDescription,
-        finalImageUrl,
-        address,
-        effectiveChainId,
-      )
- 
-      let finalSlug = createdFaucetAddress
-      try {
-        const syncRes = await fetch(
-          `https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app/sync-faucet/${createdFaucetAddress}`,
-          { method: "POST" },
-        )
-        if (syncRes.ok) {
-          const data = await syncRes.json()
-          if (data.slug) finalSlug = data.slug
-        }
-      } catch {}
- 
-      toast.success(`Faucet "${wizardState.formData.faucetName}" created successfully!`)
-      if (onSuccess) setTimeout(() => onSuccess(), 500)
-      if (closeModal) {
-        closeModal()
-      } else {
-        window.location.href = `/faucet/${finalSlug}?networkId=${effectiveChainId}&new=true`
-      }
-    } catch (error: any) {
-      const errorMessage = error.message || "Failed to create faucet"
-      toast.error("Failed to create faucet", { description: errorMessage })
-      setCreationError(errorMessage)
-    } finally {
-      setIsFaucetCreating(false)
-    }
+  if (!wizardState.formData.faucetName.trim()) {
+    setCreationError("Please enter a faucet name")
+    return
   }
+  if (!nameValidation.isNameAvailable) {
+    setCreationError("Please choose a valid faucet name")
+    return
+  }
+
+  const finalTokenAddress = getFinalTokenAddress()
+  if (!finalTokenAddress) {
+    setCreationError("Please select a token or enter a custom token address")
+    return
+  }
+  if (wizardState.formData.showCustomTokenInput && !customTokenValidation.isValid) {
+    setCreationError("Please enter a valid custom token address")
+    return
+  }
+  if (!effectiveChainId || !currentNetwork) {
+    setCreationError("Please connect your wallet to a supported network")
+    return
+  }
+
+  // ── SOLANA PATH ──────────────────────────────────────────────────────────
+  if (isSolana) {
+    return handleSolanaFaucetCreation(finalTokenAddress)
+  }
+
+  // ── EVM PATH ─────────────────────────────────────────────────────────────
+  if (!address) {
+    setCreationError("Unable to get wallet address")
+    return
+  }
+
+  const mappedFactoryType =
+    FAUCET_TYPE_TO_FACTORY_TYPE_MAPPING[wizardState.selectedFaucetType as FaucetType]
+  const factoryAddress = getFactoryAddress(mappedFactoryType, currentNetwork)
+  if (!factoryAddress) {
+    setCreationError(`${wizardState.selectedFaucetType} faucets are not available on this network`)
+    return
+  }
+
+  setCreationError(null)
+  setIsFaucetCreating(true)
+
+  try {
+    // ── Get signer from wallet context — works for both embedded and external ──
+    const signer = await getActiveSigner(effectiveChainId)
+    if (!signer) {
+      setCreationError("Wallet not connected — please re-login")
+      return
+    }
+
+    const createdFaucetAddress = await createFaucet(
+      factoryAddress,
+      wizardState.formData.faucetName,
+      finalTokenAddress,
+      BigInt(effectiveChainId),
+      mappedFactoryType,
+      signer,  // ← pass signer directly
+    )
+
+    if (!createdFaucetAddress) throw new Error("Failed to get created faucet address")
+
+    await registerFaucetInBackend(
+      createdFaucetAddress,
+      address,
+      effectiveChainId,
+      mappedFactoryType,
+      wizardState.formData.faucetName,
+    )
+
+    const networkName = currentNetwork?.name || "Unknown Network"
+    const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
+    const finalDescription =
+      faucetDescription.trim() || `This is a faucet on ${networkName} by ${ownerShort}`
+    const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
+
+    await saveFaucetMetadata(
+      createdFaucetAddress,
+      finalDescription,
+      finalImageUrl,
+      address,
+      effectiveChainId,
+    )
+
+    let finalSlug = createdFaucetAddress
+    try {
+      const syncRes = await fetch(
+        `https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app/sync-faucet/${createdFaucetAddress}`,
+        { method: "POST" },
+      )
+      if (syncRes.ok) {
+        const data = await syncRes.json()
+        if (data.slug) finalSlug = data.slug
+      }
+    } catch {}
+
+    toast.success(`Faucet "${wizardState.formData.faucetName}" created successfully!`)
+    if (onSuccess) setTimeout(() => onSuccess(), 500)
+    if (closeModal) {
+      closeModal()
+    } else {
+      window.location.href = `/faucet/${finalSlug}?networkId=${effectiveChainId}&new=true`
+    }
+  } catch (error: any) {
+    const errorMessage = error.message || "Failed to create faucet"
+    toast.error("Failed to create faucet", { description: errorMessage })
+    setCreationError(errorMessage)
+  } finally {
+    setIsFaucetCreating(false)
+  }
+}
  
   // ── SOLANA: dedicated creation handler ────────────────────────────────────
   /**
@@ -1676,7 +1668,7 @@ const handleFaucetCreation = async () => {
             <AlertDescription className="text-red-700 dark:text-red-300">
               Please connect your wallet to get started.
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button onClick={connect} variant="outline" size="sm">
+                <Button onClick={() => setShowModal(true)} variant="outline" size="sm">
                   Connect Wallet
                 </Button>
               </div>

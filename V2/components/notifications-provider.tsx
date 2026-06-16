@@ -11,9 +11,12 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 function getWsNotifyUrl() {
   if (typeof window === "undefined") return "wss://127.0.0.1:8000/ws/notify";
-  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-    ? "ws://127.0.0.1:8000/ws/notify"
-    : "wss://faucetpay-backend.koyeb.app/ws/notify";
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return "ws://127.0.0.1:8000/ws/notify";
+  }
+  const api = new URL(API_BASE_URL);
+  const proto = api.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${api.host}/ws/notify`;
 }
 
 const POPUP_DURATION = 30; // seconds

@@ -544,7 +544,7 @@ export default function DropPointsPanel() {
 
   try {
     // ── One line — works for both wallet types ──────────────────────────
-    toast.loading("Unlocking wallet...", { id: "claim-tx" })
+    
     const activeSigner = await getActiveSigner(chainId)
     if (!activeSigner) {
       toast.error("Could not get signer — please re-login.", { id: "claim-tx" })

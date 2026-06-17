@@ -230,6 +230,10 @@
         // Non-fatal — DROPS are on-chain. Backend reconciles on next fetchDropsBalance.
         console.warn("Could not confirm welcome mint to backend — will reconcile on next balance fetch");
       }
+      const creditMsg = data.existingBalanceFolded > 0
+        ? `🎉 Welcome! ${fmt(data.totalCredited)} DROPS added to your game pool (100 bonus + ${fmt(data.existingBalanceFolded)} already in your wallet).`
+        : "🎉 Welcome! 100 DROPS minted to your wallet!";
+      toast.success(creditMsg);
 
       toast.success("🎉 Welcome! 100 DROPS minted to your wallet!");
       setRegistered(true);

@@ -658,7 +658,7 @@ export default function DashboardPage() {
                     </Card>
                 </div>
 
-                <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg overflow-x-auto scrollbar-hide">
+                <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg overflow-x-auto tab-scrollbar">
     <button 
         onClick={() => setActiveTab('faucets')}
         className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'faucets' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}

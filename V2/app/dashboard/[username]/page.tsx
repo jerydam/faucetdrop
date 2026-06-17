@@ -681,7 +681,7 @@ export default function DashboardPage() {
         onClick={() => setActiveTab('challenge')}
         className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'challenge' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
     >
-        ⚡ Challenge
+        Challenge
     </button>
 </div>
 

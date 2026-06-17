@@ -132,7 +132,7 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
       setLoadingId(null)
     }
   }, [connectSocial, onSuccess])
-
+  
   // ── External wallet ───────────────────────────────────────────────────────
   const handleExternalWallet = useCallback(async (wallet: typeof detectedWallets[number]) => {
     setLoadingId(wallet.name)
@@ -160,6 +160,7 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
           boxShadow:   "0 32px 80px rgba(0,0,0,0.6)",
         }}
       >
+        
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4">
           <div>

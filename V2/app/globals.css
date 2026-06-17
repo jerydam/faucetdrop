@@ -170,7 +170,8 @@
   background-color: rgb(var(--surface-base));
   border-color: rgb(var(--border-subtle));
 }
-
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .quiz-card {
   background-color: rgb(var(--surface-card));
   border: 1px solid rgb(var(--border-subtle));

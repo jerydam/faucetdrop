@@ -227,7 +227,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
     const words = value.split(/\s+/).filter(Boolean)
 
     if (words.length !== 12 && words.length !== 24) {
-      setErrorMsg("Seed phrase must be 12 or 24 words.")
+      setErrorMsg("That doesn't look like a complete seed phrase. Double check you copied the whole thing.")
       return
     }
 
@@ -276,6 +276,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
   if (!open || !mounted) return null
 
   // ── Styles (system color tokens) ─────────────────────────────────────────
+  // Accent switched from Privy purple to blue to match the rest of the app.
   const S = {
     overlay: {
       background:     "rgba(0,0,0,0.6)",
@@ -292,8 +293,8 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
       border:     "1px solid var(--border, rgba(255,255,255,0.1))",
     } as React.CSSProperties,
     btnPrimary: {
-      background: "var(--primary, #fafafa)",
-      color:      "var(--primary-foreground, #09090b)",
+      background: "var(--primary, #2563eb)",
+      color:      "#fafafa",
     } as React.CSSProperties,
     btnGhost: {
       background: "var(--muted, rgba(255,255,255,0.05))",
@@ -351,12 +352,12 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                   <Wallet size={20} style={S.muted} />
                 </div>
                 <h2 className="text-base font-semibold" style={{ color: "var(--foreground, #fafafa)" }}>
-                  Legacy wallet found
+                  Existing wallet found
                 </h2>
                 <p className="text-xs mt-2 leading-relaxed" style={S.muted}>
                   {needsSeedImport
                     ? "Your address is linked but needs a seed phrase to activate. Without it you can't sign transactions."
-                    : `Your ${socialProvider} account was previously linked to a Privy embedded wallet.`}
+                    : `Your ${socialProvider} account was previously linked to a wallet.`}
                 </p>
               </div>
 
@@ -366,7 +367,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                     className="text-[10px] font-semibold uppercase tracking-wider mb-2"
                     style={S.muted}
                   >
-                    Legacy addresses
+                    Existing addresses
                   </p>
                   {legacyEvmAddr && <AddressRow label="EVM"    addr={legacyEvmAddr} chipStyle={S.chip} />}
                   {legacySolAddr && <AddressRow label="Solana" addr={legacySolAddr} chipStyle={S.chip} />}
@@ -403,14 +404,14 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                   Export your seed phrase
                 </h2>
                 <p className="text-xs mt-1" style={S.muted}>
-                  Open your old Privy wallet, copy the phrase, then come back here.
+                  Open your old wallet, copy the phrase, then come back here.
                 </p>
               </div>
 
               <ol className="space-y-3 mb-5">
                 {[
                   `Sign in with ${socialProvider} (done automatically below)`,
-                  `In the Privy dialog, click "Copy Phrase"`,
+                  `In the dialog that opens, click "Copy Phrase"`,
                   "Close the dialog — we'll show the paste field immediately",
                 ].map((text, i) => (
                   <li key={i} className="flex items-start gap-3">
@@ -425,7 +426,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                 ))}
               </ol>
 
-              {/* Privy auth state card */}
+              {/* Auth state card */}
               <div className="rounded-xl p-4 mb-4" style={S.chip}>
                 {!ready || oauthState.status === "loading" ? (
                   <div className="flex items-center gap-2 text-xs" style={S.muted}>
@@ -494,13 +495,15 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                 )}
               </div>
 
-              {/* Skip-to-paste for users who already have it copied */}
+              {/* Skip-to-paste for users who already have it copied —
+                  made larger/more prominent per feedback, since this is a
+                  real primary action for anyone who already copied their phrase. */}
               <button
-                className="w-full py-2 text-xs transition-opacity hover:opacity-100 opacity-40"
-                style={S.muted}
+                className="w-full py-3.5 rounded-xl text-sm font-medium mb-2 transition-opacity hover:opacity-90"
+                style={S.btnGhost}
                 onClick={() => setStep("paste")}
               >
-                Click to Paste Seed phrase
+                I already have my seed phrase — paste it
               </button>
               <button
                 className="w-full py-1 text-xs transition-opacity hover:opacity-60 opacity-25"
@@ -526,8 +529,21 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                   <p className="text-sm font-semibold" style={{ color: "var(--foreground, #fafafa)" }}>
                     Paste your seed phrase
                   </p>
-                  <p className="text-[11px]" style={S.muted}>12 or 24 words, separated by spaces</p>
+                  <p className="text-[11px]" style={S.muted}>Separate each word with a space</p>
                 </div>
+              </div>
+
+              {/* Clarifier so people don't confuse this with a platform password/PIN field */}
+              <div
+                className="flex items-start gap-2 rounded-lg px-3 py-2 mb-3 text-[11px] leading-relaxed"
+                style={{ ...S.chip, ...S.warning }}
+              >
+                <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                <span>
+                  This field is only for restoring your existing wallet's seed phrase — not a
+                  login password or PIN for this site. Only paste it here if you're importing
+                  a wallet you already own.
+                </span>
               </div>
 
               {/* Banner shown only when arriving here right after export */}
@@ -537,7 +553,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                   style={{ ...S.chip, ...S.success }}
                 >
                   <CheckCircle2 size={13} className="shrink-0" />
-                  Privy closed — paste your copied phrase below
+                  Dialog closed — paste your copied phrase below
                 </div>
               )}
 
@@ -545,25 +561,19 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                 ref={textareaRef}
                 value={mnemonic}
                 onChange={e => setMnemonic(e.target.value)}
-                placeholder="word1 word2 word3 … word12"
+                placeholder="word1 word2 word3 …"
                 rows={4}
-                className="w-full px-3 py-2.5 rounded-xl text-xs font-mono resize-none mb-2 focus:outline-none transition-colors"
+                className="w-full px-3 py-2.5 rounded-xl text-xs font-mono resize-none mb-3 focus:outline-none transition-colors"
                 style={{
                   ...S.input,
-                  boxShadow: mnemonic ? "0 0 0 1px var(--ring, rgba(255,255,255,0.2))" : undefined,
+                  boxShadow: mnemonic ? "0 0 0 1px var(--ring, rgba(37,99,235,0.5))" : undefined,
                 }}
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
               />
 
-              <div className="flex items-center justify-between mb-4">
-                <p
-                  className="text-[11px]"
-                  style={wordCount >= 12 ? S.success : S.muted}
-                >
-                  {wordCount} / 12 words {wordCount >= 12 && "✓"}
-                </p>
+              <div className="flex items-center justify-end mb-4">
                 <p className="flex items-center gap-1 text-[11px]" style={S.warning}>
                   <AlertTriangle size={11} />
                   Never share this phrase elsewhere
@@ -577,7 +587,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
               <Btn
                 primary
                 style={S.btnPrimary}
-                disabled={wordCount < 12}
+                disabled={wordCount === 0}
                 onClick={handleImport}
               >
                 Import wallet

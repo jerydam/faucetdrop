@@ -16,7 +16,7 @@
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
   const CELO_CHAIN_ID = 42220;
-  const DROP_TOKEN_CONTRACT= "0x1e1FB392315B248f24Bfc35742B95d5F45e85906"
+  const DROP_TOKEN_CONTRACT= "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B"
   interface LobbyChallenge {
     code: string; topic: string; stake_amount: number; token_symbol: string;
     chain_id: number; created_at: string; creator_username: string;

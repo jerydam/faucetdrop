@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useSearchParams } from "next/navigation";
+import {getActiveSigner} from "@/lib/get-signer"
 import {
   Loader2, CheckCircle2, AlertCircle,
   ChevronRight, ChevronLeft, Rocket, Globe, Lock,
@@ -272,7 +273,6 @@ useEffect(() => {
   let code: string | null = null
 
   try {
-    // 1. Register username
     if (creatorUsername) {
       await fetch(
         `${API_BASE_URL}/api/players/register?wallet=${userWalletAddress}&username=${creatorUsername}`,
@@ -280,7 +280,6 @@ useEffect(() => {
       ).catch(() => {})
     }
 
-    // 2. Create challenge backend — stored as 'pending', NOT joinable yet
     const res = await fetch(`${API_BASE_URL}/api/challenge/create`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
@@ -301,43 +300,48 @@ useEffect(() => {
     if (!data.success) throw new Error(data.detail ?? "Challenge creation failed")
     code = data.code
 
-    // 3. On-chain tx — user can reject here
     setTxPhase("creating")
+    toast.info("Confirm quiz creation in your wallet…")
     await new Promise(r => setTimeout(r, 400))
 
-    const walletClient = createWalletClient({ chain: celo, transport: custom(window.ethereum!) })
-    const publicClient = createPublicClient({ chain: celo, transport: http("https://forno.celo.org") })
-    const [account]    = await walletClient.getAddresses()
-    const quizId       = deriveQuizId(code as string)
+    // ── Use WalletContext signer (works for BOTH embedded + external) ──
+    const activeSigner = await getActiveSigner(CELO_CHAIN_ID)
+    if (!activeSigner) throw new Error("No signer available — please reconnect your wallet.")
 
-    toast.info("Confirm quiz creation in your wallet…")
+    const quizId = deriveQuizId(code as string)
 
-    const txHash = await walletClient.writeContract({
-      address:      QUIZ_HUB_ADDRESS,
-      abi:          QUIZ_HUB_ABI,
-      functionName: "createQuiz",
-      args:         [quizId],
-      account,
-      chain:        celo,
+    // Build a viem walletClient from the ethers signer
+    // For embedded wallets, activeSigner is an ethers Wallet (JsonRpcProvider)
+    // For external wallets, it's a JsonRpcSigner (BrowserProvider)
+    const { BrowserProvider, JsonRpcProvider } = await import("ethers")
+
+    // Sign and send via ethers directly (works for both wallet types)
+    const iface = new (await import("ethers")).Interface(
+      // minimal ABI for createQuiz(bytes32)
+      ["function createQuiz(bytes32 quizId)"]
+    )
+    const calldata = iface.encodeFunctionData("createQuiz", [quizId])
+
+    const tx = await activeSigner.sendTransaction({
+      to:   QUIZ_HUB_ADDRESS,
+      data: calldata,
     })
 
     toast.loading("Waiting for on-chain confirmation…", { id: "create-confirm" })
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
+    const receipt = await tx.wait()
 
-    // 4. If tx reverted, clean up and bail
-    if (receipt.status !== "success") {
+    if (!receipt || receipt.status !== 1) {
       throw new Error("Transaction reverted on-chain")
     }
 
     toast.success("Quiz created on-chain! ⛓️✅", { id: "create-confirm" })
 
-    // 5. Only NOW tell the backend to activate the challenge
     const confirmRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/on-chain-confirmed`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         creatorWallet: userWalletAddress,
-        txHash:        receipt.transactionHash,
+        txHash:        receipt.hash,
       }),
     })
 
@@ -346,7 +350,6 @@ useEffect(() => {
       throw new Error(err.detail ?? "Failed to confirm on-chain")
     }
 
-    // 6. Only reaches here if everything succeeded
     setTxPhase("done")
     setCreatedCode(code)
     toast.success(`🎉 Challenge live! Code: ${code}`)
@@ -355,7 +358,6 @@ useEffect(() => {
     setTxPhase("idle")
     toast.dismiss("create-confirm")
 
-    // Clean up the dangling backend record if tx was rejected or reverted
     if (code) {
       fetch(`${API_BASE_URL}/api/challenge/${code}/cancel`, {
         method:  "POST",
@@ -364,7 +366,12 @@ useEffect(() => {
       }).catch(() => {})
     }
 
-    if (err?.code === 4001 || err?.code === "ACTION_REJECTED" || err?.message?.includes("rejected")) {
+    if (
+      err?.code === 4001 ||
+      err?.code === "ACTION_REJECTED" ||
+      err?.message?.includes("rejected") ||
+      err?.message?.includes("cancelled")
+    ) {
       toast.error("Transaction rejected — challenge not created.")
       return
     }

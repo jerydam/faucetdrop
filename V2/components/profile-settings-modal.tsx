@@ -596,7 +596,7 @@ export function ProfileSettingsModal() {
   } = useWallet()
 
   const router        = useRouter()
-  const walletApiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
+  const walletApiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app"
   const { openPopup } = useOAuthPopup(walletApiBase)
 
   const [isOpen,          setIsOpen]          = useState(false)
@@ -1003,6 +1003,7 @@ useEffect(() => {
                   <SocialRow provider="google"    />
                   <SocialRow provider="twitter"   />
                   <SocialRow provider="github"    />
+                  <SocialRow provider="telegram"  />
                   <SocialRow provider="discord"   />
                   <SocialRow provider="farcaster" />
                 </div>

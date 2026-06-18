@@ -9,8 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus, Trash2, Sparkles, Loader2, CheckCircle2, ChevronUp, ChevronDown,
   Clock, Users, Trophy, Zap, Edit3, Eye, ArrowLeft, Copy, BookOpen,
@@ -23,10 +21,9 @@ import {
   deployQuizReward,
   type QuizRewardConfig,
 } from "@/lib/quiz";
-import { BrowserProvider } from "ethers";
+
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useWallets } from "@privy-io/react-auth";
 import { getNetworkByChainId } from "@/hooks/use-network";
 // Add these imports at the top of create-quiz/page.tsx
 import { SOLANA_CHAIN_ID } from "@/hooks/use-network"
@@ -717,15 +714,13 @@ export function DeployProgress({ step, contractAddress, error }: {
 // ══════════════════════════════════════════════════════════════
 export default function CreateQuizPage() {
   const router = useRouter();
-  const { address: userWalletAddress } = useWallet();
-  const { wallets } = useWallets();
-  const activeWallet = wallets[0];
-  const chainId = activeWallet ? parseInt(activeWallet.chainId.split(":")[1] ?? "0") : 0;
+  const { address: userWalletAddress, getActiveSigner, chainId: chainId_ } = useWallet();
+  const chainId = chainId_ ?? 0;
   const availableTokens = ALL_TOKENS_BY_CHAIN[chainId] ?? [];
   const chainName = CHAIN_NAMES[chainId] ?? "Unknown Network";
   const { activeSolanaWallet } = useSolanaWallet()
   const isSolana = chainId === SOLANA_CHAIN_ID
-
+  
   const targetNetwork = getNetworkByChainId(chainId);
   const isSupportedNetwork = !!targetNetwork?.factories?.quiz;
   // Add alongside your existing pdfNumQuestions state
@@ -965,7 +960,7 @@ const handlePdfUpload = async () => {
   };
 
   
-
+  
   const handleSubmit = async () => {
   const err = validateQuiz()
   if (err) { toast.error(err); return }
@@ -1010,12 +1005,12 @@ const handlePdfUpload = async () => {
 
     // ── EVM path ───────────────────────────────────────────────
     } else {
-      const privyProvider = await wallets[0]?.getEthereumProvider()
-      const ethersProvider = new BrowserProvider(privyProvider)
-      const result = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig())
-      contractAddress = result.contractAddress
-      deployTxHash = result.txHash
-    }
+  const activeSigner = await getActiveSigner(chainId)
+  if (!activeSigner) throw new Error("No signer available — please reconnect your wallet.")
+  const result = await deployQuizReward(activeSigner, chainId, getQuizRewardConfig())
+  contractAddress = result.contractAddress
+  deployTxHash = result.txHash
+}
 
     setRewardContractAddress(contractAddress)
     toast.loading("💾 Contract deployed! Saving quiz...", { id: toastId })
@@ -1095,12 +1090,12 @@ const handleGenerateAI = async () => {
 
     // ── EVM path ───────────────────────────────────────────────
     } else {
-      const privyProvider = await wallets[0]?.getEthereumProvider()
-      const ethersProvider = new BrowserProvider(privyProvider)
-      const result = await deployQuizReward(ethersProvider, chainId, getQuizRewardConfig())
-      contractAddress = result.contractAddress
-      deployTxHash = result.txHash
-    }
+  const activeSigner = await getActiveSigner(chainId)
+  if (!activeSigner) throw new Error("No signer available — please reconnect your wallet.")
+  const result = await deployQuizReward(activeSigner, chainId, getQuizRewardConfig())
+  contractAddress = result.contractAddress
+  deployTxHash = result.txHash
+}
 
     setRewardContractAddress(contractAddress)
     toast.loading("🤖 Deployed! AI generating questions...", { id: toastId })

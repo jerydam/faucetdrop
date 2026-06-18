@@ -612,6 +612,21 @@ export function ProfileSettingsModal() {
   // External wallet non-EVM addresses (fetched from DB on open)
   const [extSolAddr, setExtSolAddr] = useState<string | null>(null)
   const [extXlmAddr, setExtXlmAddr] = useState<string | null>(null)
+  // new state, alongside extSolAddr/extXlmAddr
+const [freshLinkedSocials, setFreshLinkedSocials] = useState<string[] | null>(null)
+
+// new fetcher, alongside fetchChainAddresses
+const fetchLinkedSocials = useCallback(async () => {
+  if (!session?.token) return
+  try {
+    const res = await fetch(`${walletApiBase}/wallet/me`, {
+      headers: { Authorization: `Bearer ${session.token}` },
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    setFreshLinkedSocials(data.linked_socials ?? [])
+  } catch { /* non-fatal — falls back to session.linkedSocials */ }
+}, [session?.token, walletApiBase])
 
   const [formData, setFormData] = useState<UserProfile>({
     wallet_address: "",
@@ -673,6 +688,7 @@ useEffect(() => {
     setEmbeddedXlmAddr(undefined)
     setExtSolAddr(null)
     setExtXlmAddr(null)
+    setFreshLinkedSocials(null)   
     setUnlinkedOverride(null)
   }
 }, [isOpen])
@@ -681,6 +697,7 @@ useEffect(() => {
     const controller = new AbortController()
     fetchProfile(controller.signal)
     fetchChainAddresses()
+    fetchLinkedSocials()
     return () => controller.abort()
   }, [isOpen, address, fetchProfile, fetchChainAddresses])
 
@@ -756,7 +773,9 @@ useEffect(() => {
   }, [])
   useEffect(() => { if (!isOpen) setUnlinkedOverride(null) }, [isOpen])
 
-  const effectiveLinked = new Set(unlinkedOverride ?? session?.linkedSocials ?? [])
+  const effectiveLinked = new Set(
+  unlinkedOverride ?? freshLinkedSocials ?? session?.linkedSocials ?? []
+)
 
   // ── Username check ───────────────────────────────────────────────────
   const checkUsernameUniqueness = async (value: string) => {

@@ -183,7 +183,6 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
     window.removeEventListener("message", onMessage)
     clearInterval(closedPoll)
   }
-
   // Listen for the postMessage from the popup
   const onMessage = async (e: MessageEvent) => {
     // Only accept messages from our own origin

@@ -5,7 +5,7 @@ export default function TelegramCallback() {
   const [status, setStatus] = useState<"waiting" | "done" | "error">("waiting")
 
   useEffect(() => {
-    const botUsername = "Wallet Infra"
+    const botUsername = "FaucetDrops"
     if (!botUsername) {
       setStatus("error")
       console.error("bot username is not set")

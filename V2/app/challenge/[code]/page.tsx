@@ -44,7 +44,7 @@ function getWsBaseUrl(): string {
 }
 
 const CELO_CHAIN_ID  = 42220;
-const DROPS_ADDRESS  = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x1e1FB392315B248f24Bfc35742B95d5F45e85906") as `0x${string}`;
+const DROPS_ADDRESS  = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B") as `0x${string}`;
 const DROPS_DECIMALS = 18;
 const DROPS_SYMBOL   = "DROPS";
 const BADGE_THRESHOLD = 10;

@@ -508,7 +508,7 @@ function ChallengeContent() {
           <div className="rounded-xl p-4 space-y-2" style={{ background: "#0d0f1a", border: "1px solid #1e2340" }}>
             <p className="text-xs font-bold" style={{ color: "#f59e0b" }}>Rank reset</p>
             <p className="text-xs leading-relaxed" style={{ color: "#64748b" }}>
-              You have a full week to claim the previous week's reward before ranks reset at 12:00 AM UTC+1 every Sunday. Unclaimed rewards are forfeited after reset.
+              You have a full week to claim the previous week&apos;s reward before ranks reset at 12:00 AM UTC+1 every Sunday. Unclaimed rewards are forfeited after reset.
             </p>
           </div>
         </Card>

@@ -34,7 +34,7 @@ import { RematchPopup, RematchInvite } from "@/components/RematchPopup";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 function getWsBaseUrl(): string {
   if (typeof window === "undefined") return "wss://127.0.0.1:8000";
@@ -308,6 +308,7 @@ export default function ChallengePage() {
   const code    = ((params.code as string) ?? "").toUpperCase();
   const { address: userWalletAddress } = useWallet();
   const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
+  const { getActiveSigner, walletType, chainId } = useWallet();
 
   const searchParams     = useSearchParams();
   const agreedStake      = searchParams.get("stake");
@@ -322,7 +323,9 @@ export default function ChallengePage() {
   const [hasJoined, setHasJoined] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
   const [claimedCodes, setClaimedCodes] = useState<Set<string>>(new Set());
-
+  const [expiryInfo, setExpiryInfo] = useState<{expiresAt:number; status:number} | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
   // ── Staking state ─────────────────────────────────────────────────────────
   const [isStaking, setIsStaking]           = useState(false);
   const [stakeTxHash, setStakeTxHash]       = useState<string | null>(null);
@@ -416,6 +419,56 @@ export default function ChallengePage() {
       ws.addEventListener("open", onOpen);
     }
   }, []);
+  useEffect(() => {
+  if (!code || phase !== "lobby") return;
+  let active = true;
+  const poll = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/expiry`);
+      const d = await res.json();
+      if (active && d.success && d.onChain) {
+        setExpiryInfo({ expiresAt: d.expiresAt, status: d.status });
+      }
+    } catch {}
+  };
+  poll();
+  const id = setInterval(poll, 20000); // re-sync with chain every 20s
+  return () => { active = false; clearInterval(id); };
+}, [code, phase]);
+
+useEffect(() => {
+  if (!expiryInfo) { setSecondsLeft(null); return; }
+  const tick = () => setSecondsLeft(Math.max(0, expiryInfo.expiresAt - Math.floor(Date.now() / 1000)));
+  tick();
+  const id = setInterval(tick, 1000);
+  return () => clearInterval(id);
+}, [expiryInfo]);
+
+const challengeExpired = expiryInfo?.status === 1 && secondsLeft === 0;
+
+function formatHMS(s: number) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return `${h}:${m.toString().padStart(2,"0")}:${sec.toString().padStart(2,"0")}`;
+}
+
+const handleCancelExpired = useCallback(async () => {
+  if (!userWalletAddress) return;
+  setIsCancelling(true);
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/cancel-expired`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress: userWalletAddress }),
+    });
+    const d = await res.json();
+    if (!d.success) throw new Error(d.detail ?? "Could not cancel challenge");
+    toast.success(d.refunded?.length ? "Challenge cancelled — stake refunded." : "Challenge cancelled.");
+    router.push("/challenge");
+  } catch (err: any) {
+    toast.error(err?.message ?? "Failed to cancel challenge");
+  } finally {
+    setIsCancelling(false);
+  }
+}, [userWalletAddress, code, router]);
 
   useEffect(() => () => { if (inviteTimerRef.current) clearInterval(inviteTimerRef.current); }, []);
   useEffect(() => () => clearRematchTimers(), [clearRematchTimers]);
@@ -745,6 +798,8 @@ export default function ChallengePage() {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const handleStake = useCallback(async () => {
+    const signer = await getActiveSigner(CELO_CHAIN_ID);
+      if (!signer) throw new Error("No wallet available");
     if (!userWalletAddress || !challenge) return;
     setIsStaking(true);
     try {
@@ -1207,7 +1262,19 @@ export default function ChallengePage() {
                 })}
               </div>
             </div>
+                {expiryInfo && secondsLeft !== null && (
+                <div className="text-center text-xs text-muted-foreground">
+                  {challengeExpired ? "Stake window has expired." : `Stake window closes in ${formatHMS(secondsLeft)}`}
+                </div>
+              )}
 
+              {challengeExpired && (
+                <Button variant="destructive" className="w-full h-12" onClick={handleCancelExpired} disabled={isCancelling}>
+                  {isCancelling
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cancelling…</>
+                    : "Cancel Expired Challenge & Refund Stake"}
+                </Button>
+              )}
             {/* Claim reward */}
             {myClaim && (
               <div className={cn(

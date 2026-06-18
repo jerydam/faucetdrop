@@ -353,7 +353,8 @@ export default function PreLobbyPage() {
   const [myOffer, setMyOffer]           = useState<number>(0);
   const [submitting, setSubmitting]     = useState(false);
   const [accepting, setAccepting]       = useState(false);
-  const [countdown, setCountdown]       = useState(120);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
   const [lockedAmount, setLockedAmount] = useState<number | null>(null);
   const [negotiationLocked, setNegotiationLocked] = useState(false);
   const [myTotalDuels, setMyTotalDuels] = useState(0);
@@ -402,6 +403,21 @@ export default function PreLobbyPage() {
     if (challenge?.creator) fetchAvatar(challenge.creator);
   }, [challenge?.creator]);
 
+
+  useEffect(() => {
+  if (!code) return;
+  fetch(`${API_BASE_URL}/api/challenge/${code}/expiry`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.success && d.secondsLeft > 0) {
+        setCountdown(Math.floor(d.secondsLeft));
+      } else {
+        setCountdown(120); // fallback if not yet on-chain
+      }
+    })
+    .catch(() => setCountdown(120));
+}, [code]);
+
   useEffect(() => {
     offers.forEach(o => fetchAvatar(o.wallet));
   }, [offers]);
@@ -423,12 +439,25 @@ export default function PreLobbyPage() {
   }, [challenge, myWallet, amCreator, pageState]);
 
   // ── Countdown ────────────────────────────────────────────────────────────
+    const isCreatorView   = pageState === "creator";
+  const hasPendingOffer = pageState === "pending";
+  const hasCounter      = pageState === "countered";
+  const totalPool       = (myOffer * 2).toFixed(2);
+  const countdownMin = countdown !== null ? Math.floor(countdown / 60) : "--";
+const countdownSec = countdown !== null ? countdown % 60 : "--";
+const countdownUrgent = countdown !== null && countdown <= 300;
   useEffect(() => {
-    if (!["idle","creator","pending","countered"].includes(pageState)) return;
-    if (countdown <= 0) return;
-    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [countdown, pageState]);
+  if (!["idle","creator","pending","countered"].includes(pageState)) return;
+  if (countdown === null || countdown <= 0) return;
+  const t = setTimeout(() => setCountdown(c => c !== null ? c - 1 : null), 1000);
+  return () => clearTimeout(t);
+}, [countdown, pageState]);
+
+// Update the display in JSX:
+{countdown !== null
+  ? `${String(countdownMin).padStart(2, "0")}:${String(countdownSec).padStart(2, "0")}`
+  : "--:--"
+}
   const isNegotiationLocked = negotiationLocked || myTotalDuels < 10;
   // ── WebSocket ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -708,13 +737,6 @@ export default function PreLobbyPage() {
 
   // ── Main pre-lobby UI ─────────────────────────────────────────────────────
 
-  const isCreatorView   = pageState === "creator";
-  const hasPendingOffer = pageState === "pending";
-  const hasCounter      = pageState === "countered";
-  const totalPool       = (myOffer * 2).toFixed(2);
-  const countdownMin    = Math.floor(countdown / 60);
-  const countdownSec    = countdown % 60;
-  const countdownUrgent = countdown <= 30;
 
   return (
     <div className="min-h-screen bg-background">

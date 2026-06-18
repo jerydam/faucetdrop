@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
+    "@farcaster/auth-client": "^0.7.1",
     "@hookform/resolvers": "^3.9.1",
     "@jerydam/lumina-sdk": "^1.0.17",
     "@lit/react": "^1.0.8",

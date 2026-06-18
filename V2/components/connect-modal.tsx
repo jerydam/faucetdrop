@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { useWallet, type SocialProvider, API_BASE } from "./wallet-provider"
 import { X, Loader2, ChevronRight, Shield, Fingerprint } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { createAppClient, viemConnector } from "@farcaster/auth-client"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Real brand icons (inline SVG, currentColor-friendly where possible)
@@ -157,35 +158,197 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
       settle(true)
     }, 180_000)
   }, [connectSocial, onSuccess])
+  // In ConnectModal, replace handleSocial for "telegram":
+
+  const handleTelegram = useCallback(() => {
+  setLoadingId("telegram")
+
+  // Open your Next.js page as a popup (not a blank window)
+  const popup = window.open(
+    "/telegram-callback",
+    "telegram_login",
+    "width=420,height=500,left=200,top=100",
+  )
+
+  if (!popup) {
+    setLoadingId(null)
+    return
+  }
+
+  let settled = false
+  const settle = () => {
+    if (settled) return
+    settled = true
+    setLoadingId(null)
+    window.removeEventListener("message", onMessage)
+    clearInterval(closedPoll)
+  }
+
+  // Listen for the postMessage from the popup
+  const onMessage = async (e: MessageEvent) => {
+    // Only accept messages from our own origin
+    if (e.origin !== window.location.origin) return
+    if (e.data?.type !== "telegram_auth") return
+
+    settle()
+    try {
+      await connectSocial("telegram", JSON.stringify(e.data.user))
+      onSuccess?.()
+    } catch (err: any) {
+      console.error("Telegram login failed:", err)
+    }
+  }
+
+  window.addEventListener("message", onMessage)
+
+  // Detect if user closes popup manually without completing
+  const closedPoll = setInterval(() => {
+    if (popup.closed) settle()
+  }, 500)
+
+  // Safety timeout
+  setTimeout(() => {
+    try { popup.close() } catch {}
+    settle()
+  }, 180_000)
+}, [connectSocial, onSuccess])
+
+const handleFarcaster = useCallback(async () => {
+  setLoadingId("farcaster")
+  try {
+    const { createAppClient, viemConnector } = await import("@farcaster/auth-client")
+    
+    const appClient = createAppClient({
+      relay: "https://relay.farcaster.xyz",
+      ethereum: viemConnector(),
+    })
+
+    const nonce = crypto.randomUUID().replace(/-/g, "")
+
+    // createChannel is the correct method in auth-client v0.x+
+    const { data: channel, isError: channelError } = await appClient.createChannel({
+      siweUri: window.location.origin,
+      domain:  window.location.hostname,
+      nonce,
+    })
+
+    if (channelError || !channel?.channelToken) {
+      throw new Error("Failed to create Farcaster channel")
+    }
+
+    // Open the Warpcast QR/deeplink in a popup
+    const popup = window.open(
+      channel.url,
+      "farcaster_login",
+      "width=460,height=680,left=200,top=100",
+    )
+
+    // Poll for completion
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+
+      const settle = (err?: Error) => {
+        if (settled) return
+        settled = true
+        clearInterval(pollId)
+        clearInterval(closedPoll)
+        if (err) reject(err)
+        else resolve()
+      }
+
+      const pollId = setInterval(async () => {
+        try {
+          const { data: status, isError } = await appClient.watchStatus({
+            channelToken: channel.channelToken,
+          })
+
+          if (isError) { settle(new Error("Farcaster auth failed")); return }
+
+          if (status?.state === "completed") {
+            try { popup?.close() } catch {}
+            settle()
+
+            await connectSocial("farcaster", JSON.stringify({
+              fid:      status.fid,
+              username: status.username ?? "",
+            }))
+            onSuccess?.()
+          }
+        } catch { /* keep polling */ }
+      }, 1500)
+
+      // Detect manual popup close
+      const closedPoll = setInterval(() => {
+        if (popup?.closed) settle(new Error("cancelled"))
+      }, 500)
+
+      // 3 min timeout
+      setTimeout(() => {
+        try { popup?.close() } catch {}
+        settle(new Error("Farcaster sign-in timed out"))
+      }, 180_000)
+    })
+
+  } catch (err: any) {
+    if (err?.message !== "cancelled") {
+      console.error("Farcaster error:", err)
+    }
+  } finally {
+    setLoadingId(null)
+  }
+}, [connectSocial, onSuccess])
 
   // ── Passkey ───────────────────────────────────────────────────────────────
   const handlePasskey = useCallback(async () => {
-    setLoadingId("passkey")
+  setLoadingId("passkey")
+  try {
+    // First try authenticating with an existing passkey
+    let credentialId: string
+
     try {
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          timeout: 60000,
+          userVerification: "required",
+        },
+      }) as PublicKeyCredential
+      credentialId = assertion.id
+    } catch {
+      // No existing passkey — register a new one
       const credential = await navigator.credentials.create({
         publicKey: {
-          challenge:  crypto.getRandomValues(new Uint8Array(32)),
-          rp:         { name: "FaucetDrops" },
-          user:       {
-            id:          crypto.getRandomValues(new Uint8Array(16)),
-            name:        "user",
-            displayName: "User",
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rp: { name: "FaucetDrops", id: window.location.hostname },
+          user: {
+            id: crypto.getRandomValues(new Uint8Array(16)),
+            name: `user-${Date.now()}`,
+            displayName: "FaucetDrops User",
           },
-          pubKeyCredParams: [{ alg: -7, type: "public-key" }],
+          pubKeyCredParams: [
+            { alg: -7, type: "public-key" },   // ES256
+            { alg: -257, type: "public-key" },  // RS256
+          ],
           authenticatorSelection: {
             authenticatorAttachment: "platform",
-            userVerification:        "required",
+            userVerification: "required",
+            residentKey: "required", // required for discoverable credentials
           },
         },
       }) as PublicKeyCredential
-      await connectSocial("passkey", credential.id)
-      onSuccess?.()
-    } catch {
-      // User cancelled or not supported
-    } finally {
-      setLoadingId(null)
+      credentialId = credential.id
     }
-  }, [connectSocial, onSuccess])
+
+    await connectSocial("passkey", credentialId)
+    onSuccess?.()
+  } catch (err: any) {
+    if (!err?.message?.includes("cancel")) {
+      console.error("Passkey error:", err)
+    }
+  } finally {
+    setLoadingId(null)
+  }
+}, [connectSocial, onSuccess])
 
   // ── External wallet ───────────────────────────────────────────────────────
   const handleExternalWallet = useCallback(async (wallet: typeof detectedWallets[number]) => {
@@ -252,17 +415,21 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
           {tab === "social" ? (
             <>
               {SOCIALS.map(s => (
-                <SocialButton
-                  key={s.id}
-                  label={s.label}
-                  Icon={s.Icon}
-                  color={s.color}
-                  bg={s.bg}
-                  loading={loadingId === s.id}
-                  disabled={!!loadingId}
-                  onClick={() => handleSocial(s.id)}
-                />
-              ))}
+  <SocialButton
+    key={s.id}
+    label={s.label}
+    Icon={s.Icon}
+    color={s.color}
+    bg={s.bg}
+    loading={loadingId === s.id}
+    disabled={!!loadingId}
+    onClick={() => {
+      if (s.id === "telegram")  { handleTelegram();  return }
+      if (s.id === "farcaster") { handleFarcaster(); return }
+      handleSocial(s.id)
+    }}
+  />
+))}
 
               {/* Passkey */}
               <button

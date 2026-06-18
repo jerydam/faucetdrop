@@ -1,23 +1,5 @@
 "use client";
 
-/**
- * CHANGES FROM ORIGINAL:
- *
- * 1. Removed inline expiryInfo / secondsLeft / isCancelling state + their
- *    useEffect blocks and handleCancelExpired — all replaced by:
- *      • useChallengeExpiry()  (shared hook)
- *      • <ChallengeExpiryBanner>  (shared component)
- *
- * 2. The banner is now visible from the moment the lobby loads until
- *    game_over, giving real-time parity with pre-lobby.
- *
- * 3. Backend re-poll every 30 s keeps all clients in sync automatically.
- *    The hook also stops polling during active gameplay phases so it doesn't
- *    add latency mid-question.
- *
- * Everything else is unchanged — search for CHANGED to find the diffs.
- */
-
 import React, {
   useState, useEffect, useRef, useCallback, useMemo,
 } from "react";
@@ -30,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Loader2, Trophy, Zap, Check, X,
   ArrowLeft, Share2, Home, Plus, Users, ShieldCheck,
-  MessageSquare, Send, RefreshCw,
+  MessageSquare, Send, RefreshCw, Clock, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -50,10 +32,6 @@ import { useSearchParams } from "next/navigation";
 import { toast as sonnerToast } from "sonner";
 import { RematchPopup, RematchInvite } from "@/components/RematchPopup";
 
-// CHANGED: import shared hook + banner
-import { useChallengeExpiry } from "@/hooks/use-challenge-expiry";
-import { ChallengeExpiryBanner } from "@/components/ChallengeExpiryBanner";
-
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
@@ -70,6 +48,7 @@ const DROPS_ADDRESS  = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x1e1FB392315
 const DROPS_DECIMALS = 18;
 const DROPS_SYMBOL   = "DROPS";
 const BADGE_THRESHOLD = 10;
+const STALE_WINDOW_SECONDS = 5 * 3600; // 5 hours — must match backend
 
 const DROPS_REDEEM_ABI = [
   {
@@ -127,13 +106,30 @@ function LinearTimer({ seconds, total }: { seconds: number; total: number }) {
 
 function deriveQuizId(code: string): `0x${string}` { return keccak256(toBytes(code)); }
 
-async function getViemClients() {
-  if (!window.ethereum) throw new Error("No wallet found. Please open inside MiniPay.");
-  await window.ethereum.request({ method: "eth_requestAccounts" });
-  return {
-    walletClient: createWalletClient({ chain: celo, transport: custom(window.ethereum) }),
-    publicClient: createPublicClient({ chain: celo, transport: http("https://forno.celo.org") }),
-  };
+async function ensureCeloNetwork(): Promise<void> {
+  if (!window.ethereum) throw new Error("No wallet detected.");
+  const chainIdHex = await (window.ethereum as any).request({ method: "eth_chainId" });
+  if (parseInt(chainIdHex, 16) !== CELO_CHAIN_ID) {
+    try {
+      await (window.ethereum as any).request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0x" + CELO_CHAIN_ID.toString(16) }],
+      });
+    } catch (switchErr: any) {
+      if (switchErr.code === 4902) {
+        await (window.ethereum as any).request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId:           "0x" + CELO_CHAIN_ID.toString(16),
+            chainName:         "Celo Mainnet",
+            nativeCurrency:    { name: "CELO", symbol: "CELO", decimals: 18 },
+            rpcUrls:           ["https://forno.celo.org"],
+            blockExplorerUrls: ["https://celoscan.io"],
+          }],
+        });
+      } else throw switchErr;
+    }
+  }
 }
 
 const CONFETTI_COLORS = ["#FFD700","#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7"];
@@ -159,44 +155,186 @@ function Confetti({ active }: { active: boolean }) {
   );
 }
 
-async function ensureCeloNetwork(): Promise<void> {
-  if (!window.ethereum) throw new Error("No wallet detected.");
-  if ((window.ethereum as any).isMiniPay) return;
-  const chainIdHex = await (window.ethereum as any).request({ method: "eth_chainId" });
-  if (parseInt(chainIdHex, 16) !== CELO_CHAIN_ID) {
-    try {
-      await (window.ethereum as any).request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x" + CELO_CHAIN_ID.toString(16) }],
-      });
-    } catch (switchErr: any) {
-      if (switchErr.code === 4902) {
-        await (window.ethereum as any).request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId:           "0x" + CELO_CHAIN_ID.toString(16),
-            chainName:         "Celo Mainnet",
-            nativeCurrency:    { name: "CELO", symbol: "CELO", decimals: 18 },
-            rpcUrls:           ["https://forno.celo.org"],
-            blockExplorerUrls: ["https://celoscan.io"],
-          }],
-        });
-      } else throw switchErr;
+// ── Passive expiry countdown (NO backend calls until expired) ─────────────────
+// createdAt is a unix timestamp (seconds). We just count down locally.
+// Only when it hits zero do we call the backend to confirm + cancel.
+
+function usePassiveExpiry(createdAt: number | null, code: string, phase: GamePhase) {
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [isExpired,   setIsExpired]   = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const calledRef = useRef(false);
+
+  // Initialise countdown from createdAt
+  useEffect(() => {
+    if (!createdAt) return;
+    const expiresAt = createdAt + STALE_WINDOW_SECONDS;
+    const remaining = expiresAt - Math.floor(Date.now() / 1000);
+    if (remaining <= 0) {
+      setSecondsLeft(0);
+      setIsExpired(true);
+    } else {
+      setSecondsLeft(remaining);
     }
-  }
+  }, [createdAt]);
+
+  // Tick every second
+  useEffect(() => {
+    if (secondsLeft === null || secondsLeft <= 0) return;
+    // Don't tick during active game — saves CPU, irrelevant then
+    if (["question", "reveal", "round_end", "countdown"].includes(phase)) return;
+    const t = setInterval(() => {
+      setSecondsLeft(prev => {
+        if (prev === null || prev <= 1) {
+          setIsExpired(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [secondsLeft, phase]);
+
+  // When expired AND still in lobby, notify backend once
+  const cancelExpired = useCallback(async (walletAddress: string) => {
+    if (calledRef.current || isCancelling) return;
+    calledRef.current = true;
+    setIsCancelling(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/cancel-expired`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        toast.error("Challenge expired — any staked DROPS have been refunded.");
+      }
+    } catch {
+      // non-fatal — WS broadcast will also handle navigation
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [code, isCancelling]);
+
+  return { secondsLeft, isExpired, isCancelling, cancelExpired };
 }
 
-async function redeemDrops(challengeCode: string, stakeAmount: number): Promise<string> {
-  await ensureCeloNetwork();
-  const { walletClient, publicClient } = await getViemClients();
-  const [userAddr] = await walletClient.getAddresses();
-  const stakeWei   = parseUnits(stakeAmount.toString(), DROPS_DECIMALS);
-  const txHash     = await walletClient.writeContract({
-    address: DROPS_ADDRESS, abi: DROPS_REDEEM_ABI, functionName: "redeem",
-    args: [stakeWei, challengeCode], account: userAddr, chain: celo,
-  });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-  return receipt.transactionHash;
+// ── Expiry Banner (pure countdown display, no polling) ─────────────────────
+
+function ExpiryBanner({
+  secondsLeft,
+  isExpired,
+  isCancelling,
+  onCancel,
+  players,
+  userWalletAddress,
+  compact = false,
+}: {
+  secondsLeft: number | null;
+  isExpired: boolean;
+  isCancelling: boolean;
+  onCancel: () => void;
+  players: PlayerState[];
+  userWalletAddress?: string | null;
+  compact?: boolean;
+}) {
+  if (secondsLeft === null) return null;
+
+  // Show banner only when under 30 minutes left or expired
+  const SHOW_THRESHOLD = 30 * 60;
+  if (!isExpired && secondsLeft > SHOW_THRESHOLD) return null;
+
+  const hrs  = Math.floor(secondsLeft / 3600);
+  const mins = Math.floor((secondsLeft % 3600) / 60);
+  const secs = secondsLeft % 60;
+  const timeStr = hrs > 0
+    ? `${hrs}h ${mins}m`
+    : mins > 0
+    ? `${mins}m ${secs}s`
+    : `${secs}s`;
+
+  const p1 = players[0];
+  const p2 = players[1];
+
+  if (compact) {
+    return (
+      <div className={cn(
+        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-black tabular-nums",
+        isExpired
+          ? "border-red-400/50 bg-red-500/10 text-red-500"
+          : "border-amber-400/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+      )}>
+        <Clock className="h-3 w-3 shrink-0" />
+        {isExpired ? "Expired" : timeStr}
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn(
+      "rounded-2xl border p-4 space-y-3",
+      isExpired
+        ? "bg-red-50 dark:bg-red-950/20 border-red-300 dark:border-red-800"
+        : "bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800",
+    )}>
+      <div className="flex items-center gap-2">
+        <AlertTriangle className={cn("h-4 w-4 shrink-0", isExpired ? "text-red-500" : "text-amber-500")} />
+        <p className={cn("font-black text-sm", isExpired ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400")}>
+          {isExpired ? "Challenge expired" : `Expires in ${timeStr}`}
+        </p>
+      </div>
+
+      {/* Stake dots */}
+      <div className="flex gap-3">
+        {[p1, p2].map((p, i) => {
+          if (!p && i === 1) return (
+            <div key="empty" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />
+              Waiting for P2
+            </div>
+          );
+          if (!p) return null;
+          const isMe = p.walletAddress.toLowerCase() === userWalletAddress?.toLowerCase();
+          return (
+            <div key={p.walletAddress} className="flex items-center gap-1.5 text-xs">
+              <div className={cn(
+                "w-2 h-2 rounded-full",
+                p.txVerified ? "bg-emerald-500" : "bg-amber-400",
+              )} />
+              <span className={cn("font-bold", isMe && "text-primary")}>
+                {p.username}{isMe ? " (you)" : ""}
+              </span>
+              <span className="text-muted-foreground">
+                {p.txVerified ? "✓ staked" : "not staked"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {isExpired && (
+        <Button
+          size="sm"
+          variant="destructive"
+          className="w-full h-9 font-bold"
+          onClick={onCancel}
+          disabled={isCancelling}
+        >
+          {isCancelling
+            ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Cancelling…</>
+            : "Cancel & Refund Stakes"
+          }
+        </Button>
+      )}
+
+      {!isExpired && (
+        <p className="text-[10px] text-amber-600 dark:text-amber-500">
+          Both players must stake before the timer runs out or the challenge is cancelled.
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ── Rematch helpers ───────────────────────────────────────────────────────────
@@ -328,9 +466,8 @@ export default function ChallengePage() {
   const params  = useParams();
   const router  = useRouter();
   const code    = ((params.code as string) ?? "").toUpperCase();
-  const { address: userWalletAddress } = useWallet();
+  const { address: userWalletAddress, getActiveSigner, walletType } = useWallet();
   const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
-  const { getActiveSigner, walletType, chainId } = useWallet();
 
   const searchParams     = useSearchParams();
   const agreedStake      = searchParams.get("stake");
@@ -346,10 +483,9 @@ export default function ChallengePage() {
   const [isCreator, setIsCreator] = useState(false);
   const [claimedCodes, setClaimedCodes] = useState<Set<string>>(new Set());
 
-  // CHANGED: removed expiryInfo, secondsLeft, isCancelling — handled by hook below
-
-  // ── CHANGED: shared expiry hook ───────────────────────────────────────────
-  const expiry = useChallengeExpiry(code, phase);
+  // ── Passive expiry (createdAt from challenge load, no backend polling) ────
+  const [createdAt, setCreatedAt] = useState<number | null>(null);
+  const expiry = usePassiveExpiry(createdAt, code, phase);
 
   // ── Staking state ─────────────────────────────────────────────────────────
   const [isStaking, setIsStaking]           = useState(false);
@@ -467,6 +603,14 @@ export default function ChallengePage() {
       .then(d => {
         if (!d.success) { toast.error("Challenge not found"); router.push("/challenge"); return; }
         setChallenge(d.challenge);
+
+        // Extract createdAt for passive countdown — no RPC needed
+        const raw = d.challenge.created_at ?? d.challenge.createdAt ?? null;
+        if (raw) {
+          const ts = typeof raw === "number" ? raw : Math.floor(new Date(raw).getTime() / 1000);
+          setCreatedAt(ts);
+        }
+
         const entries: PlayerState[] = Object.entries(d.challenge.players ?? {}).map(
           ([wallet, data]: [string, any]) => ({
             walletAddress: wallet, username: data.username, points: data.points,
@@ -541,8 +685,7 @@ export default function ChallengePage() {
       .then(d => setMyTotalDuels(d.total_duels ?? 0))
       .catch(() => {});
 
-    const opponentW =
-      Object.keys(finalScores).find(w => w.toLowerCase() !== myWallet) ?? null;
+    const opponentW = Object.keys(finalScores).find(w => w.toLowerCase() !== myWallet) ?? null;
     setOpponentWallet(opponentW);
 
     if (opponentW) {
@@ -608,6 +751,12 @@ export default function ChallengePage() {
         case "state_sync": {
           const c = msg.challenge;
           setChallenge(c);
+          // Refresh createdAt if available in sync
+          const raw = c.created_at ?? c.createdAt ?? null;
+          if (raw && !createdAt) {
+            const ts = typeof raw === "number" ? raw : Math.floor(new Date(raw).getTime() / 1000);
+            setCreatedAt(ts);
+          }
           setPlayers(prev => {
             const incoming: PlayerState[] = Object.entries(c.players ?? {}).map(([w, d]: [string, any]) => ({
               walletAddress: w, username: d.username, points: d.points, ready: d.ready,
@@ -629,8 +778,6 @@ export default function ChallengePage() {
             return [...prev, { walletAddress: p.walletAddress, username: p.username, points: 0, ready: false, txVerified: false, avatarUrl: p.avatar_url ?? "" }];
           });
           toast.info(`${p.username} joined the lobby!`);
-          // CHANGED: trigger an expiry re-sync when the second player arrives
-          expiry.refresh();
           break;
         }
         case "stake_verified": {
@@ -641,8 +788,6 @@ export default function ChallengePage() {
             return prev.map(p => p.walletAddress.toLowerCase() === wallet ? { ...p, txVerified: true } : p);
           });
           if (wallet === currentMyWallet) { setStakeVerifying(false); toast.success("Stake verified ✓ — click Ready!"); }
-          // CHANGED: re-sync expiry so stake dots update
-          expiry.refresh();
           break;
         }
         case "stake_failed": {
@@ -708,7 +853,6 @@ export default function ChallengePage() {
           break;
         }
         case "challenge_expired": {
-          // Backend broadcast when challenge is cancelled server-side
           toast.error("Challenge expired — any staked DROPS have been refunded.");
           router.push("/challenge");
           break;
@@ -760,12 +904,13 @@ export default function ChallengePage() {
       }
     };
     ws.onclose = (ev) => {
-      if (ev.code === 1000 || ev.code === 1008) return;
+      // 1000 = normal close, 1001 = going away, 1008 = policy violation — don't retry
+      if ([1000, 1001, 1008].includes(ev.code)) return;
       if (reconnectAttempts.current >= 5) { toast.error("Connection lost. Refresh."); return; }
       reconnectAttempts.current += 1;
       setTimeout(() => { if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); }, 2000 * reconnectAttempts.current);
     };
-  }, [code, userWalletAddress, startTimer, clearRematchTimers, expiry]);
+  }, [code, userWalletAddress, startTimer, clearRematchTimers, createdAt]);
 
   useEffect(() => {
     if (!userWalletAddress) return;
@@ -775,18 +920,55 @@ export default function ChallengePage() {
 
   useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
 
+  // ── Handle expiry when timer hits zero in lobby ───────────────────────────
+  useEffect(() => {
+    if (expiry.isExpired && phase === "lobby" && userWalletAddress) {
+      expiry.cancelExpired(userWalletAddress);
+    }
+  }, [expiry.isExpired, phase, userWalletAddress]);
+
   // ── Actions ────────────────────────────────────────────────────────────────
 
   const handleStake = useCallback(async () => {
-    const signer = await getActiveSigner(CELO_CHAIN_ID);
-    if (!signer) throw new Error("No wallet available");
     if (!userWalletAddress || !challenge) return;
     setIsStaking(true);
     try {
       const stakeAmt = agreedStake ? parseFloat(agreedStake) : challenge.stake;
       toast.info(`Staking ${stakeAmt} DROPS — confirm in your wallet…`);
 
-      const txHash = await redeemDrops(code, stakeAmt);
+      const activeSigner = await getActiveSigner(CELO_CHAIN_ID);
+      if (!activeSigner) throw new Error("No wallet available. Please reconnect.");
+
+      let txHash: string;
+
+      if (walletType === "embedded") {
+        // Embedded wallet: activeSigner is an ethers.Wallet
+        const { ethers } = await import("ethers");
+        const dropsIface = new ethers.Interface([
+          "function redeem(uint256 amount, string rewardId)"
+        ]);
+        const stakeWei = ethers.parseUnits(stakeAmt.toString(), DROPS_DECIMALS);
+        const data = dropsIface.encodeFunctionData("redeem", [stakeWei, code]);
+        const tx = await (activeSigner as any).sendTransaction({
+          to: DROPS_ADDRESS,
+          data,
+        });
+        const receipt = await tx.wait();
+        txHash = receipt.hash;
+      } else {
+        // External wallet: use viem with window.ethereum
+        await ensureCeloNetwork();
+        const walletClient = createWalletClient({ chain: celo, transport: custom(window.ethereum!) });
+        const publicClient = createPublicClient({ chain: celo, transport: http("https://forno.celo.org") });
+        const [userAddr] = await walletClient.getAddresses();
+        const stakeWei = parseUnits(stakeAmt.toString(), DROPS_DECIMALS);
+        const hash = await walletClient.writeContract({
+          address: DROPS_ADDRESS, abi: DROPS_REDEEM_ABI, functionName: "redeem",
+          args: [stakeWei, code], account: userAddr, chain: celo,
+        });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        txHash = receipt.transactionHash;
+      }
 
       if (!hasJoined) {
         const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/join`, {
@@ -818,14 +1000,13 @@ export default function ChallengePage() {
       }
 
       toast.success("DROPS staked! Click Ready to start.");
-      expiry.refresh(); // CHANGED: update p1/p2 stake dots after staking
     } catch (err: any) {
       toast.dismiss("confirm-burn");
       toast.error(err?.message ?? "Stake failed.");
     } finally {
       setIsStaking(false);
     }
-  }, [userWalletAddress, challenge, hasJoined, code, username, sendStakeConfirmed, agreedStake, myWallet, avatarUrl, expiry]);
+  }, [userWalletAddress, challenge, hasJoined, code, username, sendStakeConfirmed, agreedStake, myWallet, avatarUrl, getActiveSigner, walletType]);
 
   const handleSelectAnswer = useCallback((optId: string) => {
     if (!currentQ || timeLeft <= 0 || phase === "reveal") return;
@@ -887,13 +1068,12 @@ export default function ChallengePage() {
         if (!joinData.success) throw new Error(joinData.detail ?? "Join failed");
         setHasJoined(true);
       }
-      expiry.refresh(); // CHANGED
     } catch (err: any) {
       toast.error(err?.message ?? "Could not sync stake.");
     } finally {
       setIsSyncing(false);
     }
-  }, [userWalletAddress, challenge, code, username, hasJoined, expiry]);
+  }, [userWalletAddress, challenge, code, username, hasJoined]);
 
   const handleRefresh = useCallback(async () => {
     if (!code || isRefreshing) return;
@@ -913,11 +1093,10 @@ export default function ChallengePage() {
         const existing = prev.find(p => p.walletAddress.toLowerCase() === newP.walletAddress.toLowerCase());
         return existing?.avatarUrl ? { ...newP, avatarUrl: existing.avatarUrl } : newP;
       }));
-      expiry.refresh(); // CHANGED
       toast.success("Lobby refreshed");
     } catch { toast.error("Refresh failed"); }
     finally { setIsRefreshing(false); }
-  }, [code, isRefreshing, expiry]);
+  }, [code, isRefreshing]);
 
   // ── Avatar hydration ───────────────────────────────────────────────────────
   const avatarKey = players.map(p => `${p.walletAddress}:${p.avatarUrl}`).join("|");
@@ -954,7 +1133,7 @@ export default function ChallengePage() {
   );
 
   // ─────────────────────────────────────────────────────────────────────────────
-  //  RENDER — early returns AFTER all hooks
+  //  RENDER
   // ─────────────────────────────────────────────────────────────────────────────
 
   if (phase === "loading") {
@@ -1382,13 +1561,15 @@ export default function ChallengePage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {/* CHANGED: compact expiry pill in sticky header */}
-              <ChallengeExpiryBanner
-                expiry={expiry}
+              {/* Compact expiry pill — only shows when under 30 min */}
+              <ExpiryBanner
+                secondsLeft={expiry.secondsLeft}
+                isExpired={expiry.isExpired}
+                isCancelling={expiry.isCancelling}
+                onCancel={() => userWalletAddress && expiry.cancelExpired(userWalletAddress)}
+                players={players}
                 userWalletAddress={userWalletAddress}
-                code={code}
                 compact
-                onCancelled={() => router.push("/challenge")}
               />
               <div className="text-right hidden sm:block">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Per Player</p>
@@ -1483,12 +1664,14 @@ export default function ChallengePage() {
             </button>
           )}
 
-          {/* CHANGED: full expiry banner replaces the old inline timer block */}
-          <ChallengeExpiryBanner
-            expiry={expiry}
+          {/* Full expiry banner — only appears under 30min or expired */}
+          <ExpiryBanner
+            secondsLeft={expiry.secondsLeft}
+            isExpired={expiry.isExpired}
+            isCancelling={expiry.isCancelling}
+            onCancel={() => userWalletAddress && expiry.cancelExpired(userWalletAddress)}
+            players={players}
             userWalletAddress={userWalletAddress}
-            code={code}
-            onCancelled={() => router.push("/challenge")}
           />
 
           {hasJoined && (

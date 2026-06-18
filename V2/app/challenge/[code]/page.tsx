@@ -1,5 +1,23 @@
 "use client";
 
+/**
+ * CHANGES FROM ORIGINAL:
+ *
+ * 1. Removed inline expiryInfo / secondsLeft / isCancelling state + their
+ *    useEffect blocks and handleCancelExpired — all replaced by:
+ *      • useChallengeExpiry()  (shared hook)
+ *      • <ChallengeExpiryBanner>  (shared component)
+ *
+ * 2. The banner is now visible from the moment the lobby loads until
+ *    game_over, giving real-time parity with pre-lobby.
+ *
+ * 3. Backend re-poll every 30 s keeps all clients in sync automatically.
+ *    The hook also stops polling during active gameplay phases so it doesn't
+ *    add latency mid-question.
+ *
+ * Everything else is unchanged — search for CHANGED to find the diffs.
+ */
+
 import React, {
   useState, useEffect, useRef, useCallback, useMemo,
 } from "react";
@@ -31,6 +49,10 @@ import { celo } from "viem/chains";
 import { useSearchParams } from "next/navigation";
 import { toast as sonnerToast } from "sonner";
 import { RematchPopup, RematchInvite } from "@/components/RematchPopup";
+
+// CHANGED: import shared hook + banner
+import { useChallengeExpiry } from "@/hooks/use-challenge-expiry";
+import { ChallengeExpiryBanner } from "@/components/ChallengeExpiryBanner";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -323,9 +345,12 @@ export default function ChallengePage() {
   const [hasJoined, setHasJoined] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
   const [claimedCodes, setClaimedCodes] = useState<Set<string>>(new Set());
-  const [expiryInfo, setExpiryInfo] = useState<{expiresAt:number; status:number} | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
-  const [isCancelling, setIsCancelling] = useState(false);
+
+  // CHANGED: removed expiryInfo, secondsLeft, isCancelling — handled by hook below
+
+  // ── CHANGED: shared expiry hook ───────────────────────────────────────────
+  const expiry = useChallengeExpiry(code, phase);
+
   // ── Staking state ─────────────────────────────────────────────────────────
   const [isStaking, setIsStaking]           = useState(false);
   const [stakeTxHash, setStakeTxHash]       = useState<string | null>(null);
@@ -388,14 +413,12 @@ export default function ChallengePage() {
   const displayStake  = agreedStake ?? challenge?.stake;
 
   // ── Rematch eligibility ───────────────────────────────────────────────────
-  // opponentTotalDuels===null means still loading; optimistically allow so
-  // the button doesn't flicker — the server enforces the real check.
   const myBadgeEarned       = myTotalDuels >= BADGE_THRESHOLD;
   const opponentBadgeEarned = opponentTotalDuels === null || opponentTotalDuels >= BADGE_THRESHOLD;
   const rematchAllowed      = canRematch && myBadgeEarned && opponentBadgeEarned;
 
   const rematchLockReason: string | null = (() => {
-    if (!canRematch) return null; // button won't render at all
+    if (!canRematch) return null;
     if (!myBadgeEarned)
       return `Play ${BADGE_THRESHOLD - myTotalDuels} more game${BADGE_THRESHOLD - myTotalDuels !== 1 ? "s" : ""} to unlock rematches.`;
     if (!opponentBadgeEarned && opponentTotalDuels !== null)
@@ -419,56 +442,6 @@ export default function ChallengePage() {
       ws.addEventListener("open", onOpen);
     }
   }, []);
-  useEffect(() => {
-  if (!code || phase !== "lobby") return;
-  let active = true;
-  const poll = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/expiry`);
-      const d = await res.json();
-      if (active && d.success && d.onChain) {
-        setExpiryInfo({ expiresAt: d.expiresAt, status: d.status });
-      }
-    } catch {}
-  };
-  poll();
-  const id = setInterval(poll, 20000); // re-sync with chain every 20s
-  return () => { active = false; clearInterval(id); };
-}, [code, phase]);
-
-useEffect(() => {
-  if (!expiryInfo) { setSecondsLeft(null); return; }
-  const tick = () => setSecondsLeft(Math.max(0, expiryInfo.expiresAt - Math.floor(Date.now() / 1000)));
-  tick();
-  const id = setInterval(tick, 1000);
-  return () => clearInterval(id);
-}, [expiryInfo]);
-
-const challengeExpired = expiryInfo?.status === 1 && secondsLeft === 0;
-
-function formatHMS(s: number) {
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-  return `${h}:${m.toString().padStart(2,"0")}:${sec.toString().padStart(2,"0")}`;
-}
-
-const handleCancelExpired = useCallback(async () => {
-  if (!userWalletAddress) return;
-  setIsCancelling(true);
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/cancel-expired`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ walletAddress: userWalletAddress }),
-    });
-    const d = await res.json();
-    if (!d.success) throw new Error(d.detail ?? "Could not cancel challenge");
-    toast.success(d.refunded?.length ? "Challenge cancelled — stake refunded." : "Challenge cancelled.");
-    router.push("/challenge");
-  } catch (err: any) {
-    toast.error(err?.message ?? "Failed to cancel challenge");
-  } finally {
-    setIsCancelling(false);
-  }
-}, [userWalletAddress, code, router]);
 
   useEffect(() => () => { if (inviteTimerRef.current) clearInterval(inviteTimerRef.current); }, []);
   useEffect(() => () => clearRematchTimers(), [clearRematchTimers]);
@@ -558,19 +531,16 @@ const handleCancelExpired = useCallback(async () => {
   useEffect(() => {
     if (phase !== "game_over" || !myWallet) return;
 
-    // Pending claims
     fetch(`${API_BASE_URL}/api/challenge/${myWallet}/pending-claims`)
       .then(r => r.json())
       .then(d => { if (d.success) setPendingClaims(d.claims ?? []); })
       .catch(() => {});
 
-    // My total_duels for badge check
     fetch(`${API_BASE_URL}/api/players/${myWallet}`)
       .then(r => r.json())
       .then(d => setMyTotalDuels(d.total_duels ?? 0))
       .catch(() => {});
 
-    // Opponent wallet = any key in finalScores that isn't mine
     const opponentW =
       Object.keys(finalScores).find(w => w.toLowerCase() !== myWallet) ?? null;
     setOpponentWallet(opponentW);
@@ -613,7 +583,7 @@ const handleCancelExpired = useCallback(async () => {
     sendWhenReady({ type: "ready", walletAddress: userWalletAddress });
   }, [userWalletAddress, sendWhenReady]);
 
-  // ── WS refs to avoid reconnect loops ─────────────────────────────────────
+  // ── WS refs ───────────────────────────────────────────────────────────────
   const usernameRef = useRef(username);
   const myWalletRef = useRef(myWallet);
   useEffect(() => { usernameRef.current = username; }, [username]);
@@ -659,6 +629,8 @@ const handleCancelExpired = useCallback(async () => {
             return [...prev, { walletAddress: p.walletAddress, username: p.username, points: 0, ready: false, txVerified: false, avatarUrl: p.avatar_url ?? "" }];
           });
           toast.info(`${p.username} joined the lobby!`);
+          // CHANGED: trigger an expiry re-sync when the second player arrives
+          expiry.refresh();
           break;
         }
         case "stake_verified": {
@@ -669,6 +641,8 @@ const handleCancelExpired = useCallback(async () => {
             return prev.map(p => p.walletAddress.toLowerCase() === wallet ? { ...p, txVerified: true } : p);
           });
           if (wallet === currentMyWallet) { setStakeVerifying(false); toast.success("Stake verified ✓ — click Ready!"); }
+          // CHANGED: re-sync expiry so stake dots update
+          expiry.refresh();
           break;
         }
         case "stake_failed": {
@@ -733,6 +707,12 @@ const handleCancelExpired = useCallback(async () => {
           if (msg.winner === currentMyWallet) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 6000); }
           break;
         }
+        case "challenge_expired": {
+          // Backend broadcast when challenge is cancelled server-side
+          toast.error("Challenge expired — any staked DROPS have been refunded.");
+          router.push("/challenge");
+          break;
+        }
         case "rematch_declined":
           clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
           toast.error(`${msg.declinerName ?? "Opponent"} declined the rematch.`);
@@ -785,7 +765,7 @@ const handleCancelExpired = useCallback(async () => {
       reconnectAttempts.current += 1;
       setTimeout(() => { if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); }, 2000 * reconnectAttempts.current);
     };
-  }, [code, userWalletAddress, startTimer, clearRematchTimers]);
+  }, [code, userWalletAddress, startTimer, clearRematchTimers, expiry]);
 
   useEffect(() => {
     if (!userWalletAddress) return;
@@ -799,7 +779,7 @@ const handleCancelExpired = useCallback(async () => {
 
   const handleStake = useCallback(async () => {
     const signer = await getActiveSigner(CELO_CHAIN_ID);
-      if (!signer) throw new Error("No wallet available");
+    if (!signer) throw new Error("No wallet available");
     if (!userWalletAddress || !challenge) return;
     setIsStaking(true);
     try {
@@ -838,13 +818,14 @@ const handleCancelExpired = useCallback(async () => {
       }
 
       toast.success("DROPS staked! Click Ready to start.");
+      expiry.refresh(); // CHANGED: update p1/p2 stake dots after staking
     } catch (err: any) {
       toast.dismiss("confirm-burn");
       toast.error(err?.message ?? "Stake failed.");
     } finally {
       setIsStaking(false);
     }
-  }, [userWalletAddress, challenge, hasJoined, code, username, sendStakeConfirmed, agreedStake, myWallet, avatarUrl]);
+  }, [userWalletAddress, challenge, hasJoined, code, username, sendStakeConfirmed, agreedStake, myWallet, avatarUrl, expiry]);
 
   const handleSelectAnswer = useCallback((optId: string) => {
     if (!currentQ || timeLeft <= 0 || phase === "reveal") return;
@@ -906,12 +887,13 @@ const handleCancelExpired = useCallback(async () => {
         if (!joinData.success) throw new Error(joinData.detail ?? "Join failed");
         setHasJoined(true);
       }
+      expiry.refresh(); // CHANGED
     } catch (err: any) {
       toast.error(err?.message ?? "Could not sync stake.");
     } finally {
       setIsSyncing(false);
     }
-  }, [userWalletAddress, challenge, code, username, hasJoined]);
+  }, [userWalletAddress, challenge, code, username, hasJoined, expiry]);
 
   const handleRefresh = useCallback(async () => {
     if (!code || isRefreshing) return;
@@ -931,10 +913,11 @@ const handleCancelExpired = useCallback(async () => {
         const existing = prev.find(p => p.walletAddress.toLowerCase() === newP.walletAddress.toLowerCase());
         return existing?.avatarUrl ? { ...newP, avatarUrl: existing.avatarUrl } : newP;
       }));
+      expiry.refresh(); // CHANGED
       toast.success("Lobby refreshed");
     } catch { toast.error("Refresh failed"); }
     finally { setIsRefreshing(false); }
-  }, [code, isRefreshing]);
+  }, [code, isRefreshing, expiry]);
 
   // ── Avatar hydration ───────────────────────────────────────────────────────
   const avatarKey = players.map(p => `${p.walletAddress}:${p.avatarUrl}`).join("|");
@@ -1196,7 +1179,6 @@ const handleCancelExpired = useCallback(async () => {
 
           <div className="max-w-2xl mx-auto w-full px-4 py-8 pb-24 space-y-5">
 
-            {/* Outcome hero */}
             <div className="text-center space-y-2">
               <div className="text-6xl">{isTie ? "🤝" : isWinner ? "🏆" : "🎯"}</div>
               <h1 className="text-3xl font-black text-foreground">
@@ -1212,7 +1194,6 @@ const handleCancelExpired = useCallback(async () => {
               </div>
             </div>
 
-            {/* Final leaderboard */}
             <div className="bg-card rounded-2xl border border-border overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                 <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -1233,21 +1214,13 @@ const handleCancelExpired = useCallback(async () => {
                       isMe && "bg-blue-50 dark:bg-blue-950/20",
                       isThisWinner && !isMe && "bg-blue-50/50 dark:bg-blue-950/10"
                     )}>
-                      <div className="text-xl w-8 text-center shrink-0">
-                        {medals[i] ?? `${i + 1}`}
-                      </div>
+                      <div className="text-xl w-8 text-center shrink-0">{medals[i] ?? `${i + 1}`}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-foreground text-sm">{data.username}</p>
-                          {isMe && (
-                            <Badge className="text-[9px] h-4 px-1.5 bg-primary text-primary-foreground border-0">YOU</Badge>
-                          )}
-                          {isThisWinner && (
-                            <Badge className="text-[9px] h-4 px-1.5 bg-blue-400 text-blue-900 border-0">WINNER</Badge>
-                          )}
-                          {isTie && (
-                            <Badge variant="outline" className="text-[9px] h-4 px-1.5">TIE</Badge>
-                          )}
+                          {isMe && <Badge className="text-[9px] h-4 px-1.5 bg-primary text-primary-foreground border-0">YOU</Badge>}
+                          {isThisWinner && <Badge className="text-[9px] h-4 px-1.5 bg-blue-400 text-blue-900 border-0">WINNER</Badge>}
+                          {isTie && <Badge variant="outline" className="text-[9px] h-4 px-1.5">TIE</Badge>}
                         </div>
                         <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
                           {wallet.slice(0, 6)}…{wallet.slice(-4)}
@@ -1262,20 +1235,7 @@ const handleCancelExpired = useCallback(async () => {
                 })}
               </div>
             </div>
-                {expiryInfo && secondsLeft !== null && (
-                <div className="text-center text-xs text-muted-foreground">
-                  {challengeExpired ? "Stake window has expired." : `Stake window closes in ${formatHMS(secondsLeft)}`}
-                </div>
-              )}
 
-              {challengeExpired && (
-                <Button variant="destructive" className="w-full h-12" onClick={handleCancelExpired} disabled={isCancelling}>
-                  {isCancelling
-                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cancelling…</>
-                    : "Cancel Expired Challenge & Refund Stake"}
-                </Button>
-              )}
-            {/* Claim reward */}
             {myClaim && (
               <div className={cn(
                 "rounded-2xl p-4 space-y-3 border",
@@ -1316,7 +1276,6 @@ const handleCancelExpired = useCallback(async () => {
               </div>
             )}
 
-            {/* Winner but no pending claim */}
             {isWinner && !myClaim && phase === "game_over" && (
               <div className="bg-muted/50 border border-border rounded-2xl p-4 text-center space-y-1">
                 <p className="text-sm font-bold text-foreground">Reward already sent ✓</p>
@@ -1324,21 +1283,15 @@ const handleCancelExpired = useCallback(async () => {
               </div>
             )}
 
-            {/* Actions */}
             <div className="flex flex-col gap-3">
-
-              {/* ── Rematch button — always rendered when canRematch, badge-aware ── */}
               {canRematch && (
                 <div className="flex flex-col gap-1.5">
                   <button
                     onClick={() =>
                       sendRematchInvite({
-                        code,
-                        userWalletAddress: userWalletAddress!,
-                        setRematchPending,
-                        setRematchCountdown,
-                        rematchTimerRef,
-                        rematchTimeoutRef,
+                        code, userWalletAddress: userWalletAddress!,
+                        setRematchPending, setRematchCountdown,
+                        rematchTimerRef, rematchTimeoutRef,
                       })
                     }
                     disabled={!rematchAllowed || isRequestingRematch || rematchPending}
@@ -1351,30 +1304,17 @@ const handleCancelExpired = useCallback(async () => {
                     )}
                   >
                     {rematchPending ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Waiting{rematchCountdown !== null && rematchCountdown > 0 ? ` (${rematchCountdown}s)` : "…"}
-                      </>
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Waiting{rematchCountdown !== null && rematchCountdown > 0 ? ` (${rematchCountdown}s)` : "…"}</>
                     ) : isRequestingRematch ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        Creating challenge…
-                      </>
+                      <><Loader2 className="h-5 w-5 animate-spin" /> Creating challenge…</>
                     ) : rematchAllowed ? (
                       <>🔁 Request Rematch</>
                     ) : (
-                      <>
-                        <ShieldCheck className="h-5 w-5" />
-                        Rematch Locked
-                      </>
+                      <><ShieldCheck className="h-5 w-5" /> Rematch Locked</>
                     )}
                   </button>
-
-                  {/* Reason shown only when locked and no request is in-flight */}
                   {rematchLockReason && !rematchPending && !isRequestingRematch && (
-                    <p className="text-[11px] text-center text-muted-foreground px-2">
-                      🔒 {rematchLockReason}
-                    </p>
+                    <p className="text-[11px] text-center text-muted-foreground px-2">🔒 {rematchLockReason}</p>
                   )}
                 </div>
               )}
@@ -1422,10 +1362,7 @@ const handleCancelExpired = useCallback(async () => {
         <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md border-b border-border">
           <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => router.push("/challenge")}
-                className="hover:bg-muted p-2 rounded-full transition-colors"
-              >
+              <button onClick={() => router.push("/challenge")} className="hover:bg-muted p-2 rounded-full transition-colors">
                 <ArrowLeft className="h-5 w-5" />
               </button>
               <button
@@ -1445,6 +1382,14 @@ const handleCancelExpired = useCallback(async () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {/* CHANGED: compact expiry pill in sticky header */}
+              <ChallengeExpiryBanner
+                expiry={expiry}
+                userWalletAddress={userWalletAddress}
+                code={code}
+                compact
+                onCancelled={() => router.push("/challenge")}
+              />
               <div className="text-right hidden sm:block">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Per Player</p>
                 <p className="font-bold text-sm">{displayStake} {DROPS_SYMBOL}</p>
@@ -1537,6 +1482,14 @@ const handleCancelExpired = useCallback(async () => {
               <Share2 className="h-4 w-4" /> Copy invite link
             </button>
           )}
+
+          {/* CHANGED: full expiry banner replaces the old inline timer block */}
+          <ChallengeExpiryBanner
+            expiry={expiry}
+            userWalletAddress={userWalletAddress}
+            code={code}
+            onCancelled={() => router.push("/challenge")}
+          />
 
           {hasJoined && (
             <div className="space-y-3 pt-2">

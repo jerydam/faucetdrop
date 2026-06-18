@@ -20,7 +20,7 @@ import { ethers } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
 import { getGoodDollarPrice } from "@/lib/getGoodDollarPrice";
 
-const BACKEND_URL = "http://127.0.0.1:8000";
+const BACKEND_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 /** ─── Contract config ────────────────────────────────────────────────────── */
 const DROPS_REDEEM_POOL_ADDRESS = "0x38Ae076A115bf79102DA9472C4c688DB078a4b13"; // ← replace

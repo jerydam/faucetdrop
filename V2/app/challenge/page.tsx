@@ -14,7 +14,7 @@
   import { ethers } from "ethers";
   import { REDEEM_ABI } from "@/lib/abis";
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
   const CELO_CHAIN_ID = 42220;
   const DROP_TOKEN_CONTRACT= "0x1e1FB392315B248f24Bfc35742B95d5F45e85906"
   interface LobbyChallenge {

@@ -34,7 +34,7 @@ import { QUIZ_HUB_ABI } from "@/lib/abis";
 // Config
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 const QUIZ_HUB_ADDRESS = (
   process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0xB19aA952c94faB37716131D8C3d9Bb564e6253Ed"

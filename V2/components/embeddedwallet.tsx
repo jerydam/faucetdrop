@@ -71,6 +71,8 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
     { address: "0x765DE816845861e75A25fCA122bb6898B8B1282a", name: "Celo Dollar", symbol: "cUSD", decimals: 18, logoUrl: "/cusd.png", description: "USD-pegged stablecoin on Celo" },
     { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", name: "Tether", symbol: "USDT", decimals: 6, logoUrl: "/usdt.jpg", description: "Tether USD stablecoin" },
     { address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "USD Coin stablecoin" },
+    { address: "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B", name: "FaucetDrops", symbol: "DROPS", decimals: 18, logoUrl: "/drop-token.png", description: "FaucetDrops Utility Token" },
+    
   ],
   // Lisk Mainnet (1135)
   1135: [

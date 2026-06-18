@@ -46,8 +46,10 @@ interface WalletContextType {
   isConnected:      boolean
   isConnecting:     boolean
   walletType:       "embedded" | "external" | null
-  provider:         BrowserProvider | null
-  signer:           JsonRpcSigner | null
+  // NOTE: widened so embedded sessions can populate these directly, the
+  // same way external sessions always have — see refreshEmbeddedSigner.
+  provider:         BrowserProvider | JsonRpcProvider | null
+  signer:           JsonRpcSigner | Wallet | null
   detectedWallets:  DetectedWallet[]
   showModal:        boolean
   solanaAddress:    string | null
@@ -57,9 +59,9 @@ interface WalletContextType {
   legacyEvmAddress?:  string | null
   legacySolAddress?:  string | null
   getEmbeddedSigner: (chainId: number) => Promise<Wallet | null>
-getActiveSigner:   (chainId?: number) => Promise<JsonRpcSigner | Wallet | null>
+  getActiveSigner:   (chainId?: number) => Promise<JsonRpcSigner | Wallet | null>
 
-  clearLegacy:      () => void
+  clearLegacy:      () => Promise<void>
   fetchNonEvmAddresses: () => Promise<void>
 
   setShowModal:             (val: boolean) => void
@@ -150,10 +152,10 @@ export const WalletContext = createContext<WalletContextType>({
   refreshProvider: async () => {},
   solanaAddress:  null,
   stellarAddress: null,
-  clearLegacy:      () => {},
+  clearLegacy:      async () => {},
   fetchNonEvmAddresses: async () => {},
   getActiveSigner:   async () => null,
-  
+
 })
 
 export async function openOAuthPopup(
@@ -221,8 +223,8 @@ export async function openOAuthPopup(
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [session,         setSession]         = useState<WalletSession | null>(null)
-  const [provider,        setProvider]        = useState<BrowserProvider | null>(null)
-  const [signer,          setSigner]          = useState<JsonRpcSigner | null>(null)
+  const [provider,        setProvider]        = useState<BrowserProvider | JsonRpcProvider | null>(null)
+  const [signer,          setSigner]          = useState<JsonRpcSigner | Wallet | null>(null)
   const [isConnecting,    setIsConnecting]    = useState(false)
   const [showModal,       setShowModal]       = useState(false)
   const [detectedWallets, setDetectedWallets] = useState<DetectedWallet[]>([])
@@ -233,22 +235,68 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // also clears Privy's OWN internal session/wallet cache. Without this,
   // Privy's useWallets() can keep returning the previous user's embedded
   // wallet address even after our own session has switched to a new user.
-  const { logout: privyLogout, authenticated: privyAuthenticated } = usePrivy()
+  const { logout: privyLogout } = usePrivy()
 
+  // NOTE: deliberately NOT gated on `usePrivy().authenticated`. That flag
+  // can lag behind reality (it's just React state from the Privy SDK), and
+  // gating on it caused stale-wallet bugs where a second account's import
+  // flow kept seeing the previous account's cached Privy session/wallets
+  // because we skipped logout thinking we were "already logged out".
+  // Calling logout() when there's nothing to log out of is a safe no-op.
   const forcePrivyLogout = useCallback(async () => {
     try {
-      if (privyAuthenticated) {
-        await privyLogout()
-      }
+      await privyLogout()
     } catch {
       // non-fatal — Privy logout failing shouldn't block our own disconnect
     }
-  }, [privyLogout, privyAuthenticated])
+  }, [privyLogout])
 
   const isConnected = !!session?.address
   const address     = session?.address ?? null
   const chainId     = session?.chainId ?? null
   const walletType  = session?.walletType ?? null
+
+  // ── Embedded signer/provider loader ───────────────────────────────────────
+  // Pure fetch — takes explicit token/chainId instead of reading `session`
+  // from closure, so it can never run against a stale session.
+  const loadEmbeddedSigner = useCallback(async (token: string, targetChainId: number) => {
+    try {
+      const res = await fetch(
+        `${API_BASE}/wallet/export-privatekey?chain_id=${targetChainId}`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+      )
+      if (!res.ok) {
+        console.error(`[wallet] export-privatekey failed: ${res.status}`)
+        return null
+      }
+      const data = await res.json()
+      if (!data.private_key) {
+        console.error("[wallet] export-privatekey returned no private_key")
+        return null
+      }
+      const rpcUrl = CHAIN_RPC[targetChainId]
+      if (!rpcUrl) {
+        console.error(`[wallet] no RPC configured for chain ${targetChainId}`)
+        return null
+      }
+      const jsonRpcProvider = new JsonRpcProvider(rpcUrl)
+      const wallet = new ethers.Wallet(data.private_key, jsonRpcProvider)
+      return { provider: jsonRpcProvider, signer: wallet }
+    } catch (err) {
+      console.error("[wallet] failed to load embedded signer", err)
+      return null
+    }
+  }, [])
+
+  // Loads the embedded signer AND writes it into context state, so
+  // `useWallet().signer` / `useWallet().provider` work for embedded wallets
+  // the same way they already do for external ones.
+  const refreshEmbeddedSigner = useCallback(async (token: string, targetChainId: number) => {
+    const result = await loadEmbeddedSigner(token, targetChainId)
+    setProvider(result?.provider ?? null)
+    setSigner(result?.signer ?? null)
+    return result
+  }, [loadEmbeddedSigner])
 
   // ── Mount: detect wallets + restore session ───────────────────────────────
   useEffect(() => {
@@ -279,6 +327,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             }
           })
         }
+      } else if (saved.walletType === "embedded" && saved.token) {
+        refreshEmbeddedSigner(saved.token, saved.chainId ?? DEFAULT_CHAIN_ID)
       }
     }
 
@@ -390,49 +440,46 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [forcePrivyLogout])
 
-  // Add this inside WalletProvider, before the return
-const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
-  if (!session?.token || session.walletType !== "embedded") return null
-  try {
-    const res = await fetch(
-      `${API_BASE}/wallet/export-privatekey?chain_id=${targetChainId}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.token}` },
-      }
-    )
-    if (!res.ok) return null
-    const data = await res.json()
-    if (!data.private_key) return null
-    const provider = new JsonRpcProvider(CHAIN_RPC[targetChainId])
-    return new ethers.Wallet(data.private_key, provider)
-  } catch {
-    return null
-  }
-}, [session?.token, session?.walletType])
-const getActiveSigner = useCallback(async (targetChainId?: number) => {
-  // External wallet — rebuild provider if signer is stale/null
-  if (session?.walletType === "external") {
-    if (signer) return signer
+  // Public, backward-compatible accessor — fetches a one-off embedded
+  // signer without necessarily touching context state. Most call sites
+  // should prefer `getActiveSigner()` below; this is kept for callers that
+  // already depend on this exact signature.
+  const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
+    if (!session?.token || session.walletType !== "embedded") return null
+    const result = await loadEmbeddedSigner(session.token, targetChainId)
+    return result?.signer ?? null
+  }, [session?.token, session?.walletType, loadEmbeddedSigner])
 
-    // Signer is null but wallet may still be connected — try rebuilding
-    const raw = rawProviderRef.current
-    if (raw) {
-      const result = await buildProvider(raw)
-      if (result) {
-        setProvider(result.provider)
-        setSigner(result.signer)
-        return result.signer
+  // Single accessor that works the same way regardless of wallet type.
+  // For external wallets this returns the cached signer (rebuilding the
+  // provider first if it's gone stale). For embedded wallets it always
+  // fetches a fresh signer AND syncs it into context state, so a stale
+  // chain switch or expired key never silently no-ops a transaction.
+  const getActiveSigner = useCallback(async (targetChainId?: number) => {
+    if (session?.walletType === "external") {
+      if (signer) return signer
+
+      const raw = rawProviderRef.current
+      if (raw) {
+        const result = await buildProvider(raw)
+        if (result) {
+          setProvider(result.provider)
+          setSigner(result.signer)
+          return result.signer
+        }
       }
+      return null
     }
-    return null
-  }
 
-  // Embedded wallet — fetch private key and build local signer
-  const cid = targetChainId ?? chainId
-  if (!cid) return null
-  return getEmbeddedSigner(cid)
-}, [session?.walletType, signer, chainId, getEmbeddedSigner])
+    if (session?.walletType === "embedded" && session.token) {
+      const cid = targetChainId ?? chainId
+      if (!cid) return null
+      const result = await refreshEmbeddedSigner(session.token, cid)
+      return result?.signer ?? null
+    }
+
+    return null
+  }, [session?.walletType, session?.token, signer, chainId, refreshEmbeddedSigner])
 
   // ── Connect social (embedded wallet via backend) ──────────────────────────
   const connectSocial = useCallback(async (socialProvider: SocialProvider, credential: string) => {
@@ -488,9 +535,10 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
 
       setSession(newSession)
       saveSession(newSession)
-      setProvider(null)
-      setSigner(null)
       setShowModal(false)
+      // Populate `signer`/`provider` right away — same contract as the
+      // external-wallet path, instead of leaving them null for embedded.
+      refreshEmbeddedSigner(data.token, DEFAULT_CHAIN_ID)
       toast.success("Wallet ready!")
     } catch (err: any) {
       if (err.message !== "cancelled") {
@@ -500,14 +548,17 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
     } finally {
       setIsConnecting(false)
     }
-  }, [])
+  }, [refreshEmbeddedSigner])
 
   // ── Clear legacy import flags ────────────────────────────────────────────
   // Called both on successful import AND when the modal is dismissed/skipped.
   // We force a Privy logout here too: once the legacy-import flow is done
   // (or abandoned), we don't want Privy's embedded-wallet session lingering
-  // around to confuse the NEXT social login on this device.
-  const clearLegacy = useCallback(() => {
+  // around to confuse the NEXT social login on this device. This is now
+  // async and AWAITS the logout, so callers can rely on Privy actually
+  // being logged out by the time this resolves (fixes the bug where a
+  // second account's import kept reusing the first account's Privy wallet).
+  const clearLegacy = useCallback(async () => {
     setSession(prev => {
       if (!prev) return prev
       const updated = {
@@ -521,12 +572,14 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
       saveSession(updated)
       return updated
     })
-    forcePrivyLogout()
+    await forcePrivyLogout()
   }, [forcePrivyLogout])
 
   // ── Disconnect ────────────────────────────────────────────────────────────
-  const disconnect = useCallback(() => {
-    forcePrivyLogout()
+  const disconnect = useCallback(async () => {
+    // Awaited now too — same reasoning as clearLegacy: don't let a fast
+    // disconnect→reconnect-as-someone-else race ahead of Privy's logout.
+    await forcePrivyLogout()
     clearImportSessionKeys()
     localStorage.removeItem(SESSION_KEY)
     setSession(null)
@@ -545,6 +598,10 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
       const updated = { ...session!, chainId: targetChainId }
       setSession(updated)
       saveSession(updated)
+      // Embedded signer is chain-specific (it's built on a JsonRpcProvider
+      // pointed at one RPC) — refresh it so context state matches the new
+      // chain instead of silently holding a signer for the old one.
+      if (session?.token) refreshEmbeddedSigner(session.token, targetChainId)
       toast.success(`Switched to ${viemChain.name}`)
       return
     }
@@ -588,7 +645,7 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
       if (err?.code === 4001) toast.error("Switch cancelled")
       else toast.error("Failed to switch network")
     }
-  }, [session, walletType])
+  }, [session, walletType, refreshEmbeddedSigner])
 
   const ensureCorrectNetwork = useCallback(async (requiredChainId: number) => {
     if (!isConnected) { setShowModal(true); return false }

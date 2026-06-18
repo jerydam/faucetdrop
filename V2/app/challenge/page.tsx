@@ -62,8 +62,7 @@
     .lobby-card:hover{border-color:var(--dd-blue);transform:translateY(-2px)}
     .lobby-card:active{transform:scale(.98)}
     .history-row{transition:border-color .15s}.history-row:active{transform:scale(.99)}
-    .register-banner{background:linear-gradient(135deg,#f59e0b,#ef4444);border-radius:16px;overflow:hidden;animation:slideDown 0.4s ease-out}
-    @keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+    .register-banner{background:linear-gradient(135deg,var(--dd-blue),var(--dd-blue2));border-radius:16px;overflow:hidden;animation:slideDown 0.4s ease-out}    @keyframes slideDown{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
     @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     .spin{animation:spin 1s linear infinite}
     .drops-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:800;font-family:'Figtree',sans-serif}
@@ -230,6 +229,10 @@
         // Non-fatal — DROPS are on-chain. Backend reconciles on next fetchDropsBalance.
         console.warn("Could not confirm welcome mint to backend — will reconcile on next balance fetch");
       }
+      const creditMsg = data.existingBalanceFolded > 0
+        ? `🎉 Welcome! ${fmt(data.totalCredited)} DROPS added to your game pool (100 bonus + ${fmt(data.existingBalanceFolded)} already in your wallet).`
+        : "🎉 Welcome! 100 DROPS minted to your wallet!";
+      toast.success(creditMsg);
 
       toast.success("🎉 Welcome! 100 DROPS minted to your wallet!");
       setRegistered(true);
@@ -353,7 +356,7 @@
                         disabled={isRegistering}
                         style={{
                           height: 42, padding: "0 20px", borderRadius: 10,
-                          background: "#fff", color: "#ef4444", border: "none",
+                          background: "#fff", color: "var(--dd-blue)", border: "none",
                           fontWeight: 900, fontSize: 13, cursor: "pointer",
                           display: "flex", alignItems: "center", gap: 8,
                           opacity: isRegistering ? 0.7 : 1,

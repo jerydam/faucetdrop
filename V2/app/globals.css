@@ -170,7 +170,21 @@
   background-color: rgb(var(--surface-base));
   border-color: rgb(var(--border-subtle));
 }
-
+.tab-scrollbar::-webkit-scrollbar {
+  height: 3px;
+}
+.tab-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tab-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.3);
+  border-radius: 999px;
+}
+.tab-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.6);
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .quiz-card {
   background-color: rgb(var(--surface-card));
   border: 1px solid rgb(var(--border-subtle));

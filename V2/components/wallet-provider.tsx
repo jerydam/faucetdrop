@@ -6,6 +6,7 @@ import {
 } from "react"
 import { BrowserProvider, ethers, JsonRpcProvider, Wallet, type JsonRpcSigner } from "ethers"
 import { toast } from "sonner"
+import { usePrivy } from "@privy-io/react-auth"
 import { supportedChains, DEFAULT_CHAIN_ID, CHAIN_RPC } from "@/config/chain"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,16 +92,16 @@ function detectWallets(): DetectedWallet[] {
   const providers: any[] = eth.providers ?? [eth]
 
   for (const p of providers) {
+    if (p.isBraveWallet)               continue  // ← add this first to skip early
     if (p.isMetaMask && !p.isRabby)    wallets.push({ name: "MetaMask",       icon: "🦊", provider: p })
     else if (p.isRabby)                wallets.push({ name: "Rabby",           icon: "🐰", provider: p })
     else if (p.isCoinbaseWallet)       wallets.push({ name: "Coinbase Wallet", icon: "🔵", provider: p })
-    else if (p.isBraveWallet)          wallets.push({ name: "Brave Wallet",    icon: "🦁", provider: p })
     else if (p.isFrame)                wallets.push({ name: "Frame",           icon: "🖼", provider: p })
     else if (p.isOkxWallet)            wallets.push({ name: "OKX Wallet",      icon: "⭕", provider: p })
     else if (p.isTrust)                wallets.push({ name: "Trust Wallet",    icon: "🛡", provider: p })
     else if (p.isPhantom && p.ethereum)wallets.push({ name: "Phantom",         icon: "👻", provider: p.ethereum })
     else                               wallets.push({ name: "Browser Wallet",  icon: "🌐", provider: p })
-  }
+}
 
   return wallets.filter((w, i, arr) => arr.findIndex(x => x.name === w.name) === i)
 }
@@ -227,6 +228,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [detectedWallets, setDetectedWallets] = useState<DetectedWallet[]>([])
   const rawProviderRef = useRef<any>(null)
 
+  // ── Privy SDK logout hook ──────────────────────────────────────────────
+  // We need this so that disconnecting / switching accounts on this app
+  // also clears Privy's OWN internal session/wallet cache. Without this,
+  // Privy's useWallets() can keep returning the previous user's embedded
+  // wallet address even after our own session has switched to a new user.
+  const { logout: privyLogout, authenticated: privyAuthenticated } = usePrivy()
+
+  const forcePrivyLogout = useCallback(async () => {
+    try {
+      if (privyAuthenticated) {
+        await privyLogout()
+      }
+    } catch {
+      // non-fatal — Privy logout failing shouldn't block our own disconnect
+    }
+  }, [privyLogout, privyAuthenticated])
+
   const isConnected = !!session?.address
   const address     = session?.address ?? null
   const chainId     = session?.chainId ?? null
@@ -343,7 +361,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       })
       const data = await res.json()
 
-      // Clear any stale import state from a previous user
+      // Clear any stale import state from a previous user, including
+      // Privy's own cached session — an external wallet connect should
+      // never leave a stale embedded-wallet session behind either.
+      await forcePrivyLogout()
       clearImportSessionKeys()
       localStorage.removeItem(SESSION_KEY)
 
@@ -367,7 +388,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsConnecting(false)
     }
-  }, [])
+  }, [forcePrivyLogout])
 
   // Add this inside WalletProvider, before the return
 const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
@@ -440,6 +461,9 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
       } = await res.json()
 
       // ── Clear ALL stale import/session state from any previous user ──
+      // NOTE: we intentionally do NOT call forcePrivyLogout() here — this
+      // is the path where Privy auth is what we're actively establishing
+      // (e.g. via the export flow), so logging out here would undo it.
       clearImportSessionKeys()
       localStorage.removeItem(SESSION_KEY)
 
@@ -478,6 +502,11 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
     }
   }, [])
 
+  // ── Clear legacy import flags ────────────────────────────────────────────
+  // Called both on successful import AND when the modal is dismissed/skipped.
+  // We force a Privy logout here too: once the legacy-import flow is done
+  // (or abandoned), we don't want Privy's embedded-wallet session lingering
+  // around to confuse the NEXT social login on this device.
   const clearLegacy = useCallback(() => {
     setSession(prev => {
       if (!prev) return prev
@@ -492,10 +521,12 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
       saveSession(updated)
       return updated
     })
-  }, [])
+    forcePrivyLogout()
+  }, [forcePrivyLogout])
 
   // ── Disconnect ────────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
+    forcePrivyLogout()
     clearImportSessionKeys()
     localStorage.removeItem(SESSION_KEY)
     setSession(null)
@@ -503,7 +534,7 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
     setSigner(null)
     rawProviderRef.current = null
     toast.success("Disconnected")
-  }, [])
+  }, [forcePrivyLogout])
 
   // ── Switch chain ──────────────────────────────────────────────────────────
   const switchChain = useCallback(async (targetChainId: number) => {

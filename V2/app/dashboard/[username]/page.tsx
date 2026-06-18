@@ -658,53 +658,32 @@ export default function DashboardPage() {
                     </Card>
                 </div>
 
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-                    <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg">
-                        <button 
-                            onClick={() => setActiveTab('faucets')}
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'faucets' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                        >
-                            Faucets ({faucets.length})
-                        </button>
-                        <button 
-                            onClick={() => setActiveTab('quests')}
-                            className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'quests' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                        >
-                            Quests ({publishedQuests.length})
-                        </button>
-                        <button 
-                            onClick={() => setActiveTab('quizzes')}
-                            className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-md transition-all ${activeTab === 'quizzes' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                        >
-                            Quizzes ({quizCount})
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('challenge')}
-                            className={`px-4 py-2 text-sm font-medium whitespace-nowrap rounded-md transition-all ${
-                                activeTab === 'challenge'
-                                ? 'bg-background shadow text-foreground'
-                                : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                            >
-                            ⚡ Challenge
-                            </button>
-                    </div>
-                    
-                    {isOwner && (
-                        <div className="flex gap-3 w-full md:w-auto">
-                            <div className="md:hidden flex gap-3 w-full">
-                                <MyCreationsModal faucets={faucets} address={currentConnectedAddress!} />
-                                <CreateNewModal onSuccess={fetchData} />
-                            </div>
-                            
-                            <div className="hidden md:flex gap-3 flex-wrap">
-                                <EmbeddedWalletControlProduction /> 
-                                <MyCreationsModal faucets={faucets} address={currentConnectedAddress!} />
-                                <CreateNewModal onSuccess={fetchData} />
-                            </div>
-                        </div>
-                    )}
-                </div>
+                <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg overflow-x-auto tab-scrollbar">
+    <button 
+        onClick={() => setActiveTab('faucets')}
+        className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'faucets' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+    >
+        Faucets ({faucets.length})
+    </button>
+    <button 
+        onClick={() => setActiveTab('quests')}
+        className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'quests' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+    >
+        Quests ({publishedQuests.length})
+    </button>
+    <button 
+        onClick={() => setActiveTab('quizzes')}
+        className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'quizzes' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+    >
+        Quizzes ({quizCount})
+    </button>
+    <button
+        onClick={() => setActiveTab('challenge')}
+        className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'challenge' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+    >
+        Challenge
+    </button>
+</div>
 
                 {/* TAB: FAUCETS */}
                 {activeTab === 'faucets' && (

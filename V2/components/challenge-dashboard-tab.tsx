@@ -91,6 +91,11 @@ interface DropsBalance {
   maxStake: number | null;
 }
 
+interface ChallengeDashboardTabProps {
+  walletAddress: string;
+  initialSubtab?: string | null;
+}
+
 interface StakePool {
   id: string;
   drops_staked: number;
@@ -248,7 +253,8 @@ interface Props {
   walletAddress: string;
 }
 
-export function ChallengeDashboardTab({ walletAddress }: Props) {
+export function ChallengeDashboardTab({ walletAddress, initialSubtab }: ChallengeDashboardTabProps) {
+  const [activeSubtab, setActiveSubtab] = useState(initialSubtab || 'overview');
   const { toast } = useToast();
   const wallet = walletAddress.toLowerCase();
   const adminMode = isAdmin(wallet);
@@ -275,7 +281,17 @@ export function ChallengeDashboardTab({ walletAddress }: Props) {
   { key: "buy",      label: "Buy Drop"      },           // ← new
   ...(adminMode ? [{ key: "admin" as InnerTab, label: "Admin" }] : []),
 ];
-  const [innerTab, setInnerTab] = useState<InnerTab>("overview");
+ const [innerTab, setInnerTab] = useState<InnerTab>(() => {
+  if (initialSubtab === "redeem") return "redeem";
+  if (initialSubtab === "buy-drop") return "buy";
+  return "overview";
+});
+
+useEffect(() => {
+  if (!initialSubtab) return;
+  if (initialSubtab === "redeem") setInnerTab("redeem");
+  if (initialSubtab === "buy-drop") setInnerTab("buy");
+}, [initialSubtab]);
 
   // ── Redeem form ────────────────────────────────────────────────────────────
   const [redeemAmount, setRedeemAmount] = useState("");
@@ -575,11 +591,14 @@ const handleBuyReset = () => {
   }, [getReadContract, toast]);
 
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
+  
   useEffect(() => {
     if (innerTab === "pools") fetchStakes();
     if (innerTab === "history") { fetchHistory(); fetchMatches(); }
     if (innerTab === "admin" && adminMode) fetchOnChainStats();
   }, [innerTab, fetchStakes, fetchHistory, fetchMatches, fetchOnChainStats, adminMode]);
+   
+  
 
   // ── Redeem preview ─────────────────────────────────────────────────────────
   useEffect(() => {

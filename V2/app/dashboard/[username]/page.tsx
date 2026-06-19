@@ -128,7 +128,7 @@ export default function DashboardPage() {
     
     const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
     const [isVerified, setIsVerified] = useState(false);
-
+    const [initialSubtab, setInitialSubtab] = useState<string | null>(null);
     const getNativeTokenSymbol = (networkName: string): string => {
       switch (networkName) {
         case "Celo": return "CELO";
@@ -142,10 +142,15 @@ export default function DashboardPage() {
     };
     const searchParams = useSearchParams();
     useEffect(() => {
-    if (searchParams.get('tab') === 'challenge') {
-        setActiveTab('challenge');
+  if (searchParams.get('tab') === 'challenge') {
+    setActiveTab('challenge');
+    const subtab = searchParams.get('subtab');
+    if (subtab) {
+      // pass it down to ChallengeDashboardTab
+      setInitialSubtab(subtab);
     }
-    }, [searchParams]);
+  }
+}, [searchParams]);
     async function fetchOwnerFaucetsMeta(supabaseClient: any, ownerAddress: string) {
       const { data, error } = await supabaseClient
         .from("network_faucets")
@@ -811,7 +816,10 @@ export default function DashboardPage() {
                 {/* TAB: CHALLENGE */}
                 {activeTab === 'challenge' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <ChallengeDashboardTab walletAddress={profile.wallet_address} />
+                    <ChallengeDashboardTab 
+                    walletAddress={profile.wallet_address}
+                    initialSubtab={initialSubtab}
+                    />
                 </div>
                 )}
             </div>

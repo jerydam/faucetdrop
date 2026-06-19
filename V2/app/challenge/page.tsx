@@ -396,11 +396,37 @@ export default function QuizListPage() {
                   </p>
                 </div>
               </div>
-              <span className="drops-pill" style={{ background: `${tierColor}15`, color: tierColor, border: `1px solid ${tierColor}30` }}>
-                {dropsBalance.tier}
-              </span>
+
+              {/* ── Action buttons + tier ── */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <button
+                  onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge&subtab=redeem`)}
+                  style={{
+                    fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
+                    background: "var(--dd-surface)", color: "var(--dd-text)",
+                    border: "1px solid var(--dd-card-border)", cursor: "pointer",
+                    fontFamily: "'Figtree',sans-serif", whiteSpace: "nowrap",
+                  }}
+                >
+                  Redeem $G
+                </button>
+                <button
+                  onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge&subtab=buy-drop`)}
+                  style={{
+                    fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
+                    background: "var(--dd-surface)", color: "var(--dd-text)",
+                    border: "1px solid var(--dd-card-border)", cursor: "pointer",
+                    fontFamily: "'Figtree',sans-serif", whiteSpace: "nowrap",
+                  }}
+                >
+                  Buy DROPS
+                </button>
+                <span className="drops-pill" style={{ background: `${tierColor}15`, color: tierColor, border: `1px solid ${tierColor}30` }}>
+                  {dropsBalance.tier}
+                </span>
+              </div>
             </div>
-          )}
+          )}  
 
           {/* ── Hero + Quick Join ─────────────────────────────────────────── */}
           <div style={{ background: "var(--dd-blue)", borderRadius: 16, padding: 20 }}>

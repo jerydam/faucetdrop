@@ -9,7 +9,7 @@ const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
 const tabs = [
   { id: "home",    label: "Home",    icon: Home,   href: "/" },
   { id: "ranks",   label: "Ranks",   icon: Trophy, href: "/rank" },
-  { id: "profile", label: "Profile", icon: User,   href: "/dashboard" },
+  { id: "profile", label: "Profile", icon: User,   href: "/dashboard" }, 
 ];
 
 export function BottomNav() {
@@ -55,14 +55,14 @@ export function BottomNav() {
   if (isGamePage) return null;
 
   const profileHref = dbUsername
-    ? `/dashboard/${dbUsername}`
-    : address
-    ? `/dashboard/${address.toLowerCase()}`
-    : "/dashboard";
+  ? `/dashboard/${dbUsername}?tab=challenge`
+  : address
+  ? `/dashboard/${address.toLowerCase()}?tab=challenge`
+  : "/dashboard";
 
-  const resolvedTabs = tabs.map(t =>
-    t.id === "profile" ? { ...t, href: profileHref } : t
-  );
+ const resolvedTabs = tabs.map(t =>
+  t.id === "profile" ? { ...t, href: profileHref } : t
+);
 
   return (
     <nav

@@ -327,31 +327,32 @@ export default function DashboardPage() {
             const isAddress = isHexAddress || isBase58Address;
             
             if (isAddress) {
-                const profRes = await fetch(`${backendUrl}/api/users/${targetUsernameOrAddress.toLowerCase()}?t=${Date.now()}`);
-                const profData = await profRes.json();
-                
-                const fetchedData = profData.profile || (profData.username ? profData : null);
+                // AFTER
+                const profRes = await fetch(`${backendUrl}/api/profile/${targetUsernameOrAddress}?t=${Date.now()}`);
+                const profData = await profRes.json()
+                const fetchedData = profData.profile
 
-                if (profData.success && fetchedData) {
-                    userProfile = {
-                        wallet_address: fetchedData.wallet_address || targetUsernameOrAddress.toLowerCase(),
-                        username: fetchedData.username,
-                        email: fetchedData.email,
-                        bio: fetchedData.bio,
-                        avatar_url: fetchedData.avatar_url || fetchedData.avatarUrl,
-                        twitter_handle: fetchedData.twitter_handle || fetchedData.twitterHandle,
-                        discord_handle: fetchedData.discord_handle || fetchedData.discordHandle,
-                        telegram_handle: fetchedData.telegram_handle || fetchedData.telegramHandle,
-                        farcaster_handle: fetchedData.farcaster_handle || fetchedData.farcasterHandle
-                    };
-                } else {
-                    userProfile = {
-                        wallet_address: targetUsernameOrAddress.toLowerCase(),
-                        username: "New User",
-                        bio: "You haven't set up your profile yet. Click settings to get started!"
-                    };
+                if (fetchedData) {
+                userProfile = {
+                    wallet_address: fetchedData.wallet_address || targetUsernameOrAddress.toLowerCase(),
+                    username:       fetchedData.username,
+                    email:          fetchedData.email,
+                    bio:            fetchedData.bio,
+                    avatar_url:     fetchedData.avatar_url,
+                    twitter_handle: fetchedData.twitter_handle,
+                    discord_handle: fetchedData.discord_handle,
+                    telegram_handle: fetchedData.telegram_handle,
+                    farcaster_handle: fetchedData.farcaster_handle,
                 }
-                userWallet = targetUsernameOrAddress.toLowerCase();
+                } else {
+                userProfile = {
+                    wallet_address: targetUsernameOrAddress.toLowerCase(),
+                    username: "New User",
+                    bio: "You haven't set up your profile yet.",
+                }
+                }
+                userWallet = fetchedData?.wallet_address || targetUsernameOrAddress.toLowerCase()
+
                 
             } else {
                 const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsernameOrAddress}?t=${Date.now()}`);

@@ -42,58 +42,61 @@ export function WalletConnectButton({ className }: Props) {
 
   // ── Fetch / sync profile ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!isConnected || !address) {
-      setDbUsername(null); setDbAvatarUrl(null)
-      hasSyncedRef.current = false
-      return
-    }
-    let mounted = true
-    setLoading(true)
+  if (!isConnected || !address) {
+    setDbUsername(null); setDbAvatarUrl(null)
+    hasSyncedRef.current = false
+    return
+  }
+  let mounted = true
+  setLoading(true)
 
-    ;(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/users/${address.toLowerCase()}`)
-        if (res.ok) {
-          const data = await res.json()
-          const profile = data.profile ?? (data.username ? data : null)
-          if (profile?.username && profile.username !== "New User") {
-            if (mounted) {
-              setDbUsername(profile.username)
-              setDbAvatarUrl(profile.avatar_url ?? profile.avatarUrl ?? "")
-              return
-            }
+  ;(async () => {
+    try {
+      // Try the general profile endpoint which ORs across all 3 address columns
+      const res = await fetch(`${API_BASE}/api/profile/${address}`)
+      if (res.ok) {
+        const data = await res.json()
+        const profile = data.profile
+        if (profile?.username && profile.username !== "New User" && !profile.username.startsWith("user_")) {
+          if (mounted) {
+            setDbUsername(profile.username)
+            setDbAvatarUrl(profile.avatar_url ?? "")
+            return
           }
         }
-        if (!hasSyncedRef.current) {
-          hasSyncedRef.current = true
-          const syncRes = await fetch(`${API_BASE}/api/profile/sync`, {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              wallet_address: address,
-              username: `user_${address.slice(-4)}`,
-              avatar_url: "",
-              email: "",
-            }),
-          })
-          const syncData = await syncRes.json()
-          if (syncData.success && syncData.profile && mounted) {
-            setDbUsername(syncData.profile.username)
-            setDbAvatarUrl(syncData.profile.avatar_url)
-            window.dispatchEvent(new CustomEvent("profileUpdated", {
-              detail: { username: syncData.profile.username, avatarUrl: syncData.profile.avatar_url },
-            }))
-          }
-        }
-      } catch (e) {
-        console.error("Profile sync error", e)
-      } finally {
-        if (mounted) setLoading(false)
       }
-    })()
 
-    return () => { mounted = false }
-  }, [address, isConnected])
+      // Only sync if truly new — don't overwrite an existing profile
+      if (!hasSyncedRef.current) {
+        hasSyncedRef.current = true
+        const syncRes = await fetch(`${API_BASE}/api/profile/sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wallet_address: address,
+            username: `user_${address.slice(-4)}`,
+            avatar_url: "",
+            email: "",
+          }),
+        })
+        const syncData = await syncRes.json()
+        if (syncData.success && syncData.profile && mounted) {
+          setDbUsername(syncData.profile.username)
+          setDbAvatarUrl(syncData.profile.avatar_url ?? "")
+          window.dispatchEvent(new CustomEvent("profileUpdated", {
+            detail: { username: syncData.profile.username, avatarUrl: syncData.profile.avatar_url },
+          }))
+        }
+      }
+    } catch (e) {
+      console.error("Profile sync error", e)
+    } finally {
+      if (mounted) setLoading(false)
+    }
+  })()
+
+  return () => { mounted = false }
+}, [address, isConnected])
 
   // Listen for profile updates from elsewhere
   useEffect(() => {
@@ -245,15 +248,6 @@ export function WalletConnectButton({ className }: Props) {
                 <Wallet className="h-4 w-4" /><span>Copy Address</span>
               </DropdownMenuItem>
             )}
-
-            {/* Link additional social — only available for embedded wallets */}
-            
-              <DropdownMenuItem
-                onClick={() => setShowModal(true)}
-                className="cursor-pointer flex items-center gap-2"
-              >
-                <Link2 className="h-4 w-4" /><span>Link Account</span>
-              </DropdownMenuItem>
             
           </DropdownMenuGroup>
 

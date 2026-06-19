@@ -251,59 +251,40 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const walletType  = session?.walletType ?? null
 
   // ── Mount: detect wallets + restore session ───────────────────────────────
-useEffect(() => {
-  setDetectedWallets(detectWallets())
+  useEffect(() => {
+    setDetectedWallets(detectWallets())
 
-  const handler = (e: any) => {
-    const { info, provider: p } = e.detail
-    setDetectedWallets(prev => {
-      const exists = prev.some(w => w.name === info.name)
-      if (exists) return prev
-      return [...prev, { name: info.name, icon: info.icon ?? "🌐", provider: p }]
-    })
-  }
-  window.addEventListener("eip6963:announceProvider", handler)
-  window.dispatchEvent(new Event("eip6963:requestProvider"))
+    const handler = (e: any) => {
+      const { info, provider: p } = e.detail
+      setDetectedWallets(prev => {
+        const exists = prev.some(w => w.name === info.name)
+        if (exists) return prev
+        return [...prev, { name: info.name, icon: info.icon ?? "🌐", provider: p }]
+      })
+    }
+    window.addEventListener("eip6963:announceProvider", handler)
+    window.dispatchEvent(new Event("eip6963:requestProvider"))
 
-  const saved = loadSession()
-  if (saved) {
-    setSession(saved)
-    if (saved.walletType === "external") {
-      const wallets = detectWallets()
-      if (wallets.length > 0) {
-        buildProvider(wallets[0].provider).then(result => {
-          if (result) {
-            setProvider(result.provider)
-            setSigner(result.signer)
-            rawProviderRef.current = wallets[0].provider
-          }
-        })
+    const saved = loadSession()
+    if (saved) {
+      setSession(saved)
+      if (saved.walletType === "external") {
+        const wallets = detectWallets()
+        if (wallets.length > 0) {
+          buildProvider(wallets[0].provider).then(result => {
+            if (result) {
+              setProvider(result.provider)
+              setSigner(result.signer)
+              rawProviderRef.current = wallets[0].provider
+            }
+          })
+        }
       }
     }
 
-    // The cached session may be stale — e.g. socials linked on another
-    // device since this localStorage entry was last written. Re-check
-    // against the backend right away so linkedSocials reflects reality.
-    if (saved.token) {
-      fetch(`${API_BASE}/wallet/me`, {
-        headers: { Authorization: `Bearer ${saved.token}` },
-      })
-        .then(res => (res.ok ? res.json() : null))
-        .then(data => {
-          if (!data) return
-          setSession(prev => {
-            if (!prev) return prev
-            const refreshed = { ...prev, linkedSocials: data.linked_socials }
-            saveSession(refreshed)
-            return refreshed
-          })
-        })
-        .catch(() => { /* non-fatal — keep the cached session as-is */ })
-    }
-  }
+    return () => window.removeEventListener("eip6963:announceProvider", handler)
+  }, [])
 
-  return () => window.removeEventListener("eip6963:announceProvider", handler)
-}, [])
   // ── Fetch Solana + Stellar addresses from backend ─────────────────────────
   const fetchNonEvmAddresses = useCallback(async () => {
     const s = session
@@ -455,77 +436,71 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
 
   // ── Connect social (embedded wallet via backend) ──────────────────────────
   const connectSocial = useCallback(async (socialProvider: SocialProvider, credential: string) => {
-  setIsConnecting(true)
-  try {
-    const res = await fetch(`${API_BASE}/wallet/social-login`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ provider: socialProvider, credential }),
-    })
-    if (!res.ok) {
-      const err = await res.json()
-      throw new Error(err.detail ?? "Social login failed")
-    }
+    setIsConnecting(true)
+    try {
+      const res = await fetch(`${API_BASE}/wallet/social-login`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ provider: socialProvider, credential }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.detail ?? "Social login failed")
+      }
 
-    const data: {
-      address:            string
-      token:              string
-      linked_socials:     SocialProvider[]
-      legacy_found:       boolean
-      legacy_privy_id:    string | null
-      legacy_evm_address: string | null
-      legacy_sol_address: string | null
-      stellar_address:    string | null
-      needs_seed_import:  boolean
-    } = await res.json()
+      const data: {
+        address:            string
+        token:              string
+        linked_socials:     SocialProvider[]
+        legacy_found:       boolean
+        legacy_privy_id:    string | null
+        legacy_evm_address: string | null
+        legacy_sol_address: string | null
+        stellar_address:    string | null
+        needs_seed_import:  boolean
+      } = await res.json()
 
-    // If there's already an active session on a DIFFERENT wallet, this
-    // social account isn't tied to it — surface that instead of quietly
-    // swapping the user onto a wallet they didn't expect.
-    const switchingWallets =
-      !!session?.address && session.address.toLowerCase() !== data.address.toLowerCase()
+      // ── Clear ALL stale import/session state from any previous user ──
+      // NOTE: we intentionally do NOT call forcePrivyLogout() here — this
+      // is the path where Privy auth is what we're actively establishing
+      // (e.g. via the export flow), so logging out here would undo it.
+      clearImportSessionKeys()
+      localStorage.removeItem(SESSION_KEY)
 
-    clearImportSessionKeys()
-    localStorage.removeItem(SESSION_KEY)
+      const newSession: WalletSession = {
+        address:        data.address,
+        walletType:     "embedded",
+        provider:       socialProvider,
+        chainId:        DEFAULT_CHAIN_ID,
+        token:          data.token,
+        linkedSocials:  data.linked_socials,
+        // Start as undefined so fetchNonEvmAddresses runs, but if backend
+        // already returned stellar/solana from the login response, use it.
+        solanaAddress:  undefined,
+        stellarAddress: data.stellar_address ?? undefined,
+        // ── Legacy fields ──
+        legacyFound:      data.legacy_found || data.needs_seed_import,
+        legacyEvmAddress: data.legacy_evm_address ?? data.address,
+        legacyPrivyId:    data.legacy_privy_id,
+        legacySolAddress: data.legacy_sol_address,
+        needsSeedImport:  data.needs_seed_import,
+      }
 
-    const newSession: WalletSession = {
-      address:        data.address,
-      walletType:     "embedded",
-      provider:       socialProvider,
-      chainId:        DEFAULT_CHAIN_ID,
-      token:          data.token,
-      linkedSocials:  data.linked_socials,
-      solanaAddress:  undefined,
-      stellarAddress: data.stellar_address ?? undefined,
-      legacyFound:      data.legacy_found || data.needs_seed_import,
-      legacyEvmAddress: data.legacy_evm_address ?? data.address,
-      legacyPrivyId:    data.legacy_privy_id,
-      legacySolAddress: data.legacy_sol_address,
-      needsSeedImport:  data.needs_seed_import,
-    }
-
-    setSession(newSession)
-    saveSession(newSession)
-    setProvider(null)
-    setSigner(null)
-    setShowModal(false)
-
-    if (switchingWallets) {
-      toast.success(
-        `This ${socialProvider} account is linked to a different wallet (${data.address.slice(0, 6)}…${data.address.slice(-4)}) — switched to it.`
-      )
-    } else {
+      setSession(newSession)
+      saveSession(newSession)
+      setProvider(null)
+      setSigner(null)
+      setShowModal(false)
       toast.success("Wallet ready!")
+    } catch (err: any) {
+      if (err.message !== "cancelled") {
+        toast.error(err.message ?? "Login failed")
+      }
+      throw err
+    } finally {
+      setIsConnecting(false)
     }
-  } catch (err: any) {
-    if (err.message !== "cancelled") {
-      toast.error(err.message ?? "Login failed")
-    }
-    throw err
-  } finally {
-    setIsConnecting(false)
-  }
-}, [session])
+  }, [])
 
   // ── Clear legacy import flags ────────────────────────────────────────────
   // Called both on successful import AND when the modal is dismissed/skipped.

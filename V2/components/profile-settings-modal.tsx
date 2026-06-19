@@ -18,7 +18,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-const API_BASE_URL  = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
+const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -51,35 +51,19 @@ const GENERATED_SEEDS = [
   "Pulse","Echo","Flux","Spark","Glow","Shine","Shadow","Light",
 ]
 
-const CHAIN_META: Record<string, {
-  label:        string
-  badge:        string
-  explorerBase: string
-}> = {
-  evm: {
-    label:        "EVM",
-    badge:        "EVM",
-    explorerBase: "https://celoscan.io/address/",
-  },
-  solana: {
-    label:        "Solana",
-    badge:        "SOL",
-    explorerBase: "https://solscan.io/account/",
-  },
-  stellar: {
-    label:        "Stellar",
-    badge:        "XLM",
-    explorerBase: "https://stellar.expert/explorer/public/account/",
-  },
+const CHAIN_META: Record<string, { label: string; badge: string; explorerBase: string }> = {
+  evm:     { label: "EVM",     badge: "EVM", explorerBase: "https://celoscan.io/address/" },
+  solana:  { label: "Solana",  badge: "SOL", explorerBase: "https://solscan.io/account/" },
+  stellar: { label: "Stellar", badge: "XLM", explorerBase: "https://stellar.expert/explorer/public/account/" },
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Social brand icons
+// Social brand icons (unchanged from original)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function GoogleIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none">
       <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" fill="#4285F4"/>
       <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.69-2.26 1.1-3.71 1.1-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.99 10.99 0 0 0 12 23z" fill="#34A853"/>
       <path d="M5.84 14.14A6.6 6.6 0 0 1 5.5 12c0-.74.13-1.46.34-2.14V7.02H2.18A10.99 10.99 0 0 0 1 12c0 1.77.43 3.45 1.18 4.98l3.66-2.84z" fill="#FBBC05"/>
@@ -87,42 +71,37 @@ function GoogleIcon({ className, style }: { className?: string; style?: React.CS
     </svg>
   )
 }
-
 function XIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
       <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
     </svg>
   )
 }
-
 function GithubIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.9.57.1.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.02 1.75 2.68 1.25 3.33.95.1-.74.39-1.25.71-1.54-2.56-.29-5.25-1.28-5.25-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.47.11-3.06 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.63 1.59.23 2.77.11 3.06.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.41-5.27 5.69.41.36.78 1.07.78 2.16 0 1.56-.01 2.81-.01 3.19 0 .3.21.66.79.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/>
     </svg>
   )
 }
-
 function DiscordIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
       <path d="M20.32 4.74A19.8 19.8 0 0 0 15.87 3.3c-.2.36-.43.85-.59 1.24a18.3 18.3 0 0 0-5.56 0 8.4 8.4 0 0 0-.6-1.24 19.9 19.9 0 0 0-4.45 1.44C2.1 8.4 1.42 12 1.74 15.55a19.9 19.9 0 0 0 5.06 2.62c.41-.57.77-1.18 1.08-1.82a13 13 0 0 1-1.7-.84c.14-.11.28-.22.41-.34a13.9 13.9 0 0 0 11.82 0c.14.12.28.23.41.34-.54.32-1.11.6-1.7.84.31.64.67 1.25 1.08 1.82a19.9 19.9 0 0 0 5.06-2.62c.38-4.1-.62-7.66-2.94-10.81zM8.68 13.4c-.83 0-1.5-.78-1.5-1.74 0-.96.66-1.74 1.5-1.74s1.51.78 1.5 1.74c0 .96-.66 1.74-1.5 1.74zm6.64 0c-.83 0-1.5-.78-1.5-1.74 0-.96.66-1.74 1.5-1.74s1.51.78 1.5 1.74c0 .96-.66 1.74-1.5 1.74z"/>
     </svg>
   )
 }
-
 function TelegramIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor">
       <path d="M12 .5C5.65.5.5 5.65.5 12s5.15 11.5 11.5 11.5S23.5 18.35 23.5 12 18.35.5 12 .5zm5.4 7.86-1.83 8.63c-.14.62-.5.77-1 .48l-2.77-2.04-1.34 1.29c-.15.15-.27.27-.55.27l.2-2.79 5.09-4.6c.22-.2-.05-.31-.34-.11l-6.29 3.96-2.71-.85c-.59-.18-.6-.59.12-.87l10.6-4.09c.49-.18.92.12.82.72z"/>
     </svg>
   )
 }
-
 function FarcasterIcon({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
-    <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} style={style} viewBox="0 0 24 24" fill="none">
       <rect x="2" y="2" width="20" height="20" rx="5" fill="#855DCD"/>
       <path d="M6.5 7h11v2.2h-3.1V17h-2.2v-7.8H8.7V17H6.5V7z" fill="white"/>
       <path d="M5.8 7h1.6l.4 1.8-.4 1.6H5.8z" fill="white"/>
@@ -143,226 +122,103 @@ const SOCIALS: { id: SocialProvider; label: string; Icon: IconComponent; color: 
 const getSocialMeta = (provider: SocialProvider) => SOCIALS.find(s => s.id === provider)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Wallet brand icons — stylized, brand-colored marks for recognizability.
-// Swap for official media-kit SVGs any time for pixel-perfect parity.
+// Wallet brand icons (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PhantomIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#AB9FF2"/>
-      <path d="M12 4.5c-3.6 0-6.2 2.9-6.2 6.7 0 2.1.6 3.9 1.7 5.2.3.4.9.3 1.1-.1l.4-.9c.1-.3.5-.4.8-.2.6.4 1.3.6 2.2.6s1.6-.2 2.2-.6c.3-.2.7-.1.8.2l.4.9c.2.4.8.5 1.1.1 1.1-1.3 1.7-3.1 1.7-5.2 0-3.8-2.6-6.7-6.2-6.7z" fill="white"/>
-      <circle cx="9.8" cy="11" r="1" fill="#AB9FF2"/>
-      <circle cx="14.2" cy="11" r="1" fill="#AB9FF2"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#AB9FF2"/><path d="M12 4.5c-3.6 0-6.2 2.9-6.2 6.7 0 2.1.6 3.9 1.7 5.2.3.4.9.3 1.1-.1l.4-.9c.1-.3.5-.4.8-.2.6.4 1.3.6 2.2.6s1.6-.2 2.2-.6c.3-.2.7-.1.8.2l.4.9c.2.4.8.5 1.1.1 1.1-1.3 1.7-3.1 1.7-5.2 0-3.8-2.6-6.7-6.2-6.7z" fill="white"/><circle cx="9.8" cy="11" r="1" fill="#AB9FF2"/><circle cx="14.2" cy="11" r="1" fill="#AB9FF2"/></svg>
 }
-
 function BackpackIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#111111"/>
-      <path d="M8 9.5c0-1.9 1.8-3.5 4-3.5s4 1.6 4 3.5v7a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-7z" fill="#E5E5E5"/>
-      <rect x="9.5" y="9" width="5" height="3" rx="0.5" fill="#111111"/>
-      <rect x="10.5" y="4.5" width="3" height="2.5" rx="1" fill="#E5E5E5"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#111111"/><path d="M8 9.5c0-1.9 1.8-3.5 4-3.5s4 1.6 4 3.5v7a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-7z" fill="#E5E5E5"/><rect x="9.5" y="9" width="5" height="3" rx="0.5" fill="#111111"/><rect x="10.5" y="4.5" width="3" height="2.5" rx="1" fill="#E5E5E5"/></svg>
 }
-
 function SolflareIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#181818"/>
-      <path d="M12 4l1.8 4.6L18 12l-4.2 3.4L12 20l-1.8-4.6L6 12l4.2-3.4z" fill="#FC9B30"/>
-      <circle cx="12" cy="12" r="2.4" fill="#FFDD55"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#181818"/><path d="M12 4l1.8 4.6L18 12l-4.2 3.4L12 20l-1.8-4.6L6 12l4.2-3.4z" fill="#FC9B30"/><circle cx="12" cy="12" r="2.4" fill="#FFDD55"/></svg>
 }
-
 function GlowIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="glow-wallet-icon-gradient" x1="0" y1="0" x2="24" y2="24">
-          <stop offset="0%" stopColor="#FF5F6D"/>
-          <stop offset="50%" stopColor="#9C5FFF"/>
-          <stop offset="100%" stopColor="#36D1DC"/>
-        </linearGradient>
-      </defs>
-      <circle cx="12" cy="12" r="10" fill="url(#glow-wallet-icon-gradient)"/>
-      <circle cx="12" cy="12" r="4.5" fill="white" opacity="0.85"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="24" y2="24"><stop offset="0%" stopColor="#FF5F6D"/><stop offset="50%" stopColor="#9C5FFF"/><stop offset="100%" stopColor="#36D1DC"/></linearGradient></defs><circle cx="12" cy="12" r="10" fill="url(#g)"/><circle cx="12" cy="12" r="4.5" fill="white" opacity="0.85"/></svg>
 }
-
 function ExodusIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#0A0A0A"/>
-      <path d="M12 4l5 4-5 4-5-4z" fill="white"/>
-      <path d="M7 12l5 4 5-4-5 8z" fill="#7C7CFF"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#0A0A0A"/><path d="M12 4l5 4-5 4-5-4z" fill="white"/><path d="M7 12l5 4 5-4-5 8z" fill="#7C7CFF"/></svg>
 }
-
 function FreighterIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#000000"/>
-      <path d="M5 12l14-7-5.5 16-2.5-6.5z" fill="white"/>
-      <path d="M11 14.5l3-3" stroke="white" strokeWidth="1.2"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#000000"/><path d="M5 12l14-7-5.5 16-2.5-6.5z" fill="white"/><path d="M11 14.5l3-3" stroke="white" strokeWidth="1.2"/></svg>
 }
-
 function LobstrIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="11" fill="#E0473E"/>
-      <path d="M9 7c-1.8 0-3 1.4-3 3.2 0 1.1.5 1.9 1.3 2.5L6 16l2.6-1.2c.7.3 1.5.5 2.4.5.6 0 1.1-.1 1.6-.2" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round"/>
-      <path d="M15 7c1.8 0 3 1.4 3 3.2 0 1.1-.5 1.9-1.3 2.5L18 16l-2.6-1.2c-.7.3-1.5.5-2.4.5-.6 0-1.1-.1-1.6-.2" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#E0473E"/><path d="M9 7c-1.8 0-3 1.4-3 3.2 0 1.1.5 1.9 1.3 2.5L6 16l2.6-1.2c.7.3 1.5.5 2.4.5.6 0 1.1-.1 1.6-.2" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round"/><path d="M15 7c1.8 0 3 1.4 3 3.2 0 1.1-.5 1.9-1.3 2.5L18 16l-2.6-1.2c-.7.3-1.5.5-2.4.5-.6 0-1.1-.1-1.6-.2" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round"/></svg>
 }
-
 function RabetIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#3B3FE0"/>
-      <path d="M9 10c-1-2.5-1.6-5-.6-5.6 1-.6 2.4 1.6 3.2 4" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round"/>
-      <path d="M15 10c1-2.5 1.6-5 .6-5.6-1-.6-2.4 1.6-3.2 4" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round"/>
-      <ellipse cx="12" cy="14" rx="4.2" ry="3.6" fill="white"/>
-      <circle cx="10.4" cy="13.6" r="0.6" fill="#3B3FE0"/>
-      <circle cx="13.6" cy="13.6" r="0.6" fill="#3B3FE0"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#3B3FE0"/><path d="M9 10c-1-2.5-1.6-5-.6-5.6 1-.6 2.4 1.6 3.2 4" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round"/><path d="M15 10c1-2.5 1.6-5 .6-5.6-1-.6-2.4 1.6-3.2 4" fill="none" stroke="white" strokeWidth="1.3" strokeLinecap="round"/><ellipse cx="12" cy="14" rx="4.2" ry="3.6" fill="white"/><circle cx="10.4" cy="13.6" r="0.6" fill="#3B3FE0"/><circle cx="13.6" cy="13.6" r="0.6" fill="#3B3FE0"/></svg>
 }
-
 function XBullIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="11" fill="#111111"/>
-      <path d="M6 9c-1.3-.5-2-1.6-1.6-2.6.5-1 2-1 2.9-.2" fill="none" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
-      <path d="M18 9c1.3-.5 2-1.6 1.6-2.6-.5-1-2-1-2.9-.2" fill="none" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
-      <path d="M8 11c0-2.2 1.8-4 4-4s4 1.8 4 4-1.8 5-4 5-4-2.8-4-5z" fill="white"/>
-      <circle cx="10.3" cy="10.6" r="0.6" fill="#111111"/>
-      <circle cx="13.7" cy="10.6" r="0.6" fill="#111111"/>
-      <path d="M11 13.5h2" stroke="#111111" strokeWidth="0.8" strokeLinecap="round"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#111111"/><path d="M6 9c-1.3-.5-2-1.6-1.6-2.6.5-1 2-1 2.9-.2" fill="none" stroke="white" strokeWidth="1.2" strokeLinecap="round"/><path d="M18 9c1.3-.5 2-1.6 1.6-2.6-.5-1-2-1-2.9-.2" fill="none" stroke="white" strokeWidth="1.2" strokeLinecap="round"/><path d="M8 11c0-2.2 1.8-4 4-4s4 1.8 4 4-1.8 5-4 5-4-2.8-4-5z" fill="white"/><circle cx="10.3" cy="10.6" r="0.6" fill="#111111"/><circle cx="13.7" cy="10.6" r="0.6" fill="#111111"/><path d="M11 13.5h2" stroke="#111111" strokeWidth="0.8" strokeLinecap="round"/></svg>
 }
-
 function GenericWalletIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <rect width="24" height="24" rx="6" fill="#374151"/>
-      <rect x="5" y="8" width="14" height="9" rx="2" fill="#9CA3AF"/>
-      <rect x="5" y="8" width="14" height="3" rx="1.5" fill="#D1D5DB"/>
-      <circle cx="15.5" cy="12.5" r="1.2" fill="#374151"/>
-    </svg>
-  )
+  return <svg className={className} viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#374151"/><rect x="5" y="8" width="14" height="9" rx="2" fill="#9CA3AF"/><rect x="5" y="8" width="14" height="3" rx="1.5" fill="#D1D5DB"/><circle cx="15.5" cy="12.5" r="1.2" fill="#374151"/></svg>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Wallet detection
+// Wallet detection helpers (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function detectSolanaWallets(): DetectedChainWallet[] {
   if (typeof window === "undefined") return []
-  const wallets: DetectedChainWallet[] = []
   const w = window as any
-
-  // Standard window.solana (Phantom, Brave, many others register here)
-  if (w.solana?.isPhantom)    wallets.push({ name: "Phantom",  icon: PhantomIcon,  provider: w.solana })
-  if (w.backpack?.isBackpack) wallets.push({ name: "Backpack", icon: BackpackIcon, provider: w.backpack })
-  if (w.solflare?.isSolflare) wallets.push({ name: "Solflare", icon: SolflareIcon, provider: w.solflare })
-  if (w.glow?.isGlow)         wallets.push({ name: "Glow",     icon: GlowIcon,     provider: w.glow })
-  if (w.exodus?.solana)       wallets.push({ name: "Exodus",   icon: ExodusIcon,   provider: w.exodus.solana })
-
-  // Catch-all: generic window.solana not matched above
-  if (w.solana && wallets.length === 0) {
-    wallets.push({ name: "Browser Wallet", icon: GenericWalletIcon, provider: w.solana })
-  }
-
+  const wallets: DetectedChainWallet[] = []
+  if (w.solana?.isPhantom)    wallets.push({ name: "Phantom",       icon: PhantomIcon,  provider: w.solana })
+  if (w.backpack?.isBackpack) wallets.push({ name: "Backpack",      icon: BackpackIcon, provider: w.backpack })
+  if (w.solflare?.isSolflare) wallets.push({ name: "Solflare",      icon: SolflareIcon, provider: w.solflare })
+  if (w.glow?.isGlow)         wallets.push({ name: "Glow",          icon: GlowIcon,     provider: w.glow })
+  if (w.exodus?.solana)       wallets.push({ name: "Exodus",        icon: ExodusIcon,   provider: w.exodus.solana })
+  if (w.solana && wallets.length === 0) wallets.push({ name: "Browser Wallet", icon: GenericWalletIcon, provider: w.solana })
   return wallets
 }
 
 function detectStellarWallets(): DetectedChainWallet[] {
   if (typeof window === "undefined") return []
-  const wallets: DetectedChainWallet[] = []
   const w = window as any
-
-  if (w.freighter)                wallets.push({ name: "Freighter", icon: FreighterIcon, provider: { type: "freighter" } })
-  if (w.lobstr?.stellar)          wallets.push({ name: "Lobstr",    icon: LobstrIcon,    provider: { type: "lobstr",    raw: w.lobstr } })
-  if (w.rabet?.stellar)           wallets.push({ name: "Rabet",     icon: RabetIcon,     provider: { type: "rabet",     raw: w.rabet } })
-  if (w.xbull?.stellar)           wallets.push({ name: "xBull",     icon: XBullIcon,     provider: { type: "xbull",     raw: w.xbull } })
-
+  const wallets: DetectedChainWallet[] = []
+  if (w.freighter)       wallets.push({ name: "Freighter", icon: FreighterIcon, provider: { type: "freighter" } })
+  if (w.lobstr?.stellar) wallets.push({ name: "Lobstr",    icon: LobstrIcon,    provider: { type: "lobstr",  raw: w.lobstr } })
+  if (w.rabet?.stellar)  wallets.push({ name: "Rabet",     icon: RabetIcon,     provider: { type: "rabet",   raw: w.rabet } })
+  if (w.xbull?.stellar)  wallets.push({ name: "xBull",     icon: XBullIcon,     provider: { type: "xbull",   raw: w.xbull } })
   return wallets
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sign helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function signWithSolana(
-  provider: any,
-  message:  string,
-): Promise<{ address: string; signature: string }> {
-  // Connect if needed
+async function signWithSolana(provider: any, message: string): Promise<{ address: string; signature: string }> {
   if (!provider.isConnected) await provider.connect()
-  const pubkey   = provider.publicKey?.toString()
+  const pubkey = provider.publicKey?.toString()
   if (!pubkey) throw new Error("No public key — connect your wallet first")
-
-  const encoded  = new TextEncoder().encode(message)
+  const encoded = new TextEncoder().encode(message)
   const { signature } = await provider.signMessage(encoded, "utf8")
-
-  // signature is Uint8Array — encode to base58
-  const base58   = await uint8ArrayToBase58(signature)
+  const base58 = await uint8ArrayToBase58(signature)
   return { address: pubkey, signature: base58 }
 }
 
-async function signWithStellar(
-  provider: { type: string; raw?: any },
-  message:  string,
-): Promise<{ address: string; signature: string }> {
+async function signWithStellar(provider: { type: string; raw?: any }, message: string): Promise<{ address: string; signature: string }> {
   if (provider.type === "freighter") {
     const freighterApi = await import("@stellar/freighter-api")
-
     const addressResult = await freighterApi.getAddress()
     const address = "address" in addressResult ? addressResult.address : (addressResult as any).address
     if (!address) throw new Error("Freighter not connected")
-
     const signResult = await freighterApi.signMessage(message, { address })
-
-    // SignMessageV4Response has `signature`, SignMessageV3Response has `signedMessage`
-    let signature: string
-    if ("signature" in signResult && signResult.signature) {
-      signature = signResult.signature
-    } else if ("signedMessage" in signResult && (signResult as any).signedMessage) {
-      signature = (signResult as any).signedMessage
-    } else {
-      throw new Error("Freighter returned no signature")
-    }
-
+    const signature = "signature" in signResult && signResult.signature
+      ? signResult.signature
+      : (signResult as any).signedMessage
+    if (!signature) throw new Error("Freighter returned no signature")
     return { address, signature }
   }
-
   throw new Error(`${provider.type} signing not yet supported — use Freighter`)
 }
 
-
-// base58 encoding without a heavy dep — use dynamic import of bs58 if available,
-// else fall back to a lightweight pure-JS impl bundled below
 async function uint8ArrayToBase58(bytes: Uint8Array): Promise<string> {
   try {
     const bs58 = await import("bs58")
     return bs58.default.encode(bytes)
   } catch {
-    // Inline fallback (standard Bitcoin base58 alphabet)
     const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-    let   carry    = BigInt(0)
+    let carry = BigInt(0)
     for (const b of bytes) carry = carry * 256n + BigInt(b)
-    let   result   = ""
+    let result = ""
     while (carry > 0n) { result = ALPHABET[Number(carry % 58n)] + result; carry /= 58n }
     for (const b of bytes) { if (b !== 0) break; result = "1" + result }
     return result
@@ -370,19 +226,12 @@ async function uint8ArrayToBase58(bytes: Uint8Array): Promise<string> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Wallet picker sheet (inline, no extra modal dep needed)
+// Wallet picker (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WalletPicker({
-  wallets,
-  chain,
-  onPick,
-  onCancel,
-}: {
-  wallets:  DetectedChainWallet[]
-  chain:    string
-  onPick:   (w: DetectedChainWallet) => void
-  onCancel: () => void
+function WalletPicker({ wallets, chain, onPick, onCancel }: {
+  wallets: DetectedChainWallet[]; chain: string
+  onPick: (w: DetectedChainWallet) => void; onCancel: () => void
 }) {
   return (
     <div className="flex flex-col gap-2 p-3 border rounded-lg bg-muted/40 mt-1">
@@ -397,11 +246,8 @@ function WalletPicker({
       {wallets.map(w => {
         const Icon = w.icon
         return (
-          <button
-            key={w.name}
-            onClick={() => onPick(w)}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-card hover:bg-accent/60 transition-colors text-left"
-          >
+          <button key={w.name} onClick={() => onPick(w)}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-card hover:bg-accent/60 transition-colors text-left">
             <Icon className="h-6 w-6 shrink-0" />
             <span className="text-sm font-medium">{w.name}</span>
           </button>
@@ -412,72 +258,45 @@ function WalletPicker({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Address row — handles read-only (embedded) and link flow (external)
+// WalletAddressRow (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WalletAddressRow({
-  chain,
-  address,
-  onLink,
-}: {
-  chain:   string
-  address: string | null | undefined
-  /** If provided, row supports linking a new address for this chain */
+function WalletAddressRow({ chain, address, onLink }: {
+  chain: string; address: string | null | undefined
   onLink?: (chain: string, addr: string, sig: string, msg: string) => Promise<void>
 }) {
   const meta = CHAIN_META[chain]
-
   type LinkStep = "idle" | "picking" | "signing" | "done"
-
   const [step,    setStep]    = useState<LinkStep>("idle")
   const [wallets, setWallets] = useState<DetectedChainWallet[]>([])
   const [errMsg,  setErrMsg]  = useState<string | null>(null)
 
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast.success(`${meta.label} address copied`)
-  }
+  const copy = (text: string) => { navigator.clipboard.writeText(text); toast.success(`${meta.label} address copied`) }
 
   const handleLinkClick = () => {
     setErrMsg(null)
     const detected = chain === "solana" ? detectSolanaWallets() : detectStellarWallets()
-    if (detected.length === 0) {
-      setErrMsg(`No ${meta.label} wallet detected. Install Phantom, Backpack, or Solflare for Solana; Freighter for Stellar.`)
-      return
-    }
-    if (detected.length === 1) {
-      // Skip picker, go straight to signing
-      handlePick(detected[0])
-    } else {
-      setWallets(detected)
-      setStep("picking")
-    }
+    if (detected.length === 0) { setErrMsg(`No ${meta.label} wallet detected.`); return }
+    if (detected.length === 1) { handlePick(detected[0]) } else { setWallets(detected); setStep("picking") }
   }
 
   const handlePick = async (wallet: DetectedChainWallet) => {
-    setStep("signing")
-    setErrMsg(null)
+    setStep("signing"); setErrMsg(null)
     try {
       const message = `Link ${meta.label} wallet to FaucetDrops\nTimestamp: ${Date.now()}`
       const { address: walletAddr, signature } = chain === "solana"
         ? await signWithSolana(wallet.provider, message)
         : await signWithStellar(wallet.provider, message)
-
       await onLink!(chain, walletAddr, signature, message)
       setStep("done")
     } catch (err: any) {
       const msg = err?.message ?? "Signing failed"
-      if (!msg.toLowerCase().includes("cancel") && !msg.toLowerCase().includes("reject")) {
-        setErrMsg(msg)
-      }
+      if (!msg.toLowerCase().includes("cancel") && !msg.toLowerCase().includes("reject")) setErrMsg(msg)
       setStep("idle")
     }
   }
 
-  const displayAddr = address
-  const short       = displayAddr
-    ? `${displayAddr.slice(0, 6)}…${displayAddr.slice(-4)}`
-    : null
+  const short = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : null
 
   return (
     <div className="flex flex-col gap-2">
@@ -486,15 +305,14 @@ function WalletAddressRow({
           <span className="text-sm font-semibold">{meta.label}</span>
           <Badge variant="secondary" className="text-[10px]">{meta.badge}</Badge>
         </div>
-
         <div className="flex items-center gap-1.5">
           {short ? (
             <>
               <span className="text-xs text-muted-foreground font-mono">{short}</span>
-              <button onClick={() => copy(displayAddr!)} className="text-muted-foreground hover:text-foreground p-1 rounded">
+              <button onClick={() => copy(address!)} className="text-muted-foreground hover:text-foreground p-1 rounded">
                 <Copy className="h-3 w-3" />
               </button>
-              <a href={`${meta.explorerBase}${displayAddr}`} target="_blank" rel="noopener noreferrer"
+              <a href={`${meta.explorerBase}${address}`} target="_blank" rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground p-1 rounded">
                 <ExternalLink className="h-3 w-3" />
               </a>
@@ -502,87 +320,30 @@ function WalletAddressRow({
                 <Button size="sm" variant="ghost"
                   className="h-7 px-2 text-xs text-muted-foreground hover:text-primary"
                   onClick={handleLinkClick} disabled={step === "signing"}>
-                  {step === "signing"
-                    ? <Loader2 className="h-3 w-3 animate-spin" />
-                    : <Edit2 className="h-3 w-3" />}
+                  {step === "signing" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Edit2 className="h-3 w-3" />}
                 </Button>
               )}
             </>
           ) : onLink ? (
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1"
               onClick={handleLinkClick} disabled={step === "signing"}>
-              {step === "signing"
-                ? <><Loader2 className="h-3 w-3 animate-spin" /> Signing…</>
-                : "Link wallet"}
+              {step === "signing" ? <><Loader2 className="h-3 w-3 animate-spin" /> Signing…</> : "Link wallet"}
             </Button>
           ) : (
             <span className="text-xs text-muted-foreground">Not available</span>
           )}
         </div>
       </div>
-
-      {/* Wallet picker (shown when multiple wallets detected) */}
-      {step === "picking" && (
-        <WalletPicker
-          wallets={wallets}
-          chain={chain}
-          onPick={handlePick}
-          onCancel={() => setStep("idle")}
-        />
-      )}
-
-      {/* Signing status */}
+      {step === "picking" && <WalletPicker wallets={wallets} chain={chain} onPick={handlePick} onCancel={() => setStep("idle")} />}
       {step === "signing" && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border text-xs text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-          Waiting for wallet signature — check your wallet extension…
+          Waiting for wallet signature…
         </div>
       )}
-
-      {/* Error */}
-      {errMsg && (
-        <p className="text-xs text-red-500 px-1">{errMsg}</p>
-      )}
+      {errMsg && <p className="text-xs text-red-500 px-1">{errMsg}</p>}
     </div>
   )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// OAuth popup (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function useOAuthPopup(apiBase: string) {
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
-
-  const openPopup = useCallback((provider: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const state = crypto.randomUUID()
-      const popup = window.open(
-        `${apiBase}/api/auth/${provider}?client_state=${state}`,
-        `${provider}_oauth`,
-        "width=520,height=640,left=400,top=100",
-      )
-      if (!popup) { reject(new Error("Popup blocked — allow popups and try again")); return }
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const res  = await fetch(`${apiBase}/api/auth/session?state=${state}`)
-          if (!res.ok) return
-          const data = await res.json()
-          if (data.status === "pending") return
-          clearInterval(pollRef.current!)
-          popup.close()
-          if (data.status === "done") resolve(data.credential)
-          else reject(new Error("OAuth cancelled"))
-        } catch { /* keep polling */ }
-      }, 1000)
-
-      setTimeout(() => { clearInterval(pollRef.current!); popup?.close(); reject(new Error("OAuth timed out")) }, 180_000)
-    })
-  }, [apiBase])
-
-  return { openPopup }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -591,16 +352,14 @@ function useOAuthPopup(apiBase: string) {
 
 export function ProfileSettingsModal() {
   const {
-    address, isConnected, signer, session,
+    address, isConnected, session,
     linkSocial, walletType, solanaAddress, stellarAddress,
+    getActiveSigner,   // ← replaces direct `signer` usage for save
   } = useWallet()
 
   const router        = useRouter()
   const walletApiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
-  const { openPopup } = useOAuthPopup(walletApiBase)
-  const [showTelegramLinkWidget, setShowTelegramLinkWidget] = useState(false)
-  const telegramLinkContainerRef = useRef<HTMLDivElement>(null)
-  const [farcasterLinkChannel, setFarcasterLinkChannel] = useState<{ url: string; channelToken: string } | null>(null)
+
   const [isOpen,          setIsOpen]          = useState(false)
   const [loading,         setLoading]         = useState(false)
   const [saving,          setSaving]          = useState(false)
@@ -610,60 +369,31 @@ export function ProfileSettingsModal() {
   const [linkingProvider, setLinkingProvider] = useState<string | null>(null)
   const [embeddedSolAddr, setEmbeddedSolAddr] = useState<string | null | undefined>(undefined)
   const [embeddedXlmAddr, setEmbeddedXlmAddr] = useState<string | null | undefined>(undefined)
-
-  // External wallet non-EVM addresses (fetched from DB on open)
-  const [extSolAddr, setExtSolAddr] = useState<string | null>(null)
-  const [extXlmAddr, setExtXlmAddr] = useState<string | null>(null)
-  // new state, alongside extSolAddr/extXlmAddr
-const [freshLinkedSocials, setFreshLinkedSocials] = useState<string[] | null>(null)
-
-// new fetcher, alongside fetchChainAddresses
-const fetchLinkedSocials = useCallback(async () => {
-  if (!session?.token) return
-  try {
-    const res = await fetch(`${walletApiBase}/wallet/me`, {
-      headers: { Authorization: `Bearer ${session.token}` },
-    })
-    if (!res.ok) return
-    const data = await res.json()
-    setFreshLinkedSocials(data.linked_socials ?? [])
-  } catch { /* non-fatal — falls back to session.linkedSocials */ }
-}, [session?.token, walletApiBase])
+  const [extSolAddr,      setExtSolAddr]      = useState<string | null>(null)
+  const [extXlmAddr,      setExtXlmAddr]      = useState<string | null>(null)
+  const [freshLinkedSocials, setFreshLinkedSocials] = useState<string[] | null>(null)
+  const [unlinkedOverride,   setUnlinkedOverride]   = useState<SocialProvider[] | null>(null)
 
   const [formData, setFormData] = useState<UserProfile>({
-    wallet_address: "",
-    username:       "",
-    bio:            "",
-    avatar_url:     "",
+    wallet_address: "", username: "", bio: "", avatar_url: "",
   })
 
   const isEmbedded   = walletType === "embedded"
-  const effectiveSol = isEmbedded ? (solanaAddress  ?? null) : extSolAddr
-
+  const effectiveSol = isEmbedded ? (solanaAddress ?? null) : extSolAddr
   const effectiveXlm = isEmbedded
-  ? (embeddedXlmAddr !== undefined ? embeddedXlmAddr : (stellarAddress ?? undefined))
-  : extXlmAddr
+    ? (embeddedXlmAddr !== undefined ? embeddedXlmAddr : (stellarAddress ?? undefined))
+    : extXlmAddr
 
-// Replace fetchChainAddresses:
-const fetchChainAddresses = useCallback(async () => {
-  if (!session?.token) return
-  try {
-    const res  = await fetch(`${walletApiBase}/wallet/addresses`, {
-      headers: { Authorization: `Bearer ${session.token}` },
-    })
-    if (!res.ok) return
-    const data = await res.json()
-
-    if (isEmbedded) {
-      setEmbeddedSolAddr(data.solana  ?? null)
-      setEmbeddedXlmAddr(data.stellar ?? null)
-    } else {
-      setExtSolAddr(data.solana  ?? null)
-      setExtXlmAddr(data.stellar ?? null)
+  // ── Reset on close ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) {
+      setEmbeddedSolAddr(undefined); setEmbeddedXlmAddr(undefined)
+      setExtSolAddr(null);           setExtXlmAddr(null)
+      setFreshLinkedSocials(null);   setUnlinkedOverride(null)
     }
-  } catch { /* non-fatal */ }
-}, [session?.token, isEmbedded, walletApiBase])
-  // ── Fetch FaucetDrops profile ────────────────────────────────────────
+  }, [isOpen])
+
+  // ── Fetch profile + addresses + socials on open ───────────────────────
   const fetchProfile = useCallback(async (signal?: AbortSignal) => {
     if (!address) return
     setLoading(true)
@@ -684,16 +414,36 @@ const fetchChainAddresses = useCallback(async () => {
     }
   }, [address])
 
-useEffect(() => {
-  if (!isOpen) {
-    setEmbeddedSolAddr(undefined)
-    setEmbeddedXlmAddr(undefined)
-    setExtSolAddr(null)
-    setExtXlmAddr(null)
-    setFreshLinkedSocials(null)   
-    setUnlinkedOverride(null)
-  }
-}, [isOpen])
+  const fetchChainAddresses = useCallback(async () => {
+    if (!session?.token) return
+    try {
+      const res  = await fetch(`${walletApiBase}/wallet/addresses`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      if (isEmbedded) {
+        setEmbeddedSolAddr(data.solana ?? null)
+        setEmbeddedXlmAddr(data.stellar ?? null)
+      } else {
+        setExtSolAddr(data.solana ?? null)
+        setExtXlmAddr(data.stellar ?? null)
+      }
+    } catch { /* non-fatal */ }
+  }, [session?.token, isEmbedded, walletApiBase])
+
+  const fetchLinkedSocials = useCallback(async () => {
+    if (!session?.token) return
+    try {
+      const res  = await fetch(`${walletApiBase}/wallet/me`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      setFreshLinkedSocials(data.linked_socials ?? [])
+    } catch { /* non-fatal */ }
+  }, [session?.token, walletApiBase])
+
   useEffect(() => {
     if (!isOpen || !address) return
     const controller = new AbortController()
@@ -701,111 +451,141 @@ useEffect(() => {
     fetchChainAddresses()
     fetchLinkedSocials()
     return () => controller.abort()
-  }, [isOpen, address, fetchProfile, fetchChainAddresses])
+  }, [isOpen, address, fetchProfile, fetchChainAddresses, fetchLinkedSocials])
 
-  // ── Link external address (after signature) ──────────────────────────
-  const handleLinkAddress = async (
-    chain:     string,
-    addr:      string,
-    signature: string,
-    message:   string,
-  ) => {
+  // ── Link external non-EVM address ────────────────────────────────────
+  const handleLinkAddress = async (chain: string, addr: string, signature: string, message: string) => {
     if (!session?.token) throw new Error("Not authenticated")
     const res = await fetch(`${walletApiBase}/wallet/link-external-address`, {
-      method:  "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization:  `Bearer ${session.token}`,
-      },
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
       body: JSON.stringify({ chain, address: addr, signature, message }),
     })
     if (!res.ok) {
       const err = await res.json()
       throw new Error(err.detail || "Failed to link address")
     }
-    // Update local state immediately
     if (chain === "solana")  setExtSolAddr(addr)
     if (chain === "stellar") setExtXlmAddr(addr)
     toast.success(`${CHAIN_META[chain].label} wallet verified and linked!`)
   }
 
-  // ── Social linking ───────────────────────────────────────────────────
-  const [unlinkedOverride, setUnlinkedOverride] = useState<SocialProvider[] | null>(null)
-  const handleLinkTelegramInline = () => setShowTelegramLinkWidget(true)
-
-useEffect(() => {
-  if (!showTelegramLinkWidget || !telegramLinkContainerRef.current) return
-
-  ;(window as any).onTelegramAuthLink = async (telegramUser: Record<string, unknown>) => {
-    setLinkingProvider("telegram")
+  // ── Save profile — works for both embedded and external wallets ───────
+  const handleSave = async () => {
+    if (!isConnected || !address) return toast.error("Wallet not connected")
+    setSaving(true)
+    const valid = await checkUsernameUniqueness(formData.username || "")
+    if (!valid) { setSaving(false); return }
     try {
-      await linkSocial("telegram", JSON.stringify(telegramUser))
-      setUnlinkedOverride(null)
+      // getActiveSigner() handles both external (JsonRpcSigner) and
+      // embedded (Wallet from private key) transparently.
+      const activeSigner = await getActiveSigner()
+      if (!activeSigner) {
+        toast.error("Could not get wallet signer — please reconnect")
+        setSaving(false)
+        return
+      }
+      const nonce     = Math.floor(Math.random() * 1_000_000).toString()
+      const message   = `Update Profile\nWallet: ${address}\nNonce: ${nonce}`
+      const signature = await activeSigner.signMessage(message)
+      const res = await fetch(`${API_BASE_URL}/api/profile/update`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet_address: address,
+          username: formData.username, bio: formData.bio,
+          avatar_url: formData.avatar_url, signature, message, nonce,
+        }),
+      })
+      if (!res.ok) throw new Error("Update failed")
+      toast.success("Profile saved!")
+      setIsOpen(false)
+      window.dispatchEvent(new Event("profileUpdated"))
+      if (formData.username) router.push(`/dashboard/${formData.username}`)
     } catch (err: any) {
-      toast.error(err.message || "Failed to connect Telegram")
+      const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error"
+      toast.error(msg)
     } finally {
-      setLinkingProvider(null)
-      setShowTelegramLinkWidget(false)
+      setSaving(false)
     }
   }
 
- 
-
-
-  const script = document.createElement("script")
-  script.src = "https://telegram.org/js/telegram-widget.js?22"
-  script.setAttribute("data-telegram-login", "FaucetDrops") // your bot's username
-  script.setAttribute("data-size", "large")
-  script.setAttribute("data-onauth", "onTelegramAuthLink(user)")
-  script.setAttribute("data-request-access", "write")
-  script.async = true
-  telegramLinkContainerRef.current.appendChild(script)
-
-  return () => {
-    delete (window as any).onTelegramAuthLink
-    if (telegramLinkContainerRef.current) telegramLinkContainerRef.current.innerHTML = ""
+  // ── Username availability ─────────────────────────────────────────────
+  const checkUsernameUniqueness = async (value: string) => {
+    if (!value?.trim() || !address) return true
+    try {
+      const res  = await fetch(`${API_BASE_URL}/api/profile/check-availability`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field: "username", value: value.trim(), current_wallet: address.toLowerCase() }),
+      })
+      const data = await res.json()
+      if (!data.available) { setUsernameError(data.message); return false }
+      setUsernameError(null); return true
+    } catch { return true }
   }
-}, [showTelegramLinkWidget, linkSocial])
- const handleLinkFarcasterInline = async () => {
-  setLinkingProvider("farcaster")
-  try {
-    const { createAppClient, viemConnector } = await import("@farcaster/auth-client")
-    const appClient = createAppClient({ relay: "https://relay.farcaster.xyz", ethereum: viemConnector() })
-    const nonce = crypto.randomUUID().replace(/-/g, "")
-    const { data: channel, isError } = await appClient.createChannel({
-      siweUri: window.location.origin,
-      domain:  window.location.hostname,
-      nonce,
+
+  // ── Social linking — POPUP approach for all providers ─────────────────
+
+  // Generic helper: opens a popup and returns a promise that resolves
+  // to the credential when the popup posts back, or rejects on close/timeout.
+  const openSocialPopup = (
+    url: string,
+    expectedType: string,
+    name: string = "auth",
+  ): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const popup = window.open(url, name, "width=520,height=640,left=400,top=100")
+      if (!popup) { reject(new Error("Popup blocked — allow popups and try again")); return }
+
+      let settled = false
+      const settle = (fn: () => void) => {
+        if (settled) return
+        settled = true
+        clearInterval(closedPoll)
+        window.removeEventListener("message", messageHandler)
+        fn()
+      }
+
+      const messageHandler = (e: MessageEvent) => {
+        if (e.data?.type !== expectedType) return
+        popup.close()
+        settle(() => resolve(JSON.stringify(e.data.user ?? e.data.data)))
+      }
+
+      window.addEventListener("message", messageHandler)
+
+      const closedPoll = setInterval(() => {
+        if (popup.closed) settle(() => reject(new Error("cancelled")))
+      }, 500)
+
+      setTimeout(() => {
+        popup.close()
+        settle(() => reject(new Error("OAuth timed out")))
+      }, 180_000)
     })
-    if (isError || !channel?.channelToken) throw new Error("Failed to start Farcaster sign-in")
-    setFarcasterLinkChannel({ url: channel.url, channelToken: channel.channelToken })
-
-    const poll = setInterval(async () => {
-      try {
-        const { data: status, isError: pollError } = await appClient.watchStatus({ channelToken: channel.channelToken })
-        if (pollError) { clearInterval(poll); setFarcasterLinkChannel(null); setLinkingProvider(null); return }
-        if (status?.state === "completed") {
-          clearInterval(poll)
-          await linkSocial("farcaster", JSON.stringify({ fid: status.fid, username: status.username ?? "" }))
-          setUnlinkedOverride(null)
-          setFarcasterLinkChannel(null)
-          setLinkingProvider(null)
-        }
-      } catch { /* keep polling */ }
-    }, 1500)
-
-    setTimeout(() => { clearInterval(poll); setFarcasterLinkChannel(null); setLinkingProvider(null) }, 180_000)
-  } catch (err: any) {
-    toast.error(err.message || "Failed to connect Farcaster")
-    setLinkingProvider(null)
   }
-}
+
   const handleLinkSocial = async (provider: SocialProvider) => {
     setLinkingProvider(provider)
     try {
-      const credential = await openOAuthPopup(walletApiBase, provider, () => setLinkingProvider(null))
+      let credential: string
+
+      if (provider === "telegram") {
+        // Opens the existing /auth/telegram page (your TelegramCallback component)
+        credential = await openSocialPopup("/auth/telegram", "telegram_auth", "telegram_auth")
+      } else if (provider === "farcaster") {
+        // Opens the new /auth/farcaster page
+        credential = await openSocialPopup("/auth/farcaster", "farcaster_auth", "farcaster_auth")
+      } else {
+        // Standard OAuth popup for Google, Twitter, GitHub, Discord
+        credential = await openOAuthPopup(walletApiBase, provider, () => setLinkingProvider(null))
+      }
+
       await linkSocial(provider, credential)
       setUnlinkedOverride(null)
+      // Re-fetch so the UI reflects the new linked state immediately
+      await fetchLinkedSocials()
     } catch (err: any) {
       if (err.message === "cancelled") return
       if (err.message !== "OAuth timed out") toast.error(err.message || `Failed to connect ${provider}`)
@@ -829,6 +609,7 @@ useEffect(() => {
       const data = await res.json()
       toast.success(`${getSocialMeta(provider)?.label ?? provider} disconnected`)
       window.dispatchEvent(new CustomEvent("socialUnlinked", { detail: data.linked_socials }))
+      await fetchLinkedSocials()
     } catch (err: any) {
       toast.error(err.message || `Failed to disconnect ${provider}`)
     } finally {
@@ -841,60 +622,12 @@ useEffect(() => {
     window.addEventListener("socialUnlinked", handler)
     return () => window.removeEventListener("socialUnlinked", handler)
   }, [])
-  useEffect(() => { if (!isOpen) setUnlinkedOverride(null) }, [isOpen])
 
   const effectiveLinked = new Set(
-  unlinkedOverride ?? freshLinkedSocials ?? session?.linkedSocials ?? []
-)
+    unlinkedOverride ?? freshLinkedSocials ?? session?.linkedSocials ?? []
+  )
 
-  // ── Username check ───────────────────────────────────────────────────
-  const checkUsernameUniqueness = async (value: string) => {
-    if (!value?.trim() || !address) return true
-    try {
-      const res  = await fetch(`${API_BASE_URL}/api/profile/check-availability`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field: "username", value: value.trim(), current_wallet: address.toLowerCase() }),
-      })
-      const data = await res.json()
-      if (!data.available) { setUsernameError(data.message); return false }
-      setUsernameError(null); return true
-    } catch { return true }
-  }
-
-  // ── Save profile ─────────────────────────────────────────────────────
-  const handleSave = async () => {
-    if (!isConnected || !address || !signer) return toast.error("Wallet not connected")
-    setSaving(true)
-    const valid = await checkUsernameUniqueness(formData.username || "")
-    if (!valid) { setSaving(false); return }
-    try {
-      const nonce     = Math.floor(Math.random() * 1_000_000).toString()
-      const message   = `Update Profile\nWallet: ${address}\nNonce: ${nonce}`
-      const signature = await signer.signMessage(message)
-      const res = await fetch(`${API_BASE_URL}/api/profile/update`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          wallet_address: address,
-          username: formData.username, bio: formData.bio,
-          avatar_url: formData.avatar_url, signature, message, nonce,
-        }),
-      })
-      if (!res.ok) throw new Error("Update failed")
-      toast.success("Profile saved!")
-      setIsOpen(false)
-      window.dispatchEvent(new Event("profileUpdated"))
-      if (formData.username) router.push(`/dashboard/${formData.username}`)
-    } catch {
-      toast.error("Could not save profile")
-    } finally {
-      setSaving(false)
-    }
-  }
-  
-
-  // ── File upload ──────────────────────────────────────────────────────
+  // ── File upload ───────────────────────────────────────────────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -914,21 +647,18 @@ useEffect(() => {
   }
 
   const currentSeeds = GENERATED_SEEDS.slice(seedOffset, seedOffset + 8)
-  
-  // ── Social row ───────────────────────────────────────────────────────
+
+  // ── Social row ────────────────────────────────────────────────────────
   const SocialRow = ({ provider }: { provider: SocialProvider }) => {
     const linked = effectiveLinked.has(provider)
     const busy   = linkingProvider === provider
     const meta   = getSocialMeta(provider)
-    
     const Icon   = meta?.Icon
     return (
       <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50 hover:bg-card/80 transition-colors">
         <div className="flex items-center gap-2">
-          <span
-            className="flex items-center justify-center h-8 w-8 rounded-full shrink-0"
-            style={{ background: meta?.bg ?? "rgba(255,255,255,0.08)" }}
-          >
+          <span className="flex items-center justify-center h-8 w-8 rounded-full shrink-0"
+            style={{ background: meta?.bg ?? "rgba(255,255,255,0.08)" }}>
             {Icon ? <Icon className="h-4 w-4" style={{ color: meta?.color }} /> : null}
           </span>
           <div className="flex flex-col gap-0.5">
@@ -948,16 +678,8 @@ useEffect(() => {
             {busy ? "Removing…" : "Disconnect"}
           </Button>
         ) : (
-          <Button
-            size="sm" variant="outline" type="button"
-            disabled={busy || !!linkingProvider}
-            className="shrink-0"
-            onClick={() => {
-              if (provider === "telegram")  { handleLinkTelegramInline();  return }
-              if (provider === "farcaster") { handleLinkFarcasterInline(); return }
-              handleLinkSocial(provider)
-            }}
-          >
+          <Button size="sm" variant="outline" type="button" disabled={busy || !!linkingProvider}
+            className="shrink-0" onClick={() => handleLinkSocial(provider)}>
             {busy && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
             {busy ? "Connecting…" : "Connect"}
           </Button>
@@ -966,7 +688,7 @@ useEffect(() => {
     )
   }
 
-  // ── Render ───────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -1074,48 +796,9 @@ useEffect(() => {
                 </h4>
                 <div className="grid gap-3">
                   {address && <WalletAddressRow chain="evm" address={address} />}
-
-                  <WalletAddressRow
-                    chain="solana"
-                    address={effectiveSol}
-                    onLink={!isEmbedded ? handleLinkAddress : undefined}
-                  />
-                  <WalletAddressRow
-                    chain="stellar"
-                    address={effectiveXlm}
-                    onLink={!isEmbedded ? handleLinkAddress : undefined}
-                  />
+                  <WalletAddressRow chain="solana"  address={effectiveSol} onLink={!isEmbedded ? handleLinkAddress : undefined} />
+                  <WalletAddressRow chain="stellar" address={effectiveXlm} onLink={!isEmbedded ? handleLinkAddress : undefined} />
                 </div>
-                {showTelegramLinkWidget && (
-  <div className="rounded-lg border bg-card/50 p-4 flex flex-col items-center gap-3">
-    <div className="flex items-center justify-between w-full">
-      <span className="text-xs text-muted-foreground">Sign in with Telegram</span>
-      <button onClick={() => setShowTelegramLinkWidget(false)} className="text-muted-foreground hover:text-foreground">
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
-    <div ref={telegramLinkContainerRef} />
-  </div>
-)}
-
-{farcasterLinkChannel && (
-  <div className="rounded-lg border bg-card/50 p-4 flex flex-col items-center gap-3">
-    <div className="flex items-center justify-between w-full">
-      <span className="text-xs text-muted-foreground">Scan with Warpcast</span>
-      <button onClick={() => { setFarcasterLinkChannel(null); setLinkingProvider(null) }} className="text-muted-foreground hover:text-foreground">
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
-    <img
-      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(farcasterLinkChannel.url)}`}
-      alt="Farcaster sign-in QR code"
-      className="rounded-md"
-    />
-    <a href={farcasterLinkChannel.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
-      Or open in Warpcast
-    </a>
-  </div>
-)}
                 <p className="text-xs text-muted-foreground mt-3 px-1">
                   {isEmbedded
                     ? "All addresses are derived from your seed phrase."

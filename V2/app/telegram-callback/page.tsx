@@ -1,24 +1,16 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 export default function TelegramCallback() {
   const [status, setStatus] = useState<"waiting" | "done" | "error">("waiting")
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const botUsername = "FaucetDrops"
-    if (!botUsername) {
-      setStatus("error")
-      console.error("bot username is not set")
-      return
-    }
+    const botUsername = "FaucetDrops" // must match BotFather exactly
 
-    // ✅ Renamed parameter to avoid shorthand ambiguity
-    ;(window as any).onTelegramAuth = (telegramUser: Record<string, unknown>) => {
+    ;(window as any).onTelegramAuth = (tgUser: Record<string, unknown>) => {
       setStatus("done")
-      window.opener?.postMessage(
-        { type: "telegram_auth", user: telegramUser },
-        "*",
-      )
+      window.opener?.postMessage({ type: "telegram_auth", user: tgUser }, "*")
       setTimeout(() => window.close(), 500)
     }
 
@@ -30,10 +22,14 @@ export default function TelegramCallback() {
     script.setAttribute("data-request-access", "write")
     script.async = true
     script.onerror = () => setStatus("error")
-    document.body.appendChild(script)
+
+    // ✅ Append to the container div, not document.body
+    containerRef.current?.appendChild(script)
 
     return () => {
-      if (document.body.contains(script)) document.body.removeChild(script)
+      if (containerRef.current?.contains(script)) {
+        containerRef.current.removeChild(script)
+      }
       delete (window as any).onTelegramAuth
     }
   }, [])
@@ -50,6 +46,8 @@ export default function TelegramCallback() {
           Click the button below to sign in with Telegram
         </p>
       )}
+      {/* ✅ This is where the widget button renders */}
+      <div ref={containerRef} />
       {status === "done"  && <p style={{ color: "#4ade80" }}>✓ Signed in! Closing…</p>}
       {status === "error" && (
         <p style={{ color: "#f87171" }}>

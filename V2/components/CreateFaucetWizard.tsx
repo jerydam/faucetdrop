@@ -148,6 +148,15 @@ interface NetworkImageProps {
 }
 const DEFAULT_FAUCET_IMAGE = "/default.jpeg"
 
+const FAUCET_TYPE_DEFAULT_IMAGES: Record<string, string> = {
+  open: "/dropcode.png",
+  gated: "/droplist.png",
+  custom: "/custom.png",
+}
+
+const getDefaultFaucetImage = (faucetType: string): string => {
+  return FAUCET_TYPE_DEFAULT_IMAGES[faucetType] ?? DEFAULT_FAUCET_IMAGE
+}
 function NetworkImage({ network, size = 'md', className = '' }: NetworkImageProps) {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
@@ -1280,7 +1289,7 @@ const handleFaucetCreation = async () => {
     const ownerShort = `${address.slice(0, 6)}...${address.slice(-4)}`
     const finalDescription =
       faucetDescription.trim() || `This is a faucet on ${networkName} by ${ownerShort}`
-    const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
+    const finalImageUrl = faucetImageUrl.trim() || getDefaultFaucetImage(wizardState.selectedFaucetType)
 
     await saveFaucetMetadata(
       createdFaucetAddress,
@@ -1401,7 +1410,7 @@ const handleFaucetCreation = async () => {
       const finalDescription =
         faucetDescription.trim() ||
         `This is a faucet on Solana Devnet by ${ownerShort}`
-      const finalImageUrl = faucetImageUrl.trim() || DEFAULT_FAUCET_IMAGE
+      const finalImageUrl = faucetImageUrl.trim() || getDefaultFaucetImage(wizardState.selectedFaucetType)
  
       await saveFaucetMetadata(
         faucetStatePubkey,
@@ -2176,7 +2185,7 @@ const handleFaucetCreation = async () => {
                 {faucetImageUrl ? "Custom Image Preview:" : "Default Image:"}
               </p>
               <img 
-                src={faucetImageUrl || DEFAULT_FAUCET_IMAGE}
+                src={faucetImageUrl || getDefaultFaucetImage(wizardState.selectedFaucetType)}
                 alt="Faucet preview" 
                 className="max-h-40 rounded object-contain mx-auto"
                 onError={() => {

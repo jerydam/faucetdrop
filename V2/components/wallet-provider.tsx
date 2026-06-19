@@ -251,40 +251,59 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const walletType  = session?.walletType ?? null
 
   // ── Mount: detect wallets + restore session ───────────────────────────────
-  useEffect(() => {
-    setDetectedWallets(detectWallets())
+useEffect(() => {
+  setDetectedWallets(detectWallets())
 
-    const handler = (e: any) => {
-      const { info, provider: p } = e.detail
-      setDetectedWallets(prev => {
-        const exists = prev.some(w => w.name === info.name)
-        if (exists) return prev
-        return [...prev, { name: info.name, icon: info.icon ?? "🌐", provider: p }]
-      })
-    }
-    window.addEventListener("eip6963:announceProvider", handler)
-    window.dispatchEvent(new Event("eip6963:requestProvider"))
+  const handler = (e: any) => {
+    const { info, provider: p } = e.detail
+    setDetectedWallets(prev => {
+      const exists = prev.some(w => w.name === info.name)
+      if (exists) return prev
+      return [...prev, { name: info.name, icon: info.icon ?? "🌐", provider: p }]
+    })
+  }
+  window.addEventListener("eip6963:announceProvider", handler)
+  window.dispatchEvent(new Event("eip6963:requestProvider"))
 
-    const saved = loadSession()
-    if (saved) {
-      setSession(saved)
-      if (saved.walletType === "external") {
-        const wallets = detectWallets()
-        if (wallets.length > 0) {
-          buildProvider(wallets[0].provider).then(result => {
-            if (result) {
-              setProvider(result.provider)
-              setSigner(result.signer)
-              rawProviderRef.current = wallets[0].provider
-            }
-          })
-        }
+  const saved = loadSession()
+  if (saved) {
+    setSession(saved)
+    if (saved.walletType === "external") {
+      const wallets = detectWallets()
+      if (wallets.length > 0) {
+        buildProvider(wallets[0].provider).then(result => {
+          if (result) {
+            setProvider(result.provider)
+            setSigner(result.signer)
+            rawProviderRef.current = wallets[0].provider
+          }
+        })
       }
     }
 
-    return () => window.removeEventListener("eip6963:announceProvider", handler)
-  }, [])
+    // The cached session may be stale — e.g. socials linked on another
+    // device since this localStorage entry was last written. Re-check
+    // against the backend right away so linkedSocials reflects reality.
+    if (saved.token) {
+      fetch(`${API_BASE}/wallet/me`, {
+        headers: { Authorization: `Bearer ${saved.token}` },
+      })
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => {
+          if (!data) return
+          setSession(prev => {
+            if (!prev) return prev
+            const refreshed = { ...prev, linkedSocials: data.linked_socials }
+            saveSession(refreshed)
+            return refreshed
+          })
+        })
+        .catch(() => { /* non-fatal — keep the cached session as-is */ })
+    }
+  }
 
+  return () => window.removeEventListener("eip6963:announceProvider", handler)
+}, [])
   // ── Fetch Solana + Stellar addresses from backend ─────────────────────────
   const fetchNonEvmAddresses = useCallback(async () => {
     const s = session

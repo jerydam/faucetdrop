@@ -598,7 +598,9 @@ export function ProfileSettingsModal() {
   const router        = useRouter()
   const walletApiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
   const { openPopup } = useOAuthPopup(walletApiBase)
-
+  const [showTelegramLinkWidget, setShowTelegramLinkWidget] = useState(false)
+  const telegramLinkContainerRef = useRef<HTMLDivElement>(null)
+  const [farcasterLinkChannel, setFarcasterLinkChannel] = useState<{ url: string; channelToken: string } | null>(null)
   const [isOpen,          setIsOpen]          = useState(false)
   const [loading,         setLoading]         = useState(false)
   const [saving,          setSaving]          = useState(false)
@@ -729,7 +731,75 @@ useEffect(() => {
 
   // ── Social linking ───────────────────────────────────────────────────
   const [unlinkedOverride, setUnlinkedOverride] = useState<SocialProvider[] | null>(null)
+  const handleLinkTelegramInline = () => setShowTelegramLinkWidget(true)
 
+useEffect(() => {
+  if (!showTelegramLinkWidget || !telegramLinkContainerRef.current) return
+
+  ;(window as any).onTelegramAuthLink = async (telegramUser: Record<string, unknown>) => {
+    setLinkingProvider("telegram")
+    try {
+      await linkSocial("telegram", JSON.stringify(telegramUser))
+      setUnlinkedOverride(null)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to connect Telegram")
+    } finally {
+      setLinkingProvider(null)
+      setShowTelegramLinkWidget(false)
+    }
+  }
+
+ 
+
+
+  const script = document.createElement("script")
+  script.src = "https://telegram.org/js/telegram-widget.js?22"
+  script.setAttribute("data-telegram-login", "FaucetDrops") // your bot's username
+  script.setAttribute("data-size", "large")
+  script.setAttribute("data-onauth", "onTelegramAuthLink(user)")
+  script.setAttribute("data-request-access", "write")
+  script.async = true
+  telegramLinkContainerRef.current.appendChild(script)
+
+  return () => {
+    delete (window as any).onTelegramAuthLink
+    if (telegramLinkContainerRef.current) telegramLinkContainerRef.current.innerHTML = ""
+  }
+}, [showTelegramLinkWidget, linkSocial])
+ const handleLinkFarcasterInline = async () => {
+  setLinkingProvider("farcaster")
+  try {
+    const { createAppClient, viemConnector } = await import("@farcaster/auth-client")
+    const appClient = createAppClient({ relay: "https://relay.farcaster.xyz", ethereum: viemConnector() })
+    const nonce = crypto.randomUUID().replace(/-/g, "")
+    const { data: channel, isError } = await appClient.createChannel({
+      siweUri: window.location.origin,
+      domain:  window.location.hostname,
+      nonce,
+    })
+    if (isError || !channel?.channelToken) throw new Error("Failed to start Farcaster sign-in")
+    setFarcasterLinkChannel({ url: channel.url, channelToken: channel.channelToken })
+
+    const poll = setInterval(async () => {
+      try {
+        const { data: status, isError: pollError } = await appClient.watchStatus({ channelToken: channel.channelToken })
+        if (pollError) { clearInterval(poll); setFarcasterLinkChannel(null); setLinkingProvider(null); return }
+        if (status?.state === "completed") {
+          clearInterval(poll)
+          await linkSocial("farcaster", JSON.stringify({ fid: status.fid, username: status.username ?? "" }))
+          setUnlinkedOverride(null)
+          setFarcasterLinkChannel(null)
+          setLinkingProvider(null)
+        }
+      } catch { /* keep polling */ }
+    }, 1500)
+
+    setTimeout(() => { clearInterval(poll); setFarcasterLinkChannel(null); setLinkingProvider(null) }, 180_000)
+  } catch (err: any) {
+    toast.error(err.message || "Failed to connect Farcaster")
+    setLinkingProvider(null)
+  }
+}
   const handleLinkSocial = async (provider: SocialProvider) => {
     setLinkingProvider(provider)
     try {
@@ -822,6 +892,7 @@ useEffect(() => {
       setSaving(false)
     }
   }
+  
 
   // ── File upload ──────────────────────────────────────────────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -843,12 +914,13 @@ useEffect(() => {
   }
 
   const currentSeeds = GENERATED_SEEDS.slice(seedOffset, seedOffset + 8)
-
+  
   // ── Social row ───────────────────────────────────────────────────────
   const SocialRow = ({ provider }: { provider: SocialProvider }) => {
     const linked = effectiveLinked.has(provider)
     const busy   = linkingProvider === provider
     const meta   = getSocialMeta(provider)
+    
     const Icon   = meta?.Icon
     return (
       <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50 hover:bg-card/80 transition-colors">
@@ -876,8 +948,16 @@ useEffect(() => {
             {busy ? "Removing…" : "Disconnect"}
           </Button>
         ) : (
-          <Button size="sm" variant="outline" type="button" disabled={busy || !!linkingProvider}
-            className="shrink-0" onClick={() => handleLinkSocial(provider)}>
+          <Button
+            size="sm" variant="outline" type="button"
+            disabled={busy || !!linkingProvider}
+            className="shrink-0"
+            onClick={() => {
+              if (provider === "telegram")  { handleLinkTelegramInline();  return }
+              if (provider === "farcaster") { handleLinkFarcasterInline(); return }
+              handleLinkSocial(provider)
+            }}
+          >
             {busy && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
             {busy ? "Connecting…" : "Connect"}
           </Button>
@@ -1006,6 +1086,36 @@ useEffect(() => {
                     onLink={!isEmbedded ? handleLinkAddress : undefined}
                   />
                 </div>
+                {showTelegramLinkWidget && (
+  <div className="rounded-lg border bg-card/50 p-4 flex flex-col items-center gap-3">
+    <div className="flex items-center justify-between w-full">
+      <span className="text-xs text-muted-foreground">Sign in with Telegram</span>
+      <button onClick={() => setShowTelegramLinkWidget(false)} className="text-muted-foreground hover:text-foreground">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+    <div ref={telegramLinkContainerRef} />
+  </div>
+)}
+
+{farcasterLinkChannel && (
+  <div className="rounded-lg border bg-card/50 p-4 flex flex-col items-center gap-3">
+    <div className="flex items-center justify-between w-full">
+      <span className="text-xs text-muted-foreground">Scan with Warpcast</span>
+      <button onClick={() => { setFarcasterLinkChannel(null); setLinkingProvider(null) }} className="text-muted-foreground hover:text-foreground">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+    <img
+      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(farcasterLinkChannel.url)}`}
+      alt="Farcaster sign-in QR code"
+      className="rounded-md"
+    />
+    <a href={farcasterLinkChannel.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+      Or open in Warpcast
+    </a>
+  </div>
+)}
                 <p className="text-xs text-muted-foreground mt-3 px-1">
                   {isEmbedded
                     ? "All addresses are derived from your seed phrase."

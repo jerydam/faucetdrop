@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect,useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useWallet, type SocialProvider, API_BASE } from "./wallet-provider"
 import { X, Loader2, ChevronRight, Shield, Fingerprint } from "lucide-react"
@@ -90,6 +90,8 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
   const [tab,       setTab]       = useState<"social" | "wallet">("social")
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [mounted,   setMounted]   = useState(false)
+  const [showTelegramWidget, setShowTelegramWidget] = useState(false)
+  const telegramContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => setMounted(true), [])
 
@@ -160,57 +162,40 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
   }, [connectSocial, onSuccess])
   // In ConnectModal, replace handleSocial for "telegram":
 
-  const handleTelegram = useCallback(() => {
-  setLoadingId("telegram")
+  const handleTelegramInline = useCallback(() => {
+  setShowTelegramWidget(true)
+}, [])
 
-  // Open your Next.js page as a popup (not a blank window)
-  const popup = window.open(
-    "/telegram-callback",
-    "telegram_login",
-    "width=420,height=500,left=200,top=100",
-  )
+useEffect(() => {
+  if (!showTelegramWidget || !telegramContainerRef.current) return
 
-  if (!popup) {
-    setLoadingId(null)
-    return
-  }
-
-  let settled = false
-  const settle = () => {
-    if (settled) return
-    settled = true
-    setLoadingId(null)
-    window.removeEventListener("message", onMessage)
-    clearInterval(closedPoll)
-  }
-  // Listen for the postMessage from the popup
-  const onMessage = async (e: MessageEvent) => {
-    // Only accept messages from our own origin
-    if (e.origin !== window.location.origin) return
-    if (e.data?.type !== "telegram_auth") return
-
-    settle()
+  ;(window as any).onTelegramAuth = async (telegramUser: Record<string, unknown>) => {
+    setLoadingId("telegram")
     try {
-      await connectSocial("telegram", JSON.stringify(e.data.user))
+      await connectSocial("telegram", JSON.stringify(telegramUser))
       onSuccess?.()
     } catch (err: any) {
       console.error("Telegram login failed:", err)
+    } finally {
+      setLoadingId(null)
+      setShowTelegramWidget(false)
     }
   }
 
-  window.addEventListener("message", onMessage)
+  const script = document.createElement("script")
+  script.src = "https://telegram.org/js/telegram-widget.js?22"
+  script.setAttribute("data-telegram-login", "FaucetDrops") // your bot's username, not the app name
+  script.setAttribute("data-size", "large")
+  script.setAttribute("data-onauth", "onTelegramAuth(user)")
+  script.setAttribute("data-request-access", "write")
+  script.async = true
+  telegramContainerRef.current.appendChild(script)
 
-  // Detect if user closes popup manually without completing
-  const closedPoll = setInterval(() => {
-    if (popup.closed) settle()
-  }, 500)
-
-  // Safety timeout
-  setTimeout(() => {
-    try { popup.close() } catch {}
-    settle()
-  }, 180_000)
-}, [connectSocial, onSuccess])
+  return () => {
+    delete (window as any).onTelegramAuth
+    if (telegramContainerRef.current) telegramContainerRef.current.innerHTML = ""
+  }
+}, [showTelegramWidget, connectSocial, onSuccess])
 
 const handleFarcaster = useCallback(async () => {
   setLoadingId("farcaster")
@@ -423,12 +408,26 @@ const handleFarcaster = useCallback(async () => {
     loading={loadingId === s.id}
     disabled={!!loadingId}
     onClick={() => {
-      if (s.id === "telegram")  { handleTelegram();  return }
-      if (s.id === "farcaster") { handleFarcaster(); return }
-      handleSocial(s.id)
-    }}
+  if (s.id === "telegram")  { handleTelegramInline(); return }
+  if (s.id === "farcaster") { handleFarcaster(); return }
+  handleSocial(s.id)
+}}
   />
 ))}
+{showTelegramWidget && (
+  <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex flex-col items-center gap-3">
+    <div className="flex items-center justify-between w-full">
+      <span className="text-xs text-white/50">Sign in with Telegram</span>
+      <button onClick={() => setShowTelegramWidget(false)} className="text-white/40 hover:text-white">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+    <div ref={telegramContainerRef} />
+    <p className="text-[11px] text-white/30 text-center">
+      Telegram will open its own secure window to verify your account.
+    </p>
+  </div>
+)}
 
               {/* Passkey */}
               <button
@@ -493,7 +492,7 @@ const handleFarcaster = useCallback(async () => {
         <div className="px-6 pb-5 flex items-center gap-2">
           <Shield className="h-3 w-3 text-white/20 shrink-0" />
           <p className="text-[11px] text-white/25 leading-tight">
-            Social logins create a self-custodial wallet. Your encrypted seed phrase is stored securely.
+            Social logins create a self-custodial wallet.
           </p>
         </div>
       </div>

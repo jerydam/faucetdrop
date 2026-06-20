@@ -747,72 +747,113 @@
      * The backend now trusts these pre-calculated values rather than re-fetching.
      */
     const handleRedeem = async () => {
-      const drops = parseFloat(redeemAmount);
-      if (!drops || drops <= 0) return;
-      if (!balance?.rematchBadge) {
-        toast({ title: "Rematch badge required", variant: "destructive" });
-        return;
-      }
-      if (drops > (balance?.rewardDrops ?? 0)) {
-        toast({ title: "Insufficient reward drops", variant: "destructive" });
-        return;
-      }
+  const drops = parseFloat(redeemAmount);
+  if (!drops || drops <= 0) return;
+  if (!balance?.rematchBadge) {
+    toast({ title: "Rematch badge required", variant: "destructive" });
+    return;
+  }
+  if (drops > (balance?.rewardDrops ?? 0)) {
+    toast({ title: "Insufficient reward drops", variant: "destructive" });
+    return;
+  }
 
-      setRedeemLoading(true);
+  setRedeemLoading(true);
 
-      // Refresh price right before submitting — prevents stale rate being sent
-      let freshPrice: number;
-      try {
-        freshPrice = await getGoodDollarPrice();
-        setGPriceUsd(freshPrice);
-        setGPriceFetchedAt(Date.now());
-      } catch {
-        toast({
-          title: "Could not refresh $G price",
-          description: "Check your connection and try again.",
-          variant: "destructive",
-        });
-        setRedeemLoading(false);
-        return;
-      }
+  // Refresh price right before submitting
+  let freshPrice: number;
+  try {
+    freshPrice = await getGoodDollarPrice();
+    setGPriceUsd(freshPrice);
+    setGPriceFetchedAt(Date.now());
+  } catch {
+    toast({
+      title: "Could not refresh $G price",
+      description: "Check your connection and try again.",
+      variant: "destructive",
+    });
+    setRedeemLoading(false);
+    return;
+  }
 
-      // Recompute with the freshest price so what we send matches what user saw
-      const preview = computeRedeemPreview(drops, freshPrice, balance.apyPct, balance.rewardDrops);
-      setRedeemPreview(preview);
+  const preview = computeRedeemPreview(drops, freshPrice, balance.apyPct, balance.rewardDrops);
+  setRedeemPreview(preview);
 
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/drops/redeem`, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            walletAddress: wallet,
-            dropsAmount:   drops,
-            chainId:       CELO_CHAIN_ID,
-            // Pre-calculated values — backend uses these instead of re-fetching price
-            gPriceUsd:     freshPrice,
-            playerG:       preview.playerG,
-            feeG:          preview.feeG,
-            stakedDrops:   preview.stakedDrops,
-            apyPct:        preview.apyPct,
-          }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          toast({ title: "✅ Redeemed!", description: `${fmt(data.playerG ?? preview.playerG, 4)} $G sent to your wallet.` });
-          setRedeemAmount("");
-          setRedeemPreview(null);
-          fetchBalance();
-          fetchStakes();
-          fetchHistory();
-        } else {
-          toast({ title: "Redeem failed", description: data.detail ?? "Unknown error", variant: "destructive" });
-        }
-      } catch {
-        toast({ title: "Network error", variant: "destructive" });
-      } finally {
-        setRedeemLoading(false);
-      }
-    };
+  try {
+    // ── Step 1: Player burns their DROPS on-chain ──────────────────────
+    toast({ title: "⏳ Step 1/2 — Confirm burn in your wallet…" });
+
+    const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
+    if (!switched) throw new Error("Please connect your wallet first.");
+
+    const signer = await getActiveSigner(CELO_CHAIN_ID);
+    if (!signer) throw new Error("No wallet connected");
+
+    const signerAddr = await signer.getAddress();
+    if (signerAddr.toLowerCase() !== wallet) {
+      throw new Error(`Connect as ${walletAddress} to proceed`);
+    }
+
+    const cfg = getChainConfig(CELO_CHAIN_ID);
+    const dropsContract = new ethers.Contract(
+      cfg.contracts.dropsToken!,
+      ["function redeem(uint256 amount, string calldata rewardId) external"],
+      signer,
+    );
+
+    const totalWei = ethers.parseUnits(drops.toString(), 18);
+    const burnTx   = await dropsContract.redeem(totalWei, `redeem_${Date.now()}`);
+
+    toast({ title: "📡 Burn sent, waiting for confirmation…" });
+    const receipt = await burnTx.wait();
+    if (!receipt || receipt.status !== 1) {
+      throw new Error("Burn transaction failed on-chain");
+    }
+
+    // ── Step 2: Backend mints 100% to pool → redeemForPlayer ──────────
+    toast({ title: "⏳ Step 2/2 — Processing redemption…" });
+
+    const res = await fetch(`${BACKEND_URL}/api/drops/redeem`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        walletAddress: wallet,
+        dropsAmount:   drops,
+        chainId:       CELO_CHAIN_ID,
+        gPriceUsd:     freshPrice,
+        playerG:       preview.playerG,
+        feeG:          preview.feeG,
+        stakedDrops:   preview.stakedDrops,
+        apyPct:        preview.apyPct,
+      }),
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      toast({
+        title: "✅ Redeemed!",
+        description: `${fmt(data.playerG ?? preview.playerG, 4)} $G sent to your wallet.`,
+      });
+      setRedeemAmount("");
+      setRedeemPreview(null);
+      fetchBalance();
+      fetchStakes();
+      fetchHistory();
+    } else {
+      toast({
+        title: "Redeem failed",
+        description: data.detail ?? "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+  } catch (err: any) {
+    const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error";
+    toast({ title: "Transaction failed", description: msg, variant: "destructive" });
+  } finally {
+    setRedeemLoading(false);
+  }
+};
 
     const handleClaimStake = async (stakeId: string) => {
       setClaimingStake(stakeId);

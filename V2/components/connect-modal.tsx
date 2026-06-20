@@ -166,36 +166,76 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
   setShowTelegramWidget(true)
 }, [])
 
+// Replace the existing telegram useEffect with this:
 useEffect(() => {
-  if (!showTelegramWidget || !telegramContainerRef.current) return
+  if (!showTelegramWidget) return
 
-  ;(window as any).onTelegramAuth = async (telegramUser: Record<string, unknown>) => {
-    setLoadingId("telegram")
-    try {
-      await connectSocial("telegram", JSON.stringify(telegramUser))
-      onSuccess?.()
-    } catch (err: any) {
-      console.error("Telegram login failed:", err)
-    } finally {
-      setLoadingId(null)
+  // Wait for the container div to be in the DOM
+  const timeout = setTimeout(() => {
+    if (!telegramContainerRef.current) return
+
+    ;(window as any).onTelegramAuth = async (telegramUser: Record<string, unknown>) => {
+      setLoadingId("telegram")
       setShowTelegramWidget(false)
+      try {
+        await connectSocial("telegram", JSON.stringify(telegramUser))
+        onSuccess?.()
+      } catch (err: any) {
+        console.error("Telegram login failed:", err)
+      } finally {
+        setLoadingId(null)
+      }
     }
-  }
 
-  const script = document.createElement("script")
-  script.src = "https://telegram.org/js/telegram-widget.js?22"
-  script.setAttribute("data-telegram-login", "FaucetDrops") // your bot's username, not the app name
-  script.setAttribute("data-size", "large")
-  script.setAttribute("data-onauth", "onTelegramAuth(user)")
-  script.setAttribute("data-request-access", "write")
-  script.async = true
-  telegramContainerRef.current.appendChild(script)
+    const script = document.createElement("script")
+    script.src = "https://telegram.org/js/telegram-widget.js?22"
+    script.setAttribute("data-telegram-login", "FaucetDrops")
+    script.setAttribute("data-size", "large")
+    script.setAttribute("data-onauth", "onTelegramAuth(user)")
+    script.setAttribute("data-request-access", "write")
+    script.async = true
+    telegramContainerRef.current.appendChild(script)
+  }, 50) // small delay to let React render the container div
 
   return () => {
+    clearTimeout(timeout)
     delete (window as any).onTelegramAuth
     if (telegramContainerRef.current) telegramContainerRef.current.innerHTML = ""
   }
 }, [showTelegramWidget, connectSocial, onSuccess])
+const handleTelegramPopup = useCallback(() => {
+  setLoadingId("telegram")
+  
+  const popup = window.open(
+    "/auth/telegram", // your TelegramCallback page route
+    "telegram_login",
+    "width=400,height=500,left=200,top=100"
+  )
+
+  const handler = async (e: MessageEvent) => {
+    if (e.data?.type !== "telegram_auth") return
+    window.removeEventListener("message", handler)
+    try {
+      await connectSocial("telegram", JSON.stringify(e.data.user))
+      onSuccess?.()
+    } catch (err) {
+      console.error("Telegram login failed:", err)
+    } finally {
+      setLoadingId(null)
+    }
+  }
+
+  window.addEventListener("message", handler)
+
+  // Cleanup if popup closed without auth
+  const poll = setInterval(() => {
+    if (popup?.closed) {
+      clearInterval(poll)
+      window.removeEventListener("message", handler)
+      setLoadingId(null)
+    }
+  }, 500)
+}, [connectSocial, onSuccess])
 
 const handleFarcaster = useCallback(async () => {
   setLoadingId("farcaster")
@@ -408,7 +448,7 @@ const handleFarcaster = useCallback(async () => {
     loading={loadingId === s.id}
     disabled={!!loadingId}
     onClick={() => {
-  if (s.id === "telegram")  { handleTelegramInline(); return }
+  if (s.id === "telegram") { handleTelegramPopup(); return }
   if (s.id === "farcaster") { handleFarcaster(); return }
   handleSocial(s.id)
 }}

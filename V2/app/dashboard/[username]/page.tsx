@@ -107,7 +107,7 @@ export default function DashboardPage() {
     const params = useParams();
     const router = useRouter();
     const { toast } = useToast();
-    
+    const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
     // --- COMBINED WALLET LOGIC ---
     const { address: evmAddress } = useWallet(); 
     const { publicKey: solanaPublicKey } = useSolanaWallet();
@@ -817,6 +817,7 @@ export default function DashboardPage() {
                 {activeTab === 'challenge' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <ChallengeDashboardTab 
+                    refreshKey={dashboardRefreshKey}
                     walletAddress={profile.wallet_address}
                     initialSubtab={initialSubtab}
                     />

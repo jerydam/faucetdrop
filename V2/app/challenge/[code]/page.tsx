@@ -79,7 +79,9 @@ interface PlayerState {
   txVerified:    boolean;
   avatarUrl:     string;
 }
-
+interface BadgeUnlockedPopupProps {
+  onDismiss: () => void;
+}
 interface QuizOption      { id: string; text: string }
 interface CurrentQuestion {
   roundIndex: number; questionIndex: number; totalQuestions: number;
@@ -160,6 +162,39 @@ function Confetti({ active }: { active: boolean }) {
 // ── Passive expiry countdown (NO backend calls until expired) ─────────────────
 // createdAt is a unix timestamp (seconds). We just count down locally.
 // Only when it hits zero do we call the backend to confirm + cancel.
+function BadgeUnlockedPopup({ onDismiss }: BadgeUnlockedPopupProps) {
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+      <div
+        className="w-full max-w-sm bg-card border border-border rounded-3xl p-6 text-center space-y-4 shadow-2xl"
+        style={{ animation: "badgePopIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)" }}
+      >
+        <div className="text-6xl">🏆</div>
+        <div className="space-y-1">
+          <h2 className="text-xl font-black text-foreground">Rematch Badge Earned!</h2>
+          <p className="text-sm text-muted-foreground">
+            You've played 10 games and unlocked the Rematch Badge.
+          </p>
+        </div>
+        <div className="bg-primary/10 border border-primary/20 rounded-2xl p-3 space-y-1">
+          <p className="text-xs font-bold text-primary">What's unlocked:</p>
+          <ul className="text-xs text-muted-foreground space-y-0.5 text-left list-disc list-inside">
+            <li>Request rematches with past opponents</li>
+            <li>Stake above the {10} DROPS limit</li>
+            <li>Redeem Reward DROPS for $G</li>
+          </ul>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Keep playing to climb tiers and earn higher APY on your DROPS.
+        </p>
+        <Button className="w-full h-11 font-bold" onClick={onDismiss}>
+          Nice! 🎉
+        </Button>
+      </div>
+      <style>{`@keyframes badgePopIn{0%{opacity:0;transform:scale(0.85) translateY(10px)}100%{opacity:1;transform:scale(1) translateY(0)}}`}</style>
+    </div>
+  );
+}
 
 function usePassiveExpiry(createdAt: number | null, code: string, phase: GamePhase) {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
@@ -487,11 +522,12 @@ export default function ChallengePage() {
   () => getChainConfig(challenge?.chainId ?? CELO_CHAIN_ID),
   [challenge?.chainId]
 );
-const DROPS_ADDRESS = chainCfg.contracts.dropsToken;
+  const DROPS_ADDRESS = chainCfg.contracts.dropsToken;
   // ── Passive expiry (createdAt from challenge load, no backend polling) ────
   const [createdAt, setCreatedAt] = useState<number | null>(null);
   const expiry = usePassiveExpiry(createdAt, code, phase);
-
+  const [showBadgeUnlocked, setShowBadgeUnlocked] = useState(false);
+  const badgeUnlockShownRef = useRef(false);
   // ── Staking state ─────────────────────────────────────────────────────────
   const [isStaking, setIsStaking]           = useState(false);
   const [stakeTxHash, setStakeTxHash]       = useState<string | null>(null);
@@ -677,29 +713,44 @@ const DROPS_ADDRESS = chainCfg.contracts.dropsToken;
   }, [cameFromPreLobby, agreedStake, userWalletAddress, challenge, code, username]);
 
   // ── Pending claims + badge data on game over ───────────────────────────────
-  useEffect(() => {
-    if (phase !== "game_over" || !myWallet) return;
+  // ── New state, alongside other badge/rematch state ──────────────────────
 
-    fetch(`${API_BASE_URL}/api/challenge/${myWallet}/pending-claims`)
+// ── Pending claims + badge data on game over ───────────────────────────────
+useEffect(() => {
+  if (phase !== "game_over" || !myWallet) return;
+
+  fetch(`${API_BASE_URL}/api/challenge/${myWallet}/pending-claims`)
+    .then(r => r.json())
+    .then(d => { if (d.success) setPendingClaims(d.claims ?? []); })
+    .catch(() => {});
+
+  fetch(`${API_BASE_URL}/api/players/${myWallet}`)
+    .then(r => r.json())
+    .then(d => {
+      const newTotalDuels = d.total_duels ?? 0;
+      setMyTotalDuels(newTotalDuels);
+
+      // ── Fire the milestone popup exactly when this game was the 10th ──
+      // Checking === BADGE_THRESHOLD (not >=) ensures it only fires once,
+      // on the game that pushed them to exactly 10 — not on every game
+      // thereafter where total_duels stays >= 10.
+      if (newTotalDuels === BADGE_THRESHOLD && !badgeUnlockShownRef.current) {
+        badgeUnlockShownRef.current = true;
+        setShowBadgeUnlocked(true);
+      }
+    })
+    .catch(() => {});
+
+  const opponentW = Object.keys(finalScores).find(w => w.toLowerCase() !== myWallet) ?? null;
+  setOpponentWallet(opponentW);
+
+  if (opponentW) {
+    fetch(`${API_BASE_URL}/api/players/${opponentW}`)
       .then(r => r.json())
-      .then(d => { if (d.success) setPendingClaims(d.claims ?? []); })
+      .then(d => setOpponentTotalDuels(d.total_duels ?? 0))
       .catch(() => {});
-
-    fetch(`${API_BASE_URL}/api/players/${myWallet}`)
-      .then(r => r.json())
-      .then(d => setMyTotalDuels(d.total_duels ?? 0))
-      .catch(() => {});
-
-    const opponentW = Object.keys(finalScores).find(w => w.toLowerCase() !== myWallet) ?? null;
-    setOpponentWallet(opponentW);
-
-    if (opponentW) {
-      fetch(`${API_BASE_URL}/api/players/${opponentW}`)
-        .then(r => r.json())
-        .then(d => setOpponentTotalDuels(d.total_duels ?? 0))
-        .catch(() => {});
-    }
-  }, [phase, myWallet, finalScores]);
+  }
+}, [phase, myWallet, finalScores]);
 
   const handleInviteDismiss = useCallback(() => {
     if (inviteTimerRef.current) clearInterval(inviteTimerRef.current);
@@ -1195,6 +1246,9 @@ const handleStake = useCallback(async () => {
   // ── Global overlays ────────────────────────────────────────────────────────
   const globalOverlays = (
     <>
+    {showBadgeUnlocked && (
+      <BadgeUnlockedPopup onDismiss={() => setShowBadgeUnlocked(false)} />
+    )}
       {rematchInvite && (
         <RematchPopup
           invite={rematchInvite} myWallet={myWallet}

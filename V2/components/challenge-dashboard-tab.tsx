@@ -93,6 +93,7 @@ interface DropsBalance {
 interface ChallengeDashboardTabProps {
   walletAddress: string;
   initialSubtab?: string | null;
+  refreshKey?: number;  
 }
 
 interface StakePool {
@@ -228,7 +229,7 @@ interface Props {
   walletAddress: string;
 }
 
-export function ChallengeDashboardTab({ walletAddress, initialSubtab }: ChallengeDashboardTabProps) {
+export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey }: ChallengeDashboardTabProps) {
   const [activeSubtab, setActiveSubtab] = useState(initialSubtab || 'overview');
   const { toast } = useToast();
   const wallet = walletAddress.toLowerCase();
@@ -515,6 +516,30 @@ const handleBuyReset = () => {
     } catch { /* silent */ }
     finally { setLoadingBalance(false); }
   }, [wallet]);
+
+  // Initial load
+  useEffect(() => { fetchBalance(); }, [fetchBalance]);
+
+  // ── NEW: refetch whenever the parent signals a game just finished ───────
+  useEffect(() => {
+    if (refreshKey === undefined) return;
+    fetchBalance();
+  }, [refreshKey, fetchBalance]);
+
+  // ── NEW: refetch whenever this tab/window regains focus or becomes
+  // visible again — covers the "stayed mounted in background" case where
+  // the player finished a game on another tab/route and comes back here.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchBalance();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", fetchBalance);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", fetchBalance);
+    };
+  }, [fetchBalance]);
 
   const fetchStakes = useCallback(async () => {
     setLoadingStakes(true);

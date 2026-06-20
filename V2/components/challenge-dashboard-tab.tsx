@@ -246,7 +246,8 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [loadingOnChain, setLoadingOnChain] = useState(false);
-  
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   // ── Inner tab ──────────────────────────────────────────────────────────────
   type InnerTab = "overview" | "redeem" | "pools" | "history" | "buy" | "admin";
   const tabs: { key: InnerTab; label: string }[] = [
@@ -354,7 +355,33 @@ const handleCalculate = async () => {
   setBuyStep("deposit");
 };
 
-
+useEffect(() => {
+  const amt = parseFloat(redeemAmount);
+  if (!redeemAmount || isNaN(amt) || amt <= 0) { 
+    setRedeemPreview(null); 
+    setPreviewError(null);
+    return; 
+  }
+  const timeout = setTimeout(async () => {
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/drops/preview-redeem?wallet=${wallet}&drops=${amt}`);
+      const data = await res.json();
+      if (data.success) {
+        setRedeemPreview(data);
+        setPreviewError(null);
+      } else {
+        setPreviewError(data.detail ?? "Could not load preview");
+        setRedeemPreview(null);
+      }
+    } catch {
+      setPreviewError("Price feed unavailable — you can still redeem");
+      setRedeemPreview(null);
+    } finally { setPreviewLoading(false); }
+  }, 600);
+  return () => clearTimeout(timeout);
+}, [redeemAmount, wallet]);
 
   // ── Contract interaction helpers ───────────────────────────────────────────
   // ── Buy DROPS handler ─────────────────────────────────────────────────────
@@ -540,6 +567,13 @@ const handleBuyReset = () => {
       window.removeEventListener("focus", fetchBalance);
     };
   }, [fetchBalance]);
+
+  const canRedeem = 
+  !redeemLoading &&
+  !!balance?.rematchBadge &&
+  parseFloat(redeemAmount) > 0 &&
+  parseFloat(redeemAmount) <= (balance?.rewardDrops ?? 0) &&
+  (redeemPreview?.sufficient || !!previewError);
 
   const fetchStakes = useCallback(async () => {
     setLoadingStakes(true);
@@ -1061,11 +1095,16 @@ const handleBuyReset = () => {
                   )}
                 </div>
               )}
-
+              {previewError && !previewLoading && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+                  <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-400">{previewError}</p>
+                </div>
+              )}
               <Button
                 className="w-full"
                 onClick={handleRedeem}
-                disabled={redeemLoading || !redeemPreview || !redeemPreview.sufficient || !balance?.rematchBadge}
+                disabled={!canRedeem}
               >
                 {redeemLoading
                   ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Redeeming…</>

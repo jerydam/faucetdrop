@@ -66,13 +66,16 @@ const isFaucetPage = pathname.includes('/faucet');
 const isQuizPage = pathname.includes('/quiz');
 
 const isQuestPage = pathname.includes('/quest');
-
+const isNetworkPage = pathname.includes('/faucet/network') || pathname.includes('/network/');  
 const isChallengePage = pathname.includes('/challenge');
 const getActionConfig = () => {
 
 if (isQuestPage) return { label: "Create Quest", path: "/quest/create-quest" };
 
 if (isQuizPage) return { label: "Create Quiz", path: "/quiz/create-quiz" };
+
+const isNetworkPage = pathname.includes('/faucet/network') || pathname.includes('/network/');  
+
 
 if (pathname.includes('/spinner')) return { label: "Create Spinner", path: "/spinner/create" };
 
@@ -208,7 +211,7 @@ return (
           !isQuestPage &&
           !isQuizPage &&
           !isChallengePage &&
-          !isFaucetPage && (
+          !isFaucetPage && !isNetworkPage && (
           <Button
             onClick={() => router.push(action.path)}
             variant="default"

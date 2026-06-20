@@ -13,7 +13,7 @@ import {
   Flame, BarChart3, Coins, ArrowDownToLine, ArrowUpFromLine,
   RefreshCw, AlertCircle, Lock, Unlock, ShieldCheck,
   DollarSign, Droplets, Activity, Settings2, Wallet,
-  ExternalLink, Hash,ShoppingCart, Banknote 
+  ExternalLink, Hash, ShoppingCart, Banknote
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ethers } from "ethers";
@@ -28,7 +28,6 @@ const DROPS_REDEEM_POOL_ADDRESS =
   getChainConfig(CELO_CHAIN_ID).contracts.dropsRedeemPool!;
 
 const DROPS_REDEEM_POOL_ABI = [
-  // ── Read ──────────────────────────────────────────────────────────────────
   "function freeLiquidity() view returns (uint256)",
   "function poolGBalance() view returns (uint256)",
   "function poolDropsBalance() view returns (uint256)",
@@ -43,17 +42,14 @@ const DROPS_REDEEM_POOL_ABI = [
   "function getStake(uint256 stakeId) view returns (tuple(address player, uint256 stakeDropsWei, uint256 stakeGWei, uint256 apy, uint256 stakedAt, uint256 maturesAt, bool capitalReleased))",
   "function previewRedeem(uint256 totalDropsWei) view returns (uint256 playerG, uint256 feeG, uint256 stakeGLocked, uint256 stakeDropsWei, uint256 poolNeeded)",
   "function previewClaim(uint256 stakeId) view returns (uint256 apyG, uint256 capitalDropsWei, bool matured)",
-  // ── Write (owner) ─────────────────────────────────────────────────────────
   "function depositG(uint256 amount)",
   "function withdrawG(uint256 amount)",
   "function setGPrice(uint256 _priceWei)",
   "function setResolver(address _resolver)",
   "function setServiceAddress(address _addr)",
   "function setDropsToken(address _dropsToken)",
-  // ── ERC20 approve (for depositG) ──────────────────────────────────────────
 ];
 
-// Minimal ERC20 ABI for approve
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
   "function allowance(address owner, address spender) view returns (uint256)",
@@ -61,8 +57,9 @@ const ERC20_ABI = [
   "function decimals() view returns (uint8)",
 ];
 
-/** ─── Admin address (case-insensitive compare) ───────────────────────────── */
+/** ─── Admin address ──────────────────────────────────────────────────────── */
 const ADMIN_ADDRESS = "0x9fbc2a0de6e5c5fd96e8d11541608f5f328c0785";
+
 async function submitDropsClaim(
   payload: { contract: string; amount: string; timestamp: number; signature: string },
   activeSigner: ethers.JsonRpcSigner | ethers.Wallet,
@@ -76,6 +73,7 @@ async function submitDropsClaim(
   await tx.wait();
   return tx.hash as string;
 }
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface DropsBalance {
@@ -93,7 +91,7 @@ interface DropsBalance {
 interface ChallengeDashboardTabProps {
   walletAddress: string;
   initialSubtab?: string | null;
-  refreshKey?: number;  
+  refreshKey?: number;
 }
 
 interface StakePool {
@@ -131,23 +129,23 @@ interface MatchHistory {
   finished_at: string | null;
 }
 
-interface PreviewRedeem {
+// ── Frontend-computed redeem preview (no backend call needed) ─────────────────
+interface RedeemPreview {
   dropsToRedeem: number;
-  availableReward: number;
   gPriceUsd: number;
-  playerG: number;
-  feeG: number;
-  stakedG: number;
-  stakeEarnedG: number;
+  playerG: number;       // 75% of USD value → $G, minus 10% fee
+  feeG: number;          // 10% of the 75% slice
+  stakedDrops: number;   // 25% DROPS held back for the stake pool
+  stakedG: number;       // stakedDrops converted to $G at live price
+  stakeEarnedG: number;  // projected APY yield
   apyPct: number;
   sufficient: boolean;
 }
 
-/** On-chain pool stats (read directly from contract) */
 interface OnChainPoolStats {
-  gBalance: string;       // formatted $G
-  freeLiquidity: string;  // formatted $G
-  dropsBalance: string;   // formatted DROPS
+  gBalance: string;
+  freeLiquidity: string;
+  dropsBalance: string;
   gPriceWei: bigint;
   gPriceUsd: number;
   nextStakeId: number;
@@ -175,6 +173,9 @@ const TIERS = [
   { name: "Torrent",  minDuels: 301, apy: 30, next: 501 },
   { name: "Flood",    minDuels: 501, apy: 35, next: null },
 ];
+
+// 100 DROPS = $1 (mirrors backend DROPS_PER_USD)
+const DROPS_PER_USD = 100.0;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -222,6 +223,39 @@ function isAdmin(address: string) {
   return address.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
 }
 
+/**
+ * Pure client-side redeem preview — mirrors the backend split exactly:
+ *   75% of USD value → player_g (gross), minus 10% fee = net player_g
+ *   25% of USD value → staked as DROPS in the pool
+ */
+function computeRedeemPreview(
+  drops: number,
+  gPriceUsd: number,
+  apyPct: number,
+  rewardDrops: number,
+): RedeemPreview {
+  const usdValue       = drops / DROPS_PER_USD;
+  const playerUsd      = usdValue * 0.75;
+  const stakedUsd      = usdValue * 0.25;
+  const feeUsd         = playerUsd * 0.10;
+  const playerGNet     = (playerUsd - feeUsd) / gPriceUsd;
+  const feeG           = feeUsd / gPriceUsd;
+  const stakedDrops    = drops * 0.25;
+  const stakedG        = stakedUsd / gPriceUsd;
+  const stakeEarnedG   = stakedG * (apyPct / 100.0);
+
+  return {
+    dropsToRedeem: drops,
+    gPriceUsd,
+    playerG:      playerGNet,
+    feeG,
+    stakedDrops,
+    stakedG,
+    stakeEarnedG,
+    apyPct,
+    sufficient:   rewardDrops >= drops,
+  };
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -230,11 +264,12 @@ interface Props {
 }
 
 export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey }: ChallengeDashboardTabProps) {
-  const [activeSubtab, setActiveSubtab] = useState(initialSubtab || 'overview');
+  const [activeSubtab, setActiveSubtab] = useState(initialSubtab || "overview");
   const { toast } = useToast();
   const wallet = walletAddress.toLowerCase();
   const adminMode = isAdmin(wallet);
   const { getActiveSigner, ensureCorrectNetwork } = useWallet();
+
   // ── Data state ─────────────────────────────────────────────────────────────
   const [balance, setBalance] = useState<DropsBalance | null>(null);
   const [stakes, setStakes] = useState<StakePool[]>([]);
@@ -246,35 +281,75 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [loadingOnChain, setLoadingOnChain] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // ── Inner tab ──────────────────────────────────────────────────────────────
   type InnerTab = "overview" | "redeem" | "pools" | "history" | "buy" | "admin";
   const tabs: { key: InnerTab; label: string }[] = [
-  { key: "overview", label: "Overview" },
-  { key: "redeem",   label: "Redeem"   },
-  { key: "pools",    label: "Pools"    },
-  { key: "history",  label: "History"  },
-  { key: "buy",      label: "Buy Drop"      },           // ← new
-  ...(adminMode ? [{ key: "admin" as InnerTab, label: "Admin" }] : []),
-];
- const [innerTab, setInnerTab] = useState<InnerTab>(() => {
-  if (initialSubtab === "redeem") return "redeem";
-  if (initialSubtab === "buy-drop") return "buy";
-  return "overview";
-});
+    { key: "overview", label: "Overview" },
+    { key: "redeem",   label: "Redeem"   },
+    { key: "pools",    label: "Pools"    },
+    { key: "history",  label: "History"  },
+    { key: "buy",      label: "Buy Drop" },
+    ...(adminMode ? [{ key: "admin" as InnerTab, label: "Admin" }] : []),
+  ];
 
-useEffect(() => {
-  if (!initialSubtab) return;
-  if (initialSubtab === "redeem") setInnerTab("redeem");
-  if (initialSubtab === "buy-drop") setInnerTab("buy");
-}, [initialSubtab]);
+  const [innerTab, setInnerTab] = useState<InnerTab>(() => {
+    if (initialSubtab === "redeem") return "redeem";
+    if (initialSubtab === "buy-drop") return "buy";
+    return "overview";
+  });
 
-  // ── Redeem form ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!initialSubtab) return;
+    if (initialSubtab === "redeem") setInnerTab("redeem");
+    if (initialSubtab === "buy-drop") setInnerTab("buy");
+  }, [initialSubtab]);
+
+  // ── Shared $G price state (used by both Redeem and Buy tabs) ──────────────
+  const [gPriceUsd, setGPriceUsd]           = useState<number | null>(null);
+  const [gPriceLoading, setGPriceLoading]   = useState(false);
+  const [gPriceError, setGPriceError]       = useState<string | null>(null);
+  const [gPriceFetchedAt, setGPriceFetchedAt] = useState<number | null>(null);
+
+  const fetchGoodDollarPrice = useCallback(async () => {
+    setGPriceLoading(true);
+    setGPriceError(null);
+    try {
+      const price = await getGoodDollarPrice();
+      setGPriceUsd(price);
+      setGPriceFetchedAt(Date.now());
+    } catch {
+      setGPriceError("Could not fetch $G price. Try refreshing.");
+      setGPriceUsd(null);
+    } finally {
+      setGPriceLoading(false);
+    }
+  }, []);
+
+  // Fetch fresh price whenever the user opens redeem or buy tab
+  useEffect(() => {
+    if (innerTab === "redeem" || innerTab === "buy") {
+      fetchGoodDollarPrice();
+    }
+  }, [innerTab, fetchGoodDollarPrice]);
+
+  // ── Redeem form state ──────────────────────────────────────────────────────
   const [redeemAmount, setRedeemAmount] = useState("");
-  const [redeemPreview, setRedeemPreview] = useState<PreviewRedeem | null>(null);
+  const [redeemPreview, setRedeemPreview] = useState<RedeemPreview | null>(null);
   const [redeemLoading, setRedeemLoading] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Recompute preview locally whenever amount or price changes — no backend call
+  useEffect(() => {
+    const drops = parseFloat(redeemAmount);
+    if (!redeemAmount || isNaN(drops) || drops <= 0 || !gPriceUsd || !balance) {
+      setRedeemPreview(null);
+      return;
+    }
+    setRedeemPreview(
+      computeRedeemPreview(drops, gPriceUsd, balance.apyPct, balance.rewardDrops)
+    );
+  }, [redeemAmount, gPriceUsd, balance]);
+
   const [claimingStake, setClaimingStake] = useState<string | null>(null);
 
   // ── Admin contract form state ──────────────────────────────────────────────
@@ -293,269 +368,192 @@ useEffect(() => {
   const [gCostDisplay, setGCostDisplay] = useState<number | null>(null);
   const [buyResult, setBuyResult] = useState<{ dropsAmount: number; mintTxHash: string } | null>(null);
   const [buyLoading, setBuyLoading] = useState(false);
-  const [gTxHash, setGTxHash]         = useState("");
-  const [gAmount, setGAmount]         = useState("");
-  const [gPriceUsd, setGPriceUsd]           = useState<number | null>(null);
-  const [gPriceLoading, setGPriceLoading]   = useState(false);
-  const [gPriceError, setGPriceError]       = useState<string | null>(null);
-  const [gPriceFetchedAt, setGPriceFetchedAt] = useState<number | null>(null);
+  const [gTxHash, setGTxHash] = useState("");
 
-  const fetchGoodDollarPrice = useCallback(async () => {
-  setGPriceLoading(true);
-  setGPriceError(null);
-  try {
-    const price = await getGoodDollarPrice();
-    setGPriceUsd(price);
-    setGPriceFetchedAt(Date.now());
-  } catch {
-    setGPriceError("Could not fetch $G price. Try refreshing.");
-    setGPriceUsd(null);
-  } finally {
-    setGPriceLoading(false);
-  }
-}, []);
-
-// Fetch fresh every time user opens the buy tab
-useEffect(() => {
-  if (innerTab === "buy") {
-    fetchGoodDollarPrice();
-  }
-}, [innerTab, fetchGoodDollarPrice]);
-
-const handleCalculate = async () => {
-  const drops = parseFloat(dropsToBuy);
-  if (!drops || drops < 10) {
-    toast({ title: "Minimum 10 DROPS", variant: "destructive" });
-    return;
-  }
-
-  // Refresh price right before calculating so it's never stale
-  setGPriceLoading(true);
-  setGPriceError(null);
-  let freshPrice: number;
-  try {
-    freshPrice = await getGoodDollarPrice();
-    setGPriceUsd(freshPrice);
-    setGPriceFetchedAt(Date.now());
-  } catch {
-    toast({
-      title: "Could not fetch $G price",
-      description: "Check your connection and try again.",
-      variant: "destructive",
-    });
-    setGPriceLoading(false);
-    return;
-  } finally {
-    setGPriceLoading(false);
-  }
-
-  // 100 DROPS = $1 → gCost = (drops / 100) / pricePerG
-  const gCost = (drops / 100) / freshPrice;
-  setGCostDisplay(gCost);
-  setBuyStep("deposit");
-};
-
-useEffect(() => {
-  const amt = parseFloat(redeemAmount);
-  if (!redeemAmount || isNaN(amt) || amt <= 0) { 
-    setRedeemPreview(null); 
-    setPreviewError(null);
-    return; 
-  }
-  const timeout = setTimeout(async () => {
-    setPreviewLoading(true);
-    setPreviewError(null);
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/drops/preview-redeem?wallet=${wallet}&drops=${amt}`);
-      const data = await res.json();
-      if (data.success) {
-        setRedeemPreview(data);
-        setPreviewError(null);
-      } else {
-        setPreviewError(data.detail ?? "Could not load preview");
-        setRedeemPreview(null);
-      }
-    } catch {
-      setPreviewError("Price feed unavailable — you can still redeem");
-      setRedeemPreview(null);
-    } finally { setPreviewLoading(false); }
-  }, 600);
-  return () => clearTimeout(timeout);
-}, [redeemAmount, wallet]);
-
-  // ── Contract interaction helpers ───────────────────────────────────────────
-  // ── Buy DROPS handler ─────────────────────────────────────────────────────
-// Add near the top with other state
-const handleConfirmDeposit = async () => {
-  const drops = parseFloat(dropsToBuy);
-  if (!drops || !gCostDisplay) return;
- 
-  setBuyLoading(true);
-  setBuyStep("processing");
-  setBuyResult(null);
- 
-  // G token is Celo-only — always use CELO_CHAIN_ID here.
-  // getChainConfig gives us the address without hardcoding it.
-  const cfg        = getChainConfig(CELO_CHAIN_ID);
-  const G_TOKEN    = cfg.contracts.gToken;
-  if (!G_TOKEN) {
-    toast({ title: "No $G token configured for this chain", variant: "destructive" });
-    setBuyStep("deposit");
-    setBuyLoading(false);
-    return;
-  }
- 
-  try {
-    // ── 1. Ensure the wallet is on Celo ──────────────────────────────────────
-    // ensureCorrectNetwork from useWallet():
-    //   • External wallet → wallet_switchEthereumChain
-    //   • Embedded wallet → updates session.chainId in memory (no RPC prompt)
-    const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
-    if (!switched) throw new Error("Please connect your wallet first.");
- 
-    // ── 2. Get signer via context ─────────────────────────────────────────────
-    // getActiveSigner from useWallet():
-    //   • External → returns live JsonRpcSigner from BrowserProvider
-    //   • Embedded → fetches private key, returns ethers.Wallet on Celo RPC
-    const signer = await getActiveSigner(CELO_CHAIN_ID);
-    if (!signer) throw new Error("No wallet connected");
- 
-    const signerAddr = await signer.getAddress();
-    if (signerAddr.toLowerCase() !== wallet) {
-      throw new Error(`Connect as ${walletAddress} to proceed`);
-    }
- 
-    // ── 3. Build G token contract with the context signer ────────────────────
-    const gToken = new ethers.Contract(
-      G_TOKEN,
-      [
-        "function transfer(address to, uint256 amount) returns (bool)",
-        "function balanceOf(address account) view returns (uint256)",
-        "function decimals() view returns (uint8)",
-      ],
-      signer,   // ← context signer, not a self-built BrowserProvider signer
-    );
- 
-    const decimals: number  = await gToken.decimals();
-    const gAmountWei        = ethers.parseUnits(gCostDisplay.toFixed(6), decimals);
-    const balanceOf: bigint = await gToken.balanceOf(signerAddr);
- 
-    if (balanceOf < gAmountWei) {
-      const humanBalance = ethers.formatUnits(balanceOf, decimals);
-      throw new Error(
-        `Insufficient $G balance. You have ${parseFloat(humanBalance).toFixed(4)} $G, ` +
-        `need ${gCostDisplay.toFixed(4)} $G`,
-      );
-    }
- 
-    toast({ title: "⏳ Confirm $G transfer in your wallet…" });
-    const tx = await gToken.transfer(DROPS_REDEEM_POOL_ADDRESS, gAmountWei);
-    toast({ title: "📡 Transfer sent, waiting for confirmation…" });
- 
-    const receipt = await tx.wait();
-    if (!receipt || receipt.status !== 1) {
-      throw new Error("$G transfer transaction failed");
-    }
- 
-    setGTxHash(tx.hash);
-    toast({ title: "✅ $G transferred! Minting your DROPS…" });
- 
-    // ── 4. Backend mint call — unchanged, just add chainId ───────────────────
-    const res = await fetch(`${BACKEND_URL}/api/drops/buy`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        walletAddress:   wallet,
-        dropsAmount:     drops,
-        expectedGAmount: gCostDisplay,
-        gTxHash:         tx.hash,
-        chainId:         CELO_CHAIN_ID,   // ← always send chainId
-      }),
-    });
- 
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      toast({
-        title:       "Mint failed",
-        description: data?.detail ??
-          `Transfer confirmed but minting failed — save this tx: ${tx.hash}`,
-        variant: "destructive",
-      });
-      setBuyStep("deposit");
+  // ── Buy DROPS: Calculate cost ─────────────────────────────────────────────
+  const handleCalculate = async () => {
+    const drops = parseFloat(dropsToBuy);
+    if (!drops || drops < 10) {
+      toast({ title: "Minimum 10 DROPS", variant: "destructive" });
       return;
     }
- 
-    setBuyResult({ dropsAmount: data.dropsMinted, mintTxHash: data.mintTxHash });
-    setBuyStep("done");
-    toast({ title: `✅ ${data.dropsMinted} DROPS minted!` });
-    fetchBalance();
- 
-  } catch (err: any) {
-    console.error("handleConfirmDeposit error:", err);
-    const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error";
-    toast({ title: "Transaction failed", description: msg, variant: "destructive" });
+
+    setGPriceLoading(true);
+    setGPriceError(null);
+    let freshPrice: number;
+    try {
+      freshPrice = await getGoodDollarPrice();
+      setGPriceUsd(freshPrice);
+      setGPriceFetchedAt(Date.now());
+    } catch {
+      toast({
+        title: "Could not fetch $G price",
+        description: "Check your connection and try again.",
+        variant: "destructive",
+      });
+      setGPriceLoading(false);
+      return;
+    } finally {
+      setGPriceLoading(false);
+    }
+
+    const gCost = (drops / 100) / freshPrice;
+    setGCostDisplay(gCost);
     setBuyStep("deposit");
-  } finally {
-    setBuyLoading(false);
-  }
-};
+  };
 
+  // ── Contract interaction helpers ───────────────────────────────────────────
+  const handleConfirmDeposit = async () => {
+    const drops = parseFloat(dropsToBuy);
+    if (!drops || !gCostDisplay) return;
 
-const handleBuyReset = () => {
-  setDropsToBuy("");
-  setGCostDisplay(null);
-  setBuyResult(null);
-  setBuyStep("input");
-};
+    setBuyLoading(true);
+    setBuyStep("processing");
+    setBuyResult(null);
+
+    const cfg     = getChainConfig(CELO_CHAIN_ID);
+    const G_TOKEN = cfg.contracts.gToken;
+    if (!G_TOKEN) {
+      toast({ title: "No $G token configured for this chain", variant: "destructive" });
+      setBuyStep("deposit");
+      setBuyLoading(false);
+      return;
+    }
+
+    try {
+      const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
+      if (!switched) throw new Error("Please connect your wallet first.");
+
+      const signer = await getActiveSigner(CELO_CHAIN_ID);
+      if (!signer) throw new Error("No wallet connected");
+
+      const signerAddr = await signer.getAddress();
+      if (signerAddr.toLowerCase() !== wallet) {
+        throw new Error(`Connect as ${walletAddress} to proceed`);
+      }
+
+      const gToken = new ethers.Contract(
+        G_TOKEN,
+        [
+          "function transfer(address to, uint256 amount) returns (bool)",
+          "function balanceOf(address account) view returns (uint256)",
+          "function decimals() view returns (uint8)",
+        ],
+        signer,
+      );
+
+      const decimals: number  = await gToken.decimals();
+      const gAmountWei        = ethers.parseUnits(gCostDisplay.toFixed(6), decimals);
+      const balanceOf: bigint = await gToken.balanceOf(signerAddr);
+
+      if (balanceOf < gAmountWei) {
+        const humanBalance = ethers.formatUnits(balanceOf, decimals);
+        throw new Error(
+          `Insufficient $G balance. You have ${parseFloat(humanBalance).toFixed(4)} $G, ` +
+          `need ${gCostDisplay.toFixed(4)} $G`,
+        );
+      }
+
+      toast({ title: "⏳ Confirm $G transfer in your wallet…" });
+      const tx = await gToken.transfer(DROPS_REDEEM_POOL_ADDRESS, gAmountWei);
+      toast({ title: "📡 Transfer sent, waiting for confirmation…" });
+
+      const receipt = await tx.wait();
+      if (!receipt || receipt.status !== 1) {
+        throw new Error("$G transfer transaction failed");
+      }
+
+      setGTxHash(tx.hash);
+      toast({ title: "✅ $G transferred! Minting your DROPS…" });
+
+      const res = await fetch(`${BACKEND_URL}/api/drops/buy`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletAddress:   wallet,
+          dropsAmount:     drops,
+          expectedGAmount: gCostDisplay,
+          gTxHash:         tx.hash,
+          chainId:         CELO_CHAIN_ID,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast({
+          title:       "Mint failed",
+          description: data?.detail ??
+            `Transfer confirmed but minting failed — save this tx: ${tx.hash}`,
+          variant: "destructive",
+        });
+        setBuyStep("deposit");
+        return;
+      }
+
+      setBuyResult({ dropsAmount: data.dropsMinted, mintTxHash: data.mintTxHash });
+      setBuyStep("done");
+      toast({ title: `✅ ${data.dropsMinted} DROPS minted!` });
+      fetchBalance();
+
+    } catch (err: any) {
+      console.error("handleConfirmDeposit error:", err);
+      const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error";
+      toast({ title: "Transaction failed", description: msg, variant: "destructive" });
+      setBuyStep("deposit");
+    } finally {
+      setBuyLoading(false);
+    }
+  };
+
+  const handleBuyReset = () => {
+    setDropsToBuy("");
+    setGCostDisplay(null);
+    setBuyResult(null);
+    setBuyStep("input");
+  };
+
   /** Get a signer-backed contract instance, ensuring Celo network */
   const getSignerContract = useCallback(async () => {
     if (typeof window === "undefined" || !window.ethereum) {
       throw new Error("No wallet detected.");
     }
-    // ensureCorrectNetwork from useWallet() — handles embedded + external
     const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
     if (!switched) throw new Error("Please connect your wallet to continue.");
- 
-    const provider  = new ethers.BrowserProvider(window.ethereum);
-    const signer    = await provider.getSigner();
+
+    const provider   = new ethers.BrowserProvider(window.ethereum);
+    const signer     = await provider.getSigner();
     const signerAddr = await signer.getAddress();
     if (signerAddr.toLowerCase() !== wallet) {
       throw new Error(`Wallet mismatch. Connect as ${walletAddress} to perform admin actions.`);
     }
     return new ethers.Contract(DROPS_REDEEM_POOL_ADDRESS, DROPS_REDEEM_POOL_ABI, signer);
-  }, [wallet, walletAddress, ensureCorrectNetwork, DROPS_REDEEM_POOL_ADDRESS]);
- 
+  }, [wallet, walletAddress, ensureCorrectNetwork]);
 
   /** Read-only contract (no wallet needed) */
   const getReadContract = useCallback(() => {
     const cfg      = getChainConfig(CELO_CHAIN_ID);
     const provider = new ethers.JsonRpcProvider(cfg.rpcUrl);
     return new ethers.Contract(DROPS_REDEEM_POOL_ADDRESS, DROPS_REDEEM_POOL_ABI, provider);
-  }, [DROPS_REDEEM_POOL_ADDRESS]);
+  }, []);
 
   // ── Fetch helpers ──────────────────────────────────────────────────────────
   const fetchBalance = useCallback(async () => {
     setLoadingBalance(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/drops/balance/${wallet}?chainId=${CELO_CHAIN_ID}`);
+      const res  = await fetch(`${BACKEND_URL}/api/drops/balance/${wallet}?chainId=${CELO_CHAIN_ID}`);
       const data = await res.json();
       if (data.success) setBalance(data);
     } catch { /* silent */ }
     finally { setLoadingBalance(false); }
   }, [wallet]);
 
-  // Initial load
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
 
-  // ── NEW: refetch whenever the parent signals a game just finished ───────
   useEffect(() => {
     if (refreshKey === undefined) return;
     fetchBalance();
   }, [refreshKey, fetchBalance]);
 
-  // ── NEW: refetch whenever this tab/window regains focus or becomes
-  // visible again — covers the "stayed mounted in background" case where
-  // the player finished a game on another tab/route and comes back here.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === "visible") fetchBalance();
@@ -568,17 +566,20 @@ const handleBuyReset = () => {
     };
   }, [fetchBalance]);
 
-  const canRedeem = 
-  !redeemLoading &&
-  !!balance?.rematchBadge &&
-  parseFloat(redeemAmount) > 0 &&
-  parseFloat(redeemAmount) <= (balance?.rewardDrops ?? 0) &&
-  (redeemPreview?.sufficient || !!previewError);
+  // canRedeem: price must be loaded and amount must be valid
+  const canRedeem =
+    !redeemLoading &&
+    !!balance?.rematchBadge &&
+    !!gPriceUsd &&
+    !gPriceLoading &&
+    parseFloat(redeemAmount) > 0 &&
+    parseFloat(redeemAmount) <= (balance?.rewardDrops ?? 0) &&
+    !!redeemPreview?.sufficient;
 
   const fetchStakes = useCallback(async () => {
     setLoadingStakes(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/drops/stakes/${wallet}?chainId=${CELO_CHAIN_ID}`);
+      const res  = await fetch(`${BACKEND_URL}/api/drops/stakes/${wallet}?chainId=${CELO_CHAIN_ID}`);
       const data = await res.json();
       if (data.success) setStakes(data.stakes ?? []);
     } catch { /* silent */ }
@@ -588,7 +589,7 @@ const handleBuyReset = () => {
   const fetchHistory = useCallback(async () => {
     setLoadingHistory(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/drops/redeem-history/${wallet}?limit=20`);
+      const res  = await fetch(`${BACKEND_URL}/api/drops/redeem-history/${wallet}?limit=20`);
       const data = await res.json();
       if (data.success) setHistory(data.history ?? []);
     } catch { /* silent */ }
@@ -598,14 +599,13 @@ const handleBuyReset = () => {
   const fetchMatches = useCallback(async () => {
     setLoadingMatches(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/challenge/${wallet}/history?limit=20`);
+      const res  = await fetch(`${BACKEND_URL}/api/challenge/${wallet}/history?limit=20`);
       const data = await res.json();
       if (data.success) setMatchHistory(data.history ?? []);
     } catch { /* silent */ }
     finally { setLoadingMatches(false); }
   }, [wallet]);
 
-  /** Read pool stats directly from the chain — no backend needed */
   const fetchOnChainStats = useCallback(async () => {
     setLoadingOnChain(true);
     try {
@@ -627,20 +627,19 @@ const handleBuyReset = () => {
         contract.dropsToken(),
       ]);
 
-      // gPriceWei is in 1e18 scale (1 USD = 1e18 wei equivalent)
       const priceUsd = parseFloat(ethers.formatUnits(gPriceRaw, 18));
 
       setOnChainStats({
-        gBalance: fmtBig(gBalRaw, 18, 4),
-        freeLiquidity: fmtBig(freeLiqRaw, 18, 4),
-        dropsBalance: fmtBig(dropsBalRaw, 18, 0),
-        gPriceWei: gPriceRaw,
-        gPriceUsd: priceUsd,
-        nextStakeId: Number(nextId),
-        owner: ownerAddr,
-        resolver: resolverAddr,
-        serviceAddress: serviceAddr,
-        gTokenAddress: gTokenAddr,
+        gBalance:         fmtBig(gBalRaw, 18, 4),
+        freeLiquidity:    fmtBig(freeLiqRaw, 18, 4),
+        dropsBalance:     fmtBig(dropsBalRaw, 18, 0),
+        gPriceWei:        gPriceRaw,
+        gPriceUsd:        priceUsd,
+        nextStakeId:      Number(nextId),
+        owner:            ownerAddr,
+        resolver:         resolverAddr,
+        serviceAddress:   serviceAddr,
+        gTokenAddress:    gTokenAddr,
         dropsTokenAddress: dropsTokenAddr,
       });
     } catch (err) {
@@ -651,37 +650,13 @@ const handleBuyReset = () => {
     }
   }, [getReadContract, toast]);
 
-  useEffect(() => { fetchBalance(); }, [fetchBalance]);
-  
   useEffect(() => {
-    if (innerTab === "pools") fetchStakes();
+    if (innerTab === "pools")   fetchStakes();
     if (innerTab === "history") { fetchHistory(); fetchMatches(); }
     if (innerTab === "admin" && adminMode) fetchOnChainStats();
   }, [innerTab, fetchStakes, fetchHistory, fetchMatches, fetchOnChainStats, adminMode]);
-   
-  
-
-  // ── Redeem preview ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const amt = parseFloat(redeemAmount);
-    if (!redeemAmount || isNaN(amt) || amt <= 0) { setRedeemPreview(null); return; }
-    const timeout = setTimeout(async () => {
-      setPreviewLoading(true);
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/drops/preview-redeem?wallet=${wallet}&drops=${amt}`);
-        const data = await res.json();
-        if (data.success) setRedeemPreview(data);
-      } catch { /* silent */ }
-      finally { setPreviewLoading(false); }
-    }, 600);
-    return () => clearTimeout(timeout);
-  }, [redeemAmount, wallet]);
 
   // ── Generic contract write wrapper ─────────────────────────────────────────
-  /**
-   * Runs a contract write, handles wallet prompts, waits for confirmation,
-   * shows toasts, and refreshes on-chain stats.
-   */
   const contractWrite = useCallback(async (
     actionKey: string,
     label: string,
@@ -712,19 +687,17 @@ const handleBuyReset = () => {
     }
   }, [getSignerContract, toast, fetchOnChainStats]);
 
-  // ── Admin handlers (direct contract calls) ─────────────────────────────────
+  // ── Admin handlers ─────────────────────────────────────────────────────────
 
   const handleDeposit = () => {
     const amt = parseFloat(depositAmount);
     if (!amt || amt <= 0) return;
     contractWrite("deposit", "Deposit $G", async (contract) => {
-      // First approve $G token spend
       if (!onChainStats?.gTokenAddress) throw new Error("$G token address not loaded");
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const gToken = new ethers.Contract(onChainStats.gTokenAddress, ERC20_ABI, signer);
-      const amtWei = ethers.parseUnits(depositAmount, 18);
-
+      const signer   = await provider.getSigner();
+      const gToken   = new ethers.Contract(onChainStats.gTokenAddress, ERC20_ABI, signer);
+      const amtWei   = ethers.parseUnits(depositAmount, 18);
       const allowance: bigint = await gToken.allowance(walletAddress, DROPS_REDEEM_POOL_ADDRESS);
       if (allowance < amtWei) {
         toast({ title: "⏳ Approving $G spend…" });
@@ -747,7 +720,6 @@ const handleBuyReset = () => {
   const handleSetGPrice = () => {
     const priceUsd = parseFloat(newGPrice);
     if (!priceUsd || priceUsd <= 0) return;
-    // Contract expects price in 1e18 precision (18-decimal fixed point)
     const priceWei = ethers.parseUnits(newGPrice, 18);
     contractWrite("price", "Set $G Price", (contract) =>
       contract.setGPrice(priceWei),
@@ -781,40 +753,85 @@ const handleBuyReset = () => {
     () => setNewDropsToken(""));
   };
 
-  // ── Redeem / stake handlers ────────────────────────────────────────────────
-
+  // ── Redeem handler ────────────────────────────────────────────────────────
+  /**
+   * On submit we refresh the price one final time (same pattern as Buy DROPS
+   * handleCalculate) so the backend receives the freshest possible numbers.
+   * The backend now trusts these pre-calculated values rather than re-fetching.
+   */
   const handleRedeem = async () => {
-    const amt = parseFloat(redeemAmount);
-    if (!amt || amt <= 0) return;
-    if (!redeemPreview?.sufficient) {
+    const drops = parseFloat(redeemAmount);
+    if (!drops || drops <= 0) return;
+    if (!balance?.rematchBadge) {
+      toast({ title: "Rematch badge required", variant: "destructive" });
+      return;
+    }
+    if (drops > (balance?.rewardDrops ?? 0)) {
       toast({ title: "Insufficient reward drops", variant: "destructive" });
       return;
     }
+
     setRedeemLoading(true);
+
+    // Refresh price right before submitting — prevents stale rate being sent
+    let freshPrice: number;
+    try {
+      freshPrice = await getGoodDollarPrice();
+      setGPriceUsd(freshPrice);
+      setGPriceFetchedAt(Date.now());
+    } catch {
+      toast({
+        title: "Could not refresh $G price",
+        description: "Check your connection and try again.",
+        variant: "destructive",
+      });
+      setRedeemLoading(false);
+      return;
+    }
+
+    // Recompute with the freshest price so what we send matches what user saw
+    const preview = computeRedeemPreview(drops, freshPrice, balance.apyPct, balance.rewardDrops);
+    setRedeemPreview(preview);
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/drops/redeem`, {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({ walletAddress: wallet, dropsAmount: amt, chainId: CELO_CHAIN_ID }),
+        body: JSON.stringify({
+          walletAddress: wallet,
+          dropsAmount:   drops,
+          chainId:       CELO_CHAIN_ID,
+          // Pre-calculated values — backend uses these instead of re-fetching price
+          gPriceUsd:     freshPrice,
+          playerG:       preview.playerG,
+          feeG:          preview.feeG,
+          stakedDrops:   preview.stakedDrops,
+          apyPct:        preview.apyPct,
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        toast({ title: "✅ Redeemed!", description: `${fmt(data.playerG, 4)} $G sent to your wallet.` });
-        setRedeemAmount(""); setRedeemPreview(null);
-        fetchBalance(); fetchStakes(); fetchHistory();
+        toast({ title: "✅ Redeemed!", description: `${fmt(data.playerG ?? preview.playerG, 4)} $G sent to your wallet.` });
+        setRedeemAmount("");
+        setRedeemPreview(null);
+        fetchBalance();
+        fetchStakes();
+        fetchHistory();
       } else {
         toast({ title: "Redeem failed", description: data.detail ?? "Unknown error", variant: "destructive" });
       }
     } catch {
       toast({ title: "Network error", variant: "destructive" });
-    } finally { setRedeemLoading(false); }
+    } finally {
+      setRedeemLoading(false);
+    }
   };
 
   const handleClaimStake = async (stakeId: string) => {
     setClaimingStake(stakeId);
     try {
       const res = await fetch(`${BACKEND_URL}/api/drops/claim-stake`, {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress: wallet, stakeId, chainId: CELO_CHAIN_ID }),
       });
@@ -827,20 +844,20 @@ const handleBuyReset = () => {
       }
     } catch {
       toast({ title: "Network error", variant: "destructive" });
-    } finally { setClaimingStake(null); }
+    } finally {
+      setClaimingStake(null); }
   };
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const tierStyle = TIER_COLORS[balance?.tier ?? "Droplet"] ?? TIER_COLORS.Droplet;
-  const currentTierDef = TIERS.find(t => t.name === (balance?.tier ?? "Droplet")) ?? TIERS[0];
-  const nextTierDef = TIERS.find(t => t.minDuels > (balance?.totalDuels ?? 0)) ?? null;
-  const progressToNext = nextTierDef
+  const tierStyle         = TIER_COLORS[balance?.tier ?? "Droplet"] ?? TIER_COLORS.Droplet;
+  const currentTierDef    = TIERS.find(t => t.name === (balance?.tier ?? "Droplet")) ?? TIERS[0];
+  const nextTierDef       = TIERS.find(t => t.minDuels > (balance?.totalDuels ?? 0)) ?? null;
+  const progressToNext    = nextTierDef
     ? Math.min(100, (((balance?.totalDuels ?? 0) - currentTierDef.minDuels) / (nextTierDef.minDuels - currentTierDef.minDuels)) * 100)
     : 100;
-  const wins = matchHistory.filter(m => m.winner_address?.toLowerCase() === wallet);
+  const wins                  = matchHistory.filter(m => m.winner_address?.toLowerCase() === wallet);
   const matureUnclaimedStakes = stakes.filter(s => s.matured && !s.claimed);
 
-  
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loadingBalance) {
     return (
@@ -880,9 +897,10 @@ const handleBuyReset = () => {
         <button
           onClick={() => {
             fetchBalance();
-            if (innerTab === "pools") fetchStakes();
+            if (innerTab === "pools")   fetchStakes();
             if (innerTab === "history") { fetchHistory(); fetchMatches(); }
-            if (innerTab === "admin") fetchOnChainStats();
+            if (innerTab === "admin")   fetchOnChainStats();
+            if (innerTab === "redeem" || innerTab === "buy") fetchGoodDollarPrice();
           }}
           className="ml-auto p-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -1021,11 +1039,14 @@ const handleBuyReset = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+
+              {/* Available balance */}
               <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
                 <span className="text-sm text-muted-foreground font-medium">Available to redeem</span>
                 <span className="font-black text-foreground">{fmt(balance?.rewardDrops ?? 0, 0)} DROPS</span>
               </div>
 
+              {/* Badge gate */}
               {balance && !balance.rematchBadge && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/50">
                   <Lock className="h-4 w-4 text-red-500 shrink-0" />
@@ -1035,6 +1056,50 @@ const handleBuyReset = () => {
                 </div>
               )}
 
+              {/* Live $G price card — identical to Buy DROPS */}
+              <div className="p-3 rounded-xl bg-muted/40 border border-border space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-foreground">Live $G Rate</p>
+                  <button
+                    onClick={fetchGoodDollarPrice}
+                    disabled={gPriceLoading}
+                    className="flex items-center gap-1 text-[10px] text-primary hover:opacity-70 transition-opacity"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${gPriceLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                </div>
+
+                {gPriceLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Fetching price…</span>
+                  </div>
+                ) : gPriceError ? (
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                    <span className="text-xs text-destructive">{gPriceError}</span>
+                  </div>
+                ) : gPriceUsd ? (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">1 $G</span>
+                      <span className="text-xs font-black text-foreground">${gPriceUsd.toFixed(6)} USD</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">100 DROPS</span>
+                      <span className="text-xs font-black text-foreground">$1.00 USD</span>
+                    </div>
+                    {gPriceFetchedAt && (
+                      <p className="text-[10px] text-muted-foreground/60 pt-0.5">
+                        Updated {Math.floor((Date.now() - gPriceFetchedAt) / 1000)}s ago · CoinGecko
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Amount input */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Amount to Redeem</Label>
                 <div className="flex gap-2">
@@ -1045,24 +1110,33 @@ const handleBuyReset = () => {
                     placeholder="0"
                     min={1}
                     className="flex-1 font-mono font-bold text-lg h-12"
-                    disabled={!balance?.rematchBadge}
+                    disabled={!balance?.rematchBadge || !gPriceUsd}
                   />
                   <Button
                     variant="outline" size="sm"
                     className="h-12 px-3 text-xs font-bold"
                     onClick={() => setRedeemAmount(String(Math.floor(balance?.rewardDrops ?? 0)))}
-                    disabled={!balance?.rematchBadge}
+                    disabled={!balance?.rematchBadge || !gPriceUsd}
                   >
                     MAX
                   </Button>
                 </div>
+                {/* Inline USD estimate */}
+                {redeemAmount && parseFloat(redeemAmount) > 0 && gPriceUsd && (
+                  <p className="text-xs text-muted-foreground pl-1">
+                    ≈ <strong className="text-foreground">
+                      ${(parseFloat(redeemAmount) / DROPS_PER_USD).toFixed(4)} USD
+                    </strong> total value
+                  </p>
+                )}
               </div>
 
+              {/* Quick picks */}
               <div className="flex gap-2">
                 {[10, 25, 50, 100].filter(v => (balance?.rewardDrops ?? 0) >= v).map(v => (
                   <button
                     key={v} onClick={() => setRedeemAmount(String(v))}
-                    disabled={!balance?.rematchBadge}
+                    disabled={!balance?.rematchBadge || !gPriceUsd}
                     className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all ${parseFloat(redeemAmount) === v ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"} disabled:opacity-40`}
                   >
                     {v}
@@ -1070,20 +1144,24 @@ const handleBuyReset = () => {
                 ))}
               </div>
 
-              {previewLoading && (
+              {/* Price loading / no price yet */}
+              {gPriceLoading && (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground ml-2">Loading live price…</span>
                 </div>
               )}
-              {redeemPreview && !previewLoading && (
+
+              {/* Breakdown — shown as soon as we have price + amount */}
+              {redeemPreview && !gPriceLoading && (
                 <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
                   <p className="text-xs font-black text-muted-foreground uppercase tracking-wide mb-3">Breakdown</p>
                   {[
-                    { label: "You receive", value: `${fmt(redeemPreview.playerG, 4)} $G`, highlight: true },
-                    { label: "Fee (10%)", value: `${fmt(redeemPreview.feeG, 4)} $G` },
+                    { label: "You receive",               value: `${fmt(redeemPreview.playerG, 4)} $G`,       highlight: true },
+                    { label: "Fee (10%)",                  value: `${fmt(redeemPreview.feeG, 4)} $G` },
                     { label: `Staked (${redeemPreview.apyPct}% APY, 30d)`, value: `${fmt(redeemPreview.stakedG, 4)} $G` },
-                    { label: "Projected stake yield", value: `+${fmt(redeemPreview.stakeEarnedG, 4)} $G` },
-                    { label: "$G price", value: `$${fmt(redeemPreview.gPriceUsd, 4)}` },
+                    { label: "Projected stake yield",      value: `+${fmt(redeemPreview.stakeEarnedG, 4)} $G` },
+                    { label: "$G price",                   value: `$${fmt(redeemPreview.gPriceUsd, 6)}` },
                   ].map(({ label, value, highlight }) => (
                     <div key={label} className="flex justify-between items-center">
                       <span className="text-xs text-muted-foreground">{label}</span>
@@ -1095,12 +1173,15 @@ const handleBuyReset = () => {
                   )}
                 </div>
               )}
-              {previewError && !previewLoading && (
+
+              {/* Price unavailable warning */}
+              {gPriceError && !gPriceLoading && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
                   <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
-                  <p className="text-xs text-amber-700 dark:text-amber-400">{previewError}</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">{gPriceError} — refresh to retry.</p>
                 </div>
               )}
+
               <Button
                 className="w-full"
                 onClick={handleRedeem}
@@ -1113,264 +1194,250 @@ const handleBuyReset = () => {
               </Button>
 
               <p className="text-[10px] text-center text-muted-foreground">
-                Reward DROPS are burned; $G is sent to your wallet. 30-day stake vests on Celo.
+                Reward DROPS are burned; $G is sent to your wallet. 25% staked for 30 days on Celo.
               </p>
             </CardContent>
           </Card>
         </div>
       )}
+
       {/* ════════════════════════════════════════════════════════════════════
-              BUY DROPS — send $G, receive DROPS minted to your wallet
-          ════════════════════════════════════════════════════════════════════ */}
-        {innerTab === "buy" && (
-  <div className="space-y-4">
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <ShoppingCart className="h-4 w-4 text-primary" />
-          Buy DROPS with $G
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+          BUY DROPS
+      ════════════════════════════════════════════════════════════════════ */}
+      {innerTab === "buy" && (
+        <div className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4 text-primary" />
+                Buy DROPS with $G
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
 
-        {/* ── Step indicator ── */}
-        <div className="flex items-center gap-2">
-          {(["input", "deposit", "processing", "done"] as const).map((s, i) => (
-            <React.Fragment key={s}>
-              <div className={`flex items-center gap-1.5 text-xs font-bold transition-colors
-                ${buyStep === s ? "text-primary" : 
-                  ["input","deposit","processing","done"].indexOf(buyStep) > i 
-                    ? "text-muted-foreground" 
-                    : "text-muted-foreground/40"}`}
-              >
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border-2 transition-all
-                  ${buyStep === s 
-                    ? "border-primary bg-primary text-primary-foreground" 
-                    : ["input","deposit","processing","done"].indexOf(buyStep) > i
-                      ? "border-muted-foreground bg-muted-foreground text-background"
-                      : "border-muted-foreground/30 text-muted-foreground/40"}`}
-                >
-                  {["input","deposit","processing","done"].indexOf(buyStep) > i 
-                    ? <CheckCircle2 className="h-3 w-3" /> 
-                    : i + 1}
+              {/* Step indicator */}
+              <div className="flex items-center gap-2">
+                {(["input", "deposit", "processing", "done"] as const).map((s, i) => (
+                  <React.Fragment key={s}>
+                    <div className={`flex items-center gap-1.5 text-xs font-bold transition-colors
+                      ${buyStep === s ? "text-primary" :
+                        ["input","deposit","processing","done"].indexOf(buyStep) > i
+                          ? "text-muted-foreground"
+                          : "text-muted-foreground/40"}`}
+                    >
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border-2 transition-all
+                        ${buyStep === s
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : ["input","deposit","processing","done"].indexOf(buyStep) > i
+                            ? "border-muted-foreground bg-muted-foreground text-background"
+                            : "border-muted-foreground/30 text-muted-foreground/40"}`}
+                      >
+                        {["input","deposit","processing","done"].indexOf(buyStep) > i
+                          ? <CheckCircle2 className="h-3 w-3" />
+                          : i + 1}
+                      </div>
+                      <span className="hidden sm:inline capitalize">{s === "processing" ? "Minting" : s}</span>
+                    </div>
+                    {i < 3 && <div className={`flex-1 h-px transition-colors ${["input","deposit","processing","done"].indexOf(buyStep) > i ? "bg-muted-foreground" : "bg-muted-foreground/20"}`} />}
+                  </React.Fragment>
+                ))}
+              </div>
+
+              {/* STEP 1 — Enter DROPS amount */}
+              {buyStep === "input" && (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-xl bg-muted/40 border border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-foreground">Live $G Rate</p>
+                      <button
+                        onClick={fetchGoodDollarPrice}
+                        disabled={gPriceLoading}
+                        className="flex items-center gap-1 text-[10px] text-primary hover:opacity-70 transition-opacity"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${gPriceLoading ? "animate-spin" : ""}`} />
+                        Refresh
+                      </button>
+                    </div>
+
+                    {gPriceLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Fetching price…</span>
+                      </div>
+                    ) : gPriceError ? (
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                        <span className="text-xs text-destructive">{gPriceError}</span>
+                      </div>
+                    ) : gPriceUsd ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">1 $G</span>
+                          <span className="text-xs font-black text-foreground">${gPriceUsd.toFixed(6)} USD</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">100 DROPS</span>
+                          <span className="text-xs font-black text-foreground">$1.00 USD</span>
+                        </div>
+                        {gPriceFetchedAt && (
+                          <p className="text-[10px] text-muted-foreground/60 pt-0.5">
+                            Updated {Math.floor((Date.now() - gPriceFetchedAt) / 1000)}s ago · CoinGecko
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                      DROPS to Buy
+                    </Label>
+                    <Input
+                      type="number"
+                      value={dropsToBuy}
+                      onChange={e => setDropsToBuy(e.target.value)}
+                      placeholder="e.g. 100"
+                      min="10"
+                      step="10"
+                      className="font-mono font-bold text-lg h-12"
+                    />
+                    {dropsToBuy && parseFloat(dropsToBuy) > 0 && gPriceUsd && (
+                      <p className="text-xs text-muted-foreground pl-1">
+                        ≈ <strong className="text-foreground">
+                          {((parseFloat(dropsToBuy) / 100) / gPriceUsd).toFixed(4)} $G
+                        </strong> required
+                        {" · "}
+                        <span className="text-muted-foreground/60">
+                          ${(parseFloat(dropsToBuy) / 100).toFixed(2)} USD
+                        </span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    {[100, 500, 1000, 5000].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => setDropsToBuy(String(v))}
+                        className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all
+                          ${parseFloat(dropsToBuy) === v
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40"}`}
+                      >
+                        <span className="block">{v >= 1000 ? `${v / 1000}k` : v}</span>
+                        {gPriceUsd && (
+                          <span className="block text-[9px] font-normal text-muted-foreground/70 mt-0.5">
+                            {((v / 100) / gPriceUsd).toFixed(2)} $G
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <Button
+                    className="w-full"
+                    onClick={handleCalculate}
+                    disabled={!dropsToBuy || parseFloat(dropsToBuy) < 10 || gPriceLoading || !gPriceUsd}
+                  >
+                    {gPriceLoading
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Fetching Price…</>
+                      : <><Coins className="h-4 w-4 mr-2" /> Calculate Cost & Continue</>
+                    }
+                  </Button>
                 </div>
-                <span className="hidden sm:inline capitalize">{s === "processing" ? "Minting" : s}</span>
-              </div>
-              {i < 3 && <div className={`flex-1 h-px transition-colors ${["input","deposit","processing","done"].indexOf(buyStep) > i ? "bg-muted-foreground" : "bg-muted-foreground/20"}`} />}
-            </React.Fragment>
-          ))}
+              )}
+
+              {/* STEP 2 — Confirm & send $G */}
+              {buyStep === "deposit" && gCostDisplay !== null && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <p className="text-xs font-black text-muted-foreground uppercase tracking-wide">Order Summary</p>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">You get</span>
+                      <span className="text-xl font-black text-foreground">
+                        {parseFloat(dropsToBuy).toLocaleString()} DROPS
+                      </span>
+                    </div>
+                    <div className="h-px bg-border" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">You send</span>
+                      <span className="text-xl font-black text-primary">{gCostDisplay.toFixed(6)} $G</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/50">
+                    <Wallet className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-700 dark:text-blue-400">
+                      Clicking below will prompt your wallet to transfer{" "}
+                      <strong>{gCostDisplay.toFixed(6)} $G</strong> to the pool on Celo.
+                      DROPS are minted automatically once the transfer confirms.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={handleBuyReset} disabled={buyLoading}>
+                      Back
+                    </Button>
+                    <Button className="flex-1" onClick={handleConfirmDeposit} disabled={buyLoading}>
+                      {buyLoading
+                        ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing…</>
+                        : <><Zap className="h-4 w-4 mr-2" /> Send $G &amp; Mint DROPS</>
+                      }
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-center text-muted-foreground">
+                    You'll sign one transaction. DROPS are minted to your wallet automatically after.
+                  </p>
+                </div>
+              )}
+
+              {/* STEP 3 — Processing */}
+              {buyStep === "processing" && (
+                <div className="flex flex-col items-center gap-4 py-8 text-center">
+                  <div className="w-14 h-14 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                  <div>
+                    <p className="font-black text-foreground">Verifying deposit…</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Checking on-chain for your $G transfer and minting {parseFloat(dropsToBuy).toLocaleString()} DROPS
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4 — Done */}
+              {buyStep === "done" && buyResult && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-green-200 dark:border-green-800/50 bg-green-50/50 dark:bg-green-950/10 p-5 space-y-3 text-center">
+                    <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto" />
+                    <div>
+                      <p className="text-lg font-black text-green-700 dark:text-green-400">
+                        {buyResult.dropsAmount.toLocaleString()} DROPS minted!
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Landed in your wallet on Celo
+                      </p>
+                    </div>
+                    <a
+                      href={`https://celoscan.io/tx/${buyResult.mintTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-primary"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {shortAddr(buyResult.mintTxHash)}
+                    </a>
+                  </div>
+                  <Button variant="outline" className="w-full" onClick={handleBuyReset}>
+                    Buy More DROPS
+                  </Button>
+                </div>
+              )}
+
+            </CardContent>
+          </Card>
         </div>
-
-        {/* ══════════════════════════════
-            STEP 1 — Enter DROPS amount
-        ══════════════════════════════ */}
-        {buyStep === "input" && (
-          <div className="space-y-4">
-            {/* Rate card */}
-<div className="p-3 rounded-xl bg-muted/40 border border-border space-y-2">
-  <div className="flex items-center justify-between">
-    <p className="text-xs font-bold text-foreground">Live $G Rate</p>
-    <button
-      onClick={fetchGoodDollarPrice}
-      disabled={gPriceLoading}
-      className="flex items-center gap-1 text-[10px] text-primary hover:opacity-70 transition-opacity"
-    >
-      <RefreshCw className={`h-3 w-3 ${gPriceLoading ? "animate-spin" : ""}`} />
-      Refresh
-    </button>
-  </div>
-
-  {gPriceLoading ? (
-    <div className="flex items-center gap-2">
-      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-      <span className="text-xs text-muted-foreground">Fetching price…</span>
-    </div>
-  ) : gPriceError ? (
-    <div className="flex items-center gap-2">
-      <AlertCircle className="h-3.5 w-3.5 text-destructive" />
-      <span className="text-xs text-destructive">{gPriceError}</span>
-    </div>
-  ) : gPriceUsd ? (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">1 $G</span>
-        <span className="text-xs font-black text-foreground">${gPriceUsd.toFixed(6)} USD</span>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">100 DROPS</span>
-        <span className="text-xs font-black text-foreground">$1.00 USD</span>
-      </div>
-      {gPriceFetchedAt && (
-        <p className="text-[10px] text-muted-foreground/60 pt-0.5">
-          Updated {Math.floor((Date.now() - gPriceFetchedAt) / 1000)}s ago · CoinGecko
-        </p>
       )}
-    </div>
-  ) : null}
-</div>
 
-{/* Input */}
-<div className="space-y-1.5">
-  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
-    DROPS to Buy
-  </Label>
-  <Input
-    type="number"
-    value={dropsToBuy}
-    onChange={e => setDropsToBuy(e.target.value)}
-    placeholder="e.g. 100"
-    min="10"
-    step="10"
-    className="font-mono font-bold text-lg h-12"
-  />
-  {/* ← was onChainStats?.gPriceUsd, now gPriceUsd */}
-  {dropsToBuy && parseFloat(dropsToBuy) > 0 && gPriceUsd && (
-    <p className="text-xs text-muted-foreground pl-1">
-      ≈ <strong className="text-foreground">
-        {((parseFloat(dropsToBuy) / 100) / gPriceUsd).toFixed(4)} $G
-      </strong> required
-      {" · "}
-      <span className="text-muted-foreground/60">
-        ${(parseFloat(dropsToBuy) / 100).toFixed(2)} USD
-      </span>
-    </p>
-  )}
-</div>
-
-{/* Quick picks — also was onChainStats?.gPriceUsd */}
-<div className="flex gap-2">
-  {[100, 500, 1000, 5000].map(v => (
-    <button
-      key={v}
-      onClick={() => setDropsToBuy(String(v))}
-      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all
-        ${parseFloat(dropsToBuy) === v
-          ? "border-primary bg-primary/10 text-primary"
-          : "border-border text-muted-foreground hover:border-primary/40"}`}
-    >
-      <span className="block">{v >= 1000 ? `${v / 1000}k` : v}</span>
-      {gPriceUsd && (
-        <span className="block text-[9px] font-normal text-muted-foreground/70 mt-0.5">
-          {((v / 100) / gPriceUsd).toFixed(2)} $G
-        </span>
-      )}
-    </button>
-  ))}
-</div>
-
-<Button
-  className="w-full"
-  onClick={handleCalculate}
-  
-  disabled={!dropsToBuy || parseFloat(dropsToBuy) < 10 || gPriceLoading || !gPriceUsd}
->
-  {gPriceLoading
-    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Fetching Price…</>
-    : <><Coins className="h-4 w-4 mr-2" /> Calculate Cost & Continue</>
-  }
-</Button>
-
-          </div>
-        )}
-
-        {/* ══════════════════════════════
-            STEP 2 — Send $G to pool
-        ══════════════════════════════ */}
-        {/* STEP 2 — Confirm & send $G automatically */}
-{buyStep === "deposit" && gCostDisplay !== null && (
-  <div className="space-y-4">
-    {/* Summary box */}
-    <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3">
-      <p className="text-xs font-black text-muted-foreground uppercase tracking-wide">Order Summary</p>
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-muted-foreground">You get</span>
-        <span className="text-xl font-black text-foreground">
-          {parseFloat(dropsToBuy).toLocaleString()} DROPS
-        </span>
-      </div>
-      <div className="h-px bg-border" />
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-muted-foreground">You send</span>
-        <span className="text-xl font-black text-primary">{gCostDisplay.toFixed(6)} $G</span>
-      </div>
-    </div>
-
-    <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/50">
-      <Wallet className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-      <p className="text-xs text-blue-700 dark:text-blue-400">
-        Clicking below will prompt your wallet to transfer{" "}
-        <strong>{gCostDisplay.toFixed(6)} $G</strong> to the pool on Celo.
-        DROPS are minted automatically once the transfer confirms.
-      </p>
-    </div>
-
-    <div className="flex gap-2">
-      <Button variant="outline" className="flex-1" onClick={handleBuyReset} disabled={buyLoading}>
-        Back
-      </Button>
-      <Button className="flex-1" onClick={handleConfirmDeposit} disabled={buyLoading}>
-        {buyLoading
-          ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing…</>
-          : <><Zap className="h-4 w-4 mr-2" /> Send $G &amp; Mint DROPS</>
-        }
-      </Button>
-    </div>
-    <p className="text-[10px] text-center text-muted-foreground">
-      You'll sign one transaction. DROPS are minted to your wallet automatically after.
-    </p>
-  </div>
-)}
-
-        {/* ══════════════════════════════
-            STEP 3 — Processing
-        ══════════════════════════════ */}
-        {buyStep === "processing" && (
-          <div className="flex flex-col items-center gap-4 py-8 text-center">
-            <div className="w-14 h-14 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-            <div>
-              <p className="font-black text-foreground">Verifying deposit…</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Checking on-chain for your $G transfer and minting {parseFloat(dropsToBuy).toLocaleString()} DROPS
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ══════════════════════════════
-            STEP 4 — Done
-        ══════════════════════════════ */}
-        {buyStep === "done" && buyResult && (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-green-200 dark:border-green-800/50 bg-green-50/50 dark:bg-green-950/10 p-5 space-y-3 text-center">
-              <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto" />
-              <div>
-                <p className="text-lg font-black text-green-700 dark:text-green-400">
-                  {buyResult.dropsAmount.toLocaleString()} DROPS minted!
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Landed in your wallet on Celo
-                </p>
-              </div>
-              <a
-                href={`https://celoscan.io/tx/${buyResult.mintTxHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-primary"
-              >
-                <ExternalLink className="h-3 w-3" />
-                {shortAddr(buyResult.mintTxHash)}
-              </a>
-            </div>
-            <Button variant="outline" className="w-full" onClick={handleBuyReset}>
-              Buy More DROPS
-            </Button>
-          </div>
-        )}
-
-      </CardContent>
-    </Card>
-  </div>
-)}
       {/* ════════════════════════════════════════════════════════════════════
           POOLS
       ════════════════════════════════════════════════════════════════════ */}
@@ -1397,7 +1464,7 @@ const handleBuyReset = () => {
                 </div>
               )}
               {stakes.map(stake => {
-                const isMature = stake.matured || new Date(stake.matures_at) <= new Date();
+                const isMature   = stake.matured || new Date(stake.matures_at) <= new Date();
                 const isClaiming = claimingStake === stake.id;
                 return (
                   <Card key={stake.id} className={`${isMature && !stake.claimed ? "border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/10" : ""}`}>
@@ -1415,8 +1482,8 @@ const handleBuyReset = () => {
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-center">
                         {[
-                          { label: "Value", val: `$${fmt(stake.g_value_usd, 2)}` },
-                          { label: "APY",   val: `${stake.apy_pct}%`, accent: true },
+                          { label: "Value",  val: `$${fmt(stake.g_value_usd, 2)}` },
+                          { label: "APY",    val: `${stake.apy_pct}%`, accent: true },
                           { label: "Earned", val: stake.g_earned != null ? `${fmt(stake.g_earned, 4)} $G` : "—", green: true },
                         ].map(({ label, val, accent, green }) => (
                           <div key={label} className="bg-muted/40 rounded-lg p-2">
@@ -1540,14 +1607,13 @@ const handleBuyReset = () => {
           </div>
         </div>
       )}
-        
+
       {/* ════════════════════════════════════════════════════════════════════
-          ADMIN — direct on-chain writes via connected wallet
+          ADMIN
       ════════════════════════════════════════════════════════════════════ */}
       {innerTab === "admin" && adminMode && (
         <div className="space-y-4">
 
-          {/* Identity banner */}
           <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700">
             <ShieldCheck className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
             <div className="min-w-0 flex-1">
@@ -1563,7 +1629,6 @@ const handleBuyReset = () => {
             </a>
           </div>
 
-          {/* Last tx hash */}
           {lastTxHash && (
             <a
               href={celoScanTx(lastTxHash)}
@@ -1576,7 +1641,6 @@ const handleBuyReset = () => {
             </a>
           )}
 
-          {/* On-chain pool stats */}
           <Card className="border-amber-200 dark:border-amber-800/50">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-300">
@@ -1595,12 +1659,12 @@ const handleBuyReset = () => {
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: "$G Balance",     value: `${onChainStats.gBalance} $G`,       icon: DollarSign  },
-                      { label: "Free Liquidity", value: `${onChainStats.freeLiquidity} $G`,  icon: Unlock      },
-                      { label: "DROPS in Pool",  value: onChainStats.dropsBalance,            icon: Droplets    },
-                      { label: "Total Stakes",   value: String(onChainStats.nextStakeId - 1), icon: TrendingUp  },
+                      { label: "$G Balance",     value: `${onChainStats.gBalance} $G`,         icon: DollarSign },
+                      { label: "Free Liquidity", value: `${onChainStats.freeLiquidity} $G`,    icon: Unlock     },
+                      { label: "DROPS in Pool",  value: onChainStats.dropsBalance,             icon: Droplets   },
+                      { label: "Total Stakes",   value: String(onChainStats.nextStakeId - 1),  icon: TrendingUp },
                       { label: "$G Price (USD)", value: `$${onChainStats.gPriceUsd.toFixed(6)}`, icon: BarChart3 },
-                      { label: "Stake IDs",      value: `0 – ${onChainStats.nextStakeId - 1}`,  icon: Coins     },
+                      { label: "Stake IDs",      value: `0 – ${onChainStats.nextStakeId - 1}`, icon: Coins     },
                     ].map(({ label, value, icon: Icon }) => (
                       <div key={label} className="bg-muted/40 rounded-xl p-3 border border-border">
                         <div className="flex items-center gap-1.5 mb-1">
@@ -1611,13 +1675,12 @@ const handleBuyReset = () => {
                       </div>
                     ))}
                   </div>
-                  {/* Contract roles */}
                   <div className="space-y-1.5 pt-1">
                     {[
-                      { label: "Owner",           addr: onChainStats.owner           },
-                      { label: "Resolver",         addr: onChainStats.resolver        },
-                      { label: "Service Address",  addr: onChainStats.serviceAddress  },
-                      { label: "$G Token",         addr: onChainStats.gTokenAddress   },
+                      { label: "Owner",           addr: onChainStats.owner            },
+                      { label: "Resolver",         addr: onChainStats.resolver         },
+                      { label: "Service Address",  addr: onChainStats.serviceAddress   },
+                      { label: "$G Token",         addr: onChainStats.gTokenAddress    },
                       { label: "DROPS Token",      addr: onChainStats.dropsTokenAddress },
                     ].map(({ label, addr }) => (
                       <div key={label} className="flex items-center justify-between text-[11px] py-1 border-b border-border/50 last:border-0">
@@ -1639,7 +1702,7 @@ const handleBuyReset = () => {
             </CardContent>
           </Card>
 
-          {/* ── Deposit $G ────────────────────────────────────────────────── */}
+          {/* Deposit $G */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1648,33 +1711,20 @@ const handleBuyReset = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Approves and calls <code className="font-mono text-[10px] bg-muted px-1 rounded">depositG(amount)</code> on the contract.
-                Your wallet must hold enough $G and will be prompted to approve the spend first.
+                Approves and calls <code className="font-mono text-[10px] bg-muted px-1 rounded">depositG(amount)</code>.
               </p>
               <div className="flex gap-2">
-                <Input
-                  type="number"
-                  value={depositAmount}
-                  onChange={e => setDepositAmount(e.target.value)}
-                  placeholder="Amount in $G"
-                  className="flex-1 font-mono font-bold h-10"
-                />
-                <Button
-                  size="sm"
-                  className="h-10 bg-green-600 hover:bg-green-700 text-white px-4 min-w-[100px]"
+                <Input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Amount in $G" className="flex-1 font-mono font-bold h-10" />
+                <Button size="sm" className="h-10 bg-green-600 hover:bg-green-700 text-white px-4 min-w-[100px]"
                   disabled={!depositAmount || parseFloat(depositAmount) <= 0 || !!adminActionLoading}
-                  onClick={handleDeposit}
-                >
-                  {adminActionLoading === "deposit"
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <><ArrowDownToLine className="h-3.5 w-3.5 mr-1.5" /> Deposit</>
-                  }
+                  onClick={handleDeposit}>
+                  {adminActionLoading === "deposit" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><ArrowDownToLine className="h-3.5 w-3.5 mr-1.5" /> Deposit</>}
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* ── Withdraw $G ───────────────────────────────────────────────── */}
+          {/* Withdraw $G */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1683,7 +1733,7 @@ const handleBuyReset = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Calls <code className="font-mono text-[10px] bg-muted px-1 rounded">withdrawG(amount)</code>. Only free liquidity (not locked stake backing) can be withdrawn.
+                Calls <code className="font-mono text-[10px] bg-muted px-1 rounded">withdrawG(amount)</code>. Only free liquidity can be withdrawn.
               </p>
               {onChainStats && (
                 <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border">
@@ -1692,29 +1742,17 @@ const handleBuyReset = () => {
                 </div>
               )}
               <div className="flex gap-2">
-                <Input
-                  type="number"
-                  value={withdrawAmount}
-                  onChange={e => setWithdrawAmount(e.target.value)}
-                  placeholder="Amount in $G"
-                  className="flex-1 font-mono font-bold h-10"
-                />
-                <Button
-                  variant="outline" size="sm"
-                  className="h-10 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 px-4 min-w-[100px]"
+                <Input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder="Amount in $G" className="flex-1 font-mono font-bold h-10" />
+                <Button variant="outline" size="sm" className="h-10 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 px-4 min-w-[100px]"
                   disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || !!adminActionLoading}
-                  onClick={handleWithdraw}
-                >
-                  {adminActionLoading === "withdraw"
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <><ArrowUpFromLine className="h-3.5 w-3.5 mr-1.5" /> Withdraw</>
-                  }
+                  onClick={handleWithdraw}>
+                  {adminActionLoading === "withdraw" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><ArrowUpFromLine className="h-3.5 w-3.5 mr-1.5" /> Withdraw</>}
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* ── Set $G Price ──────────────────────────────────────────────── */}
+          {/* Set $G Price */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1723,8 +1761,7 @@ const handleBuyReset = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Calls <code className="font-mono text-[10px] bg-muted px-1 rounded">setGPrice(priceWei)</code>.
-                Enter the price in USD — it will be converted to 1e18 wei-precision before sending.
+                Calls <code className="font-mono text-[10px] bg-muted px-1 rounded">setGPrice(priceWei)</code>. Enter USD — converted to 1e18 precision.
               </p>
               {onChainStats && (
                 <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border">
@@ -1733,30 +1770,17 @@ const handleBuyReset = () => {
                 </div>
               )}
               <div className="flex gap-2">
-                <Input
-                  type="number"
-                  value={newGPrice}
-                  onChange={e => setNewGPrice(e.target.value)}
-                  placeholder="New price in USD (e.g. 0.001)"
-                  step="0.000001"
-                  className="flex-1 font-mono font-bold h-10"
-                />
-                <Button
-                  size="sm" variant="outline"
-                  className="h-10 px-4 min-w-[90px]"
+                <Input type="number" value={newGPrice} onChange={e => setNewGPrice(e.target.value)} placeholder="New price in USD (e.g. 0.001)" step="0.000001" className="flex-1 font-mono font-bold h-10" />
+                <Button size="sm" variant="outline" className="h-10 px-4 min-w-[90px]"
                   disabled={!newGPrice || parseFloat(newGPrice) <= 0 || !!adminActionLoading}
-                  onClick={handleSetGPrice}
-                >
-                  {adminActionLoading === "price"
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : "Set Price"
-                  }
+                  onClick={handleSetGPrice}>
+                  {adminActionLoading === "price" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Set Price"}
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* ── Contract Config ───────────────────────────────────────────── */}
+          {/* Contract Config */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1764,83 +1788,26 @@ const handleBuyReset = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-
-              {/* Resolver */}
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Resolver Address</Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Calls <code className="font-mono bg-muted px-1 rounded">setResolver(address)</code>. The backend wallet allowed to call resolver-gated functions.
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    value={newResolver}
-                    onChange={e => setNewResolver(e.target.value)}
-                    placeholder="0x…"
-                    className="flex-1 font-mono text-xs h-10"
-                  />
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-10 px-4 min-w-[90px]"
-                    disabled={!newResolver || !!adminActionLoading}
-                    onClick={handleSetResolver}
-                  >
-                    {adminActionLoading === "resolver" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
-                  </Button>
+              {[
+                { label: "Resolver Address",    placeholder: "0x…", value: newResolver,       setValue: setNewResolver,       key: "resolver",    fn: handleSetResolver,       desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setResolver(address)</code>. The backend wallet for resolver-gated functions.</> },
+                { label: "Service (Fee) Address", placeholder: "0x…", value: newServiceAddress, setValue: setNewServiceAddress, key: "service",     fn: handleSetServiceAddress, desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setServiceAddress(address)</code>. Receives 10% fee on redemptions.</> },
+                { label: "DROPS Token Address", placeholder: "0x…", value: newDropsToken,     setValue: setNewDropsToken,     key: "dropsToken",  fn: handleSetDropsToken,     desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setDropsToken(address)</code>. Updates DROPS ERC20 reference.</> },
+              ].map(({ label, placeholder, value, setValue, key, fn, desc }) => (
+                <div key={key} className="space-y-2">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{label}</Label>
+                  <p className="text-[10px] text-muted-foreground">{desc}</p>
+                  <div className="flex gap-2">
+                    <Input value={value} onChange={e => setValue(e.target.value)} placeholder={placeholder} className="flex-1 font-mono text-xs h-10" />
+                    <Button size="sm" variant="outline" className="h-10 px-4 min-w-[90px]"
+                      disabled={!value || !!adminActionLoading} onClick={fn}>
+                      {adminActionLoading === key ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-
-              {/* Service Address */}
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Service (Fee) Address</Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Calls <code className="font-mono bg-muted px-1 rounded">setServiceAddress(address)</code>. Receives the 10% fee on every redemption.
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    value={newServiceAddress}
-                    onChange={e => setNewServiceAddress(e.target.value)}
-                    placeholder="0x…"
-                    className="flex-1 font-mono text-xs h-10"
-                  />
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-10 px-4 min-w-[90px]"
-                    disabled={!newServiceAddress || !!adminActionLoading}
-                    onClick={handleSetServiceAddress}
-                  >
-                    {adminActionLoading === "service" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
-                  </Button>
-                </div>
-              </div>
-
-              {/* DROPS Token */}
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">DROPS Token Address</Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Calls <code className="font-mono bg-muted px-1 rounded">setDropsToken(address)</code>. Updates the DROPS ERC20 contract reference.
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    value={newDropsToken}
-                    onChange={e => setNewDropsToken(e.target.value)}
-                    placeholder="0x…"
-                    className="flex-1 font-mono text-xs h-10"
-                  />
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-10 px-4 min-w-[90px]"
-                    disabled={!newDropsToken || !!adminActionLoading}
-                    onClick={handleSetDropsToken}
-                  >
-                    {adminActionLoading === "dropsToken" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
-                  </Button>
-                </div>
-              </div>
-
+              ))}
             </CardContent>
           </Card>
 
-          {/* Contract address info */}
           <div className="rounded-xl border border-dashed border-muted-foreground/30 p-4 space-y-2">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
               <Wallet className="h-3.5 w-3.5" /> Contract
@@ -1854,7 +1821,6 @@ const handleBuyReset = () => {
             </a>
             <p className="text-[10px] text-muted-foreground">
               All admin actions are signed by your connected wallet and sent directly to the contract on Celo Mainnet.
-              The page will prompt you to switch networks if needed.
             </p>
           </div>
 

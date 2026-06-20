@@ -453,39 +453,36 @@ const handleFarcaster = useCallback(async () => {
               </button>
             </>
           ) : (
-            <>
-              {detectedWallets.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-3xl mb-3">🔍</div>
-                  <p className="text-sm text-white/50">No wallets detected</p>
-                  <p className="text-xs text-white/30 mt-1">Install MetaMask or another browser wallet</p>
-                </div>
-              ) : (
-                detectedWallets.map(w => (
-                  <button
-                    key={w.name}
-                    onClick={() => handleExternalWallet(w)}
-                    disabled={!!loadingId}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
-                      "text-white/80 hover:text-white",
-                      "border border-white/10 hover:border-white/20 hover:bg-white/5",
-                      loadingId === w.name && "opacity-60 pointer-events-none",
-                    )}
-                  >
-                    <span
-                      className="h-8 w-8 rounded-lg flex items-center justify-center text-xl"
-                      style={{ background: "rgba(255,255,255,0.06)" }}
-                    >
-                      {loadingId === w.name ? <Loader2 className="h-4 w-4 animate-spin" /> : w.icon}
-                    </span>
-                    <span className="flex-1 text-left">{w.name}</span>
-                    <ChevronRight className="h-4 w-4 opacity-30" />
-                  </button>
-                ))
-              )}
-            </>
-          )}
+  <>
+    {!(window as any)?.ethereum ? (
+      <div className="text-center py-8">
+        <div className="text-3xl mb-3">🔍</div>
+        <p className="text-sm text-white/50">No wallet detected</p>
+        <p className="text-xs text-white/30 mt-1">Install MetaMask or another browser wallet</p>
+      </div>
+    ) : (
+      <button
+        onClick={() => handleExternalWallet({ name: "Browser Wallet", icon: "🌐", provider: (window as any).ethereum })}
+        disabled={!!loadingId}
+        className={cn(
+          "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+          "text-white/80 hover:text-white",
+          "border border-white/10 hover:border-white/20 hover:bg-white/5",
+          loadingId === "Browser Wallet" && "opacity-60 pointer-events-none",
+        )}
+      >
+        <span
+          className="h-8 w-8 rounded-lg flex items-center justify-center text-xl"
+          style={{ background: "rgba(255,255,255,0.06)" }}
+        >
+          {loadingId === "Browser Wallet" ? <Loader2 className="h-4 w-4 animate-spin" /> : "🌐"}
+        </span>
+        <span className="flex-1 text-left">Connect Wallet</span>
+        <ChevronRight className="h-4 w-4 opacity-30" />
+      </button>
+    )}
+  </>
+)}
         </div>
 
         {/* Footer */}

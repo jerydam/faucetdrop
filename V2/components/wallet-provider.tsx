@@ -87,23 +87,8 @@ function detectWallets(): DetectedWallet[] {
   if (typeof window === "undefined") return []
   const eth = (window as any).ethereum
   if (!eth) return []
-
-  const wallets: DetectedWallet[] = []
-  const providers: any[] = eth.providers ?? [eth]
-
-  for (const p of providers) {
-    if (p.isBraveWallet)               continue  // ← add this first to skip early
-    if (p.isMetaMask && !p.isRabby)    wallets.push({ name: "MetaMask",       icon: "🦊", provider: p })
-    else if (p.isRabby)                wallets.push({ name: "Rabby",           icon: "🐰", provider: p })
-    else if (p.isCoinbaseWallet)       wallets.push({ name: "Coinbase Wallet", icon: "🔵", provider: p })
-    else if (p.isFrame)                wallets.push({ name: "Frame",           icon: "🖼", provider: p })
-    else if (p.isOkxWallet)            wallets.push({ name: "OKX Wallet",      icon: "⭕", provider: p })
-    else if (p.isTrust)                wallets.push({ name: "Trust Wallet",    icon: "🛡", provider: p })
-    else if (p.isPhantom && p.ethereum)wallets.push({ name: "Phantom",         icon: "👻", provider: p.ethereum })
-    else                               wallets.push({ name: "Browser Wallet",  icon: "🌐", provider: p })
-}
-
-  return wallets.filter((w, i, arr) => arr.findIndex(x => x.name === w.name) === i)
+  // Return a single generic entry — the browser decides which wallet to use
+  return [{ name: "Browser Wallet", icon: "🌐", provider: eth }]
 }
 
 async function buildProvider(raw: any) {

@@ -133,11 +133,12 @@ interface MatchHistory {
 interface RedeemPreview {
   dropsToRedeem: number;
   gPriceUsd: number;
-  playerG: number;       // 75% of USD value → $G, minus 10% fee
-  feeG: number;          // 10% of the 75% slice
-  stakedDrops: number;   // 25% DROPS held back for the stake pool
-  stakedG: number;       // stakedDrops converted to $G at live price
-  stakeEarnedG: number;  // projected APY yield
+  playerG: number;
+  feeG: number;
+  stakedDrops: number;
+  stakedG: number;
+  stakeEarnedDrops: number;   // ← NEW: APY yield in actual DROPS terms
+  stakeEarnedG: number;       // estimated $G value of that yield, AT TODAY'S PRICE ONLY
   apyPct: number;
   sufficient: boolean;
 }
@@ -234,26 +235,22 @@ function computeRedeemPreview(
   apyPct: number,
   rewardDrops: number,
 ): RedeemPreview {
-  const usdValue       = drops / DROPS_PER_USD;
-  const playerUsd      = usdValue * 0.75;
-  const stakedUsd      = usdValue * 0.25;
-  const feeUsd         = playerUsd * 0.10;
-  const playerGNet     = (playerUsd - feeUsd) / gPriceUsd;
-  const feeG           = feeUsd / gPriceUsd;
-  const stakedDrops    = drops * 0.25;
-  const stakedG        = stakedUsd / gPriceUsd;
-  const stakeEarnedG   = stakedG * (apyPct / 100.0);
+  const usdValue = drops / DROPS_PER_USD;
+  const playerUsd = usdValue * 0.75;
+  const stakedUsd = usdValue * 0.25;
+  const feeUsd    = playerUsd * 0.10;   // computed off the 75% slice, but NOT subtracted from it
+
+  const playerG          = playerUsd / gPriceUsd;   // ← CHANGED: full 75%, no fee subtracted
+  const feeG              = feeUsd / gPriceUsd;       // pool pays this on top, from its own reserves
+  const stakedDrops        = drops * 0.25;
+  const stakedG            = stakedUsd / gPriceUsd;
+  const stakeEarnedDrops   = stakedDrops * (apyPct / 100.0);
+  const stakeEarnedG       = stakedG * (apyPct / 100.0);
 
   return {
-    dropsToRedeem: drops,
-    gPriceUsd,
-    playerG:      playerGNet,
-    feeG,
-    stakedDrops,
-    stakedG,
-    stakeEarnedG,
-    apyPct,
-    sufficient:   rewardDrops >= drops,
+    dropsToRedeem: drops, gPriceUsd, playerG, feeG,
+    stakedDrops, stakedG, stakeEarnedDrops, stakeEarnedG,
+    apyPct, sufficient: rewardDrops >= drops,
   };
 }
 
@@ -1156,24 +1153,42 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
               {redeemPreview && !gPriceLoading && (
                 <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
                   <p className="text-xs font-black text-muted-foreground uppercase tracking-wide mb-3">Breakdown</p>
-                  {[
-                    { label: "You receive",               value: `${fmt(redeemPreview.playerG, 4)} $G`,       highlight: true },
-                    { label: "Fee (10%)",                  value: `${fmt(redeemPreview.feeG, 4)} $G` },
-                    { label: `Staked (${redeemPreview.apyPct}% APY, 30d)`, value: `${fmt(redeemPreview.stakedG, 4)} $G` },
-                    { label: "Projected stake yield",      value: `+${fmt(redeemPreview.stakeEarnedG, 4)} $G` },
-                    { label: "$G price",                   value: `$${fmt(redeemPreview.gPriceUsd, 6)}` },
-                  ].map(({ label, value, highlight }) => (
-                    <div key={label} className="flex justify-between items-center">
-                      <span className="text-xs text-muted-foreground">{label}</span>
-                      <span className={`text-xs font-bold ${highlight ? "text-primary" : "text-foreground"}`}>{value}</span>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">You receive (full 75%)</span>
+                    <span className="text-xs font-bold text-primary">{fmt(redeemPreview.playerG, 4)} $G</span>
+                  </div>
+                  
+
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs text-muted-foreground">Staked ({redeemPreview.apyPct}% APY, 30d)</span>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-foreground">{fmt(redeemPreview.stakedDrops, 0)} DROPS</div>
+                      <div className="text-[10px] text-muted-foreground/70">≈ {fmt(redeemPreview.stakedG, 4)} $G now</div>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs text-muted-foreground">Projected stake yield</span>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-foreground">+{fmt(redeemPreview.stakeEarnedDrops, 2)} DROPS</div>
+                      <div className="text-[10px] text-muted-foreground/70">≈ +{fmt(redeemPreview.stakeEarnedG, 4)} $G at today's rate</div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">$G price</span>
+                    <span className="text-xs font-bold text-foreground">${fmt(redeemPreview.gPriceUsd, 6)}</span>
+                  </div>
+
                   {!redeemPreview.sufficient && (
                     <p className="text-xs text-red-500 font-bold pt-1">Insufficient reward drops.</p>
                   )}
+                  <p className="text-[10px] text-muted-foreground/60 pt-1">
+                    Stake amount and yield are held in DROPS — the $G figures above are estimates at the current rate and may change by the time the stake matures.
+                  </p>
                 </div>
               )}
-
               {/* Price unavailable warning */}
               {gPriceError && !gPriceLoading && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">

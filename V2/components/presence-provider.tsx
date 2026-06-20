@@ -5,9 +5,8 @@ import React, {
 } from "react";
 import { useWallet } from "@/hooks/use-wallet";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetpay-backend.koyeb.app";
-const WS_BASE  = API_BASE.replace(/^https?/, (s) => s === "https" ? "wss" : "ws");
-
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const WS_BASE  = API_BASE.replace(/^https/, "wss").replace(/^http/, "ws");
 const PresenceContext = createContext<Set<string>>(new Set());
 
 export function PresenceProvider({ children }: { children: React.ReactNode }) {

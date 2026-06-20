@@ -839,15 +839,7 @@ useEffect(() => { setPage(1); }, [searchTerm, filterBy, sortBy]);
                 ? `No faucets are available on ${network?.name || "this network"} yet.`
                 : "Try adjusting your search or filter criteria."}
             </p>
-            {allFaucetsMeta.length === 0 ? (
-              <Link href="/faucet/create-faucet">
-                <Button className="h-9 md:h-10 text-xs sm:text-base">Create Faucet</Button>
-              </Link>
-            ) : (
-              <Button onClick={handleClearFilters} className="h-9 md:h-10 text-xs sm:text-base">
-                Clear Filters
-              </Button>
-            )}
+            
           </CardContent>
         </Card>
       ) : (

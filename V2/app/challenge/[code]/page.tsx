@@ -8,6 +8,8 @@ import { useWallet } from "@/hooks/use-wallet";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {makePublicClient,makeWalletClient,toViemChain,ensureChainNetwork} from "@/lib/chain"
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Loader2, Trophy, Zap, Check, X,
@@ -31,6 +33,8 @@ import { celo } from "viem/chains";
 import { useSearchParams } from "next/navigation";
 import { toast as sonnerToast } from "sonner";
 import { RematchPopup, RematchInvite } from "@/components/RematchPopup";
+import { getChainConfig, CELO_CHAIN_ID, } from "@/lib/chain";
+
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -43,8 +47,6 @@ function getWsBaseUrl(): string {
     : "wss://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 }
 
-const CELO_CHAIN_ID  = 42220;
-const DROPS_ADDRESS  = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B") as `0x${string}`;
 const DROPS_DECIMALS = 18;
 const DROPS_SYMBOL   = "DROPS";
 const BADGE_THRESHOLD = 10;
@@ -466,9 +468,8 @@ export default function ChallengePage() {
   const params  = useParams();
   const router  = useRouter();
   const code    = ((params.code as string) ?? "").toUpperCase();
-  const { address: userWalletAddress, getActiveSigner, walletType } = useWallet();
+  const { address: userWalletAddress, getActiveSigner, ensureCorrectNetwork, walletType } = useWallet();
   const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
-
   const searchParams     = useSearchParams();
   const agreedStake      = searchParams.get("stake");
   const cameFromPreLobby = searchParams.get("agreed") === "1";
@@ -482,7 +483,11 @@ export default function ChallengePage() {
   const [hasJoined, setHasJoined] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
   const [claimedCodes, setClaimedCodes] = useState<Set<string>>(new Set());
-
+  const chainCfg = useMemo(
+  () => getChainConfig(challenge?.chainId ?? CELO_CHAIN_ID),
+  [challenge?.chainId]
+);
+const DROPS_ADDRESS = chainCfg.contracts.dropsToken;
   // ── Passive expiry (createdAt from challenge load, no backend polling) ────
   const [createdAt, setCreatedAt] = useState<number | null>(null);
   const expiry = usePassiveExpiry(createdAt, code, phase);
@@ -929,85 +934,7 @@ export default function ChallengePage() {
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  const handleStake = useCallback(async () => {
-    if (!userWalletAddress || !challenge) return;
-    setIsStaking(true);
-    try {
-      const stakeAmt = agreedStake ? parseFloat(agreedStake) : challenge.stake;
-      toast.info(`Staking ${stakeAmt} DROPS — confirm in your wallet…`);
-
-      const activeSigner = await getActiveSigner(CELO_CHAIN_ID);
-      if (!activeSigner) throw new Error("No wallet available. Please reconnect.");
-
-      let txHash: string;
-
-      if (walletType === "embedded") {
-        // Embedded wallet: activeSigner is an ethers.Wallet
-        const { ethers } = await import("ethers");
-        const dropsIface = new ethers.Interface([
-          "function redeem(uint256 amount, string rewardId)"
-        ]);
-        const stakeWei = ethers.parseUnits(stakeAmt.toString(), DROPS_DECIMALS);
-        const data = dropsIface.encodeFunctionData("redeem", [stakeWei, code]);
-        const tx = await (activeSigner as any).sendTransaction({
-          to: DROPS_ADDRESS,
-          data,
-        });
-        const receipt = await tx.wait();
-        txHash = receipt.hash;
-      } else {
-        // External wallet: use viem with window.ethereum
-        await ensureCeloNetwork();
-        const walletClient = createWalletClient({ chain: celo, transport: custom(window.ethereum!) });
-        const publicClient = createPublicClient({ chain: celo, transport: http("https://forno.celo.org") });
-        const [userAddr] = await walletClient.getAddresses();
-        const stakeWei = parseUnits(stakeAmt.toString(), DROPS_DECIMALS);
-        const hash = await walletClient.writeContract({
-          address: DROPS_ADDRESS, abi: DROPS_REDEEM_ABI, functionName: "redeem",
-          args: [stakeWei, code], account: userAddr, chain: celo,
-        });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
-        txHash = receipt.transactionHash;
-      }
-
-      if (!hasJoined) {
-        const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/join`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress: userWalletAddress, username, txHash }),
-        });
-        const d = await res.json();
-        if (!d.success) throw new Error(d.detail ?? "Join failed");
-        setHasJoined(true);
-        setPlayers(prev => {
-          if (prev.some(p => p.walletAddress.toLowerCase() === myWallet)) return prev;
-          return [...prev, { walletAddress: userWalletAddress, username, points: 0, ready: false, txVerified: false, avatarUrl: avatarUrl ?? "" }];
-        });
-      }
-
-      toast.loading("Verifying stake on-chain…", { id: "confirm-burn" });
-      const burnRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/confirm-burn`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: userWalletAddress, txHash, success: true }),
-      });
-      const burnData = await burnRes.json();
-      toast.dismiss("confirm-burn");
-
-      if (!burnData.success && !burnData.alreadyVerified) {
-        toast.error("Could not verify burn automatically. Use 'Already staked? Sync my stake' below.");
-        sendStakeConfirmed(txHash);
-        return;
-      }
-
-      toast.success("DROPS staked! Click Ready to start.");
-    } catch (err: any) {
-      toast.dismiss("confirm-burn");
-      toast.error(err?.message ?? "Stake failed.");
-    } finally {
-      setIsStaking(false);
-    }
-  }, [userWalletAddress, challenge, hasJoined, code, username, sendStakeConfirmed, agreedStake, myWallet, avatarUrl, getActiveSigner, walletType]);
-
+  
   const handleSelectAnswer = useCallback((optId: string) => {
     if (!currentQ || timeLeft <= 0 || phase === "reveal") return;
     wsRef.current?.send(JSON.stringify({
@@ -1026,43 +953,161 @@ export default function ChallengePage() {
     setChatInput("");
   }, [chatInput, userWalletAddress, username]);
 
-  const handleClaim = useCallback(async (claimCode: string) => {
-    if (claimedCodes.has(claimCode)) return;
-    setIsClaiming(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/challenge/claim`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: claimCode, walletAddress: userWalletAddress }),
-      });
-      const d = await res.json();
-      if (!d.success && !d.alreadyClaimed) throw new Error(d.detail ?? "Claim failed");
-      toast.success("DROPS claimed to your wallet! 🏆");
-      setClaimedCodes(prev => new Set(prev).add(claimCode));
-      setPendingClaims(prev => prev.filter(c => c.code !== claimCode));
-    } catch (err: any) {
-      toast.error(err?.message ?? "Claim failed");
-    } finally {
-      setIsClaiming(false);
-    }
-  }, [userWalletAddress, claimedCodes]);
+  // ─── PASTE THIS into app/challenge/[code]/page.tsx ───────────────────────────
+// Replaces: the entire handleStake useCallback
+// Also add these imports at the top of the file:
+//   import { ensureChainNetwork, makeWalletClient, makePublicClient, toViemChain } from "@/lib/chain-utils";
+// And REMOVE: import { celo } from "viem/chains";
+// And REMOVE: the standalone ensureCeloNetwork() helper function
+// ─────────────────────────────────────────────────────────────────────────────
 
+const handleStake = useCallback(async () => {
+    if (!userWalletAddress || !challenge) return;
+    setIsStaking(true);
+ 
+    const activeChainId = challenge.chainId ?? CELO_CHAIN_ID;
+    const activeCfg     = getChainConfig(activeChainId);
+    const DROPS_ADDRESS = activeCfg.contracts.dropsToken;
+ 
+    try {
+      const stakeAmt = agreedStake ? parseFloat(agreedStake) : challenge.stake;
+      toast.info(`Staking ${stakeAmt} DROPS — confirm in your wallet…`);
+ 
+      // ── ensureCorrectNetwork comes from useWallet() — handles both wallet types ──
+      // For embedded: updates session.chainId in-memory, no RPC prompt.
+      // For external: calls wallet_switchEthereumChain via the raw provider.
+      const switched = await ensureCorrectNetwork(activeChainId);
+      if (!switched) throw new Error("Please connect your wallet first.");
+ 
+      // ── getActiveSigner from useWallet() — handles both wallet types ──
+      // For embedded: fetches private key from backend, returns ethers.Wallet.
+      // For external: returns the live JsonRpcSigner from BrowserProvider.
+      const activeSigner = await getActiveSigner(activeChainId);
+      if (!activeSigner) throw new Error("No wallet available. Please reconnect.");
+ 
+      let txHash: string;
+ 
+      if (walletType === "embedded") {
+        // ── Embedded path: ethers only, no viem needed ──────────────────────
+        const { ethers } = await import("ethers");
+        const dropsIface = new ethers.Interface([
+          "function redeem(uint256 amount, string rewardId)",
+        ]);
+        const stakeWei = ethers.parseUnits(stakeAmt.toString(), DROPS_DECIMALS);
+        const data     = dropsIface.encodeFunctionData("redeem", [stakeWei, code]);
+        const tx       = await (activeSigner as any).sendTransaction({ to: DROPS_ADDRESS, data });
+        const receipt  = await tx.wait();
+        txHash = receipt.hash;
+ 
+      } else {
+        // ── External path: viem WalletClient + PublicClient ─────────────────
+        // ensureCorrectNetwork() already switched the chain above, so
+        // makeWalletClient() will find the right chain in window.ethereum.
+        const chainObj     = toViemChain(activeChainId);
+        const walletClient = makeWalletClient(activeChainId);
+        const publicClient = makePublicClient(activeChainId);
+        const [userAddr]   = await walletClient.getAddresses();
+        const stakeWei     = parseUnits(stakeAmt.toString(), DROPS_DECIMALS);
+ 
+        const hash = await walletClient.writeContract({
+          address:      DROPS_ADDRESS,
+          abi:          DROPS_REDEEM_ABI,
+          functionName: "redeem",
+          args:         [stakeWei, code],
+          account:      userAddr,
+          chain:        chainObj,
+        });
+ 
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        txHash = receipt.transactionHash;
+      }
+ 
+      // ── Join (if not already in lobby) ────────────────────────────────────
+      if (!hasJoined) {
+        const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/join`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletAddress: userWalletAddress,
+            username,
+            txHash,
+            chainId: activeChainId,
+          }),
+        });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.detail ?? "Join failed");
+        setHasJoined(true);
+        setPlayers(prev => {
+          if (prev.some(p => p.walletAddress.toLowerCase() === myWallet)) return prev;
+          return [...prev, {
+            walletAddress: userWalletAddress, username, points: 0,
+            ready: false, txVerified: false, avatarUrl: avatarUrl ?? "",
+          }];
+        });
+      }
+ 
+      // ── Confirm burn on backend ────────────────────────────────────────────
+      toast.loading("Verifying stake on-chain…", { id: "confirm-burn" });
+      const burnRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/confirm-burn`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletAddress: userWalletAddress,
+          txHash,
+          success: true,
+          chainId: activeChainId,
+        }),
+      });
+      const burnData = await burnRes.json();
+      toast.dismiss("confirm-burn");
+ 
+      if (!burnData.success && !burnData.alreadyVerified) {
+        toast.error("Could not verify burn automatically. Use 'Already staked? Sync my stake' below.");
+        sendStakeConfirmed(txHash);
+        return;
+      }
+ 
+      toast.success("DROPS staked! Click Ready to start.");
+    } catch (err: any) {
+      toast.dismiss("confirm-burn");
+      toast.error(err?.message ?? "Stake failed.");
+    } finally {
+      setIsStaking(false);
+    }
+  }, [
+    userWalletAddress, challenge, hasJoined, code, username,
+    sendStakeConfirmed, agreedStake, myWallet, avatarUrl,
+    getActiveSigner, ensureCorrectNetwork, walletType,
+  ]);
+ 
+ 
+// ─── handleSyncStake ─────────────────────────────────────────────────────────
+ 
   const handleSyncStake = useCallback(async () => {
     if (!userWalletAddress || !challenge) return;
     setIsSyncing(true);
+    const activeChainId = challenge.chainId ?? CELO_CHAIN_ID;
     try {
       const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/sync-stake`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: userWalletAddress }),
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: userWalletAddress, chainId: activeChainId }),
       });
       const d = await res.json();
-      if (!d.success && !d.alreadyVerified) { toast.error(d.message ?? "No DROPS redeem found on-chain yet."); return; }
+      if (!d.success && !d.alreadyVerified) {
+        toast.error(d.message ?? "No DROPS redeem found on-chain yet.");
+        return;
+      }
       if (d.alreadyVerified) toast.success("Stake already verified! Click 'I'm Ready'.");
       else toast.success("Stake synced! Click 'I'm Ready'.");
       if (!hasJoined) {
         const joinRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/join`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress: userWalletAddress, username, txHash: "sync-recovery" }),
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletAddress: userWalletAddress, username,
+            txHash: "sync-recovery", chainId: activeChainId,
+          }),
         });
         const joinData = await joinRes.json();
         if (!joinData.success) throw new Error(joinData.detail ?? "Join failed");
@@ -1074,7 +1119,34 @@ export default function ChallengePage() {
       setIsSyncing(false);
     }
   }, [userWalletAddress, challenge, code, username, hasJoined]);
-
+ 
+ 
+// ─── handleClaim ─────────────────────────────────────────────────────────────
+ 
+  const handleClaim = useCallback(async (claimCode: string) => {
+    if (claimedCodes.has(claimCode)) return;
+    setIsClaiming(true);
+    const activeChainId = challenge?.chainId ?? CELO_CHAIN_ID;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/challenge/claim`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: claimCode, walletAddress: userWalletAddress, chainId: activeChainId,
+        }),
+      });
+      const d = await res.json();
+      if (!d.success && !d.alreadyClaimed) throw new Error(d.detail ?? "Claim failed");
+      toast.success("DROPS claimed to your wallet! 🏆");
+      setClaimedCodes(prev => new Set(prev).add(claimCode));
+      setPendingClaims(prev => prev.filter(c => c.code !== claimCode));
+    } catch (err: any) {
+      toast.error(err?.message ?? "Claim failed");
+    } finally {
+      setIsClaiming(false);
+    }
+  }, [userWalletAddress, claimedCodes, challenge?.chainId]);
+ 
   const handleRefresh = useCallback(async () => {
     if (!code || isRefreshing) return;
     setIsRefreshing(true);
@@ -1558,6 +1630,7 @@ export default function ChallengePage() {
                   <Badge variant="secondary" className="text-[10px] uppercase">{DROPS_SYMBOL}</Badge>
                 </div>
                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{challenge?.topic}</p>
+                <span className="text-lg" title={chainCfg.name}>{chainCfg.icon}</span>
               </div>
             </div>
             <div className="flex items-center gap-3">

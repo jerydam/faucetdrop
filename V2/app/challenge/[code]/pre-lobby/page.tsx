@@ -12,6 +12,10 @@
  *   2. WebSocket handler now processes `pre_lobby_offers_snapshot` so a
  *      reconnecting user immediately sees all live offers (backend must send
  *      this on connect — see main.py fix).
+ *   3. chainId is now read from the loaded challenge and threaded through
+ *      every backend call (offer, counter, accept) and through the
+ *      per-chain balance/avatar lookups, using lib/chain.ts as the single
+ *      source of truth for chain config.
  */
 
 import React, {
@@ -29,6 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getChainConfig } from "@/lib/chain";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 const MIN_STAKE = 10;
@@ -334,6 +339,16 @@ export default function PreLobbyPage() {
   const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
   const [avatarCache, setAvatarCache] = useState<Record<string, string>>({});
 
+  const [challenge, setChallenge]       = useState<Challenge | null>(null);
+
+  // Single source of truth for "which chain is this challenge on" — every
+  // contract address / RPC / explorer link and every backend call below
+  // should derive from this instead of assuming Celo.
+  const chainCfg = useMemo(
+    () => (challenge ? getChainConfig(challenge.chainId) : null),
+    [challenge?.chainId],
+  );
+
   const fetchAvatar = useCallback((wallet: string) => {
     if (!wallet || avatarCache[wallet.toLowerCase()]) return;
     fetch(`${API_BASE_URL}/api/players/${wallet}`)
@@ -346,7 +361,6 @@ export default function PreLobbyPage() {
       .catch(() => {});
   }, [avatarCache]);
 
-  const [challenge, setChallenge]       = useState<Challenge | null>(null);
   const [username, setUsername]         = useState("");
   const [pageState, setPageState]       = useState<PageState>("loading");
   const [offers, setOffers]             = useState<Offer[]>([]);
@@ -382,7 +396,7 @@ export default function PreLobbyPage() {
         const c: Challenge = d.challenge;
         setChallenge(c);
         setNegotiationLocked(!!d.negotiationLocked);
-        setMyOffer(c.stake ?? MIN_STAKE);setMyOffer(c.stake ?? MIN_STAKE);
+        setMyOffer(c.stake ?? MIN_STAKE);
         if (d.challenge?.creator) fetchAvatar(d.challenge.creator);
         if (c.status === "active" || c.status === "finished") {
           router.replace(`/challenge/${code}`);
@@ -392,31 +406,36 @@ export default function PreLobbyPage() {
       })
       .catch(() => { toast.error("Failed to load challenge"); setPageState("error"); });
   }, [code, router]);
+
+  // Per-chain balance — totalDuels (and whatever else gates negotiation) is
+  // tracked per chainId server-side, so this fetch is meaningless until the
+  // challenge (and therefore its chainId) has loaded.
   useEffect(() => {
-  if (!myWallet) return;
-  fetch(`${API_BASE_URL}/api/drops/balance/${myWallet}`)
-    .then(r => r.json())
-    .then(d => setMyTotalDuels(d.totalDuels ?? 0))
-    .catch(() => {});
-}, [myWallet]);
+    if (!myWallet || !challenge?.chainId) return;
+    fetch(`${API_BASE_URL}/api/drops/balance/${myWallet}?chainId=${challenge.chainId}`)
+      .then(r => r.json())
+      .then(d => setMyTotalDuels(d.totalDuels ?? 0))
+      .catch(() => {});
+  }, [myWallet, challenge?.chainId]);
+
   useEffect(() => {
     if (challenge?.creator) fetchAvatar(challenge.creator);
   }, [challenge?.creator]);
 
 
   useEffect(() => {
-  if (!code) return;
-  fetch(`${API_BASE_URL}/api/challenge/${code}/expiry`)
-    .then(r => r.json())
-    .then(d => {
-      if (d.success && d.secondsLeft > 0) {
-        setCountdown(Math.floor(d.secondsLeft));
-      } else {
-        setCountdown(120); // fallback if not yet on-chain
-      }
-    })
-    .catch(() => setCountdown(120));
-}, [code]);
+    if (!code) return;
+    fetch(`${API_BASE_URL}/api/challenge/${code}/expiry`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.secondsLeft > 0) {
+          setCountdown(Math.floor(d.secondsLeft));
+        } else {
+          setCountdown(120); // fallback if not yet on-chain
+        }
+      })
+      .catch(() => setCountdown(120));
+  }, [code]);
 
   useEffect(() => {
     offers.forEach(o => fetchAvatar(o.wallet));
@@ -439,30 +458,26 @@ export default function PreLobbyPage() {
   }, [challenge, myWallet, amCreator, pageState]);
 
   // ── Countdown ────────────────────────────────────────────────────────────
-    const isCreatorView   = pageState === "creator";
+  const isCreatorView   = pageState === "creator";
   const hasPendingOffer = pageState === "pending";
   const hasCounter      = pageState === "countered";
   const totalPool       = (myOffer * 2).toFixed(2);
   const countdownMin = countdown !== null ? Math.floor(countdown / 60) : "--";
-const countdownSec = countdown !== null ? countdown % 60 : "--";
-const countdownUrgent = countdown !== null && countdown <= 300;
+  const countdownSec = countdown !== null ? countdown % 60 : "--";
+  const countdownUrgent = countdown !== null && countdown <= 300;
   useEffect(() => {
-  if (!["idle","creator","pending","countered"].includes(pageState)) return;
-  if (countdown === null || countdown <= 0) return;
-  const t = setTimeout(() => setCountdown(c => c !== null ? c - 1 : null), 1000);
-  return () => clearTimeout(t);
-}, [countdown, pageState]);
+    if (!["idle","creator","pending","countered"].includes(pageState)) return;
+    if (countdown === null || countdown <= 0) return;
+    const t = setTimeout(() => setCountdown(c => c !== null ? c - 1 : null), 1000);
+    return () => clearTimeout(t);
+  }, [countdown, pageState]);
 
-// Update the display in JSX:
-{countdown !== null
-  ? `${String(countdownMin).padStart(2, "0")}:${String(countdownSec).padStart(2, "0")}`
-  : "--:--"
-}
   const isNegotiationLocked = negotiationLocked || myTotalDuels < 10;
+
   // ── WebSocket ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!code || !myWallet) return;
-    
+
     const ws = new WebSocket(`${getWsBase()}/ws/challenge/${code}`);
     wsRef.current = ws;
 
@@ -570,13 +585,18 @@ const countdownUrgent = countdown !== null && countdown <= 300;
       return;
     }
 
-    if (!myWallet || submitting || amCreator) return;
+    if (!myWallet || submitting || amCreator || !challenge) return;
     setSubmitting(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/offer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: myWallet, username, amount }),
+        body: JSON.stringify({
+          walletAddress: myWallet,
+          username,
+          amount,
+          chainId: challenge.chainId,
+        }),
       });
       const d = await res.json();
       if (!d.success) throw new Error(d.detail ?? "Offer failed");
@@ -593,7 +613,7 @@ const countdownUrgent = countdown !== null && countdown <= 300;
   }, [myWallet, submitting, amCreator, challenge, code, username]);
 
   const handleSendCounter = useCallback(async (amount: number, target: Offer) => {
-    if (!myWallet || submitting) return;
+    if (!myWallet || submitting || !challenge) return;
     setSubmitting(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/counter`, {
@@ -604,6 +624,7 @@ const countdownUrgent = countdown !== null && countdown <= 300;
           creatorName:   username,
           targetWallet:  target.wallet,
           amount,
+          chainId: challenge.chainId,
         }),
       });
       const d = await res.json();
@@ -617,7 +638,7 @@ const countdownUrgent = countdown !== null && countdown <= 300;
   }, [myWallet, submitting, challenge, code, username]);
 
   const handleAcceptOffer = useCallback(async (offer: Offer) => {
-    if (!myWallet || accepting) return;
+    if (!myWallet || accepting || !challenge) return;
     if (offer.wallet.toLowerCase() === myWallet) { toast.error("You can't accept your own offer."); return; }
     setAccepting(true);
     try {
@@ -628,6 +649,7 @@ const countdownUrgent = countdown !== null && countdown <= 300;
           creatorWallet:    myWallet,
           challengerWallet: offer.wallet,
           amount:           offer.amount,
+          chainId: challenge.chainId,
         }),
       });
       const d = await res.json();
@@ -636,7 +658,7 @@ const countdownUrgent = countdown !== null && countdown <= 300;
       toast.error(err?.message ?? "Could not accept offer");
       setAccepting(false);
     }
-  }, [myWallet, accepting, code]);
+  }, [myWallet, accepting, code, challenge]);
 
   const handleDeclineCounter = useCallback(() => {
     setPendingCounter(null);
@@ -753,6 +775,11 @@ const countdownUrgent = countdown !== null && countdown <= 300;
 
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="font-mono font-black">{code}</Badge>
+            {chainCfg && (
+              <Badge variant="outline" className="text-[10px] font-bold gap-1">
+                <span>{chainCfg.icon}</span> {chainCfg.shortName}
+              </Badge>
+            )}
             <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/30 text-[10px] font-bold">
               PRE-LOBBY
             </Badge>
@@ -799,6 +826,11 @@ const countdownUrgent = countdown !== null && countdown <= 300;
                   </div>
                   <span className="text-muted-foreground/30">·</span>
                   <Badge variant="secondary" className="text-[10px]">{challenge.token}</Badge>
+                  {chainCfg && (
+                    <Badge variant="secondary" className="text-[10px] gap-1">
+                      <span>{chainCfg.icon}</span> {chainCfg.shortName}
+                    </Badge>
+                  )}
                   {!challenge.isPublic && (
                     <Badge variant="outline" className="text-[10px] gap-1">
                       <Lock className="h-2.5 w-2.5" /> Private

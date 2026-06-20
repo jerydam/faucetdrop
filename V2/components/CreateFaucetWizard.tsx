@@ -509,8 +509,7 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "Degen community token",
     },
   ],
-  
-  56:[
+   56:[
     {
       address: zeroAddress,
       name: "BNB",
@@ -542,6 +541,33 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "BUSD",
       decimals: 18,
       logoUrl: "/busdt.jpg", 
+      description: "Binance-Peg BUSD Token",
+    },
+],
+  968:[
+    {
+      address: zeroAddress,
+      name: "BOT",
+      symbol: "BOT",
+      decimals: 18,
+      isNative: true,
+      logoUrl: "/botc.png", 
+      description: "Native BOT for transaction fees",
+    },
+    {
+      address: "0x75edC9335175Fc0552D51D48439F229c10420fe3",
+      name: "Tether USD",
+      symbol: "USDT",
+      decimals: 18,
+      logoUrl: "/usdt.jpg", 
+      description: "Binance-Peg BSC-USD",
+    },
+    {
+      address: "0x4cF0ce056B1C39032c41EE97e09bC8e72c7D69f4",
+      name: "CA Token",
+      symbol: "CAT",
+      decimals: 18,
+      logoUrl: "/ca.png", 
       description: "Binance-Peg BUSD Token",
     },
 ],

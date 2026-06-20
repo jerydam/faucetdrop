@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { WalletConnectButton } from "@/components/wallet-connect";
+import { NetworkSelector, MiniNetworkIndicator } from "@/components/network-selector";
 import Link from "next/link";
 import { Menu, X, ChevronLeft, Plus, RefreshCw } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
@@ -38,12 +39,10 @@ export function Header({
   const pathname = usePathname();
   const { isConnected, address } = useWallet();
 
-  // Detect MiniPay once on mount
   useEffect(() => {
     setIsMiniPay(!!(window.ethereum as any)?.isMiniPay);
   }, []);
 
-  // Fetch profile for avatar — only when in MiniPay (wallet auto-connected)
   useEffect(() => {
     if (!isMiniPay || !address) return;
     fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}`)
@@ -57,7 +56,6 @@ export function Header({
       .catch(() => {});
   }, [isMiniPay, address]);
 
-  // Re-fetch when profile is updated
   useEffect(() => {
     const handler = (e: any) => {
       if (e.detail?.avatarUrl) setAvatarUrl(e.detail.avatarUrl);
@@ -66,15 +64,6 @@ export function Header({
     window.addEventListener("profileUpdated", handler);
     return () => window.removeEventListener("profileUpdated", handler);
   }, []);
-
-  const isDashboardPage = isDashboard || 
-    pageTitle.includes("Dashboard") || 
-    pageTitle.includes("Space") || 
-    pathname.includes("/dashboard");
-
-  
-
-  
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -89,14 +78,12 @@ export function Header({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Initials fallback for avatar
   const initials = username
     ? username.slice(0, 2).toUpperCase()
     : address
     ? address.slice(2, 4).toUpperCase()
     : "?";
 
-  // Navigate to own dashboard profile
   const goToProfile = () => {
     if (username) {
       router.push(`/dashboard/${username}`);
@@ -105,7 +92,6 @@ export function Header({
     }
   };
 
-  // Profile button — shown only inside MiniPay when wallet is connected
   const ProfileButton = () => {
     if (!isMiniPay || !isConnected) return null;
     return (
@@ -169,18 +155,19 @@ export function Header({
         
           {/* Desktop Actions */}
           <div className="hidden lg:flex items-center gap-4">
+            {isConnected && <NetworkSelector />}
             <ThemeToggle />
             <NotificationBell />
+            
           </div>
 
           {/* Mobile Actions */}
           <div className="lg:hidden flex items-center gap-2 sm:gap-3">
             <ThemeToggle />
             <NotificationBell />
-
-            
-
-            
+            {isConnected && (
+              <MiniNetworkIndicator className="h-9 w-9 border border-border rounded-md" />
+            )}
           </div>
         </div>
 
@@ -201,7 +188,6 @@ export function Header({
                 Refresh Data
               </Button>
             )}
-
           </div>
         )}
       </header>

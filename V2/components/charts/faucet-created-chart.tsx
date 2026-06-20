@@ -14,6 +14,7 @@ const NETWORK_COLORS: Record<string, string> = {
   Arbitrum:  '#28A0F0',
   Base:      '#0052FF',
   BNB:       '#F3BA2F',
+  Botchain:  '#022211'
  
 };
 
@@ -140,11 +141,11 @@ export function FaucetsCreatedChart() {
       {/* Bar chart */}
       <ResponsiveContainer width="100%" height={280}>
         <BarChart
-          data={sorted}
-          margin={{ top: 12, right: 4, left: -8, bottom: 0 }}
-          barCategoryGap="32%"
-          onMouseLeave={() => setHoveredNetwork(null)}
-        >
+            data={sorted}
+            margin={{ top: 12, right: 4, left: -8, bottom: 40 }}  
+            barCategoryGap="32%"
+            onMouseLeave={() => setHoveredNetwork(null)}
+          >
           <CartesianGrid
             strokeDasharray="4 4"
             vertical={false}
@@ -157,6 +158,9 @@ export function FaucetsCreatedChart() {
             tickLine={false}
             tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))", fontWeight: 500 }}
             interval={0}
+            angle={-45}           
+            textAnchor="end"      
+            height={60}           
           />
           <YAxis
             axisLine={false}

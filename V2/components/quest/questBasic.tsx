@@ -66,7 +66,29 @@ const networks: Network[] = [
     {
         name: "Bnb", symbol: "BNB", chainId: BigInt(56), rpcUrl: "https://binance.llamarpc.com", blockExplorer: "https://bscscan.com", explorerUrl: "https://bscscan.com", color: "#F3BA2F",
         logoUrl: "/bnb.png", iconUrl: "/bnb.png", factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"], factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 }, isTestnet: false,
-    }
+    },
+    {
+        name: "Botchain Testnet",
+        symbol: "BOT",
+        chainId: BigInt(968),
+        rpcUrl: [
+          process.env.NEXT_PUBLIC_BOTCHAIN_URL || "https://rpc.bohr.life",
+        ],
+        blockExplorer: "https://scan.bohr.life",
+        explorerUrl: "https://scan.bohr.life",
+        color: "#14F195",
+        logoUrl: "/botc.png",
+        iconUrl: "/botc.png",
+        // TODO: fill in once Botchain factory contracts are deployed
+        factoryAddresses: [],
+        factories: {
+
+          custom: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
+        },
+        tokenAddress: ZeroAddress,
+        nativeCurrency: { name: "Botchain", symbol: "BOT", decimals: 18 },
+        isTestnet: true,
+      },
 ]
 
 const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
@@ -94,6 +116,32 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
         { address: "0x55d398326f99059fF775485246999027B3197955", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/usdt.jpg", description: "Binance-Peg BSC-USD" },
         { address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", name: "BUSD", symbol: "BUSD", decimals: 18, logoUrl: "/busd.png", description: "Binance-Peg BUSD Token" },
     ],
+    968:[
+        {
+          address: ZeroAddress,
+          name: "BOT",
+          symbol: "BOT",
+          decimals: 18,
+          isNative: true,
+          logoUrl: "/bot.png", 
+          description: "Native BOT for transaction fees",
+        },
+        {
+          address: "0x75edC9335175Fc0552D51D48439F229c10420fe3",
+          name: "Tether USD",
+          symbol: "USDT",
+          decimals: 18,
+          logoUrl: "/usdt.jpg", 
+          description: "Binance-Peg BSC-USD",
+        },
+        {
+          address: "0x4cF0ce056B1C39032c41EE97e09bC8e72c7D69f4",
+          name: "CA Token",
+          symbol: "CAT",
+          decimals: 18,
+          logoUrl: "/ca.png", 
+          description: "Binance-Peg BUSD Token",
+        },]
 }
 const ALL_TOKENS_BY_CHAIN_EXTENDED: Record<number, TokenConfiguration[]> = {
   ...ALL_TOKENS_BY_CHAIN,

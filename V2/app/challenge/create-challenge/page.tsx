@@ -27,6 +27,7 @@ import {
   parseUnits,
   type Address,
 } from "viem";
+import { getChainConfig, getEnabledChains, CELO_CHAIN_ID, BOTCHAIN_CHAIN_ID, type ChainConfig } from "@/lib/chain";
 import { celo } from "viem/chains";
 import { QUIZ_HUB_ABI } from "@/lib/abis";
 
@@ -36,15 +37,12 @@ import { QUIZ_HUB_ABI } from "@/lib/abis";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
-const QUIZ_HUB_ADDRESS = (
-  process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ?? "0xB19aA952c94faB37716131D8C3d9Bb564e6253Ed"
-) as `0x${string}`;
+
 
 // DROPS token on Celo — 18 decimals
-const DROPS_ADDRESS    = (process.env.NEXT_PUBLIC_DROPS_CONTRACT ?? "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B") as `0x${string}`;
-const DROPS_DECIMALS   = 18;
-const DROPS_SYMBOL     = "DROPS";
-const CELO_CHAIN_ID    = 42220;
+
+const DROPS_SYMBOL   = "DROPS";
+
 
 // 10 DROPS minimum — must match QuizHub.MIN_STAKE
 const MIN_STAKE        = 10;
@@ -145,7 +143,10 @@ export default function CreateChallengePage() {
   const [creatorUsername, setCreatorUsername] = useState("");
   const [isPublic, setIsPublic]               = useState(!searchParams.get("inviteUsername"));
   const [questionCount, setQuestionCount]     = useState(15);
-
+  const [selectedChainId, setSelectedChainId] = useState<number>(CELO_CHAIN_ID);
+  const chainCfg = getChainConfig(selectedChainId);
+  const QUIZ_HUB_ADDRESS = chainCfg.contracts.quizHub;
+  const DROPS_ADDRESS    = chainCfg.contracts.dropsToken;
   // Duel routing
   const [inviteUsername, setInviteUsername]   = useState(searchParams.get("inviteUsername") ?? "");
   const [inviteWallet, setInviteWallet]       = useState(searchParams.get("inviteWallet") ?? "");
@@ -212,44 +213,6 @@ useEffect(() => {
   return true
 }, [wizardStep, topic, stakeAmount, userWalletAddress, isPublic, usernameStatus, insufficientBalance])
 
-  // ── On-chain: createQuiz(quizId, stakeAmount) ──────────────────────────────
-  // New QuizHub v2: args are (bytes32 quizId, uint256 stakeAmount)
-  // No token address — DROPS-only is enforced by the contract.
-  const createQuizOnChain = async (code: string, stakeDROPS: number): Promise<string> => {
-  if (!window.ethereum) throw new Error("No wallet found.")
-  await window.ethereum.request({ method: "eth_requestAccounts" })
-
-  const walletClient = createWalletClient({ chain: celo, transport: custom(window.ethereum) })
-  const publicClient = createPublicClient({ chain: celo, transport: http("https://forno.celo.org") })
-
-  const [account] = await walletClient.getAddresses()
-  const quizId    = deriveQuizId(code)
-
-  setTxPhase("creating")
-  toast.info("Confirm quiz creation in your wallet…")
-
-  // Give MetaMask time to fully initialize before the tx prompt opens
-  await new Promise(r => setTimeout(r, 400))
-
-  const txHash = await walletClient.writeContract({
-    address:      QUIZ_HUB_ADDRESS,
-    abi:          QUIZ_HUB_ABI,
-    functionName: "createQuiz",
-    args:         [quizId],
-    account,
-    chain: celo,
-  })
-
-  toast.loading("Waiting for confirmation…", { id: "create-confirm" })
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
-
-  if (receipt.status !== "success") {
-    throw new Error("Transaction reverted on-chain")
-  }
-
-  toast.success("Quiz created on-chain! ⛓️✅", { id: "create-confirm" })
-  return receipt.transactionHash
-}
 
   const handleCreate = async () => {
   if (!userWalletAddress || !topic.trim() || !stakeAmount) {
@@ -264,7 +227,7 @@ useEffect(() => {
   }
 
   try {
-    await ensureCorrectNetwork(CELO_CHAIN_ID)
+    await ensureCorrectNetwork(selectedChainId)
   } catch {
     return
   }
@@ -290,7 +253,7 @@ useEffect(() => {
         creatorUsername: creatorUsername || userWalletAddress.slice(0, 8),
         stakeAmount:     stake,
         tokenSymbol:     DROPS_SYMBOL,
-        chainId:         CELO_CHAIN_ID,
+        chainId:         selectedChainId,
         isPublic,
         inviteWallet:    !isPublic && inviteWallet.trim() ? inviteWallet.trim() : undefined,
       }),
@@ -305,7 +268,7 @@ useEffect(() => {
     await new Promise(r => setTimeout(r, 400))
 
     // ── Use WalletContext signer (works for BOTH embedded + external) ──
-    const activeSigner = await getActiveSigner(CELO_CHAIN_ID)
+    const activeSigner = await getActiveSigner(selectedChainId)
     if (!activeSigner) throw new Error("No signer available — please reconnect your wallet.")
 
     const quizId = deriveQuizId(code as string)
@@ -342,6 +305,7 @@ useEffect(() => {
       body: JSON.stringify({
         creatorWallet: userWalletAddress,
         txHash:        receipt.hash,
+        chainId:       selectedChainId,  
       }),
     })
 
@@ -362,7 +326,7 @@ useEffect(() => {
       fetch(`${API_BASE_URL}/api/challenge/${code}/cancel`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creatorWallet: userWalletAddress, reason: "tx_rejected" }),
+        body: JSON.stringify({ creatorWallet: userWalletAddress, reason: "tx_rejected",chainId: selectedChainId, }),
       }).catch(() => {})
     }
 
@@ -739,6 +703,23 @@ useEffect(() => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header pageTitle="Create Challenge" />
+{/* Chain switcher row */}
+<div className="max-w-2xl mx-auto w-full px-4 pt-3 flex gap-2">
+  {getEnabledChains().map(c => (
+    <button
+      key={c.id}
+      onClick={() => setSelectedChainId(c.id)}
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-all",
+        selectedChainId === c.id
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border bg-card text-muted-foreground hover:border-primary/40",
+      )}
+    >
+      <span>{c.icon}</span> {c.shortName}
+    </button>
+  ))}
+</div>
       <div className="relative z-10 flex-1 max-w-2xl mx-auto w-full px-4 pb-24 pt-6 space-y-6">
         <div className="flex items-center gap-3">
           <button

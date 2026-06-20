@@ -81,6 +81,7 @@ const SUPPORTED_CHAIN_IDS = [
   421614, // Arbitrum Sepolia
   137,    // Polygon Mainnet
   56,
+  968
 ];
 
 // ─── Core Error Extractor ────────────────────────────────────────────────────
@@ -327,7 +328,7 @@ export async function getAllSecretCodes(): Promise<SecretCodeData[]> {
 
     if (!result.success) {
       throw new Error('Invalid response format from server');
-    }
+    }                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
 
     console.log(`✅ Retrieved ${result.count} secret codes`);
     return result.codes || [];

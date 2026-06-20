@@ -101,7 +101,7 @@ export function NetworkSelector({
   className = ""
 }: NetworkSelectorProps) {
   const { networks, isConnecting } = useNetwork() 
-  const { chainId, isConnected, address, switchChain, connect } = useWallet() // CHANGED
+  const { chainId, isConnected, address, switchChain, setShowModal } = useWallet() // CHANGED
  
   const [isSwitching, setIsSwitching] = useState(false)
   
@@ -188,7 +188,7 @@ export function NetworkSelector({
   const handleNetworkSelect = async (net: Network) => {
     // 1. Initial Checks
     if (!hasWalletConnected) {
-      await connect()
+      await setShowModal(true)
       return
     }
     
@@ -366,7 +366,7 @@ export function NetworkStatusSelector({ className }: { className?: string }) {
 
 export function MobileNetworkSelector({ className }: { className?: string }) {
   const { networks, network } = useNetwork()
-  const { isConnected, address, switchChain, connect } = useWallet() // CHANGED
+  const { isConnected, address, switchChain, setShowModal } = useWallet() // CHANGED
   
   const [isSwitching, setIsSwitching] = useState(false)
   
@@ -380,7 +380,7 @@ export function MobileNetworkSelector({ className }: { className?: string }) {
     console.log('Mobile network select:', net.name)
     
     if (!hasWalletConnected) {
-      await connect()
+      await setShowModal(true)
       return
     }
     
@@ -544,7 +544,7 @@ export function NetworkGrid({ onNetworkSelect }: { onNetworkSelect?: (network: N
 
 export function HorizontalNetworkSelector({ className }: { className?: string }) {
   const { networks, network } = useNetwork()
-  const { isConnected, address, switchChain, connect, chainId } = useWallet() // CHANGED
+  const { isConnected, address, switchChain, setShowModal, chainId } = useWallet() // CHANGED
   const [isSwitching, setIsSwitching] = useState(false)
   
   const router = useRouter()
@@ -554,7 +554,7 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
   
   const handleNetworkSelect = async (net: Network) => {
     if (!hasWalletConnected) {
-      await connect()
+      await setShowModal(true)
       return
     }
     
@@ -603,7 +603,7 @@ export function HorizontalNetworkSelector({ className }: { className?: string })
 
 export function MiniNetworkIndicator({ className = "" }: { className?: string }) {
   const { networks } = useNetwork()
-  const { chainId, isConnected, address, switchChain, connect } = useWallet()
+  const { chainId, isConnected, address, switchChain,  } = useWallet()
   const [isSwitching, setIsSwitching] = useState(false)
   
   const currentNetwork = networks.find((net) => net.chainId === chainId)
@@ -614,7 +614,6 @@ export function MiniNetworkIndicator({ className = "" }: { className?: string })
     setIsSwitching(true)
     try {
       await switchChain(targetChainId)
-      toast.success("Network switched")
     } catch (error) {
       console.error("Failed to switch network:", error)
     } finally {

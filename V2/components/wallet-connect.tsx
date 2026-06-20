@@ -199,12 +199,7 @@ export function WalletConnectButton({ className }: Props) {
                   </span>
                 </div>
               )}
-              {/* Linked socials */}
-              {(session?.linkedSocials?.length ?? 0) > 0 && (
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Linked: {session!.linkedSocials!.join(", ")}
-                </p>
-              )}
+              
             </div>
           </DropdownMenuLabel>
 

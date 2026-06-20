@@ -378,23 +378,15 @@ export default function QuizListPage() {
               border: "1.5px solid var(--dd-card-border)", background: "var(--dd-surface)",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 10,
-                  background: `${tierColor}20`, border: `1.5px solid ${tierColor}40`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <Zap size={16} color={tierColor} />
-                </div>
-                <div>
-                  <p style={{ fontSize: 12, color: "var(--dd-text-mute)", fontWeight: 700, fontFamily: "'Figtree',sans-serif" }}>
-                    Your DROPS
-                  </p>
+                
+                
+      
                   <p style={{ fontSize: 15, fontWeight: 900, color: "var(--dd-text)", fontFamily: "'Big Shoulders Display',sans-serif" }}>
                     {fmt(dropsBalance.gameDrops)} <span style={{ fontSize: 11, fontWeight: 700, color: "var(--dd-text-mute)" }}>game</span>
                     {" · "}
                     {fmt(dropsBalance.rewardDrops)} <span style={{ fontSize: 11, fontWeight: 700, color: "var(--dd-text-mute)" }}>reward</span>
                   </p>
-                </div>
+                  
               </div>
 
               {/* ── Action buttons + tier ── */}
@@ -411,6 +403,7 @@ export default function QuizListPage() {
                   Redeem $G
                 </button>
                 <button
+                  
                   onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge&subtab=buy-drop`)}
                   style={{
                     fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8,

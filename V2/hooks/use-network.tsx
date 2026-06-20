@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/hooks/use-wallet"
 // Solana wallet-adapter — only the publicKey/connected fields are needed here
 import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react"
+import { BOTCHAIN_CHAIN_ID } from "@/lib/chain"
 
 export const SOLANA_CHAIN_ID = 102
 
@@ -238,6 +239,31 @@ export const networks: Network[] = [
     },
     tokenAddress: "11111111111111111111111111111111",
     nativeCurrency: { name: "Solana", symbol: "SOL", decimals: 9 },
+    isTestnet: true,
+  },
+  {
+    name: "Botchain",
+    symbol: "BOT",
+    chainId: BOTCHAIN_CHAIN_ID,
+    rpcUrl: [
+      process.env.NEXT_PUBLIC_BOTCHAIN_URL || "https://rpc.bohr.life",
+    ],
+    blockExplorerUrls: "https://scan.bohr.life",
+    explorerUrl: "https://scan.bohr.life",
+    color: "#14F195",
+    logoUrl: "/botc.png",
+    iconUrl: "/botc.png",
+    // TODO: fill in once Botchain factory contracts are deployed
+    factoryAddresses: [],
+    factories: {
+      droplist: "0xe77Da13684158f7e6C4912730b46ea825b3CA56F",
+      dropcode: "0x034863545dfE877932F1F5261CeC9A6Be81b82EB",
+      custom: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
+      quest: "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
+      quiz: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
+    },
+    tokenAddress: ZeroAddress,
+    nativeCurrency: { name: "Botchain", symbol: "BOT", decimals: 18 },
     isTestnet: true,
   },
 ]

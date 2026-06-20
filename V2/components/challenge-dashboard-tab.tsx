@@ -19,14 +19,13 @@ import { useToast } from "@/hooks/use-toast";
 import { ethers } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
 import { getGoodDollarPrice } from "@/lib/getGoodDollarPrice";
+import { getChainConfig, CELO_CHAIN_ID } from "@/lib/chain";
 
 const BACKEND_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 /** ─── Contract config ────────────────────────────────────────────────────── */
-const DROPS_REDEEM_POOL_ADDRESS = "0x38Ae076A115bf79102DA9472C4c688DB078a4b13"; // ← replace
-const CELO_CHAIN_ID = 42220;
-const CELO_CHAIN_HEX = "0xa4ec";
-const CELO_RPC = "https://forno.celo.org";
+const DROPS_REDEEM_POOL_ADDRESS =
+  getChainConfig(CELO_CHAIN_ID).contracts.dropsRedeemPool!;
 
 const DROPS_REDEEM_POOL_ABI = [
   // ── Read ──────────────────────────────────────────────────────────────────
@@ -222,30 +221,6 @@ function isAdmin(address: string) {
   return address.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
 }
 
-/** Switch the connected wallet to Celo, adding it if needed */
-async function ensureCeloNetwork(provider: ethers.BrowserProvider): Promise<boolean> {
-  try {
-    const network = await provider.getNetwork();
-    if (network.chainId === BigInt(CELO_CHAIN_ID)) return true;
-    await (provider as any).send("wallet_switchEthereumChain", [{ chainId: CELO_CHAIN_HEX }]);
-    return true;
-  } catch (switchErr: any) {
-    // Chain not added
-    if (switchErr.code === 4902) {
-      try {
-        await (provider as any).send("wallet_addEthereumChain", [{
-          chainId: CELO_CHAIN_HEX,
-          chainName: "Celo Mainnet",
-          nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
-          rpcUrls: [CELO_RPC],
-          blockExplorerUrls: ["https://celoscan.io"],
-        }]);
-        return true;
-      } catch { return false; }
-    }
-    return false;
-  }
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -386,25 +361,43 @@ const handleCalculate = async () => {
 const handleConfirmDeposit = async () => {
   const drops = parseFloat(dropsToBuy);
   if (!drops || !gCostDisplay) return;
-
+ 
   setBuyLoading(true);
   setBuyStep("processing");
   setBuyResult(null);
-
+ 
+  // G token is Celo-only — always use CELO_CHAIN_ID here.
+  // getChainConfig gives us the address without hardcoding it.
+  const cfg        = getChainConfig(CELO_CHAIN_ID);
+  const G_TOKEN    = cfg.contracts.gToken;
+  if (!G_TOKEN) {
+    toast({ title: "No $G token configured for this chain", variant: "destructive" });
+    setBuyStep("deposit");
+    setBuyLoading(false);
+    return;
+  }
+ 
   try {
-    // ── Use the existing wallet hook — no direct window.ethereum access ──
+    // ── 1. Ensure the wallet is on Celo ──────────────────────────────────────
+    // ensureCorrectNetwork from useWallet():
+    //   • External wallet → wallet_switchEthereumChain
+    //   • Embedded wallet → updates session.chainId in memory (no RPC prompt)
     const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
-    if (!switched) throw new Error("Please switch to Celo Mainnet");
-
-    const signer = await getActiveSigner();
+    if (!switched) throw new Error("Please connect your wallet first.");
+ 
+    // ── 2. Get signer via context ─────────────────────────────────────────────
+    // getActiveSigner from useWallet():
+    //   • External → returns live JsonRpcSigner from BrowserProvider
+    //   • Embedded → fetches private key, returns ethers.Wallet on Celo RPC
+    const signer = await getActiveSigner(CELO_CHAIN_ID);
     if (!signer) throw new Error("No wallet connected");
-
+ 
     const signerAddr = await signer.getAddress();
     if (signerAddr.toLowerCase() !== wallet) {
       throw new Error(`Connect as ${walletAddress} to proceed`);
     }
-
-    const G_TOKEN = "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A";
+ 
+    // ── 3. Build G token contract with the context signer ────────────────────
     const gToken = new ethers.Contract(
       G_TOKEN,
       [
@@ -412,59 +405,63 @@ const handleConfirmDeposit = async () => {
         "function balanceOf(address account) view returns (uint256)",
         "function decimals() view returns (uint8)",
       ],
-      signer
+      signer,   // ← context signer, not a self-built BrowserProvider signer
     );
-
-    const decimals: number = await gToken.decimals();
-    const gAmountWei = ethers.parseUnits(gCostDisplay.toFixed(6), decimals);
-
+ 
+    const decimals: number  = await gToken.decimals();
+    const gAmountWei        = ethers.parseUnits(gCostDisplay.toFixed(6), decimals);
     const balanceOf: bigint = await gToken.balanceOf(signerAddr);
+ 
     if (balanceOf < gAmountWei) {
       const humanBalance = ethers.formatUnits(balanceOf, decimals);
       throw new Error(
-        `Insufficient $G balance. You have ${parseFloat(humanBalance).toFixed(4)} $G, need ${gCostDisplay.toFixed(4)} $G`
+        `Insufficient $G balance. You have ${parseFloat(humanBalance).toFixed(4)} $G, ` +
+        `need ${gCostDisplay.toFixed(4)} $G`,
       );
     }
-
+ 
     toast({ title: "⏳ Confirm $G transfer in your wallet…" });
     const tx = await gToken.transfer(DROPS_REDEEM_POOL_ADDRESS, gAmountWei);
     toast({ title: "📡 Transfer sent, waiting for confirmation…" });
-
+ 
     const receipt = await tx.wait();
     if (!receipt || receipt.status !== 1) {
       throw new Error("$G transfer transaction failed");
     }
-
+ 
     setGTxHash(tx.hash);
     toast({ title: "✅ $G transferred! Minting your DROPS…" });
-
+ 
+    // ── 4. Backend mint call — unchanged, just add chainId ───────────────────
     const res = await fetch(`${BACKEND_URL}/api/drops/buy`, {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         walletAddress:   wallet,
         dropsAmount:     drops,
         expectedGAmount: gCostDisplay,
         gTxHash:         tx.hash,
+        chainId:         CELO_CHAIN_ID,   // ← always send chainId
       }),
     });
-
+ 
     const data = await res.json();
     if (!res.ok || !data.success) {
       toast({
         title:       "Mint failed",
-        description: data?.detail ?? `Transfer confirmed but minting failed — save this tx: ${tx.hash}`,
-        variant:     "destructive",
+        description: data?.detail ??
+          `Transfer confirmed but minting failed — save this tx: ${tx.hash}`,
+        variant: "destructive",
       });
       setBuyStep("deposit");
       return;
     }
-
+ 
     setBuyResult({ dropsAmount: data.dropsMinted, mintTxHash: data.mintTxHash });
     setBuyStep("done");
     toast({ title: `✅ ${data.dropsMinted} DROPS minted!` });
     fetchBalance();
-
+ 
   } catch (err: any) {
     console.error("handleConfirmDeposit error:", err);
     const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error";
@@ -475,6 +472,7 @@ const handleConfirmDeposit = async () => {
   }
 };
 
+
 const handleBuyReset = () => {
   setDropsToBuy("");
   setGCostDisplay(null);
@@ -484,30 +482,34 @@ const handleBuyReset = () => {
   /** Get a signer-backed contract instance, ensuring Celo network */
   const getSignerContract = useCallback(async () => {
     if (typeof window === "undefined" || !window.ethereum) {
-      throw new Error("No wallet detected. Please install MetaMask or a Celo-compatible wallet.");
+      throw new Error("No wallet detected.");
     }
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const switched = await ensureCeloNetwork(provider);
-    if (!switched) throw new Error("Please switch your wallet to Celo Mainnet.");
-    const signer = await provider.getSigner();
+    // ensureCorrectNetwork from useWallet() — handles embedded + external
+    const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
+    if (!switched) throw new Error("Please connect your wallet to continue.");
+ 
+    const provider  = new ethers.BrowserProvider(window.ethereum);
+    const signer    = await provider.getSigner();
     const signerAddr = await signer.getAddress();
     if (signerAddr.toLowerCase() !== wallet) {
       throw new Error(`Wallet mismatch. Connect as ${walletAddress} to perform admin actions.`);
     }
     return new ethers.Contract(DROPS_REDEEM_POOL_ADDRESS, DROPS_REDEEM_POOL_ABI, signer);
-  }, [wallet, walletAddress]);
+  }, [wallet, walletAddress, ensureCorrectNetwork, DROPS_REDEEM_POOL_ADDRESS]);
+ 
 
   /** Read-only contract (no wallet needed) */
   const getReadContract = useCallback(() => {
-    const provider = new ethers.JsonRpcProvider(CELO_RPC);
+    const cfg      = getChainConfig(CELO_CHAIN_ID);
+    const provider = new ethers.JsonRpcProvider(cfg.rpcUrl);
     return new ethers.Contract(DROPS_REDEEM_POOL_ADDRESS, DROPS_REDEEM_POOL_ABI, provider);
-  }, []);
+  }, [DROPS_REDEEM_POOL_ADDRESS]);
 
   // ── Fetch helpers ──────────────────────────────────────────────────────────
   const fetchBalance = useCallback(async () => {
     setLoadingBalance(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/drops/balance/${wallet}`);
+      const res = await fetch(`${BACKEND_URL}/api/drops/balance/${wallet}?chainId=${CELO_CHAIN_ID}`);
       const data = await res.json();
       if (data.success) setBalance(data);
     } catch { /* silent */ }
@@ -517,7 +519,7 @@ const handleBuyReset = () => {
   const fetchStakes = useCallback(async () => {
     setLoadingStakes(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/drops/stakes/${wallet}`);
+      const res = await fetch(`${BACKEND_URL}/api/drops/stakes/${wallet}?chainId=${CELO_CHAIN_ID}`);
       const data = await res.json();
       if (data.success) setStakes(data.stakes ?? []);
     } catch { /* silent */ }
@@ -734,7 +736,7 @@ const handleBuyReset = () => {
       const res = await fetch(`${BACKEND_URL}/api/drops/redeem`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: wallet, dropsAmount: amt }),
+         body: JSON.stringify({ walletAddress: wallet, dropsAmount: amt, chainId: CELO_CHAIN_ID }),
       });
       const data = await res.json();
       if (data.success) {
@@ -755,7 +757,7 @@ const handleBuyReset = () => {
       const res = await fetch(`${BACKEND_URL}/api/drops/claim-stake`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: wallet, stakeId }),
+        body: JSON.stringify({ walletAddress: wallet, stakeId, chainId: CELO_CHAIN_ID }),
       });
       const data = await res.json();
       if (data.success) {

@@ -1,201 +1,249 @@
 "use client"
-
 import { useState, useEffect, useRef } from "react";
+
 import { Button } from "@/components/ui/button";
+
 import { WalletConnectButton } from "@/components/wallet-connect";
+
 import { NetworkSelector, MiniNetworkIndicator } from "@/components/network-selector";
+
 import Link from "next/link";
-import { Menu, X, ChevronLeft, Plus, RefreshCw } from "lucide-react"; // Added RefreshCw icon
+
+import { Menu, X, ChevronLeft, Plus, RefreshCw } from "lucide-react";
+
 import { useRouter, usePathname } from "next/navigation";
+
 import { useWallet } from "@/hooks/use-wallet";
+
 import { cn } from "@/lib/utils";
+
 import { ThemeToggle } from "./theme";
+export function Header({
 
-export function Header({ 
-  pageTitle, 
-  hideAction = false,
-  isDashboard = false,
-  onRefresh, // 💡 Added
-  loading = false // 💡 Added
-}: { 
-  pageTitle: string; 
-  hideAction?: boolean; 
-  isDashboard?: boolean;
-  onRefresh?: () => void | Promise<void>; // 💡 Added type
-  loading?: boolean; // 💡 Added type
+pageTitle,
+
+hideAction = false,
+
+isDashboard = false,
+
+onRefresh,
+
+loading = false
+
+}: {
+
+pageTitle: string;
+
+hideAction?: boolean;
+
+isDashboard?: boolean;
+
+onRefresh?: () => void | Promise<void>;
+
+loading?: boolean;
+
 }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const router = useRouter();
-  const pathname = usePathname();
-  const { isConnected } = useWallet();
+const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const isDashboardPage = isDashboard || 
-    pageTitle.includes('Dashboard') || 
-    pageTitle.includes('Space') || 
-    pathname.includes('/dashboard');
+const menuRef = useRef<HTMLDivElement>(null);
 
-  const getActionConfig = () => {
-    if (pathname.includes('/quest')) return { label: "Create Quest", path: "/quest/create-quest" };
-    if (pathname.includes('/quiz')) return { label: "Create Quiz", path: "/quiz/create-quiz" };
-    if (pathname.includes('/spinner')) return { label: "Create Spinner", path: "/spinner/create" };
-    if (pathname.includes('/challenge')) return { label: "Create Challenge", path: "/challenge/create" };
-    return { label: "Create Faucet", path: "/faucet/create-faucet" };
-  };
+const buttonRef = useRef<HTMLButtonElement>(null);
+const router = useRouter();
 
-  const action = getActionConfig();
+const pathname = usePathname();
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+const { isConnected } = useWallet();
+const isDashboardPage = isDashboard ||
 
-  return (
-    <>
-      <header className="fixed top-0 left-0 right-0 z-[100] w-full bg-background/80 backdrop-blur-md border-b border-border px-4 sm:px-10 h-20">
-        <div className="max-w-[1400px] mx-auto h-full flex items-center justify-between">
-          
-          {/* Left Section */}
-          <div className="flex items-center gap-4">       
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => router.back()}
-              className="rounded-full text-gray-400 hover:text-white transition-colors flex" 
-              title="Go Back"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-           
-            <h1 className="text-sm sm:text-base font-black tracking-tighter uppercase text-foreground/90">
-              <Link href="/" className="hover:text-blue-500 transition-colors">
-                {pageTitle}
-              </Link>
-            </h1>
+pageTitle.includes('Dashboard') ||
 
-            {/* 💡 Visual Feedback for Refreshing */}
-            {onRefresh && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onRefresh()}
-                disabled={loading}
-                className={cn("hidden md:flex items-center gap-2", loading && "opacity-50")}
-              >
-                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-                <span className="text-[10px] font-bold uppercase tracking-widest">
-                  {loading ? "Syncing" : "Refresh"}
-                </span>
-              </Button>
-            )}
-          </div>
-        
-          {/* Desktop Actions */}
-          <div className="hidden lg:flex items-center gap-4">
-            <ThemeToggle/>
-            {isConnected && (
-              <>
-                <NetworkSelector />
-                {!hideAction && !pathname.includes('/quest') && (
-                  <Button
-                      onClick={() => router.push(action.path)}
-                      variant="default"
-                      className="text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-transform"
-                  >
-                      <Plus className="mr-2 h-4 w-4" />
-                      {action.label}
-                  </Button>
-                )}
-              </>
-            )}
-            <div className="border-l border-border pl-4">
-               <WalletConnectButton />
-            </div>
-          </div>
+pageTitle.includes('Space') ||
 
-          {/* Mobile Actions */}
-          <div className="lg:hidden flex items-center gap-2 sm:gap-3">
-            <ThemeToggle />
-            <WalletConnectButton />
+pathname.includes('/dashboard');
+const isFaucetPage = pathname.includes('/faucet');
 
-            {isConnected && (
-              <MiniNetworkIndicator className="h-9 w-9 border border-border rounded-md" />
-            )}
+const isQuizPage = pathname.includes('/quiz');
 
-            {!isDashboardPage && isConnected &&
-              !pathname.includes('/quiz') && !pathname.includes('/challenge') && (
-              <Button
-                ref={buttonRef}
-                variant="outline"
-                size="sm"
-                className="px-2 border-border shadow-sm"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              >
-                {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              </Button>
-            )}
+const isQuestPage = pathname.includes('/quest');
 
-            {!hideAction &&
-              !pathname.includes('/quest') &&
-              !pathname.includes('/quiz') &&
-              !pathname.includes('/challenge') && (
-              <Button
-                  onClick={() => router.push(action.path)}
-                  variant="default"
-                  className="text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-transform"
-              >
-                  <Plus className="mr-2 h-4 w-4" />
-                  {action.label}
-              </Button>
-            )}
-          </div>
-        </div>
+const isChallengePage = pathname.includes('/challenge');
+const getActionConfig = () => {
 
-        {/* Mobile Menu Overlay */}
-        {isMenuOpen && (
-          <div
-            ref={menuRef}
-            className="lg:hidden absolute top-[79px] left-0 w-full bg-background border-b border-border p-6 flex flex-col gap-4 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200"
+if (isQuestPage) return { label: "Create Quest", path: "/quest/create-quest" };
+
+if (isQuizPage) return { label: "Create Quiz", path: "/quiz/create-quiz" };
+
+if (pathname.includes('/spinner')) return { label: "Create Spinner", path: "/spinner/create" };
+
+if (isChallengePage) return { label: "Create Challenge", path: "/challenge/create" };
+
+return { label: "Create Faucet", path: "/faucet/create-faucet" };
+
+};
+const action = getActionConfig();
+useEffect(() => {
+
+function handleClickOutside(event: MouseEvent) {
+
+if (menuRef.current && !menuRef.current.contains(event.target as Node) &&
+
+buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
+
+setIsMenuOpen(false);
+
+}
+
+}
+
+document.addEventListener("mousedown", handleClickOutside);
+
+return () => document.removeEventListener("mousedown", handleClickOutside);
+
+}, []);
+return (
+
+<>
+
+<header className="fixed top-0 left-0 right-0 z-[100] w-full bg-background/80 backdrop-blur-md border-b border-border px-4 sm:px-10 h-20">
+
+<div className="max-w-[1400px] mx-auto h-full flex items-center justify-between">
+      {/* Left Section */}
+      <div className="flex items-center gap-4">       
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => router.back()}
+          className="rounded-full text-gray-400 hover:text-white transition-colors flex" 
+          title="Go Back"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+       
+        <h1 className="text-sm sm:text-base font-black tracking-tighter uppercase text-foreground/90">
+          <Link href="/" className="hover:text-blue-500 transition-colors">
+            {pageTitle}
+          </Link>
+        </h1>
+
+        {/* Desktop Refresh — left of title area, hidden on mobile */}
+        {onRefresh && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onRefresh()}
+            disabled={loading}
+            className={cn("hidden md:flex items-center gap-2", loading && "opacity-50")}
           >
-            {/* 💡 Mobile Refresh Option */}
-            {onRefresh && (
-              <Button 
-                variant="outline" 
-                onClick={() => { onRefresh(); setIsMenuOpen(false); }}
-                disabled={loading}
-                className="w-full text-xs font-bold uppercase tracking-widest py-6"
-              >
-                <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
-                Refresh Data
-              </Button>
-            )}
-
-            {isConnected && !hideAction && (
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            <span className="text-[10px] font-bold uppercase tracking-widest">
+              {loading ? "Syncing" : "Refresh"}
+            </span>
+          </Button>
+        )}
+      </div>
+    
+      {/* Desktop Actions */}
+      <div className="hidden lg:flex items-center gap-4">
+        <ThemeToggle/>
+        {isConnected && (
+          <>
+            <NetworkSelector />
+            {!hideAction && !isQuestPage && (
               <Button
-                onClick={() => {
-                  router.push(action.path);
-                  setIsMenuOpen(false);
-                }}
+                onClick={() => router.push(action.path)}
                 variant="default"
-                className="w-full text-xs font-bold uppercase tracking-widest py-6"
+                className="text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-transform"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 {action.label}
               </Button>
             )}
-          </div>
+          </>
         )}
-      </header>
-      
-      <div className="h-20" />
-    </>
-  );
+        <div className="border-l border-border pl-4">
+          <WalletConnectButton />
+        </div>
+      </div>
+
+      {/* Mobile Actions */}
+      <div className="lg:hidden flex items-center gap-2 sm:gap-3">
+        <ThemeToggle />
+
+        {/* Mobile Refresh — icon only, shown on faucet page */}
+        {onRefresh && isFaucetPage && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onRefresh()}
+            disabled={loading}
+            className={cn("flex items-center", loading && "opacity-50")}
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
+        )}
+
+        <WalletConnectButton />
+
+        {isConnected && (
+          <MiniNetworkIndicator className="h-9 w-9 border border-border rounded-md" />
+        )}
+
+        {/* Hamburger — shown on faucet; hidden on quiz/challenge */}
+        {!isDashboardPage && isConnected &&
+          !isQuizPage && !isChallengePage && (
+          <Button
+            ref={buttonRef}
+            variant="outline"
+            size="sm"
+            className="px-2 border-border shadow-sm"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
+            {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+        )}
+
+        {/* Direct Create button — hidden on faucet/quest/quiz/challenge */}
+        {!hideAction &&
+          !isQuestPage &&
+          !isQuizPage &&
+          !isChallengePage &&
+          !isFaucetPage && (
+          <Button
+            onClick={() => router.push(action.path)}
+            variant="default"
+            className="text-xs font-bold uppercase tracking-widest px-6 shadow-md hover:scale-105 transition-transform"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {action.label}
+          </Button>
+        )}
+      </div>
+    </div>
+
+    {/* Mobile Menu Overlay */}
+    {isMenuOpen && (
+      <div
+        ref={menuRef}
+        className="lg:hidden absolute top-[79px] left-0 w-full bg-background border-b border-border p-6 flex flex-col gap-4 shadow-xl animate-in fade-in slide-in-from-top-2 duration-200"
+      >
+        {isConnected && !hideAction && (
+          <Button
+            onClick={() => {
+              router.push(action.path);
+              setIsMenuOpen(false);
+            }}
+            variant="default"
+            className="w-full text-xs font-bold uppercase tracking-widest py-6"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {action.label}
+          </Button>
+        )}
+      </div>
+    )}
+  </header>
+</>
+);
+
 }

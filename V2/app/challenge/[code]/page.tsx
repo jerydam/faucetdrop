@@ -778,9 +778,12 @@ useEffect(() => {
   }, [userWalletAddress, sendWhenReady]);
 
   const handleReady = useCallback(() => {
-    if (!userWalletAddress) return;
-    sendWhenReady({ type: "ready", walletAddress: userWalletAddress });
-  }, [userWalletAddress, sendWhenReady]);
+  if (!userWalletAddress) return;
+  sendWhenReady({ type: "ready", walletAddress: userWalletAddress });
+  setPlayers(prev => prev.map(p =>
+    p.walletAddress.toLowerCase() === myWallet ? { ...p, ready: true } : p
+  ));
+}, [userWalletAddress, myWallet, sendWhenReady]);
 
   // ── WS refs ───────────────────────────────────────────────────────────────
   const usernameRef = useRef(username);
@@ -1117,7 +1120,9 @@ const handleStake = useCallback(async () => {
         sendStakeConfirmed(txHash);
         return;
       }
- 
+      setPlayers(prev => prev.map(p =>
+        p.walletAddress.toLowerCase() === myWallet ? { ...p, txVerified: true } : p
+      ));
       toast.success("DROPS staked! Click Ready to start.");
     } catch (err: any) {
       toast.dismiss("confirm-burn");

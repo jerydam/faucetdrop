@@ -210,96 +210,104 @@ const handleExportSeed = async () => {
   }
 }
 
-    const fetchBalances = async () => {
-        if (!currentAddress || !chainId) return;
-        setLoadingBalances(true);
+    const DROPS_USD_PRICE = 0.01  // 100 DROPS = $1
 
-        const configTokens = NETWORK_TOKENS[chainId] || [];
+const fetchBalances = async () => {
+    if (!currentAddress || !chainId) return;
+    setLoadingBalances(true);
+
+    const configTokens = NETWORK_TOKENS[chainId] || [];
+
+    try {
+        let defaultBalances = configTokens.map(token => ({
+            token,
+            balance: "0",
+            balanceFormatted: "0",
+            usdValue: "0.00"
+        }));
+
+        let backendData: BackendResponse | null = null;
 
         try {
-            let defaultBalances = configTokens.map(token => ({
-                token,
-                balance: "0",
-                balanceFormatted: "0",
-                usdValue: "0.00"
-            }));
-
-            let backendData: BackendResponse | null = null;
-
-            try {
-                const response = await fetch(`https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/api/wallet/balances/${chainId}/${currentAddress}`);
-                if (response.ok) {
-                    backendData = await response.json();
-                }
-            } catch (backendError) {
-                console.warn("Backend balance fetch failed, defaulting to 0s:", backendError);
+            const response = await fetch(`https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/api/wallet/balances/${chainId}/${currentAddress}`);
+            if (response.ok) {
+                backendData = await response.json();
             }
-
-            // Fetch prices from CoinGecko safely
-            let prices: Record<string, { usd: number }> = {};
-            try {
-                const uniqueSymbols = [...new Set(configTokens.map(t => t.symbol))];
-                const coingeckoIds = uniqueSymbols
-                    .map(symbol => COINGECKO_IDS[symbol])
-                    .filter(Boolean)
-                    .join(',');
-
-                if (coingeckoIds) {
-                    const priceResponse = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoIds}&vs_currencies=usd`);
-                    if (priceResponse.ok) {
-                        prices = await priceResponse.json();
-                    }
-                }
-            } catch (priceError) {
-                console.warn("CoinGecko price fetch failed, defaulting to $0.00:", priceError);
-            }
-
-            let totalValue = 0;
-
-            const finalBalances = defaultBalances.map((item) => {
-                const backendMatch = backendData?.balances?.find(
-                    (b) => b.token_address.toLowerCase() === item.token.address.toLowerCase()
-                );
-
-                const rawBalance = backendMatch ? backendMatch.balance : "0";
-                const formatted = formatUnits(BigInt(rawBalance), item.token.decimals);
-
-                const coingeckoId = COINGECKO_IDS[item.token.symbol];
-                const price = coingeckoId && prices[coingeckoId] ? prices[coingeckoId].usd : 0;
-
-                const balanceNum = parseFloat(formatted);
-                const usdValue = (balanceNum * price).toFixed(2);
-
-                totalValue += parseFloat(usdValue);
-
-                return {
-                    token: item.token,
-                    balance: rawBalance,
-                    balanceFormatted: formatted,
-                    usdValue: usdValue
-                };
-            });
-
-            setBalances(finalBalances);
-            setTotalUsdValue(totalValue.toFixed(2));
-
-        } catch (error) {
-            console.error("Critical fetch error:", error);
-            const fallbackBalances = configTokens.map(token => ({
-                token, balance: "0", balanceFormatted: "0", usdValue: "0.00"
-            }));
-            setBalances(fallbackBalances);
-            setTotalUsdValue("0.00");
-
-            toast({
-                title: "Network Error",
-                description: "Showing local tokens with 0 balances. Refresh to try again.",
-                variant: "destructive"
-            });
-        } finally {
-            setLoadingBalances(false);
+        } catch (backendError) {
+            console.warn("Backend balance fetch failed, defaulting to 0s:", backendError);
         }
-    };
+
+        // Fetch prices from CoinGecko safely
+        let prices: Record<string, { usd: number }> = {};
+        try {
+            const uniqueSymbols = [...new Set(configTokens.map(t => t.symbol))];
+            const coingeckoIds = uniqueSymbols
+                .filter(symbol => symbol !== "DROPS")  // exclude DROPS from CoinGecko
+                .map(symbol => COINGECKO_IDS[symbol])
+                .filter(Boolean)
+                .join(',');
+
+            if (coingeckoIds) {
+                const priceResponse = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoIds}&vs_currencies=usd`);
+                if (priceResponse.ok) {
+                    prices = await priceResponse.json();
+                }
+            }
+        } catch (priceError) {
+            console.warn("CoinGecko price fetch failed, defaulting to $0.00:", priceError);
+        }
+
+        let totalValue = 0;
+
+        const finalBalances = defaultBalances.map((item) => {
+            const backendMatch = backendData?.balances?.find(
+                (b) => b.token_address.toLowerCase() === item.token.address.toLowerCase()
+            );
+
+            const rawBalance = backendMatch ? backendMatch.balance : "0";
+            const formatted = formatUnits(BigInt(rawBalance), item.token.decimals);
+            const balanceNum = parseFloat(formatted);
+
+            // ── DROPS: hardcoded at 100 DROPS = $1 ───────────────────────
+            let price: number;
+            if (item.token.symbol === "DROPS") {
+                price = DROPS_USD_PRICE;
+            } else {
+                const coingeckoId = COINGECKO_IDS[item.token.symbol];
+                price = coingeckoId && prices[coingeckoId] ? prices[coingeckoId].usd : 0;
+            }
+
+            const usdValue = (balanceNum * price).toFixed(2);
+            totalValue += parseFloat(usdValue);
+
+            return {
+                token: item.token,
+                balance: rawBalance,
+                balanceFormatted: formatted,
+                usdValue: usdValue
+            };
+        });
+
+        setBalances(finalBalances);
+        setTotalUsdValue(totalValue.toFixed(2));
+
+    } catch (error) {
+        console.error("Critical fetch error:", error);
+        const fallbackBalances = configTokens.map(token => ({
+            token, balance: "0", balanceFormatted: "0", usdValue: "0.00"
+        }));
+        setBalances(fallbackBalances);
+        setTotalUsdValue("0.00");
+
+        toast({
+            title: "Network Error",
+            description: "Showing local tokens with 0 balances. Refresh to try again.",
+            variant: "destructive"
+        });
+    } finally {
+        setLoadingBalances(false);
+    }
+};
 
     
     const handleSend = async () => {
@@ -490,8 +498,16 @@ const handleExportSeed = async () => {
                                     {balances.map((item, index) => (
                                         <button
                                             key={index}
-                                            onClick={() => { setSelectedToken(item.token); setActiveTab("send"); }}
-                                            className="w-full flex items-center justify-between p-2 sm:p-3 rounded-lg border hover:bg-muted/50 transition-colors group"
+                                            onClick={() => {
+                                                if (item.token.symbol === "DROPS") return;
+                                                setSelectedToken(item.token);
+                                                setActiveTab("send");
+                                            }}
+                                            className={`w-full flex items-center justify-between p-2 sm:p-3 rounded-lg border transition-colors group
+                                                ${item.token.symbol === "DROPS"
+                                                    ? "opacity-60 cursor-not-allowed"
+                                                    : "hover:bg-muted/50 cursor-pointer"
+                                                }`}
                                         >
                                             <div className="flex items-center gap-2 sm:gap-3">
                                                 <img src={item.token.logoUrl || undefined} alt={item.token.symbol} className="h-8 w-8 sm:h-10 sm:w-10 rounded-full" />
@@ -526,13 +542,20 @@ const handleExportSeed = async () => {
                                             <button
                                                 key={index}
                                                 onClick={() => setSelectedToken(token)}
-                                                disabled={!balance || parseFloat(balance.balanceFormatted) === 0}
-                                                className={`w-full flex items-center gap-2 sm:gap-3 p-2 rounded-md transition-colors ${!balance || parseFloat(balance.balanceFormatted) === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted'} ${selectedToken?.address === token.address ? 'bg-primary/10 border border-primary' : 'border border-transparent'}`}
+                                                disabled={!balance || parseFloat(balance.balanceFormatted) === 0 || token.symbol === "DROPS"}
+                                                className={`w-full flex items-center gap-2 sm:gap-3 p-2 rounded-md transition-colors ${
+                                                    !balance || parseFloat(balance.balanceFormatted) === 0 || token.symbol === "DROPS"
+                                                        ? 'opacity-50 cursor-not-allowed' 
+                                                        : 'hover:bg-muted'
+                                                } ${selectedToken?.address === token.address ? 'bg-primary/10 border border-primary' : 'border border-transparent'}`}
                                             >
                                                 <img src={token.logoUrl || undefined} alt={token.symbol} className="h-6 w-6 sm:h-8 sm:w-8 rounded-full" />
                                                 <div className="text-left flex-1">
                                                     <p className="font-medium text-xs sm:text-sm">{token.symbol}</p>
                                                     {balance && <p className="text-[10px] sm:text-xs text-muted-foreground">{parseFloat(balance.balanceFormatted).toFixed(4)}</p>}
+                                                    {token.symbol === "DROPS" && (
+                                                        <p className="text-[10px] text-muted-foreground">Not transferable</p>
+                                                    )}
                                                 </div>
                                                 {selectedToken?.address === token.address && <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />}
                                             </button>

@@ -46,7 +46,7 @@ export const CHAINS: Record<number, ChainConfig> = {
       quizHub: (process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ??
         "0xB19aA952c94faB37716131D8C3d9Bb564e6253Ed") as `0x${string}`,
       dropsRedeemPool: (process.env.NEXT_PUBLIC_DROPS_REDEEM_POOL_CELO ??
-        "0xc4123AA125bEF4aFB89974431ba0d080a22552D3") as `0x${string}`,
+        "0xBC6D8A2D7CB11273834f46e8ad9047ca46AA4553") as `0x${string}`,
       gToken: "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A",
     },
     enabled: true,

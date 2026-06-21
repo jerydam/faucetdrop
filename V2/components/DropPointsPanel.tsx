@@ -247,63 +247,65 @@ export default function DropPointsPanel() {
   // ── Cooldown from contract (connected chain only) ─────────────────────────
 
   const fetchCooldownFromContract = useCallback(async (addr: string) => {
-  const COOLDOWN = 24 * 60 * 60 * 1000;
+    const COOLDOWN = 24 * 60 * 60 * 1000;
 
-  const results = await Promise.allSettled(
-    CHAIN_IDS.map(async (id) => {
-      const cfg = CHAIN_CONFIG[id];
-      const provider = getProvider(id);
-      const contract = new Contract(cfg.contract, POINTS_ABI, provider);
+    const results = await Promise.allSettled(
+        CHAIN_IDS.map(async (id) => {
+            const cfg = CHAIN_CONFIG[id];
+            const provider = getProvider(id);
+            const contract = new Contract(cfg.contract, POINTS_ABI, provider);
 
-      const eligible: boolean = await contract.canClaim(addr);
-      if (eligible) return null; // no recent claim on this chain
+            try {
+                const eligible: boolean = await contract.canClaim(addr);
+                if (eligible) return null;
 
-      // Find last mint timestamp on this chain
-      const filter = contract.filters.Transfer(
-        "0x0000000000000000000000000000000000000000",
-        addr
-      );
-      const currentBlock = await provider.getBlockNumber();
-      const fromBlock = Math.max(0, currentBlock - 100_000);
-      const logs = await contract.queryFilter(filter, fromBlock, "latest");
+                const filter = contract.filters.Transfer(
+                    "0x0000000000000000000000000000000000000000",
+                    addr
+                );
+                const currentBlock = await provider.getBlockNumber();
+                const fromBlock = Math.max(0, currentBlock - 100_000);
+                const logs = await contract.queryFilter(filter, fromBlock, "latest");
 
-      if (logs.length > 0) {
-        const lastLog = logs[logs.length - 1] as any;
-        const block = await provider.getBlock(lastLog.blockNumber);
-        if (block) return block.timestamp * 1000; // ms
-      }
+                if (logs.length > 0) {
+                    const lastLog = logs[logs.length - 1] as any;
+                    const block = await provider.getBlock(lastLog.blockNumber);
+                    if (block) return block.timestamp * 1000;
+                }
 
-      // canClaim returned false but no logs found — assume recent
-      return Date.now() - 23 * 60 * 60 * 1000;
-    })
-  );
+                return Date.now() - 23 * 60 * 60 * 1000;
+            } catch {
+                return null;
+            }
+        })
+    );
 
-  // Find the most recent claim timestamp across all chains
-  let mostRecentClaimMs: number | null = null;
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value !== null) {
-      if (mostRecentClaimMs === null || result.value > mostRecentClaimMs) {
-        mostRecentClaimMs = result.value;
-      }
+    let mostRecentClaimMs: number | null = null;
+    for (const result of results) {
+        if (result.status === "fulfilled" && result.value !== null) {
+            if (mostRecentClaimMs === null || result.value > mostRecentClaimMs) {
+                mostRecentClaimMs = result.value;
+            }
+        }
     }
-  }
 
-  if (mostRecentClaimMs === null) {
-    setCanClaim(true);
-    setRemainingMs(0);
-    setLastClaimAt(null);
-  } else {
-    const rem = COOLDOWN - (Date.now() - mostRecentClaimMs);
-    if (rem > 0) {
-      setCanClaim(false);
-      setRemainingMs(rem);
-      setLastClaimAt(new Date(mostRecentClaimMs).toISOString());
+    if (mostRecentClaimMs === null) {
+        setCanClaim(true);
+        setRemainingMs(0);
+        setLastClaimAt(null);
     } else {
-      setCanClaim(true);
-      setRemainingMs(0);
-      setLastClaimAt(null);
+        const rem = COOLDOWN - (Date.now() - mostRecentClaimMs);
+        const claimIso = new Date(mostRecentClaimMs).toISOString();
+        if (rem > 0) {
+            setCanClaim(false);
+            setRemainingMs(rem);
+            setLastClaimAt(claimIso);  // ← this triggers the ticker effect
+        } else {
+            setCanClaim(true);
+            setRemainingMs(0);
+            setLastClaimAt(null);
+        }
     }
-  }
 }, []);
 
   // ── Chain balances ────────────────────────────────────────────────────────

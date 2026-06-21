@@ -1599,7 +1599,7 @@
                             {isMature && !stake.claimed ? <Unlock className="h-4 w-4 text-green-500" />
                               : stake.claimed ? <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                               : <Lock className="h-4 w-4 text-muted-foreground" />}
-                            <span className="text-sm font-bold text-foreground">{fmt(stake.drops_staked, 0)} DROPS staked</span>
+                            <span className="text-sm font-bold text-foreground">{stake.drops_staked != null ? fmt(stake.drops_staked, 0) : "—"} DROPS staked</span>
                           </div>
                           <Badge variant={stake.claimed ? "secondary" : isMature ? "default" : "outline"} className="text-xs">
                             {stake.claimed ? "Claimed" : isMature ? "Ready" : timeUntil(stake.matures_at)}
@@ -1607,7 +1607,7 @@
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-center">
                           {[
-                            { label: "Value",  val: `$${fmt(stake.g_value_usd, 2)}` },
+                            { label: "Value",  val: stake.g_value_usd != null ? `$${fmt(stake.g_value_usd, 2)}` : "—" },
                             { label: "APY",    val: `${stake.apy_pct}%`, accent: true },
                             { label: "Earned", val: stake.g_earned != null ? `${fmt(stake.g_earned, 4)} $G` : "—", green: true },
                           ].map(({ label, val, accent, green }) => (

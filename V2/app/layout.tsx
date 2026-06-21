@@ -13,6 +13,8 @@ import { Footer } from "@/components/footer"
 import { SubscriptionModalProvider } from "@/components/subscribe"
 import { useVisitTracker } from "@/hooks/use-visit-tracker"
 import { Providers } from "@/components/privyProvider"
+import { PinSetupModal } from "@/components/pin-modal"
+import { PinEntryModal } from "@/components/pin-entry"
 // ── Solana wallet adapter ─────────────────────────────────────────────────────
 import {
   ConnectionProvider,
@@ -142,6 +144,8 @@ export default function RootLayout({
             >
             <SolanaProviders>
               <NetworkProvider>
+                <PinSetupModal />
+                <PinEntryModal />
                 <WalletProvider >
                   <SignerBootstrap />
                   <PrivyImportModal

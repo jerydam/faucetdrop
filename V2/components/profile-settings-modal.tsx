@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { PinSetupModal } from "@/components/pin-modal"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useWallet, openOAuthPopup, type SocialProvider } from "@/components/wallet-provider"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
-  Loader2, Save, Upload, Check, Edit2, RefreshCw,
+  Loader2, Save, Upload, Check, Edit2, RefreshCw,ShieldCheck,
   CheckCircle2, Link as LinkIcon, Wallet, Copy, ExternalLink, X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -373,7 +374,7 @@ export function ProfileSettingsModal() {
   const [extXlmAddr,      setExtXlmAddr]      = useState<string | null>(null)
   const [freshLinkedSocials, setFreshLinkedSocials] = useState<string[] | null>(null)
   const [unlinkedOverride,   setUnlinkedOverride]   = useState<SocialProvider[] | null>(null)
-
+  const [securityModalOpen, setSecurityModalOpen] = useState(false)
   const [formData, setFormData] = useState<UserProfile>({
     wallet_address: "", username: "", bio: "", avatar_url: "",
   })
@@ -690,6 +691,7 @@ export function ProfileSettingsModal() {
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-background shadow-sm hover:bg-muted">
@@ -805,7 +807,32 @@ export function ProfileSettingsModal() {
                     : "Link your Solana and Stellar wallets to receive multi-chain rewards."}
                 </p>
               </div>
-
+               {isEmbedded && (
+                <div className="border-t pt-6">
+                  <h4 className="mb-3 text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <ShieldCheck className="h-3 w-3" /> Wallet Security
+                  </h4>
+                  <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-semibold">PIN / Passkey</span>
+                      <span className="text-xs">
+                        {session?.hasPIN
+                          ? <span className="text-green-600 flex items-center gap-1 font-medium">
+                              <CheckCircle2 className="h-3 w-3" /> Protected
+                            </span>
+                          : <span className="text-muted-foreground">Not set up</span>}
+                      </span>
+                    </div>
+                    <Button size="sm" variant="outline" type="button"
+                      onClick={() => { setIsOpen(false); setSecurityModalOpen(true) }}>
+                      {session?.hasPIN ? "Change" : "Set up"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3 px-1">
+                    Required before signing transactions — separate from your login.
+                  </p>
+                </div>
+              )}     
               {/* Verified Connections */}
               <div className="border-t pt-6">
                 <h4 className="mb-4 text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
@@ -836,5 +863,11 @@ export function ProfileSettingsModal() {
         </div>
       </DialogContent>
     </Dialog>
+    <PinSetupModal
+      open={securityModalOpen}
+      onClose={() => setSecurityModalOpen(false)}
+      onDone={() => { setSecurityModalOpen(false); setIsOpen(true) }}  
+    />
+  </>
   )
 }

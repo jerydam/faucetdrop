@@ -10,20 +10,24 @@ import { useWallet, API_BASE } from "@/components/wallet-provider"
 import { usePrivy, useWallets, useExportWallet, useLoginWithOAuth } from "@privy-io/react-auth"
 import { toast } from "sonner"
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Types
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 type Step = "intro" | "export-prompt" | "paste" | "importing" | "done" | "error"
 
 export interface PrivyImportModalProps {
-  onDismiss?: () => void
-  onComplete?: (result: { evmAddress?: string; solanaAddress?: string; stellarAddress?: string }) => void
+  onDismiss?:  () => void
+  onComplete?: (result: {
+    evmAddress?:     string
+    solanaAddress?:  string
+    stellarAddress?: string
+  }) => void
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Provider map
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 const PROVIDER_MAP: Record<string, "google" | "twitter" | "discord" | "github"> = {
   google:  "google",
@@ -32,9 +36,9 @@ const PROVIDER_MAP: Record<string, "google" | "twitter" | "discord" | "github"> 
   github:  "github",
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 function clearImportSessionKey(address?: string | null) {
   if (typeof window === "undefined") return
@@ -47,16 +51,13 @@ function clearImportSessionKey(address?: string | null) {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Main component
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProps) {
-  // ── Always read session live — never destructure token/address at top level
-  //    to avoid stale-closure bugs when a different user logs in mid-flow.
   const { session, isConnected, clearLegacy } = useWallet()
 
-  // Derive everything from live `session` so we never hold stale references
   const legacyFound     = session?.legacyFound      ?? false
   const legacyEvmAddr   = session?.legacyEvmAddress ?? null
   const legacySolAddr   = session?.legacySolAddress ?? null
@@ -91,8 +92,6 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
 
   const attemptedRef      = useRef(false)
   const textareaRef       = useRef<HTMLTextAreaElement>(null)
-  // Track the address that was active when the modal opened so we can detect
-  // a mid-flow account switch and reset cleanly.
   const mountedAddressRef = useRef<string | null>(null)
 
   const embeddedWallet = wallets.find(w => w.walletClientType === "privy")
@@ -109,19 +108,18 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
     const key = `privy_import_dismissed_${session.address}`
     if (sessionStorage.getItem(key)) return
     const t = setTimeout(() => {
-      mountedAddressRef.current = session.address   // record who opened it
+      mountedAddressRef.current = session.address
       setOpen(true)
     }, 1500)
     return () => clearTimeout(t)
   }, [isConnected, legacyFound, session?.address])
 
-  // ── CRITICAL: reset modal when a different account logs in mid-flow ──────
+  // ── Reset when a different account logs in mid-flow ──────────────────────
   useEffect(() => {
     if (!session?.address) return
-    if (mountedAddressRef.current === null) return  // modal hasn't opened yet
+    if (mountedAddressRef.current === null) return
 
     if (mountedAddressRef.current !== session.address) {
-      // A different user took over — wipe all state and close silently
       setOpen(false)
       setStep("intro")
       setMnemonic("")
@@ -137,7 +135,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
     }
   }, [session?.address])
 
-  // ── Auto-focus textarea whenever paste step is active ───────────────────
+  // ── Auto-focus textarea on paste step ───────────────────────────────────
   useEffect(() => {
     if (step === "paste") {
       const t = setTimeout(() => textareaRef.current?.focus(), 80)
@@ -212,8 +210,6 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
   }
 
   const handleImport = async () => {
-    // ── Read token and address live from session at call time —
-    //    never from a stale closure captured at render.
     const currentToken   = session?.token
     const currentAddress = session?.address
 
@@ -236,10 +232,10 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
 
     try {
       const res = await fetch(`${API_BASE}/wallet/import-privy-seed`, {
-        method: "POST",
+        method:  "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization:  `Bearer ${currentToken}`,   // live token, not stale
+          Authorization:  `Bearer ${currentToken}`,
         },
         body: JSON.stringify({ mnemonic: value.toLowerCase() }),
       })
@@ -258,8 +254,8 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
       clearLegacy()
       toast.success("Wallet imported successfully!")
       onComplete?.({
-        evmAddress:    data.evm_address,
-        solanaAddress: data.solana_address,
+        evmAddress:     data.evm_address,
+        solanaAddress:  data.solana_address,
         stellarAddress: data.stellar_address,
       })
       window.dispatchEvent(new CustomEvent("privyImportComplete", { detail: data }))
@@ -275,8 +271,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
 
   if (!open || !mounted) return null
 
-  // ── Styles (system color tokens) ─────────────────────────────────────────
-  // Accent switched from Privy purple to blue to match the rest of the app.
+  // ── Style tokens ─────────────────────────────────────────────────────────
   const S = {
     overlay: {
       background:     "rgba(0,0,0,0.6)",
@@ -310,10 +305,10 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
       background: "var(--muted, rgba(255,255,255,0.06))",
       border:     "1px solid var(--border, rgba(255,255,255,0.08))",
     } as React.CSSProperties,
-    success:  { color: "var(--chart-2, #22c55e)" }                      as React.CSSProperties,
-    warning:  { color: "var(--chart-4, #f59e0b)" }                      as React.CSSProperties,
-    danger:   { color: "var(--destructive, #ef4444)" }                   as React.CSSProperties,
-    muted:    { color: "var(--muted-foreground, rgba(255,255,255,0.45))" } as React.CSSProperties,
+    success: { color: "var(--chart-2, #22c55e)" }                         as React.CSSProperties,
+    warning: { color: "var(--chart-4, #f59e0b)" }                         as React.CSSProperties,
+    danger:  { color: "var(--destructive, #ef4444)" }                     as React.CSSProperties,
+    muted:   { color: "var(--muted-foreground, rgba(255,255,255,0.45))" } as React.CSSProperties,
   }
 
   return createPortal(
@@ -326,7 +321,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
         className="relative w-full max-w-[400px] rounded-2xl overflow-hidden"
         style={S.card}
       >
-        {/* Close button — hidden during importing or when import is mandatory */}
+        {/* Close button — hidden during import or when seed import is mandatory */}
         {step !== "importing" && !needsSeedImport && (
           <button
             onClick={dismiss}
@@ -341,7 +336,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
 
         <div className="p-6">
 
-          {/* ── Intro ──────────────────────────────────────────────────── */}
+          {/* ── Intro ────────────────────────────────────────────────── */}
           {step === "intro" && (
             <>
               <div className="mb-6 text-center">
@@ -390,7 +385,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
             </>
           )}
 
-          {/* ── Export prompt ─────────────────────────────────────────── */}
+          {/* ── Export prompt ──────────────────────────────────────── */}
           {step === "export-prompt" && (
             <>
               <div className="mb-5 text-center">
@@ -495,9 +490,6 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                 )}
               </div>
 
-              {/* Skip-to-paste for users who already have it copied —
-                  made larger/more prominent per feedback, since this is a
-                  real primary action for anyone who already copied their phrase. */}
               <button
                 className="w-full py-3.5 rounded-xl text-sm font-medium mb-2 transition-opacity hover:opacity-90"
                 style={S.btnGhost}
@@ -515,7 +507,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
             </>
           )}
 
-          {/* ── Paste ─────────────────────────────────────────────────── */}
+          {/* ── Paste ──────────────────────────────────────────────── */}
           {step === "paste" && (
             <>
               <div className="mb-4 flex items-center gap-3">
@@ -533,7 +525,6 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                 </div>
               </div>
 
-              {/* Clarifier so people don't confuse this with a platform password/PIN field */}
               <div
                 className="flex items-start gap-2 rounded-lg px-3 py-2 mb-3 text-[11px] leading-relaxed"
                 style={{ ...S.chip, ...S.warning }}
@@ -546,7 +537,6 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                 </span>
               </div>
 
-              {/* Banner shown only when arriving here right after export */}
               {justExported && (
                 <div
                   className="flex items-center gap-2 rounded-lg px-3 py-2 mb-3 text-[11px]"
@@ -566,7 +556,9 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
                 className="w-full px-3 py-2.5 rounded-xl text-xs font-mono resize-none mb-3 focus:outline-none transition-colors"
                 style={{
                   ...S.input,
-                  boxShadow: mnemonic ? "0 0 0 1px var(--ring, rgba(37,99,235,0.5))" : undefined,
+                  boxShadow: mnemonic
+                    ? "0 0 0 1px var(--ring, rgba(37,99,235,0.5))"
+                    : undefined,
                 }}
                 autoComplete="off"
                 autoCorrect="off"
@@ -602,16 +594,18 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
             </>
           )}
 
-          {/* ── Importing ─────────────────────────────────────────────── */}
+          {/* ── Importing ──────────────────────────────────────────── */}
           {step === "importing" && (
             <div className="text-center py-10">
               <Loader2 className="animate-spin mx-auto mb-4" size={32} style={S.muted} />
-              <p className="text-sm" style={{ color: "var(--foreground, #fafafa)" }}>Importing your wallet…</p>
+              <p className="text-sm" style={{ color: "var(--foreground, #fafafa)" }}>
+                Importing your wallet…
+              </p>
               <p className="text-xs mt-2" style={S.muted}>Deriving EVM · Solana · Stellar</p>
             </div>
           )}
 
-          {/* ── Done ──────────────────────────────────────────────────── */}
+          {/* ── Done ───────────────────────────────────────────────── */}
           {step === "done" && (
             <div className="text-center py-4">
               <div
@@ -639,7 +633,7 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
             </div>
           )}
 
-          {/* ── Error ─────────────────────────────────────────────────── */}
+          {/* ── Error ──────────────────────────────────────────────── */}
           {step === "error" && (
             <div className="text-center py-6">
               <div
@@ -662,9 +656,9 @@ export function PrivyImportModal({ onDismiss, onComplete }: PrivyImportModalProp
   )
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 function Btn({
   children,
@@ -674,18 +668,20 @@ function Btn({
   style,
   className = "",
 }: {
-  children:  React.ReactNode
-  onClick?:  () => void
-  disabled?: boolean
-  primary?:  boolean
-  style:     React.CSSProperties
+  children:   React.ReactNode
+  onClick?:   () => void
+  disabled?:  boolean
+  primary?:   boolean
+  style:      React.CSSProperties
   className?: string
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-opacity ${disabled ? "opacity-40 cursor-not-allowed" : "hover:opacity-90"} ${className}`}
+      className={`w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-opacity ${
+        disabled ? "opacity-40 cursor-not-allowed" : "hover:opacity-90"
+      } ${className}`}
       style={style}
     >
       {children}
@@ -705,9 +701,7 @@ function AddressChip({ addr, chipStyle }: { addr: string; chipStyle: React.CSSPr
 }
 
 function AddressRow({
-  label,
-  addr,
-  chipStyle,
+  label, addr, chipStyle,
 }: {
   label:     string
   addr:      string
@@ -724,9 +718,7 @@ function AddressRow({
 }
 
 function AddressResult({
-  label,
-  addr,
-  chipStyle,
+  label, addr, chipStyle,
 }: {
   label:     string
   addr:      string

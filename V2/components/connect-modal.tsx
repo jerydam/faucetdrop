@@ -1,14 +1,13 @@
 "use client"
 
-import { useState, useEffect,useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { useWallet, type SocialProvider, API_BASE } from "./wallet-provider"
 import { X, Loader2, ChevronRight, Shield, Fingerprint } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { createAppClient, viemConnector } from "@farcaster/auth-client"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Real brand icons (inline SVG, currentColor-friendly where possible)
+// Brand icons
 // ─────────────────────────────────────────────────────────────────────────────
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -65,13 +64,21 @@ function FarcasterIcon({ className }: { className?: string }) {
   )
 }
 
-const SOCIALS: { id: SocialProvider; label: string; Icon: (props: { className?: string }) => JSX.Element; color: string; bg: string }[] = [
-  { id: "google",    label: "Google",    Icon: GoogleIcon,    color: "#EA4335", bg: "rgba(234,67,53,0.08)"  },
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SOCIALS: {
+  id: SocialProvider
+  label: string
+  Icon: (props: { className?: string }) => JSX.Element
+  color: string
+  bg: string
+}[] = [
+  { id: "google",    label: "Google",    Icon: GoogleIcon,    color: "#EA4335", bg: "rgba(234,67,53,0.08)"   },
   { id: "twitter",   label: "Twitter/X", Icon: XIcon,         color: "#FFFFFF", bg: "rgba(255,255,255,0.08)" },
   { id: "github",    label: "GitHub",    Icon: GithubIcon,    color: "#E5E5E5", bg: "rgba(255,255,255,0.10)" },
-  { id: "discord",   label: "Discord",   Icon: DiscordIcon,   color: "#5865F2", bg: "rgba(88,101,242,0.08)" },
-  { id: "telegram",  label: "Telegram",  Icon: TelegramIcon,  color: "#2AABEE", bg: "rgba(42,171,238,0.08)" },
-  { id: "farcaster", label: "Farcaster", Icon: FarcasterIcon, color: "#855DCD", bg: "rgba(133,93,205,0.08)" },
+  { id: "discord",   label: "Discord",   Icon: DiscordIcon,   color: "#5865F2", bg: "rgba(88,101,242,0.08)"  },
+  { id: "telegram",  label: "Telegram",  Icon: TelegramIcon,  color: "#2AABEE", bg: "rgba(42,171,238,0.08)"  },
+  { id: "farcaster", label: "Farcaster", Icon: FarcasterIcon, color: "#855DCD", bg: "rgba(133,93,205,0.08)"  },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,17 +94,24 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
     isConnecting,
   } = useWallet()
 
-  const [tab,       setTab]       = useState<"social" | "wallet">("social")
-  const [loadingId, setLoadingId] = useState<string | null>(null)
-  const [mounted,   setMounted]   = useState(false)
+  const [tab,                setTab]                = useState<"social" | "wallet">("social")
+  const [loadingId,          setLoadingId]          = useState<string | null>(null)
+  const [mounted,            setMounted]            = useState(false)
   const [showTelegramWidget, setShowTelegramWidget] = useState(false)
   const telegramContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => setMounted(true), [])
 
-  // ── Social login ──────────────────────────────────────────────────────────
+  // Reset tab when modal opens
+  useEffect(() => {
+    if (showModal) setTab("social")
+  }, [showModal])
+
+  // ── Standard OAuth social login ───────────────────────────────────────────
   const handleSocial = useCallback((providerId: SocialProvider) => {
-    if (providerId === "passkey") { handlePasskey(); return }
+    if (providerId === "passkey")   { handlePasskey();       return }
+    if (providerId === "telegram")  { handleTelegramPopup(); return }
+    if (providerId === "farcaster") { handleFarcaster();     return }
 
     setLoadingId(providerId)
 
@@ -108,10 +122,7 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
       "width=500,height=700,left=200,top=100",
     )
 
-    if (!w) {
-      setLoadingId(null)
-      return
-    }
+    if (!w) { setLoadingId(null); return }
 
     let settled = false
 
@@ -122,17 +133,12 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
       if (cancelled) setLoadingId(null)
     }
 
-    // Single interval: always check session first, then check closed.
-    // This avoids the race where window.close() fires and we mistake it
-    // for a user cancellation before the session poll resolves.
     const pollId = setInterval(async () => {
-      // ── 1. Always try the session endpoint first ──────────────────────
       try {
         const res  = await fetch(`${API_BASE}/api/auth/session?state=${state}`)
         if (res.ok) {
           const data = await res.json()
           if (data.status === "done") {
-            // Success — popup already closed itself via window.close()
             settle(false)
             setLoadingId(null)
             try { w.close() } catch {}
@@ -141,238 +147,210 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
             return
           }
         }
-      } catch {
-        // Network hiccup — keep polling
-      }
+      } catch { /* keep polling */ }
 
-      // ── 2. Only treat closed popup as cancellation if session is still
-      //       pending (i.e. we didn't just succeed above) ─────────────────
       try {
-        if (w.closed) settle(true)   // user manually closed without completing OAuth
-      } catch {
-        // Cross-origin frame check can throw — ignore
-      }
+        if (w.closed) settle(true)
+      } catch { /* cross-origin */ }
     }, 800)
 
-    // Safety timeout: 3 minutes
     setTimeout(() => {
       try { w.close() } catch {}
       settle(true)
     }, 180_000)
   }, [connectSocial, onSuccess])
-  // In ConnectModal, replace handleSocial for "telegram":
 
-  const handleTelegramInline = useCallback(() => {
-  setShowTelegramWidget(true)
-}, [])
+  // ── Telegram popup ────────────────────────────────────────────────────────
+  const handleTelegramPopup = useCallback(() => {
+    setLoadingId("telegram")
 
-// Replace the existing telegram useEffect with this:
-useEffect(() => {
-  if (!showTelegramWidget) return
+    const popup = window.open(
+      "/auth/telegram",
+      "telegram_login",
+      "width=400,height=500,left=200,top=100",
+    )
 
-  // Wait for the container div to be in the DOM
-  const timeout = setTimeout(() => {
-    if (!telegramContainerRef.current) return
-
-    ;(window as any).onTelegramAuth = async (telegramUser: Record<string, unknown>) => {
-      setLoadingId("telegram")
-      setShowTelegramWidget(false)
+    const handler = async (e: MessageEvent) => {
+      if (e.data?.type !== "telegram_auth") return
+      window.removeEventListener("message", handler)
       try {
-        await connectSocial("telegram", JSON.stringify(telegramUser))
+        await connectSocial("telegram", JSON.stringify(e.data.user))
         onSuccess?.()
-      } catch (err: any) {
+      } catch (err) {
         console.error("Telegram login failed:", err)
       } finally {
         setLoadingId(null)
       }
     }
 
-    const script = document.createElement("script")
-    script.src = "https://telegram.org/js/telegram-widget.js?22"
-    script.setAttribute("data-telegram-login", "FaucetDrops")
-    script.setAttribute("data-size", "large")
-    script.setAttribute("data-onauth", "onTelegramAuth(user)")
-    script.setAttribute("data-request-access", "write")
-    script.async = true
-    telegramContainerRef.current.appendChild(script)
-  }, 50) // small delay to let React render the container div
+    window.addEventListener("message", handler)
 
-  return () => {
-    clearTimeout(timeout)
-    delete (window as any).onTelegramAuth
-    if (telegramContainerRef.current) telegramContainerRef.current.innerHTML = ""
-  }
-}, [showTelegramWidget, connectSocial, onSuccess])
-const handleTelegramPopup = useCallback(() => {
-  setLoadingId("telegram")
-  
-  const popup = window.open(
-    "/auth/telegram", // your TelegramCallback page route
-    "telegram_login",
-    "width=400,height=500,left=200,top=100"
-  )
+    const poll = setInterval(() => {
+      if (popup?.closed) {
+        clearInterval(poll)
+        window.removeEventListener("message", handler)
+        setLoadingId(null)
+      }
+    }, 500)
+  }, [connectSocial, onSuccess])
 
-  const handler = async (e: MessageEvent) => {
-    if (e.data?.type !== "telegram_auth") return
-    window.removeEventListener("message", handler)
+  // ── Telegram inline widget (fallback) ────────────────────────────────────
+  useEffect(() => {
+    if (!showTelegramWidget) return
+
+    const timeout = setTimeout(() => {
+      if (!telegramContainerRef.current) return
+
+      ;(window as any).onTelegramAuth = async (telegramUser: Record<string, unknown>) => {
+        setLoadingId("telegram")
+        setShowTelegramWidget(false)
+        try {
+          await connectSocial("telegram", JSON.stringify(telegramUser))
+          onSuccess?.()
+        } catch (err: any) {
+          console.error("Telegram login failed:", err)
+        } finally {
+          setLoadingId(null)
+        }
+      }
+
+      const script = document.createElement("script")
+      script.src = "https://telegram.org/js/telegram-widget.js?22"
+      script.setAttribute("data-telegram-login", "FaucetDrops")
+      script.setAttribute("data-size", "large")
+      script.setAttribute("data-onauth", "onTelegramAuth(user)")
+      script.setAttribute("data-request-access", "write")
+      script.async = true
+      telegramContainerRef.current.appendChild(script)
+    }, 50)
+
+    return () => {
+      clearTimeout(timeout)
+      delete (window as any).onTelegramAuth
+      if (telegramContainerRef.current) telegramContainerRef.current.innerHTML = ""
+    }
+  }, [showTelegramWidget, connectSocial, onSuccess])
+
+  // ── Farcaster ─────────────────────────────────────────────────────────────
+  const handleFarcaster = useCallback(async () => {
+    setLoadingId("farcaster")
     try {
-      await connectSocial("telegram", JSON.stringify(e.data.user))
-      onSuccess?.()
-    } catch (err) {
-      console.error("Telegram login failed:", err)
+      const { createAppClient, viemConnector } = await import("@farcaster/auth-client")
+
+      const appClient = createAppClient({
+        relay:    "https://relay.farcaster.xyz",
+        ethereum: viemConnector(),
+      })
+
+      const nonce = crypto.randomUUID().replace(/-/g, "")
+
+      const { data: channel, isError: channelError } = await appClient.createChannel({
+        siweUri: window.location.origin,
+        domain:  window.location.hostname,
+        nonce,
+      })
+
+      if (channelError || !channel?.channelToken) {
+        throw new Error("Failed to create Farcaster channel")
+      }
+
+      const popup = window.open(
+        channel.url,
+        "farcaster_login",
+        "width=460,height=680,left=200,top=100",
+      )
+
+      await new Promise<void>((resolve, reject) => {
+        let settled = false
+
+        const settle = (err?: Error) => {
+          if (settled) return
+          settled = true
+          clearInterval(pollId)
+          clearInterval(closedPoll)
+          if (err) reject(err)
+          else resolve()
+        }
+
+        const pollId = setInterval(async () => {
+          try {
+            const { data: status, isError } = await appClient.watchStatus({
+              channelToken: channel.channelToken,
+            })
+            if (isError) { settle(new Error("Farcaster auth failed")); return }
+            if (status?.state === "completed") {
+              try { popup?.close() } catch {}
+              settle()
+              await connectSocial("farcaster", JSON.stringify({
+                fid:      status.fid,
+                username: status.username ?? "",
+              }))
+              onSuccess?.()
+            }
+          } catch { /* keep polling */ }
+        }, 1500)
+
+        const closedPoll = setInterval(() => {
+          if (popup?.closed) settle(new Error("cancelled"))
+        }, 500)
+
+        setTimeout(() => {
+          try { popup?.close() } catch {}
+          settle(new Error("Farcaster sign-in timed out"))
+        }, 180_000)
+      })
+    } catch (err: any) {
+      if (err?.message !== "cancelled") console.error("Farcaster error:", err)
     } finally {
       setLoadingId(null)
     }
-  }
-
-  window.addEventListener("message", handler)
-
-  // Cleanup if popup closed without auth
-  const poll = setInterval(() => {
-    if (popup?.closed) {
-      clearInterval(poll)
-      window.removeEventListener("message", handler)
-      setLoadingId(null)
-    }
-  }, 500)
-}, [connectSocial, onSuccess])
-
-const handleFarcaster = useCallback(async () => {
-  setLoadingId("farcaster")
-  try {
-    const { createAppClient, viemConnector } = await import("@farcaster/auth-client")
-    
-    const appClient = createAppClient({
-      relay: "https://relay.farcaster.xyz",
-      ethereum: viemConnector(),
-    })
-
-    const nonce = crypto.randomUUID().replace(/-/g, "")
-
-    // createChannel is the correct method in auth-client v0.x+
-    const { data: channel, isError: channelError } = await appClient.createChannel({
-      siweUri: window.location.origin,
-      domain:  window.location.hostname,
-      nonce,
-    })
-
-    if (channelError || !channel?.channelToken) {
-      throw new Error("Failed to create Farcaster channel")
-    }
-
-    // Open the Warpcast QR/deeplink in a popup
-    const popup = window.open(
-      channel.url,
-      "farcaster_login",
-      "width=460,height=680,left=200,top=100",
-    )
-
-    // Poll for completion
-    await new Promise<void>((resolve, reject) => {
-      let settled = false
-
-      const settle = (err?: Error) => {
-        if (settled) return
-        settled = true
-        clearInterval(pollId)
-        clearInterval(closedPoll)
-        if (err) reject(err)
-        else resolve()
-      }
-
-      const pollId = setInterval(async () => {
-        try {
-          const { data: status, isError } = await appClient.watchStatus({
-            channelToken: channel.channelToken,
-          })
-
-          if (isError) { settle(new Error("Farcaster auth failed")); return }
-
-          if (status?.state === "completed") {
-            try { popup?.close() } catch {}
-            settle()
-
-            await connectSocial("farcaster", JSON.stringify({
-              fid:      status.fid,
-              username: status.username ?? "",
-            }))
-            onSuccess?.()
-          }
-        } catch { /* keep polling */ }
-      }, 1500)
-
-      // Detect manual popup close
-      const closedPoll = setInterval(() => {
-        if (popup?.closed) settle(new Error("cancelled"))
-      }, 500)
-
-      // 3 min timeout
-      setTimeout(() => {
-        try { popup?.close() } catch {}
-        settle(new Error("Farcaster sign-in timed out"))
-      }, 180_000)
-    })
-
-  } catch (err: any) {
-    if (err?.message !== "cancelled") {
-      console.error("Farcaster error:", err)
-    }
-  } finally {
-    setLoadingId(null)
-  }
-}, [connectSocial, onSuccess])
+  }, [connectSocial, onSuccess])
 
   // ── Passkey ───────────────────────────────────────────────────────────────
   const handlePasskey = useCallback(async () => {
-  setLoadingId("passkey")
-  try {
-    // First try authenticating with an existing passkey
-    let credentialId: string
-
+    setLoadingId("passkey")
     try {
-      const assertion = await navigator.credentials.get({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          timeout: 60000,
-          userVerification: "required",
-        },
-      }) as PublicKeyCredential
-      credentialId = assertion.id
-    } catch {
-      // No existing passkey — register a new one
-      const credential = await navigator.credentials.create({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          rp: { name: "FaucetDrops", id: window.location.hostname },
-          user: {
-            id: crypto.getRandomValues(new Uint8Array(16)),
-            name: `user-${Date.now()}`,
-            displayName: "FaucetDrops User",
-          },
-          pubKeyCredParams: [
-            { alg: -7, type: "public-key" },   // ES256
-            { alg: -257, type: "public-key" },  // RS256
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: "platform",
+      let credentialId: string
+      try {
+        const assertion = await navigator.credentials.get({
+          publicKey: {
+            challenge:        crypto.getRandomValues(new Uint8Array(32)),
+            timeout:          60000,
             userVerification: "required",
-            residentKey: "required", // required for discoverable credentials
           },
-        },
-      }) as PublicKeyCredential
-      credentialId = credential.id
+        }) as PublicKeyCredential
+        credentialId = assertion.id
+      } catch {
+        const credential = await navigator.credentials.create({
+          publicKey: {
+            challenge: crypto.getRandomValues(new Uint8Array(32)),
+            rp:        { name: "FaucetDrops", id: window.location.hostname },
+            user: {
+              id:          crypto.getRandomValues(new Uint8Array(16)),
+              name:        `user-${Date.now()}`,
+              displayName: "FaucetDrops User",
+            },
+            pubKeyCredParams: [
+              { alg: -7,   type: "public-key" },
+              { alg: -257, type: "public-key" },
+            ],
+            authenticatorSelection: {
+              authenticatorAttachment: "platform",
+              userVerification:        "required",
+              residentKey:             "required",
+            },
+          },
+        }) as PublicKeyCredential
+        credentialId = credential.id
+      }
+      await connectSocial("passkey", credentialId)
+      onSuccess?.()
+    } catch (err: any) {
+      if (!err?.message?.includes("cancel")) console.error("Passkey error:", err)
+    } finally {
+      setLoadingId(null)
     }
-
-    await connectSocial("passkey", credentialId)
-    onSuccess?.()
-  } catch (err: any) {
-    if (!err?.message?.includes("cancel")) {
-      console.error("Passkey error:", err)
-    }
-  } finally {
-    setLoadingId(null)
-  }
-}, [connectSocial, onSuccess])
+  }, [connectSocial, onSuccess])
 
   // ── External wallet ───────────────────────────────────────────────────────
   const handleExternalWallet = useCallback(async (wallet: typeof detectedWallets[number]) => {
@@ -387,6 +365,8 @@ const handleFarcaster = useCallback(async () => {
 
   if (!showModal || !mounted) return null
 
+  const hasEthereum = typeof window !== "undefined" && !!(window as any)?.ethereum
+
   return createPortal(
     <div
       className="fixed inset-0 z-[999] flex items-center justify-center p-4"
@@ -396,12 +376,11 @@ const handleFarcaster = useCallback(async () => {
       <div
         className="relative w-full max-w-[400px] overflow-hidden rounded-2xl"
         style={{
-          background:  "var(--modal-bg, #0f0f13)",
-          border:      "1px solid rgba(255,255,255,0.07)",
-          boxShadow:   "0 32px 80px rgba(0,0,0,0.6)",
+          background: "var(--modal-bg, #0f0f13)",
+          border:     "1px solid rgba(255,255,255,0.07)",
+          boxShadow:  "0 32px 80px rgba(0,0,0,0.6)",
         }}
       >
-
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4">
           <div>
@@ -439,39 +418,39 @@ const handleFarcaster = useCallback(async () => {
           {tab === "social" ? (
             <>
               {SOCIALS.map(s => (
-  <SocialButton
-    key={s.id}
-    label={s.label}
-    Icon={s.Icon}
-    color={s.color}
-    bg={s.bg}
-    loading={loadingId === s.id}
-    disabled={!!loadingId}
-    onClick={() => {
-  if (s.id === "telegram") { handleTelegramPopup(); return }
-  if (s.id === "farcaster") { handleFarcaster(); return }
-  handleSocial(s.id)
-}}
-  />
-))}
-{showTelegramWidget && (
-  <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex flex-col items-center gap-3">
-    <div className="flex items-center justify-between w-full">
-      <span className="text-xs text-white/50">Sign in with Telegram</span>
-      <button onClick={() => setShowTelegramWidget(false)} className="text-white/40 hover:text-white">
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
-    <div ref={telegramContainerRef} />
-    <p className="text-[11px] text-white/30 text-center">
-      Telegram will open its own secure window to verify your account.
-    </p>
-  </div>
-)}
+                <SocialButton
+                  key={s.id}
+                  label={s.label}
+                  Icon={s.Icon}
+                  color={s.color}
+                  bg={s.bg}
+                  loading={loadingId === s.id}
+                  disabled={!!loadingId}
+                  onClick={() => handleSocial(s.id)}
+                />
+              ))}
+
+              {showTelegramWidget && (
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex flex-col items-center gap-3">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs text-white/50">Sign in with Telegram</span>
+                    <button
+                      onClick={() => setShowTelegramWidget(false)}
+                      className="text-white/40 hover:text-white"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div ref={telegramContainerRef} />
+                  <p className="text-[11px] text-white/30 text-center">
+                    Telegram will open its own secure window to verify your account.
+                  </p>
+                </div>
+              )}
 
               {/* Passkey */}
               <button
-                onClick={handlePasskey}
+                onClick={() => handleSocial("passkey")}
                 disabled={!!loadingId}
                 className={cn(
                   "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
@@ -481,7 +460,7 @@ const handleFarcaster = useCallback(async () => {
                 )}
               >
                 <span
-                  className="h-8 w-8 rounded-lg flex items-center justify-center text-lg"
+                  className="h-8 w-8 rounded-lg flex items-center justify-center"
                   style={{ background: "rgba(255,255,255,0.06)" }}
                 >
                   {loadingId === "passkey"
@@ -491,45 +470,73 @@ const handleFarcaster = useCallback(async () => {
                 <span className="flex-1 text-left">Passkey</span>
                 <ChevronRight className="h-4 w-4 opacity-30" />
               </button>
+
+              {/* PIN notice — shown while any social login is in progress */}
+              {loadingId && loadingId !== "passkey" && (
+                <div
+                  className="flex items-start gap-2 px-3 py-2.5 rounded-xl"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
+                >
+                  <Shield className="h-3.5 w-3.5 text-white/30 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-white/35 leading-relaxed">
+                    You'll set a transaction PIN right after connecting to protect your funds.
+                  </p>
+                </div>
+              )}
             </>
           ) : (
-  <>
-    {!(window as any)?.ethereum ? (
-      <div className="text-center py-8">
-        <div className="text-3xl mb-3">🔍</div>
-        <p className="text-sm text-white/50">No wallet detected</p>
-        <p className="text-xs text-white/30 mt-1">Install MetaMask or another browser wallet</p>
-      </div>
-    ) : (
-      <button
-        onClick={() => handleExternalWallet({ name: "Browser Wallet", icon: "🌐", provider: (window as any).ethereum })}
-        disabled={!!loadingId}
-        className={cn(
-          "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
-          "text-white/80 hover:text-white",
-          "border border-white/10 hover:border-white/20 hover:bg-white/5",
-          loadingId === "Browser Wallet" && "opacity-60 pointer-events-none",
-        )}
-      >
-        <span
-          className="h-8 w-8 rounded-lg flex items-center justify-center text-xl"
-          style={{ background: "rgba(255,255,255,0.06)" }}
-        >
-          {loadingId === "Browser Wallet" ? <Loader2 className="h-4 w-4 animate-spin" /> : "🌐"}
-        </span>
-        <span className="flex-1 text-left">Connect Wallet</span>
-        <ChevronRight className="h-4 w-4 opacity-30" />
-      </button>
-    )}
-  </>
-)}
+            <>
+              {!hasEthereum ? (
+                <div className="text-center py-8">
+                  <div
+                    className="h-12 w-12 rounded-xl flex items-center justify-center mx-auto mb-3"
+                    style={{ background: "rgba(255,255,255,0.05)" }}
+                  >
+                    <span className="text-2xl">🔍</span>
+                  </div>
+                  <p className="text-sm text-white/50 font-medium">No wallet detected</p>
+                  <p className="text-xs text-white/30 mt-1.5 leading-relaxed">
+                    Install MetaMask, Rabby, or another browser wallet,<br />then refresh this page.
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={() =>
+                    handleExternalWallet({
+                      name:     "Browser Wallet",
+                      icon:     "🌐",
+                      provider: (window as any).ethereum,
+                    })
+                  }
+                  disabled={!!loadingId}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                    "text-white/80 hover:text-white",
+                    "border border-white/10 hover:border-white/20 hover:bg-white/5",
+                    loadingId === "Browser Wallet" && "opacity-60 pointer-events-none",
+                  )}
+                >
+                  <span
+                    className="h-8 w-8 rounded-lg flex items-center justify-center text-xl"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                  >
+                    {loadingId === "Browser Wallet"
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : "🌐"}
+                  </span>
+                  <span className="flex-1 text-left">Connect Wallet</span>
+                  <ChevronRight className="h-4 w-4 opacity-30" />
+                </button>
+              )}
+            </>
+          )}
         </div>
 
         {/* Footer */}
         <div className="px-6 pb-5 flex items-center gap-2">
           <Shield className="h-3 w-3 text-white/20 shrink-0" />
           <p className="text-[11px] text-white/25 leading-tight">
-            Social logins create a self-custodial wallet.
+            Social logins create a self-custodial wallet secured by a transaction PIN.
           </p>
         </div>
       </div>
@@ -543,8 +550,13 @@ const handleFarcaster = useCallback(async () => {
 function SocialButton({
   label, Icon, color, bg, loading, disabled, onClick,
 }: {
-  label: string; Icon: (props: { className?: string }) => JSX.Element; color: string; bg: string
-  loading: boolean; disabled: boolean; onClick: () => void
+  label:    string
+  Icon:     (props: { className?: string }) => JSX.Element
+  color:    string
+  bg:       string
+  loading:  boolean
+  disabled: boolean
+  onClick:  () => void
 }) {
   return (
     <button
@@ -561,7 +573,9 @@ function SocialButton({
         className="h-8 w-8 rounded-lg flex items-center justify-center"
         style={{ background: color + "18" }}
       >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+        {loading
+          ? <Loader2 className="h-4 w-4 animate-spin" />
+          : <Icon className="h-4 w-4" />}
       </span>
       <span className="flex-1 text-left" style={{ color: "rgba(255,255,255,0.85)" }}>
         Continue with {label}

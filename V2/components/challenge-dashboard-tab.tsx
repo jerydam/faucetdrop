@@ -95,17 +95,17 @@
   }
 
   interface StakePool {
-    id: string;
-    drops_staked: number;
-    g_value_usd: number;
-    apy_pct: number;
-    staked_at: string;
-    matures_at: string;
-    matured: boolean;
-    claimed: boolean;
-    claimed_at: string | null;
-    g_earned: number | null;
-  }
+  id: string;
+  drops_staked: number | null;
+  g_value_usd: number | null;   // ← was non-nullable
+  apy_pct: number;
+  staked_at: string;
+  matures_at: string;
+  matured: boolean;
+  claimed: boolean;
+  claimed_at: string | null;
+  g_earned: number | null;
+}
 
   interface RedeemHistory {
     id: string;
@@ -837,13 +837,14 @@
 
     const data = await res.json();
     if (data.success) {
-        setRedeemResult({
-          playerG:     data.playerG ?? preview.playerG,
-          stakedDrops: data.stakedDrops ?? preview.stakedDrops,
-          apyPct:      data.apyPct ?? preview.apyPct,
-          txHash:      data.txHash,
-          stakeId:     data.stakeId,
-        });
+      console.log("redeem success data:", data);  // ← add this
+      setRedeemResult({
+        playerG:     data.playerG ?? preview.playerG,
+        stakedDrops: data.stakedDrops ?? preview.stakedDrops,
+        apyPct:      data.apyPct ?? preview.apyPct,
+        txHash:      data.txHash,
+        stakeId:     data.stakeId,
+      });
         setRedeemAmount("");
         setRedeemPreview(null);
         fetchBalance();

@@ -196,16 +196,19 @@ function BadgeUnlockedPopup({ onDismiss }: BadgeUnlockedPopupProps) {
   );
 }
 
+const BURN_WINDOW_SECONDS = 2 * 3600; // 2 hours — matches QuizHub contract
+// Keep STALE_WINDOW_SECONDS = 5 * 3600 for DB cleanup only
+
 function usePassiveExpiry(createdAt: number | null, code: string, phase: GamePhase) {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [isExpired,   setIsExpired]   = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const calledRef = useRef(false);
 
-  // Initialise countdown from createdAt
   useEffect(() => {
     if (!createdAt) return;
-    const expiresAt = createdAt + STALE_WINDOW_SECONDS;
+    // Use burn window (2h) for expiry UI, not the 5h stale window
+    const expiresAt = createdAt + BURN_WINDOW_SECONDS;
     const remaining = expiresAt - Math.floor(Date.now() / 1000);
     if (remaining <= 0) {
       setSecondsLeft(0);
@@ -215,10 +218,8 @@ function usePassiveExpiry(createdAt: number | null, code: string, phase: GamePha
     }
   }, [createdAt]);
 
-  // Tick every second
   useEffect(() => {
     if (secondsLeft === null || secondsLeft <= 0) return;
-    // Don't tick during active game — saves CPU, irrelevant then
     if (["question", "reveal", "round_end", "countdown"].includes(phase)) return;
     const t = setInterval(() => {
       setSecondsLeft(prev => {
@@ -232,7 +233,6 @@ function usePassiveExpiry(createdAt: number | null, code: string, phase: GamePha
     return () => clearInterval(t);
   }, [secondsLeft, phase]);
 
-  // When expired AND still in lobby, notify backend once
   const cancelExpired = useCallback(async (walletAddress: string) => {
     if (calledRef.current || isCancelling) return;
     calledRef.current = true;
@@ -248,7 +248,6 @@ function usePassiveExpiry(createdAt: number | null, code: string, phase: GamePha
         toast.error("Challenge expired — any staked DROPS have been refunded.");
       }
     } catch {
-      // non-fatal — WS broadcast will also handle navigation
     } finally {
       setIsCancelling(false);
     }
@@ -278,9 +277,7 @@ function ExpiryBanner({
 }) {
   if (secondsLeft === null) return null;
 
-  // Show banner only when under 30 minutes left or expired
-  const SHOW_THRESHOLD = 30 * 60;
-  if (!isExpired && secondsLeft > SHOW_THRESHOLD) return null;
+  
 
   const hrs  = Math.floor(secondsLeft / 3600);
   const mins = Math.floor((secondsLeft % 3600) / 60);
@@ -294,19 +291,27 @@ function ExpiryBanner({
   const p1 = players[0];
   const p2 = players[1];
 
-  if (compact) {
-    return (
-      <div className={cn(
-        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-black tabular-nums",
-        isExpired
-          ? "border-red-400/50 bg-red-500/10 text-red-500"
-          : "border-amber-400/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-      )}>
-        <Clock className="h-3 w-3 shrink-0" />
-        {isExpired ? "Expired" : timeStr}
-      </div>
-    );
-  }
+  // In ExpiryBanner compact mode, color based on 2h window
+const urgency = isExpired ? "expired"
+  : secondsLeft < 600  ? "critical"   // under 10 min
+  : secondsLeft < 1800 ? "warning"    // under 30 min
+  : "ok";
+
+if (compact) {
+  return (
+    <div className={cn(
+      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-black tabular-nums",
+      urgency === "expired" || urgency === "critical"
+        ? "border-red-400/50 bg-red-500/10 text-red-500"
+        : urgency === "warning"
+        ? "border-amber-400/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        : "border-border bg-muted/30 text-muted-foreground",
+    )}>
+      <Clock className="h-3 w-3 shrink-0" />
+      {isExpired ? "Expired" : timeStr}
+    </div>
+  );
+}
 
   return (
     <div className={cn(

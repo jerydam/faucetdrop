@@ -222,7 +222,7 @@ const BLOCK_LOOKBACK: Record<number, number> = {
 
 export default function DropPointsPanel() {
   const { address, isConnected,  chainId, getActiveSigner } = useWallet();
-  const [checkingCooldown, setCheckingCooldown] = useState(true);
+
   const [activeTab, setActiveTab]       = useState<Tab>("overview");
   const [tabsExpanded, setTabsExpanded] = useState(true); // ← collapse/expand state
   const [isClaiming, setIsClaiming]     = useState(false);
@@ -247,69 +247,63 @@ export default function DropPointsPanel() {
   // ── Cooldown from contract (connected chain only) ─────────────────────────
 
   const fetchCooldownFromContract = useCallback(async (addr: string) => {
-    const COOLDOWN = 24 * 60 * 60 * 1000;
-    setCheckingCooldown(true);
+  const COOLDOWN = 24 * 60 * 60 * 1000;
 
-    const results = await Promise.allSettled(
-        CHAIN_IDS.map(async (id) => {
-            const cfg = CHAIN_CONFIG[id];
-            const provider = getProvider(id);
-            const contract = new Contract(cfg.contract, POINTS_ABI, provider);
+  const results = await Promise.allSettled(
+    CHAIN_IDS.map(async (id) => {
+      const cfg = CHAIN_CONFIG[id];
+      const provider = getProvider(id);
+      const contract = new Contract(cfg.contract, POINTS_ABI, provider);
 
-            try {
-                const eligible: boolean = await contract.canClaim(addr);
-                if (eligible) return null;
+      const eligible: boolean = await contract.canClaim(addr);
+      if (eligible) return null; // no recent claim on this chain
 
-                const filter = contract.filters.Transfer(
-                    "0x0000000000000000000000000000000000000000",
-                    addr
-                );
-                const currentBlock = await provider.getBlockNumber();
-                const fromBlock = Math.max(0, currentBlock - 100_000);
-                const logs = await contract.queryFilter(filter, fromBlock, "latest");
+      // Find last mint timestamp on this chain
+      const filter = contract.filters.Transfer(
+        "0x0000000000000000000000000000000000000000",
+        addr
+      );
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock = Math.max(0, currentBlock - 100_000);
+      const logs = await contract.queryFilter(filter, fromBlock, "latest");
 
-                if (logs.length > 0) {
-                    const lastLog = logs[logs.length - 1] as any;
-                    const block = await provider.getBlock(lastLog.blockNumber);
-                    if (block) return block.timestamp * 1000;
-                }
+      if (logs.length > 0) {
+        const lastLog = logs[logs.length - 1] as any;
+        const block = await provider.getBlock(lastLog.blockNumber);
+        if (block) return block.timestamp * 1000; // ms
+      }
 
-                // canClaim false but no logs — assume claimed very recently
-                return Date.now() - 1000;
-            } catch {
-                return null;
-            }
-        })
-    );
+      // canClaim returned false but no logs found — assume recent
+      return Date.now() - 23 * 60 * 60 * 1000;
+    })
+  );
 
-    let mostRecentClaimMs: number | null = null;
-    for (const result of results) {
-        if (result.status === "fulfilled" && result.value !== null) {
-            if (mostRecentClaimMs === null || result.value > mostRecentClaimMs) {
-                mostRecentClaimMs = result.value;
-            }
-        }
+  // Find the most recent claim timestamp across all chains
+  let mostRecentClaimMs: number | null = null;
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value !== null) {
+      if (mostRecentClaimMs === null || result.value > mostRecentClaimMs) {
+        mostRecentClaimMs = result.value;
+      }
     }
+  }
 
-    if (mostRecentClaimMs === null) {
-        setCanClaim(true);
-        setRemainingMs(0);
-        setLastClaimAt(null);
+  if (mostRecentClaimMs === null) {
+    setCanClaim(true);
+    setRemainingMs(0);
+    setLastClaimAt(null);
+  } else {
+    const rem = COOLDOWN - (Date.now() - mostRecentClaimMs);
+    if (rem > 0) {
+      setCanClaim(false);
+      setRemainingMs(rem);
+      setLastClaimAt(new Date(mostRecentClaimMs).toISOString());
     } else {
-        const rem = COOLDOWN - (Date.now() - mostRecentClaimMs);
-        const claimIso = new Date(mostRecentClaimMs).toISOString();
-        if (rem > 0) {
-            setCanClaim(false);
-            setRemainingMs(rem);
-            setLastClaimAt(claimIso);
-        } else {
-            setCanClaim(true);
-            setRemainingMs(0);
-            setLastClaimAt(null);
-        }
+      setCanClaim(true);
+      setRemainingMs(0);
+      setLastClaimAt(null);
     }
-
-    setCheckingCooldown(false);
+  }
 }, []);
 
   // ── Chain balances ────────────────────────────────────────────────────────
@@ -512,29 +506,25 @@ export default function DropPointsPanel() {
 
   useEffect(() => {
     if (!lastClaimAt) {
+      setCanClaim(true);
+      setRemainingMs(0);
+      return;
+    }
+    const COOLDOWN = 24 * 60 * 60 * 1000;
+    const tick = () => {
+      const rem = COOLDOWN - (Date.now() - new Date(lastClaimAt).getTime());
+      if (rem > 0) {
+        setCanClaim(false);
+        setRemainingMs(rem);
+      } else {
         setCanClaim(true);
         setRemainingMs(0);
-        return;
-    }
-
-    const COOLDOWN = 24 * 60 * 60 * 1000;
-
-    const tick = () => {
-        const rem = COOLDOWN - (Date.now() - new Date(lastClaimAt).getTime());
-        if (rem > 0) {
-            setCanClaim(false);
-            setRemainingMs(rem);
-        } else {
-            setCanClaim(true);
-            setRemainingMs(0);
-            setLastClaimAt(null);
-        }
+      }
     };
-
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-}, [lastClaimAt]);
+  }, [lastClaimAt]);
 
   // ── Claim ─────────────────────────────────────────────────────────────────
 
@@ -743,29 +733,27 @@ export default function DropPointsPanel() {
         <div className="relative">
           <ClaimBurst trigger={claimBurst} />
           <motion.button
-    onClick={handleClaim}
-    disabled={isClaiming || !canClaim || !isConnected || checkingCooldown}
-    whileTap={{ scale: 0.97 }}
-    className={`w-full py-3 rounded-xl font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 ${
-        !isConnected || !canClaim || checkingCooldown
-            ? "bg-accent text-muted-foreground cursor-not-allowed border border-border"
-            : isClaiming
-            ? "bg-primary/80 text-primary-foreground cursor-wait"
-            : "bg-primary text-primary-foreground hover:opacity-90 shadow-md hover:shadow-primary/30"
-    }`}
->
-    {isClaiming ? (
-        <><Loader2 size={14} className="animate-spin" /> Processing</>
-    ) : checkingCooldown ? (
-        <><Loader2 size={14} className="animate-spin" /> Checking eligibility…</>
-    ) : !isConnected ? (
-        <><Zap size={14} /> Connect Wallet to Claim</>
-    ) : !canClaim ? (
-        <><Clock size={14} /> {formatCountdown(remainingMs)}</>
-    ) : (
-        <><Zap size={14} /> Claim Daily Drop Points</>
-    )}
-</motion.button>
+            onClick={handleClaim}
+            disabled={isClaiming || !canClaim || !isConnected}
+            whileTap={{ scale: 0.97 }}
+            className={`w-full py-3 rounded-xl font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 ${
+              !isConnected || !canClaim
+                ? "bg-accent text-muted-foreground cursor-not-allowed border border-border"
+                : isClaiming
+                ? "bg-primary/80 text-primary-foreground cursor-wait"
+                : "bg-primary text-primary-foreground hover:opacity-90 shadow-md hover:shadow-primary/30"
+            }`}
+          >
+            {isClaiming ? (
+              <><Loader2 size={14} className="animate-spin" /> Processing</>
+            ) : !isConnected ? (
+              <><Zap size={14} /> Connect Wallet to Claim</>
+            ) : !canClaim ? (
+              <><Clock size={14} /> {formatCountdown(remainingMs)}</>
+            ) : (
+              <><Zap size={14} /> Claim Daily Drop Points</>
+            )}
+          </motion.button>
         </div>
 
         {/* Redeem link */}

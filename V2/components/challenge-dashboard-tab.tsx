@@ -278,6 +278,13 @@
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [loadingMatches, setLoadingMatches] = useState(false);
     const [loadingOnChain, setLoadingOnChain] = useState(false);
+    const [redeemResult, setRedeemResult] = useState<{
+  playerG: number;
+  stakedDrops: number;
+  apyPct: number;
+  txHash: string;
+  stakeId: string;
+} | null>(null);
 
     // ── Inner tab ──────────────────────────────────────────────────────────────
     type InnerTab = "overview" | "redeem" | "pools" | "history" | "buy" | "admin";
@@ -830,16 +837,19 @@
 
     const data = await res.json();
     if (data.success) {
-      toast({
-        title: "✅ Redeemed!",
-        description: `${fmt(data.playerG ?? preview.playerG, 4)} $G sent to your wallet.`,
-      });
-      setRedeemAmount("");
-      setRedeemPreview(null);
-      fetchBalance();
-      fetchStakes();
-      fetchHistory();
-    } else {
+        setRedeemResult({
+          playerG:     data.playerG ?? preview.playerG,
+          stakedDrops: data.stakedDrops ?? preview.stakedDrops,
+          apyPct:      data.apyPct ?? preview.apyPct,
+          txHash:      data.txHash,
+          stakeId:     data.stakeId,
+        });
+        setRedeemAmount("");
+        setRedeemPreview(null);
+        fetchBalance();
+        fetchStakes();
+        fetchHistory();
+      }else {
       toast({
         title: "Redeem failed",
         description: data.detail ?? "Unknown error",
@@ -1246,6 +1256,75 @@
             </Card>
           </div>
         )}
+        {/* ── Redeem Success Modal ─────────────────────────────────────────── */}
+{redeemResult && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+    onClick={() => setRedeemResult(null)}
+  >
+    <div
+      className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-sm p-6 space-y-5"
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="text-center space-y-2">
+        <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
+          <CheckCircle2 className="h-8 w-8 text-green-500" />
+        </div>
+        <h2 className="text-lg font-black text-foreground">Redemption Complete!</h2>
+        <p className="text-xs text-muted-foreground">Your DROPS have been converted to $G</p>
+      </div>
+
+      {/* Stats */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/50">
+          <span className="text-sm text-muted-foreground font-medium">$G sent to wallet</span>
+          <span className="text-sm font-black text-green-600 dark:text-green-400">
+            +{fmt(redeemResult.playerG, 4)} $G
+          </span>
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
+          <span className="text-sm text-muted-foreground font-medium">Staked for 30 days</span>
+          <span className="text-sm font-black text-foreground">
+            {fmt(redeemResult.stakedDrops, 0)} DROPS
+          </span>
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
+          <span className="text-sm text-muted-foreground font-medium">Stake APY</span>
+          <span className="text-sm font-black text-primary">{redeemResult.apyPct}%</span>
+        </div>
+      </div>
+
+      {/* Tx link */}
+      <a
+        href={celoScanTx(redeemResult.txHash)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-primary transition-colors"
+      >
+        <ExternalLink className="h-3 w-3" />
+        {shortAddr(redeemResult.txHash)}
+      </a>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={() => { setRedeemResult(null); setInnerTab("pools"); }}
+        >
+          <TrendingUp className="h-4 w-4 mr-2" /> View Stake
+        </Button>
+        <Button
+          className="flex-1"
+          onClick={() => setRedeemResult(null)}
+        >
+          Done
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
 
         {/* ════════════════════════════════════════════════════════════════════
             BUY DROPS
@@ -1872,6 +1951,7 @@
 
           </div>
         )}
+        
       </div>
     );
   }

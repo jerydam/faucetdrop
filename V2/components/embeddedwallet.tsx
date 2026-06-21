@@ -234,15 +234,48 @@ const fetchBalances = async () => {
                 backendData = await response.json();
             }
         } catch (backendError) {
-            console.warn("Backend balance fetch failed, defaulting to 0s:", backendError);
+            console.warn("Backend balance fetch failed:", backendError);
         }
 
-        // Fetch prices from CoinGecko safely
+        // ── Fetch DROPS balance directly from chain ───────────────────────
+        const DROPS_ABI = ["function balanceOf(address account) view returns (uint256)"];
+        const DROPS_RPC: Record<number, string> = {
+            42220: "https://forno.celo.org",
+            1135:  "https://rpc.api.lisk.com",
+            42161: "https://arb1.arbitrum.io/rpc",
+            8453:  "https://mainnet.base.org",
+            56:    "https://bsc-dataseed.binance.org",
+        };
+        const DROPS_CONTRACTS: Record<number, string> = {
+            42220: "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B",
+            1135:  "0x28B9DAB4Fd2CD9bF1A4773dB858e03Ee178AE075",
+            42161: "0xEcb026D22f9aA7FD9Aa83B509834dB8Fd66B27F6",
+            8453:  "0x42fcB7C4D4a36D772c430ee8C7d026f627365BcB",
+            56:    "0x4C603fe32fe590D8A47B7f23b027dc24C2c762B1",
+        };
+
+        let dropsRawBalance = "0";
+        const dropsContract = DROPS_CONTRACTS[chainId];
+        const dropsRpc = DROPS_RPC[chainId];
+
+        if (dropsContract && dropsRpc) {
+            try {
+                const { Contract, JsonRpcProvider } = await import("ethers");
+                const provider = new JsonRpcProvider(dropsRpc);
+                const contract = new Contract(dropsContract, DROPS_ABI, provider);
+                const raw: bigint = await contract.balanceOf(currentAddress);
+                dropsRawBalance = raw.toString();
+            } catch (e) {
+                console.warn("DROPS on-chain fetch failed:", e);
+            }
+        }
+
+        // Fetch prices from CoinGecko
         let prices: Record<string, { usd: number }> = {};
         try {
             const uniqueSymbols = [...new Set(configTokens.map(t => t.symbol))];
             const coingeckoIds = uniqueSymbols
-                .filter(symbol => symbol !== "DROPS")  // exclude DROPS from CoinGecko
+                .filter(symbol => symbol !== "DROPS")
                 .map(symbol => COINGECKO_IDS[symbol])
                 .filter(Boolean)
                 .join(',');
@@ -254,28 +287,32 @@ const fetchBalances = async () => {
                 }
             }
         } catch (priceError) {
-            console.warn("CoinGecko price fetch failed, defaulting to $0.00:", priceError);
+            console.warn("CoinGecko price fetch failed:", priceError);
         }
 
         let totalValue = 0;
 
         const finalBalances = defaultBalances.map((item) => {
-            const backendMatch = backendData?.balances?.find(
-                (b) => b.token_address.toLowerCase() === item.token.address.toLowerCase()
-            );
+            let rawBalance: string;
 
-            const rawBalance = backendMatch ? backendMatch.balance : "0";
+            if (item.token.symbol === "DROPS") {
+                // ── Use on-chain balance for DROPS ────────────────────────
+                rawBalance = dropsRawBalance;
+            } else {
+                const backendMatch = backendData?.balances?.find(
+                    (b) => b.token_address.toLowerCase() === item.token.address.toLowerCase()
+                );
+                rawBalance = backendMatch ? backendMatch.balance : "0";
+            }
+
             const formatted = formatUnits(BigInt(rawBalance), item.token.decimals);
             const balanceNum = parseFloat(formatted);
 
-            // ── DROPS: hardcoded at 100 DROPS = $1 ───────────────────────
-            let price: number;
-            if (item.token.symbol === "DROPS") {
-                price = DROPS_USD_PRICE;
-            } else {
-                const coingeckoId = COINGECKO_IDS[item.token.symbol];
-                price = coingeckoId && prices[coingeckoId] ? prices[coingeckoId].usd : 0;
-            }
+            const price = item.token.symbol === "DROPS"
+                ? DROPS_USD_PRICE
+                : (COINGECKO_IDS[item.token.symbol] && prices[COINGECKO_IDS[item.token.symbol]]
+                    ? prices[COINGECKO_IDS[item.token.symbol]].usd
+                    : 0);
 
             const usdValue = (balanceNum * price).toFixed(2);
             totalValue += parseFloat(usdValue);
@@ -284,7 +321,7 @@ const fetchBalances = async () => {
                 token: item.token,
                 balance: rawBalance,
                 balanceFormatted: formatted,
-                usdValue: usdValue
+                usdValue
             };
         });
 
@@ -298,7 +335,6 @@ const fetchBalances = async () => {
         }));
         setBalances(fallbackBalances);
         setTotalUsdValue("0.00");
-
         toast({
             title: "Network Error",
             description: "Showing local tokens with 0 balances. Refresh to try again.",

@@ -222,7 +222,7 @@ const BLOCK_LOOKBACK: Record<number, number> = {
 
 export default function DropPointsPanel() {
   const { address, isConnected,  chainId, getActiveSigner } = useWallet();
-
+  const [checkingCooldown, setCheckingCooldown] = useState(true);
   const [activeTab, setActiveTab]       = useState<Tab>("overview");
   const [tabsExpanded, setTabsExpanded] = useState(true); // ← collapse/expand state
   const [isClaiming, setIsClaiming]     = useState(false);
@@ -248,6 +248,7 @@ export default function DropPointsPanel() {
 
   const fetchCooldownFromContract = useCallback(async (addr: string) => {
     const COOLDOWN = 24 * 60 * 60 * 1000;
+    setCheckingCooldown(true);
 
     const results = await Promise.allSettled(
         CHAIN_IDS.map(async (id) => {
@@ -273,7 +274,8 @@ export default function DropPointsPanel() {
                     if (block) return block.timestamp * 1000;
                 }
 
-                return Date.now() - 23 * 60 * 60 * 1000;
+                // canClaim false but no logs — assume claimed very recently
+                return Date.now() - 1000;
             } catch {
                 return null;
             }
@@ -299,13 +301,15 @@ export default function DropPointsPanel() {
         if (rem > 0) {
             setCanClaim(false);
             setRemainingMs(rem);
-            setLastClaimAt(claimIso);  // ← this triggers the ticker effect
+            setLastClaimAt(claimIso);
         } else {
             setCanClaim(true);
             setRemainingMs(0);
             setLastClaimAt(null);
         }
     }
+
+    setCheckingCooldown(false);
 }, []);
 
   // ── Chain balances ────────────────────────────────────────────────────────
@@ -523,7 +527,7 @@ export default function DropPointsPanel() {
         } else {
             setCanClaim(true);
             setRemainingMs(0);
-            setLastClaimAt(null);  // ← clears so ticker stops cleanly
+            setLastClaimAt(null);
         }
     };
 
@@ -739,27 +743,29 @@ export default function DropPointsPanel() {
         <div className="relative">
           <ClaimBurst trigger={claimBurst} />
           <motion.button
-            onClick={handleClaim}
-            disabled={isClaiming || !canClaim || !isConnected}
-            whileTap={{ scale: 0.97 }}
-            className={`w-full py-3 rounded-xl font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 ${
-              !isConnected || !canClaim
-                ? "bg-accent text-muted-foreground cursor-not-allowed border border-border"
-                : isClaiming
-                ? "bg-primary/80 text-primary-foreground cursor-wait"
-                : "bg-primary text-primary-foreground hover:opacity-90 shadow-md hover:shadow-primary/30"
-            }`}
-          >
-            {isClaiming ? (
-              <><Loader2 size={14} className="animate-spin" /> Processing</>
-            ) : !isConnected ? (
-              <><Zap size={14} /> Connect Wallet to Claim</>
-            ) : !canClaim ? (
-              <><Clock size={14} /> {formatCountdown(remainingMs)}</>
-            ) : (
-              <><Zap size={14} /> Claim Daily Drop Points</>
-            )}
-          </motion.button>
+    onClick={handleClaim}
+    disabled={isClaiming || !canClaim || !isConnected || checkingCooldown}
+    whileTap={{ scale: 0.97 }}
+    className={`w-full py-3 rounded-xl font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 ${
+        !isConnected || !canClaim || checkingCooldown
+            ? "bg-accent text-muted-foreground cursor-not-allowed border border-border"
+            : isClaiming
+            ? "bg-primary/80 text-primary-foreground cursor-wait"
+            : "bg-primary text-primary-foreground hover:opacity-90 shadow-md hover:shadow-primary/30"
+    }`}
+>
+    {isClaiming ? (
+        <><Loader2 size={14} className="animate-spin" /> Processing</>
+    ) : checkingCooldown ? (
+        <><Loader2 size={14} className="animate-spin" /> Checking eligibility…</>
+    ) : !isConnected ? (
+        <><Zap size={14} /> Connect Wallet to Claim</>
+    ) : !canClaim ? (
+        <><Clock size={14} /> {formatCountdown(remainingMs)}</>
+    ) : (
+        <><Zap size={14} /> Claim Daily Drop Points</>
+    )}
+</motion.button>
         </div>
 
         {/* Redeem link */}

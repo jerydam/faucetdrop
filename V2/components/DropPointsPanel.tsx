@@ -508,25 +508,29 @@ export default function DropPointsPanel() {
 
   useEffect(() => {
     if (!lastClaimAt) {
-      setCanClaim(true);
-      setRemainingMs(0);
-      return;
-    }
-    const COOLDOWN = 24 * 60 * 60 * 1000;
-    const tick = () => {
-      const rem = COOLDOWN - (Date.now() - new Date(lastClaimAt).getTime());
-      if (rem > 0) {
-        setCanClaim(false);
-        setRemainingMs(rem);
-      } else {
         setCanClaim(true);
         setRemainingMs(0);
-      }
+        return;
+    }
+
+    const COOLDOWN = 24 * 60 * 60 * 1000;
+
+    const tick = () => {
+        const rem = COOLDOWN - (Date.now() - new Date(lastClaimAt).getTime());
+        if (rem > 0) {
+            setCanClaim(false);
+            setRemainingMs(rem);
+        } else {
+            setCanClaim(true);
+            setRemainingMs(0);
+            setLastClaimAt(null);  // ← clears so ticker stops cleanly
+        }
     };
+
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [lastClaimAt]);
+}, [lastClaimAt]);
 
   // ── Claim ─────────────────────────────────────────────────────────────────
 

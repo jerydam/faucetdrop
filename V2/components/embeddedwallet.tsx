@@ -22,7 +22,8 @@ import { useToast } from "@/hooks/use-toast"
 
 import { formatUnits, parseUnits, encodeFunctionData, type Address, zeroAddress } from "viem"
 import { type TokenConfiguration } from "@/components/CreateFaucetWizard"
-import { supportedChains, DEFAULT_CHAIN_ID, SOLANA_CHAIN_ID, STELLAR_CHAIN_ID } from "@/config/chain"
+import { supportedChains, DEFAULT_CHAIN_ID,   } from "@/config/chain"
+import { SOLANA_CHAIN_ID } from "@/hooks/use-network"
 
 
 // CoinGecko ID mapping for price fetching
@@ -72,7 +73,8 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
     { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", name: "Tether", symbol: "USDT", decimals: 6, logoUrl: "/usdt.jpg", description: "Tether USD stablecoin" },
     { address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", name: "USD Coin", symbol: "USDC", decimals: 6, logoUrl: "/usdc.jpg", description: "USD Coin stablecoin" },
     { address: "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B", name: "FaucetDrops", symbol: "DROPS", decimals: 18, logoUrl: "/drop-token.png", description: "FaucetDrops Utility Token" },
-    
+    { address: "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A", name: "Good Dollar", symbol: "G$", decimals: 18, logoUrl: "/gd.jpg", description: "Good Dollar Community token" },
+
   ],
   // Lisk Mainnet (1135)
   1135: [
@@ -146,7 +148,7 @@ export function EmbeddedWalletControlProduction() {
 const getChainDisplay = () => {
   if (!chainId) return "EVM"
   if (chainId === SOLANA_CHAIN_ID)  return "Solana"
-  if (chainId === STELLAR_CHAIN_ID) return "Stellar"
+//   if (chainId === STELLAR_CHAIN_ID) return "Stellar"
   return supportedChains.find(c => c.id === chainId)?.name ?? "EVM"
 }
 

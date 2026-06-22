@@ -165,14 +165,14 @@ export function PinSetupModal({
 
   // ── resetForm reads current mode explicitly so the correct initial
   //    step is always used regardless of stale closure values ───────────
-  const resetForm = (currentMode: "setup" | "change" = mode) => {
-    const initialStep = currentMode === "change" ? "change-verify" : "pin-setup"
-    setStep(initialStep)
-    setPin(""); setConfirm(""); setError(""); setShowPin(false)
-    setCurrentPin(""); setShowCurrentPin(false); setCurrentPinErr("")
-    setSqAnswers([]); setSqAnswerErrs(""); setResetGrant(null)
-    setSqItems([{ question: "", answer: "" }, { question: "", answer: "" }, { question: "", answer: "" }])
-    setSqError("")
+  const resetForm = (currentMode: "setup" | "change" = modeRef.current) => {
+  const initialStep = currentMode === "change" ? "change-verify" : "pin-setup"
+  setStep(initialStep)
+  setPin(""); setConfirm(""); setError(""); setShowPin(false)
+  setCurrentPin(""); setShowCurrentPin(false); setCurrentPinErr("")
+  setSqAnswers([]); setSqAnswerErrs(""); setResetGrant(null)
+  setSqItems([{ question: "", answer: "" }, { question: "", answer: "" }, { question: "", answer: "" }])
+  setSqError("")
   }
 
   useEffect(() => setMounted(true), [])
@@ -189,26 +189,26 @@ export function PinSetupModal({
     }
   }, [session?.walletType, session?.hasPIN, session?.needsSeedImport])
 
-  // ── Sync step whenever mode changes while modal is open ──────────────
-  useEffect(() => {
-    if (open) {
-      setStep(mode === "change" ? "change-verify" : "pin-setup")
-    }
-  }, [mode])
-
   // ── Open/reset when openProp fires — pass current mode explicitly ─────
-  useEffect(() => {
-    if (openProp) {
-      resetForm(mode)
-      setOpen(true)
-    }
-  }, [openProp, mode])
+  // Add this right after the mode prop is destructured
+const modeRef = useRef(mode)
+useEffect(() => { modeRef.current = mode }, [mode])
 
-  const dismiss = () => {
-    if (required) return
-    if (session?.address) localStorage.setItem(SKIP_KEY, String(Date.now()))
-    setOpen(false); resetForm(mode); onSkip?.(); onClose?.()
+// Replace the openProp effect
+useEffect(() => {
+  if (openProp) {
+    const currentMode = modeRef.current  // always fresh
+    resetForm(currentMode)
+    setOpen(true)
   }
+}, [openProp])
+
+// Replace the mode-sync effect
+useEffect(() => {
+  if (open) {
+    setStep(modeRef.current === "change" ? "change-verify" : "pin-setup")
+  }
+}, [mode, open])
 
   // ── Focus management ─────────────────────────────────────────────────
   useEffect(() => {

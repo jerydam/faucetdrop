@@ -158,6 +158,8 @@ export function PinSetupModal({
     { question: "", answer: "" },
   ])
   const [sqError, setSqError] = useState("")
+  const modeRef = useRef(mode)
+  useEffect(() => { modeRef.current = mode }, [mode])
 
   const inputRef      = useRef<HTMLInputElement>(null)
   const confirmRef    = useRef<HTMLInputElement>(null)
@@ -166,13 +168,13 @@ export function PinSetupModal({
   // ── resetForm reads current mode explicitly so the correct initial
   //    step is always used regardless of stale closure values ───────────
   const resetForm = (currentMode: "setup" | "change" = modeRef.current) => {
-  const initialStep = currentMode === "change" ? "change-verify" : "pin-setup"
-  setStep(initialStep)
-  setPin(""); setConfirm(""); setError(""); setShowPin(false)
-  setCurrentPin(""); setShowCurrentPin(false); setCurrentPinErr("")
-  setSqAnswers([]); setSqAnswerErrs(""); setResetGrant(null)
-  setSqItems([{ question: "", answer: "" }, { question: "", answer: "" }, { question: "", answer: "" }])
-  setSqError("")
+    const initialStep = currentMode === "change" ? "change-verify" : "pin-setup"
+    setStep(initialStep)
+    setPin(""); setConfirm(""); setError(""); setShowPin(false)
+    setCurrentPin(""); setShowCurrentPin(false); setCurrentPinErr("")
+    setSqAnswers([]); setSqAnswerErrs(""); setResetGrant(null)
+    setSqItems([{ question: "", answer: "" }, { question: "", answer: "" }, { question: "", answer: "" }])
+    setSqError("")
   }
 
   useEffect(() => setMounted(true), [])
@@ -191,7 +193,6 @@ export function PinSetupModal({
 
   // ── Open/reset when openProp fires — pass current mode explicitly ─────
   // Add this right after the mode prop is destructured
-const modeRef = useRef(mode)
 useEffect(() => { modeRef.current = mode }, [mode])
 
 // Replace the openProp effect

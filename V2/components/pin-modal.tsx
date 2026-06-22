@@ -131,7 +131,9 @@ export function PinSetupModal({
 
   const [open,    setOpen]    = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [step,    setStep]    = useState<Step>(mode === "change" ? "change-verify" : "pin-setup")
+
+  // ── Step starts as "pin-setup"; corrected in effects below ───────────
+  const [step,    setStep]    = useState<Step>("pin-setup")
   const [pin,     setPin]     = useState("")
   const [confirm, setConfirm] = useState("")
   const [showPin, setShowPin] = useState(false)
@@ -157,12 +159,14 @@ export function PinSetupModal({
   ])
   const [sqError, setSqError] = useState("")
 
-  const inputRef    = useRef<HTMLInputElement>(null)
-  const confirmRef  = useRef<HTMLInputElement>(null)
+  const inputRef      = useRef<HTMLInputElement>(null)
+  const confirmRef    = useRef<HTMLInputElement>(null)
   const currentPinRef = useRef<HTMLInputElement>(null)
 
-  const resetForm = () => {
-    const initialStep = mode === "change" ? "change-verify" : "pin-setup"
+  // ── resetForm reads current mode explicitly so the correct initial
+  //    step is always used regardless of stale closure values ───────────
+  const resetForm = (currentMode: "setup" | "change" = mode) => {
+    const initialStep = currentMode === "change" ? "change-verify" : "pin-setup"
     setStep(initialStep)
     setPin(""); setConfirm(""); setError(""); setShowPin(false)
     setCurrentPin(""); setShowCurrentPin(false); setCurrentPinErr("")
@@ -173,10 +177,10 @@ export function PinSetupModal({
 
   useEffect(() => setMounted(true), [])
 
-  const SKIP_KEY = `fd_pin_setup_skipped_${session?.address}`
+  const SKIP_KEY         = `fd_pin_setup_skipped_${session?.address}`
   const SKIP_DURATION_MS = 24 * 60 * 60 * 1000
 
-  // Auto-show for embedded wallets that haven't set a PIN
+  // ── Auto-show for embedded wallets that haven't set a PIN ────────────
   useEffect(() => {
     if (mode === "change") return
     if (session?.walletType === "embedded" && session.hasPIN === false && !session.needsSeedImport) {
@@ -185,27 +189,35 @@ export function PinSetupModal({
     }
   }, [session?.walletType, session?.hasPIN, session?.needsSeedImport])
 
+  // ── Sync step whenever mode changes while modal is open ──────────────
+  useEffect(() => {
+    if (open) {
+      setStep(mode === "change" ? "change-verify" : "pin-setup")
+    }
+  }, [mode])
+
+  // ── Open/reset when openProp fires — pass current mode explicitly ─────
+  useEffect(() => {
+    if (openProp) {
+      resetForm(mode)
+      setOpen(true)
+    }
+  }, [openProp, mode])
+
   const dismiss = () => {
     if (required) return
     if (session?.address) localStorage.setItem(SKIP_KEY, String(Date.now()))
-    setOpen(false); resetForm(); onSkip?.(); onClose?.()
+    setOpen(false); resetForm(mode); onSkip?.(); onClose?.()
   }
 
-  useEffect(() => {
-    if (openProp) { resetForm(); setOpen(true) }
-  }, [openProp])
-
-  // Focus management
+  // ── Focus management ─────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return
-    if (step === "pin-setup")       setTimeout(() => inputRef.current?.focus(), 80)
-    if (step === "change-verify")   setTimeout(() => currentPinRef.current?.focus(), 80)
-    if (step === "change-verify-sq" && sqAnswers.length === 0 && sqQuestions.length > 0) {
-      // answers array init
-    }
+    if (step === "pin-setup")     setTimeout(() => inputRef.current?.focus(), 80)
+    if (step === "change-verify") setTimeout(() => currentPinRef.current?.focus(), 80)
   }, [open, step])
 
-  // Load security questions when entering the SQ-verify step
+  // ── Load security questions when entering the SQ-verify step ─────────
   useEffect(() => {
     if (step !== "change-verify-sq" || !session?.token) return
     setLoadingSq(true)
@@ -226,7 +238,7 @@ export function PinSetupModal({
   }, [step, session?.token])
 
   // ── Helpers ───────────────────────────────────────────────────────────
-  const digits = (v: string) => v.replace(/\D/g, "").slice(0, 6)
+  const digits       = (v: string) => v.replace(/\D/g, "").slice(0, 6)
   const usedQuestions = sqItems.map(i => i.question).filter(Boolean)
 
   const updateSq = (idx: number, field: "question" | "answer", value: string) => {
@@ -249,10 +261,10 @@ export function PinSetupModal({
 
     setStep("saving")
     try {
-      const res = await fetch(`${API_BASE}/wallet/verify-pin`, {
-        method: "POST",
+      const res  = await fetch(`${API_BASE}/wallet/verify-pin`, {
+        method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ pin: currentPin }),
+        body:    JSON.stringify({ pin: currentPin }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -279,10 +291,10 @@ export function PinSetupModal({
 
     setStep("saving")
     try {
-      const res = await fetch(`${API_BASE}/wallet/security-questions/verify`, {
-        method: "POST",
+      const res  = await fetch(`${API_BASE}/wallet/security-questions/verify`, {
+        method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ answers: sqAnswers }),
+        body:    JSON.stringify({ answers: sqAnswers }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -314,16 +326,16 @@ export function PinSetupModal({
 
     if (skip) {
       setStep("done")
-      setTimeout(() => { setOpen(false); resetForm(); onDone?.(); onClose?.() }, 1400)
+      setTimeout(() => { setOpen(false); resetForm(mode); onDone?.(); onClose?.() }, 1400)
       return
     }
 
     setStep("saving-sq")
     try {
-      const res = await fetch(`${API_BASE}/wallet/security-questions/set`, {
-        method: "POST",
+      const res  = await fetch(`${API_BASE}/wallet/security-questions/set`, {
+        method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           items: sqItems.map(i => ({ question: i.question, answer: i.answer.trim() })),
         }),
       })
@@ -332,7 +344,7 @@ export function PinSetupModal({
 
       setStep("done")
       toast.success("Security questions saved — your wallet is fully protected.")
-      setTimeout(() => { setOpen(false); resetForm(); onDone?.(); onClose?.() }, 1600)
+      setTimeout(() => { setOpen(false); resetForm(mode); onDone?.(); onClose?.() }, 1600)
     } catch (err: any) {
       setSqError(err.message || "Something went wrong. Try again.")
       setStep("security-questions")
@@ -355,10 +367,10 @@ export function PinSetupModal({
       // If change mode and current PIN was verified, pass it
       if (mode === "change" && currentPin && !resetGrant) body.current_pin = currentPin
 
-      const res = await fetch(`${API_BASE}/wallet/set-pin`, {
-        method: "POST",
+      const res  = await fetch(`${API_BASE}/wallet/set-pin`, {
+        method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
+        body:    JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail ?? "Failed to set PIN")
@@ -369,7 +381,7 @@ export function PinSetupModal({
         // Change flow is done — no need to set up security questions again
         setStep("done")
         toast.success("PIN changed successfully.")
-        setTimeout(() => { setOpen(false); resetForm(); onDone?.(); onClose?.() }, 1600)
+        setTimeout(() => { setOpen(false); resetForm(mode); onDone?.(); onClose?.() }, 1600)
       } else {
         toast.success("PIN set — now add recovery questions.")
         setStep("security-questions")

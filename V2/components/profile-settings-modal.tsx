@@ -473,42 +473,48 @@ export function ProfileSettingsModal() {
 
   // ── Save profile — works for both embedded and external wallets ───────
   const handleSave = async () => {
-    if (!isConnected || !address) return toast.error("Wallet not connected")
-    setSaving(true)
-    const valid = await checkUsernameUniqueness(formData.username || "")
-    if (!valid) { setSaving(false); return }
-    try {
-      // getActiveSigner() handles both external (JsonRpcSigner) and
-      // embedded (Wallet from private key) transparently.
-      const activeSigner = await getActiveSigner()
-      if (!activeSigner) {
-        toast.error("Could not get wallet signer — please reconnect")
-        setSaving(false)
-        return
-      }
-      const nonce     = Math.floor(Math.random() * 1_000_000).toString()
-      const message   = `Update Profile\nWallet: ${address}\nNonce: ${nonce}`
-      const signature = await activeSigner.signMessage(message)
-      const res = await fetch(`${API_BASE_URL}/api/profile/update`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          wallet_address: address,
-          username: formData.username, bio: formData.bio,
-          avatar_url: formData.avatar_url, signature, message, nonce,
-        }),
-      })
-      if (!res.ok) throw new Error("Update failed")
-      toast.success("Profile saved!")
-      setIsOpen(false)
-      window.dispatchEvent(new Event("profileUpdated"))
-      if (formData.username) router.push(`/dashboard/${formData.username}`)
-    } catch (err: any) {
+  if (!isConnected || !address) return toast.error("Wallet not connected")
+  setSaving(true)
+  const valid = await checkUsernameUniqueness(formData.username || "")
+  if (!valid) { setSaving(false); return }
+  try {
+    // Close the dialog BEFORE requesting the signer so the PIN modal
+    // isn't buried under the Radix overlay and can receive pointer events.
+    setIsOpen(false)
+    
+    const activeSigner = await getActiveSigner()
+    if (!activeSigner) {
+      toast.error("Could not get wallet signer — please reconnect")
+      setIsOpen(true)   // reopen so user isn't left in a blank state
+      setSaving(false)
+      return
+    }
+    const nonce     = Math.floor(Math.random() * 1_000_000).toString()
+    const message   = `Update Profile\nWallet: ${address}\nNonce: ${nonce}`
+    const signature = await activeSigner.signMessage(message)
+    const res = await fetch(`${API_BASE_URL}/api/profile/update`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        wallet_address: address,
+        username: formData.username, bio: formData.bio,
+        avatar_url: formData.avatar_url, signature, message, nonce,
+      }),
+    })
+    if (!res.ok) throw new Error("Update failed")
+    toast.success("Profile saved!")
+    window.dispatchEvent(new Event("profileUpdated"))
+    if (formData.username) router.push(`/dashboard/${formData.username}`)
+  } catch (err: any) {
+    // If user cancelled the PIN or it failed, reopen the profile dialog
+    if (err?.message !== "cancelled") {
       const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error"
       toast.error(msg)
-    } finally {
-      setSaving(false)
     }
+    setIsOpen(true)
+  } finally {
+    setSaving(false)
+  }
   }
 
   // ── Username availability ─────────────────────────────────────────────

@@ -52,7 +52,7 @@ interface WalletContextType {
   provider:         BrowserProvider | null
   signer:           JsonRpcSigner | null
   detectedWallets:  DetectedWallet[]
-  markPINSet: (type: "pin" | "passkey") => void
+  markPINSet: (type: "pin" | "passkey" | null) => void
   showModal:        boolean
   solanaAddress:    string | null
   stellarAddress:   string | null
@@ -278,7 +278,7 @@ const SIGNER_CACHE_TTL_MS = 60_000
     return () => window.removeEventListener("eip6963:announceProvider", handler)
   }, [])
 
-  const markPINSet = useCallback((type: "pin" | "passkey") => {
+  const markPINSet = useCallback((type: "pin" | "passkey" | null) => {
   setSession(prev => {
     if (!prev) return prev
     const updated = { ...prev, hasPIN: true }

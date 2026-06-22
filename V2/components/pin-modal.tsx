@@ -168,7 +168,7 @@ export function PinSetupModal({
   // ── resetForm reads current mode explicitly so the correct initial
   //    step is always used regardless of stale closure values ───────────
   const resetForm = (currentMode: "setup" | "change" = modeRef.current) => {
-    const initialStep = currentMode === "change" ? "change-verify" : "pin-setup"
+  const initialStep = currentMode === "change" ? "change-verify-sq" : "pin-setup"
     setStep(initialStep)
     setPin(""); setConfirm(""); setError(""); setShowPin(false)
     setCurrentPin(""); setShowCurrentPin(false); setCurrentPinErr("")
@@ -194,22 +194,29 @@ export function PinSetupModal({
   // ── Open/reset when openProp fires — pass current mode explicitly ─────
   // Add this right after the mode prop is destructured
 useEffect(() => { modeRef.current = mode }, [mode])
+const prevOpenProp = useRef<boolean | undefined>(undefined)
 
 // Replace the openProp effect
 useEffect(() => {
-  if (openProp) {
-    const currentMode = modeRef.current  // always fresh
+  if (openProp && prevOpenProp.current !== true) {
+    const currentMode = modeRef.current
     resetForm(currentMode)
     setOpen(true)
   }
+  prevOpenProp.current = openProp
 }, [openProp])
 
-// Replace the mode-sync effect
+const hasInitialized = useRef(false)
+
 useEffect(() => {
-  if (open) {
-    setStep(modeRef.current === "change" ? "change-verify" : "pin-setup")
+  if (open && !hasInitialized.current) {
+    hasInitialized.current = true
+    setStep(modeRef.current === "change" ? "change-verify-sq" : "pin-setup")
   }
-}, [mode, open])
+  if (!open) {
+    hasInitialized.current = false
+  }
+}, [open])
 
   // ── Focus management ─────────────────────────────────────────────────
   useEffect(() => {
@@ -391,6 +398,12 @@ useEffect(() => {
       setError(err.message || "Something went wrong. Try again.")
       setStep("pin-setup")
     }
+  }
+
+  const dismiss = () => {
+    if (required) return
+    if (session?.address) localStorage.setItem(SKIP_KEY, String(Date.now()))
+    setOpen(false); resetForm(modeRef.current); onSkip?.(); onClose?.()
   }
 
   if (!open || !mounted) return null

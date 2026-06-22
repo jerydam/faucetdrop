@@ -18,6 +18,7 @@ import {
   CheckCircle2, Link as LinkIcon, Wallet, Copy, ExternalLink, X,
 } from "lucide-react"
 import { toast } from "sonner"
+import { ResetPinModal } from "./reset-pin"
 
 const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
 
@@ -360,7 +361,7 @@ export function ProfileSettingsModal() {
 
   const router        = useRouter()
   const walletApiBase = process.env.NEXT_PUBLIC_API_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
-
+  const [resetPinModalOpen, setResetPinModalOpen] = useState(false)
   const [isOpen,          setIsOpen]          = useState(false)
   const [loading,         setLoading]         = useState(false)
   const [saving,          setSaving]          = useState(false)
@@ -828,11 +829,21 @@ export function ProfileSettingsModal() {
                             </span>
                           : <span className="text-muted-foreground">Not set up</span>}
                       </span>
-                    </div>
-                    <Button size="sm" variant="outline" type="button"
-                      onClick={() => { setIsOpen(false); setSecurityModalOpen(true) }}>
-                      {session?.hasPIN ? "Change" : "Set up"}
-                    </Button>
+                    </div>                      
+                      {session?.hasPIN ? (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" type="button"
+                            onClick={() => { setIsOpen(false); setResetPinModalOpen(true) }}>
+                            Reset PIN
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="outline" type="button"
+                          onClick={() => { setIsOpen(false); setSecurityModalOpen(true) }}>
+                          Set up
+                        </Button>
+                      )}
+                    
                   </div>
                   <p className="text-xs text-muted-foreground mt-3 px-1">
                     Required before signing transactions — separate from your login.
@@ -869,6 +880,14 @@ export function ProfileSettingsModal() {
         </div>
       </DialogContent>
     </Dialog>
+    <ResetPinModal
+  open={resetPinModalOpen}
+  onClose={() => setResetPinModalOpen(false)}
+  onSuccess={() => {
+    setResetPinModalOpen(false)
+    setSecurityModalOpen(true)   // open the set-pin modal fresh
+  }}
+/>
     <PinSetupModal
       open={securityModalOpen}
       onClose={() => setSecurityModalOpen(false)}

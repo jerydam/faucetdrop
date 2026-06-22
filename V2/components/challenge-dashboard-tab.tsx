@@ -1611,6 +1611,37 @@ try {
       ════════════════════════════════════════════════════════════════════ */}
       {innerTab === "pools" && (
         <div className="space-y-3">
+
+          {/* ── $G Price banner ─────────────────────────────────────────── */}
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/40 border border-border">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium">Live $G Rate</span>
+            </div>
+            {gPriceLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            ) : gPriceUsd ? (
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-black text-foreground">
+                  1 $G = ${gPriceUsd.toFixed(6)}
+                </span>
+                <button
+                  onClick={fetchGoodDollarPrice}
+                  className="text-[10px] text-primary hover:opacity-70 transition-opacity flex items-center gap-1"
+                >
+                  <RefreshCw className="h-3 w-3" /> Refresh
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={fetchGoodDollarPrice}
+                className="text-xs text-primary hover:opacity-70 transition-opacity flex items-center gap-1"
+              >
+                <RefreshCw className="h-3 w-3" /> Load price
+              </button>
+            )}
+          </div>
+
           {loadingStakes ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1623,6 +1654,7 @@ try {
             </div>
           ) : (
             <>
+              {/* ── Mature unclaimed banner ──────────────────────────────── */}
               {matureUnclaimedStakes.length > 0 && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/50">
                   <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
@@ -1631,39 +1663,128 @@ try {
                   </p>
                 </div>
               )}
-              {stakes.map(stake => {
-                const isMature   = stake.matured || new Date(stake.matures_at) <= new Date();
-                const isClaiming = claimingStake === stake.id;
 
-                // Live accrual estimate (frontend display only; actual payout computed server-side at claim)
-                const accrued = computeAccrued(stake, now);
+              {/* ── Summary totals ───────────────────────────────────────── */}
+              {gPriceUsd && stakes.filter(s => !s.claimed).length > 0 && (() => {
+                const activeStakes = stakes.filter(s => !s.claimed)
+                const totalStakedG = activeStakes.reduce((sum, s) => {
+                  return sum + (s.drops_staked != null && gPriceUsd
+                    ? (s.drops_staked / DROPS_PER_USD) / gPriceUsd
+                    : 0)
+                }, 0)
+
+                const totalEarnedG = activeStakes.reduce((sum, s) => {
+                  const stakedUsd  = s.drops_staked != null ? s.drops_staked / DROPS_PER_USD : 0
+                  const gValue     = gPriceUsd ? stakedUsd / gPriceUsd : 0
+                  const stakedAt   = new Date(s.staked_at).getTime()
+                  const maturesAt  = new Date(s.matures_at).getTime()
+                  const totalMs    = Math.max(maturesAt - stakedAt, 1)
+                  const elapsedMs  = Math.min(Math.max(now - stakedAt, 0), totalMs)
+                  const fraction   = elapsedMs / totalMs
+                  const fullYieldG = gValue * (s.apy_pct / 100)
+                  const isMature   = s.matured || new Date(s.matures_at) <= new Date()
+                  return sum + (isMature ? fullYieldG : fullYieldG * fraction)
+                }, 0)
+                return (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-muted/40 rounded-xl p-3 border border-border text-center">
+                      <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide mb-1">
+                        Total Staked
+                      </p>
+                      <p className="text-base font-black text-foreground">{fmt(totalStakedG, 4)} $G</p>
+                      <p className="text-[10px] text-muted-foreground/60 mt-0.5">at today's rate</p>
+                    </div>
+                    <div className="bg-green-50 dark:bg-green-950/20 rounded-xl p-3 border border-green-200 dark:border-green-800/50 text-center">
+                      <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide mb-1">
+                        Total Earned
+                      </p>
+                      <p className="text-base font-black text-green-600 dark:text-green-400">
+                        {fmt(totalEarnedG, 4)} $G
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/60 mt-0.5">accrued so far</p>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* ── Stake cards ──────────────────────────────────────────── */}
+              {stakes.map(stake => {
+                const isMature   = stake.matured || new Date(stake.matures_at) <= new Date()
+                const isClaiming = claimingStake === stake.id
+
+                // Live accrual estimate (frontend display only;
+                // actual payout computed server-side at claim time)
+                const accrued = (() => {
+                  const stakedUsd    = stake.drops_staked != null ? stake.drops_staked / DROPS_PER_USD : 0
+                  const gValue       = gPriceUsd ? stakedUsd / gPriceUsd : (stake.g_value_usd ?? 0)
+                  const stakedAt     = new Date(stake.staked_at).getTime()
+                  const maturesAt    = new Date(stake.matures_at).getTime()
+                  const totalMs      = Math.max(maturesAt - stakedAt, 1)
+                  const elapsedMs    = Math.min(Math.max(now - stakedAt, 0), totalMs)
+                  const fraction     = elapsedMs / totalMs
+                  const fullYieldG   = gValue * (stake.apy_pct / 100)
+                  const accruedG     = fullYieldG * fraction
+                  const dailyRateG   = fullYieldG / (totalMs / 86400000)
+                  return { accruedG, fullYieldG, dailyRateG, progressPct: fraction * 100 }
+                })()
+
+                // $G value of the staked DROPS at today's live price
+                const stakedG = gPriceUsd && stake.drops_staked != null
+                  ? (stake.drops_staked / DROPS_PER_USD) / gPriceUsd
+                  : null
+
+                // Earned $G: full yield if matured, else linear accrual estimate
                 const liveEarnedG = stake.claimed
                   ? (stake.g_earned ?? 0)
                   : isMature
                     ? accrued.fullYieldG
-                    : accrued.accruedG;
+                    : accrued.accruedG
+
+                // Total claimable = principal (in $G) + earned APY
+                const totalClaimableG = stakedG != null
+                  ? stakedG + liveEarnedG
+                  : null
 
                 return (
-                  <Card key={stake.id} className={`${isMature && !stake.claimed ? "border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/10" : ""}`}>
+                  <Card
+                    key={stake.id}
+                    className={`${
+                      isMature && !stake.claimed
+                        ? "border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/10"
+                        : ""
+                    }`}
+                  >
                     <CardContent className="p-4 space-y-3">
+
+                      {/* ── Header ───────────────────────────────────────── */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          {isMature && !stake.claimed ? <Unlock className="h-4 w-4 text-green-500" />
-                            : stake.claimed ? <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
-                            : <Lock className="h-4 w-4 text-muted-foreground" />}
-                          <span className="text-sm font-bold text-foreground">{stake.drops_staked != null ? fmt(stake.drops_staked, 0) : "—"} DROPS staked</span>
+                          {isMature && !stake.claimed
+                            ? <Unlock className="h-4 w-4 text-green-500" />
+                            : stake.claimed
+                              ? <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                              : <Lock className="h-4 w-4 text-muted-foreground" />
+                          }
+                          <span className="text-sm font-bold text-foreground">
+                            {stake.drops_staked != null ? fmt(stake.drops_staked, 0) : "—"} DROPS staked
+                          </span>
                         </div>
-                        <Badge variant={stake.claimed ? "secondary" : isMature ? "default" : "outline"} className="text-xs font-mono">
+                        <Badge
+                          variant={stake.claimed ? "secondary" : isMature ? "default" : "outline"}
+                          className="text-xs font-mono"
+                        >
                           {stake.claimed ? "Claimed" : isMature ? "Ready" : countdownTo(stake.matures_at, now)}
                         </Badge>
                       </div>
 
-                      {/* Progress bar toward maturity */}
+                      {/* ── Progress bar toward maturity ──────────────────── */}
                       {!stake.claimed && (
                         <div className="space-y-1">
                           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all duration-1000 ${isMature ? "bg-green-500" : "bg-primary"}`}
+                              className={`h-full rounded-full transition-all duration-1000 ${
+                                isMature ? "bg-green-500" : "bg-primary"
+                              }`}
                               style={{ width: `${Math.min(100, accrued.progressPct)}%` }}
                             />
                           </div>
@@ -1674,52 +1795,126 @@ try {
                         </div>
                       )}
 
+                      {/* ── Core stats grid ───────────────────────────────── */}
                       <div className="grid grid-cols-3 gap-2 text-center">
-                        {[
-                          { label: "Value",  val: stake.g_value_usd != null ? `$${fmt(stake.g_value_usd, 2)}` : "—" },
-                          { label: "APY",    val: `${stake.apy_pct}%`, accent: true },
-                          { label: stake.claimed ? "Earned" : "Earned so far", val: `${fmt(liveEarnedG, 4)} $G`, green: true },
-                        ].map(({ label, val, accent, green }) => (
-                          <div key={label} className="bg-muted/40 rounded-lg p-2">
-                            <p className="text-xs text-muted-foreground">{label}</p>
-                            <p className={`text-sm font-black ${accent ? "text-primary" : green ? "text-green-600 dark:text-green-400" : ""}`}>{val}</p>
-                          </div>
-                        ))}
+
+                        {/* Staked value in $G */}
+                        <div className="bg-muted/40 rounded-lg p-2">
+                          <p className="text-xs text-muted-foreground">Staked ($G)</p>
+                          <p className="text-sm font-black text-foreground">
+                            {stakedG != null ? `${fmt(stakedG, 4)}` : "—"}
+                          </p>
+                          {stake.g_value_usd != null && (
+                            <p className="text-[10px] text-muted-foreground/60">
+                              ${fmt(stake.g_value_usd, 2)} USD
+                            </p>
+                          )}
+                        </div>
+
+                        {/* APY */}
+                        <div className="bg-muted/40 rounded-lg p-2">
+                          <p className="text-xs text-muted-foreground">APY</p>
+                          <p className="text-sm font-black text-primary">{stake.apy_pct}%</p>
+                          <p className="text-[10px] text-muted-foreground/60">30 days</p>
+                        </div>
+
+                        {/* Earned so far in $G */}
+                        <div className={`rounded-lg p-2 ${
+                          isMature && !stake.claimed
+                            ? "bg-green-100 dark:bg-green-900/30"
+                            : "bg-muted/40"
+                        }`}>
+                          <p className="text-xs text-muted-foreground">
+                            {stake.claimed ? "Earned" : isMature ? "Claimable" : "Earned"}
+                          </p>
+                          <p className="text-sm font-black text-green-600 dark:text-green-400">
+                            {fmt(liveEarnedG, 4)} $G
+                          </p>
+                          {!stake.claimed && stakedG != null && (
+                            <p className="text-[10px] text-muted-foreground/60">
+                              +{fmt((liveEarnedG / Math.max(stakedG, 0.0001)) * 100, 1)}%
+                            </p>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Daily accrual rate */}
-                      {!stake.claimed && (
-                        <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-primary/5 border border-primary/10">
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                            <TrendingUp className="h-3 w-3" /> Accruing
+                      {/* ── Total claimable row (mature + unclaimed only) ─── */}
+                      {isMature && !stake.claimed && totalClaimableG != null && (
+                        <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800/50">
+                          <span className="text-xs font-bold text-green-700 dark:text-green-300 flex items-center gap-1.5">
+                            <Coins className="h-3.5 w-3.5" /> Total to receive
                           </span>
-                          <span className="text-[10px] font-bold text-primary">
-                            +{fmt(accrued.dailyRateG, 4)} $G / day
+                          <span className="text-sm font-black text-green-600 dark:text-green-400">
+                            {fmt(totalClaimableG, 4)} $G
                           </span>
                         </div>
                       )}
 
+                      {/* ── Daily accrual rate (active stakes only) ────────── */}
+                      {!stake.claimed && !isMature && (
+                        <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-primary/5 border border-primary/10">
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <TrendingUp className="h-3 w-3" /> Accruing daily
+                          </span>
+                          <span className="text-[10px] font-bold text-primary">
+                            +{fmt(accrued.dailyRateG, 6)} $G / day
+                          </span>
+                        </div>
+                      )}
+
+                      {/* ── Full yield projection (active stakes) ────────── */}
+                      {!stake.claimed && !isMature && stakedG != null && (
+                        <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/30 border border-border">
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <BarChart3 className="h-3 w-3" /> At maturity
+                          </span>
+                          <span className="text-[10px] font-bold text-foreground">
+                            {fmt(stakedG + accrued.fullYieldG, 4)} $G total
+                          </span>
+                        </div>
+                      )}
+
+                      {/* ── Timestamps ───────────────────────────────────── */}
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Staked {timeAgo(stake.staked_at)}</span>
-                        <span>Matures {timeUntil(stake.matures_at)}</span>
+                        <span>
+                          {stake.claimed
+                            ? `Claimed ${stake.claimed_at ? timeAgo(stake.claimed_at) : ""}`
+                            : `Matures ${timeUntil(stake.matures_at)}`
+                          }
+                        </span>
                       </div>
+
+                      {/* ── Claim button ──────────────────────────────────── */}
                       {isMature && !stake.claimed && (
-                        <Button className="w-full" size="sm" onClick={() => handleClaimStake(stake.id)} disabled={isClaiming}>
+                        <Button
+                          className="w-full"
+                          size="sm"
+                          onClick={() => handleClaimStake(stake.id)}
+                          disabled={isClaiming}
+                        >
                           {isClaiming
                             ? <><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Claiming…</>
-                            : <><ArrowUpFromLine className="h-3 w-3 mr-2" /> Claim $G</>
+                            : <><ArrowUpFromLine className="h-3 w-3 mr-2" /> Claim {fmt(liveEarnedG, 4)} $G</>
                           }
                         </Button>
                       )}
+
+                      {/* ── No price warning ──────────────────────────────── */}
+                      {!gPriceUsd && !gPriceLoading && (
+                        <p className="text-[10px] text-muted-foreground/60 text-center">
+                          Load $G price above to see values in $G
+                        </p>
+                      )}
+
                     </CardContent>
                   </Card>
-                );
+                )
               })}
             </>
           )}
         </div>
       )}
-
       {/* ════════════════════════════════════════════════════════════════════
           HISTORY
       ════════════════════════════════════════════════════════════════════ */}

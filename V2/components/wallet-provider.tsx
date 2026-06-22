@@ -8,6 +8,7 @@ import { BrowserProvider, ethers, JsonRpcProvider, Wallet, type JsonRpcSigner } 
 import { toast } from "sonner"
 import { usePrivy } from "@privy-io/react-auth"
 import { supportedChains, DEFAULT_CHAIN_ID, CHAIN_RPC } from "@/config/chain"
+import { openPinEntryModal } from "@/components/pin-entry"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -22,6 +23,8 @@ export interface WalletSession {
   provider?:      string
   chainId:        number
   token?:         string
+  hasPIN?: boolean
+
   linkedSocials?: SocialProvider[]
   solanaAddress?:  string | null
   stellarAddress?: string | null
@@ -49,6 +52,7 @@ interface WalletContextType {
   provider:         BrowserProvider | null
   signer:           JsonRpcSigner | null
   detectedWallets:  DetectedWallet[]
+  markPINSet: (type: "pin" | "passkey") => void
   showModal:        boolean
   solanaAddress:    string | null
   stellarAddress:   string | null
@@ -57,7 +61,7 @@ interface WalletContextType {
   legacyEvmAddress?:  string | null
   legacySolAddress?:  string | null
   getEmbeddedSigner: (chainId: number) => Promise<Wallet | null>
-getActiveSigner:   (chainId?: number) => Promise<JsonRpcSigner | Wallet | null>
+  getActiveSigner:   (chainId?: number) => Promise<JsonRpcSigner | Wallet | null>
 
   clearLegacy:      () => void
   fetchNonEvmAddresses: () => Promise<void>
@@ -128,6 +132,7 @@ export const WalletContext = createContext<WalletContextType>({
   connectExternalWallet: async () => {},
   connectSocial: async () => {},
   getEmbeddedSigner: async () => null,
+  markPINSet: () => {},
   disconnect: () => {},
   switchChain: async () => {},
   ensureCorrectNetwork: async () => false,
@@ -212,6 +217,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [showModal,       setShowModal]       = useState(false)
   const [detectedWallets, setDetectedWallets] = useState<DetectedWallet[]>([])
   const rawProviderRef = useRef<any>(null)
+  // inside WalletProvider
+const embeddedSignerCache = useRef<Map<number, { wallet: Wallet; expiresAt: number }>>(new Map())
+const SIGNER_CACHE_TTL_MS = 60_000 
 
   // ── Privy SDK logout hook ──────────────────────────────────────────────
   // We need this so that disconnecting / switching accounts on this app
@@ -269,6 +277,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     return () => window.removeEventListener("eip6963:announceProvider", handler)
   }, [])
+
+  const markPINSet = useCallback((type: "pin" | "passkey") => {
+  setSession(prev => {
+    if (!prev) return prev
+    const updated = { ...prev, hasPIN: true }
+    saveSession(updated)
+    return updated
+  })
+}, [])
 
   // ── Fetch Solana + Stellar addresses from backend ─────────────────────────
   const fetchNonEvmAddresses = useCallback(async () => {
@@ -375,32 +392,72 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [forcePrivyLogout])
 
-  // Add this inside WalletProvider, before the return
+
+const getPinVerifiedGrant = useCallback(async (): Promise<string> => {
+  if (!session?.token) throw new Error("Not connected")
+
+  // openPinEntryModal returns the PIN the user typed; caller still has to
+  // verify it against the backend to get a grant.
+  const pin = await new Promise<string>((resolve, reject) => {
+    openPinEntryModal(resolve, reject)
+  })
+
+  const res = await fetch(`${API_BASE}/wallet/verify-pin`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.token}`,
+    },
+    body: JSON.stringify({ pin }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.detail ?? "Incorrect PIN")
+  return data.signing_grant as string
+}, [session?.token])
+
 const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
   if (!session?.token || session.walletType !== "embedded") return null
-  try {
-    const res = await fetch(
-      `${API_BASE}/wallet/export-privatekey?chain_id=${targetChainId}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.token}` },
-      }
-    )
-    if (!res.ok) return null
-    const data = await res.json()
-    if (!data.private_key) return null
-    const provider = new JsonRpcProvider(CHAIN_RPC[targetChainId])
-    return new ethers.Wallet(data.private_key, provider)
-  } catch {
-    return null
+
+  // Reuse a still-warm signer for this chain
+  const cached = embeddedSignerCache.current.get(targetChainId)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.wallet
   }
-}, [session?.token, session?.walletType])
+
+  // No PIN set yet — bail out to the setup nudge rather than prompting for one
+  if (session.hasPIN === false) {
+    throw new Error("NO_PIN_SET")
+  }
+
+  const grant = await getPinVerifiedGrant() // throws on cancel/wrong PIN
+
+  const res = await fetch(`${API_BASE}/wallet/export-privatekey`, {
+    method:  "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      Authorization:   `Bearer ${session.token}`,
+    },
+    body: JSON.stringify({ chain_id: targetChainId, signing_grant: grant }),
+  })
+  if (!res.ok) return null
+  const data = await res.json()
+  if (!data.private_key) return null
+
+  const provider = new JsonRpcProvider(CHAIN_RPC[targetChainId])
+  const wallet    = new ethers.Wallet(data.private_key, provider)
+
+  embeddedSignerCache.current.set(targetChainId, {
+    wallet,
+    expiresAt: Date.now() + SIGNER_CACHE_TTL_MS,
+  })
+
+  return wallet
+}, [session?.token, session?.walletType, session?.hasPIN, getPinVerifiedGrant])
+
+
 const getActiveSigner = useCallback(async (targetChainId?: number) => {
-  // External wallet — rebuild provider if signer is stale/null
   if (session?.walletType === "external") {
     if (signer) return signer
-
-    // Signer is null but wallet may still be connected — try rebuilding
     const raw = rawProviderRef.current
     if (raw) {
       const result = await buildProvider(raw)
@@ -413,11 +470,11 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
     return null
   }
 
-  // Embedded wallet — fetch private key and build local signer
   const cid = targetChainId ?? chainId
   if (!cid) return null
   return getEmbeddedSigner(cid)
 }, [session?.walletType, signer, chainId, getEmbeddedSigner])
+
 
   // ── Connect social (embedded wallet via backend) ──────────────────────────
   const connectSocial = useCallback(async (socialProvider: SocialProvider, credential: string) => {
@@ -511,15 +568,16 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
 
   // ── Disconnect ────────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
-    forcePrivyLogout()
-    clearImportSessionKeys()
-    localStorage.removeItem(SESSION_KEY)
-    setSession(null)
-    setProvider(null)
-    setSigner(null)
-    rawProviderRef.current = null
-    toast.success("Disconnected")
-  }, [forcePrivyLogout])
+  forcePrivyLogout()
+  clearImportSessionKeys()
+  localStorage.removeItem(SESSION_KEY)
+  embeddedSignerCache.current.clear()
+  setSession(null)
+  setProvider(null)
+  setSigner(null)
+  rawProviderRef.current = null
+  toast.success("Disconnected")
+}, [forcePrivyLogout])
 
   // ── Switch chain ──────────────────────────────────────────────────────────
   const switchChain = useCallback(async (targetChainId: number) => {
@@ -625,7 +683,7 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
       linkSocial, refreshProvider,
       solanaAddress:        session?.solanaAddress  ?? null,
       stellarAddress:       session?.stellarAddress ?? null,
-      fetchNonEvmAddresses,
+      fetchNonEvmAddresses,markPINSet,
       getEmbeddedSigner,
       getActiveSigner,
       legacyFound:      session?.legacyFound      ?? false,

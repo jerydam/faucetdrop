@@ -2,25 +2,29 @@
 
 import { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
-import { Loader2, ShieldCheck, Eye, EyeOff, X, Fingerprint, ChevronDown, HelpCircle } from "lucide-react"
+import { Loader2, ShieldCheck, Eye, EyeOff, X, ChevronDown, HelpCircle } from "lucide-react"
 import { useWallet, API_BASE } from "@/components/wallet-provider"
 import { toast } from "sonner"
 
 export interface PinSetupModalProps {
-  onDone?: () => void
-  onSkip?: () => void
+  onDone?:  () => void
+  onSkip?:  () => void
   required?: boolean
-  open?: boolean
+  open?:    boolean
   onClose?: () => void
+  // When true, this modal is being opened to CHANGE an existing PIN.
+  // It will first ask security questions (or current PIN), then allow
+  // the user to set a new one.
+  mode?: "setup" | "change"
 }
 
 type Step =
-  | "choose"
   | "pin-setup"
-  | "passkey-setup"
-  | "security-questions"   // NEW — shown after PIN or passkey is saved
+  | "security-questions"
+  | "change-verify"        // verify identity before changing PIN
+  | "change-verify-sq"     // answer security questions to change PIN
   | "saving"
-  | "saving-sq"            // saving security questions
+  | "saving-sq"
   | "done"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,7 +102,9 @@ function QuestionSelect({
               key={q}
               type="button"
               onClick={() => { onChange(q); setOpen(false) }}
-              className={`w-full px-3 py-2 text-left text-xs transition-colors hover:bg-muted ${q === value ? "text-primary font-medium" : "text-foreground"}`}
+              className={`w-full px-3 py-2 text-left text-xs transition-colors hover:bg-muted ${
+                q === value ? "text-primary font-medium" : "text-foreground"
+              }`}
             >
               {q}
             </button>
@@ -113,18 +119,37 @@ function QuestionSelect({
 // Main modal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function PinSetupModal({ onDone, onSkip, required = false, open: openProp, onClose }: PinSetupModalProps) {
+export function PinSetupModal({
+  onDone,
+  onSkip,
+  required = false,
+  open: openProp,
+  onClose,
+  mode = "setup",
+}: PinSetupModalProps) {
   const { session, markPINSet } = useWallet()
 
   const [open,    setOpen]    = useState(false)
   const [mounted, setMounted] = useState(false)
-  const [step,    setStep]    = useState<Step>("choose")
+  const [step,    setStep]    = useState<Step>(mode === "change" ? "change-verify" : "pin-setup")
   const [pin,     setPin]     = useState("")
   const [confirm, setConfirm] = useState("")
   const [showPin, setShowPin] = useState(false)
   const [error,   setError]   = useState("")
 
-  // Security questions state — 3 Q&A pairs
+  // For "change PIN" flow: current PIN verification
+  const [currentPin,     setCurrentPin]     = useState("")
+  const [showCurrentPin, setShowCurrentPin] = useState(false)
+  const [currentPinErr,  setCurrentPinErr]  = useState("")
+
+  // For "change PIN via security questions" flow
+  const [sqAnswers,    setSqAnswers]    = useState<{ question: string; answer: string }[]>([])
+  const [sqQuestions,  setSqQuestions]  = useState<string[]>([])
+  const [sqAnswerErrs, setSqAnswerErrs] = useState("")
+  const [loadingSq,    setLoadingSq]    = useState(false)
+  const [resetGrant,   setResetGrant]   = useState<string | null>(null)
+
+  // For setup: new security questions
   const [sqItems, setSqItems] = useState([
     { question: "", answer: "" },
     { question: "", answer: "" },
@@ -132,11 +157,16 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
   ])
   const [sqError, setSqError] = useState("")
 
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef    = useRef<HTMLInputElement>(null)
+  const confirmRef  = useRef<HTMLInputElement>(null)
+  const currentPinRef = useRef<HTMLInputElement>(null)
 
   const resetForm = () => {
-    setStep("choose")
+    const initialStep = mode === "change" ? "change-verify" : "pin-setup"
+    setStep(initialStep)
     setPin(""); setConfirm(""); setError(""); setShowPin(false)
+    setCurrentPin(""); setShowCurrentPin(false); setCurrentPinErr("")
+    setSqAnswers([]); setSqAnswerErrs(""); setResetGrant(null)
     setSqItems([{ question: "", answer: "" }, { question: "", answer: "" }, { question: "", answer: "" }])
     setSqError("")
   }
@@ -146,7 +176,9 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
   const SKIP_KEY = `fd_pin_setup_skipped_${session?.address}`
   const SKIP_DURATION_MS = 24 * 60 * 60 * 1000
 
+  // Auto-show for embedded wallets that haven't set a PIN
   useEffect(() => {
+    if (mode === "change") return
     if (session?.walletType === "embedded" && session.hasPIN === false && !session.needsSeedImport) {
       const skippedAt = Number(localStorage.getItem(SKIP_KEY) || 0)
       if (Date.now() - skippedAt > SKIP_DURATION_MS) setOpen(true)
@@ -163,12 +195,35 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
     if (openProp) { resetForm(); setOpen(true) }
   }, [openProp])
 
+  // Focus management
   useEffect(() => {
-    if (open && step === "pin-setup") {
-      const t = setTimeout(() => inputRef.current?.focus(), 80)
-      return () => clearTimeout(t)
+    if (!open) return
+    if (step === "pin-setup")       setTimeout(() => inputRef.current?.focus(), 80)
+    if (step === "change-verify")   setTimeout(() => currentPinRef.current?.focus(), 80)
+    if (step === "change-verify-sq" && sqAnswers.length === 0 && sqQuestions.length > 0) {
+      // answers array init
     }
   }, [open, step])
+
+  // Load security questions when entering the SQ-verify step
+  useEffect(() => {
+    if (step !== "change-verify-sq" || !session?.token) return
+    setLoadingSq(true)
+    fetch(`${API_BASE}/wallet/security-questions`, {
+      headers: { Authorization: `Bearer ${session.token}` },
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.has_security_questions && data.questions?.length) {
+          setSqQuestions(data.questions)
+          setSqAnswers(data.questions.map((q: string) => ({ question: q, answer: "" })))
+        } else {
+          setSqAnswerErrs("No security questions set up. You cannot change your PIN this way.")
+        }
+      })
+      .catch(() => setSqAnswerErrs("Failed to load security questions."))
+      .finally(() => setLoadingSq(false))
+  }, [step, session?.token])
 
   // ── Helpers ───────────────────────────────────────────────────────────
   const digits = (v: string) => v.replace(/\D/g, "").slice(0, 6)
@@ -179,7 +234,71 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
     setSqError("")
   }
 
-  // ── Save security questions ───────────────────────────────────────────
+  const updateAnswer = (idx: number, value: string) => {
+    setSqAnswers(prev => prev.map((item, i) => i === idx ? { ...item, answer: value } : item))
+    setSqAnswerErrs("")
+  }
+
+  // ── Change PIN: verify current PIN ────────────────────────────────────
+  const handleVerifyCurrentPin = async () => {
+    setCurrentPinErr("")
+    if (!/^\d{6}$/.test(currentPin)) { setCurrentPinErr("PIN must be 6 digits"); return }
+
+    const token = session?.token
+    if (!token) { setCurrentPinErr("Session expired."); return }
+
+    setStep("saving")
+    try {
+      const res = await fetch(`${API_BASE}/wallet/verify-pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pin: currentPin }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCurrentPinErr(data.detail ?? "Incorrect PIN")
+        setStep("change-verify")
+        return
+      }
+      // Current PIN verified — proceed to set new PIN
+      setStep("pin-setup")
+    } catch {
+      setCurrentPinErr("Something went wrong. Try again.")
+      setStep("change-verify")
+    }
+  }
+
+  // ── Change PIN: verify security questions ─────────────────────────────
+  const handleVerifySecurityAnswers = async () => {
+    setSqAnswerErrs("")
+    if (sqAnswers.some(a => !a.answer.trim())) {
+      setSqAnswerErrs("Please answer all questions."); return
+    }
+    const token = session?.token
+    if (!token) { setSqAnswerErrs("Session expired."); return }
+
+    setStep("saving")
+    try {
+      const res = await fetch(`${API_BASE}/wallet/security-questions/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ answers: sqAnswers }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSqAnswerErrs(data.detail ?? "One or more answers are incorrect")
+        setStep("change-verify-sq")
+        return
+      }
+      setResetGrant(data.reset_grant)
+      setStep("pin-setup")
+    } catch {
+      setSqAnswerErrs("Something went wrong. Try again.")
+      setStep("change-verify-sq")
+    }
+  }
+
+  // ── Save security questions (after PIN setup) ─────────────────────────
   const handleSaveSecurityQuestions = async (skip = false) => {
     if (!skip) {
       for (const item of sqItems) {
@@ -230,78 +349,34 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
 
     setStep("saving")
     try {
-      const res  = await fetch(`${API_BASE}/wallet/set-pin`, {
+      const body: Record<string, string> = { pin }
+      // If we have a reset_grant (came via security questions), pass it
+      if (resetGrant) body.reset_grant = resetGrant
+      // If change mode and current PIN was verified, pass it
+      if (mode === "change" && currentPin && !resetGrant) body.current_pin = currentPin
+
+      const res = await fetch(`${API_BASE}/wallet/set-pin`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ pin }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail ?? "Failed to set PIN")
 
       markPINSet("pin")
-      toast.success("PIN set — now add recovery questions.")
-      setStep("security-questions")   // ← go to SQ step, not done
+
+      if (mode === "change") {
+        // Change flow is done — no need to set up security questions again
+        setStep("done")
+        toast.success("PIN changed successfully.")
+        setTimeout(() => { setOpen(false); resetForm(); onDone?.(); onClose?.() }, 1600)
+      } else {
+        toast.success("PIN set — now add recovery questions.")
+        setStep("security-questions")
+      }
     } catch (err: any) {
       setError(err.message || "Something went wrong. Try again.")
       setStep("pin-setup")
-    }
-  }
-
-  // ── Passkey enrollment ────────────────────────────────────────────────
-  const handlePasskeySetup = async () => {
-    setError("")
-    setStep("passkey-setup")
-    try {
-      const credential = await navigator.credentials.create({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          rp: { name: "FaucetDrops", id: window.location.hostname },
-          user: {
-            id: new TextEncoder().encode(session?.address ?? `user-${Date.now()}`),
-            name: session?.address ?? `user-${Date.now()}`,
-            displayName: "FaucetDrops Wallet",
-          },
-          pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
-          authenticatorSelection: { userVerification: "required", residentKey: "required" },
-          timeout: 60000,
-        },
-      }) as PublicKeyCredential | null
-
-      if (!credential) throw new Error("No credential returned")
-
-      const credId   = credential.id
-      const silentPin =
-        Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b % 10).join("") +
-        Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b % 10).join("")
-
-      const token = session?.token
-      if (!token) throw new Error("Session expired")
-
-      const res = await fetch(`${API_BASE}/wallet/set-pin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ pin: silentPin }),
-      })
-      if (!res.ok) {
-        const e = await res.json()
-        throw new Error(e.detail ?? "Failed to register passkey")
-      }
-
-      const encoded = btoa(JSON.stringify({ pin: silentPin, credId, addr: session?.address }))
-      localStorage.setItem(`fd_passkey_data_${session?.address}`, encoded)
-      localStorage.setItem(`fd_passkey_cred_${session?.address}`, credId)
-
-      markPINSet("passkey")
-      toast.success("Biometric set — now add recovery questions.")
-      setStep("security-questions")   // ← go to SQ step, not done
-    } catch (err: any) {
-      const msg = err?.message ?? ""
-      if (msg.includes("cancel") || msg.includes("abort") || msg.includes("NotAllowedError")) {
-        setError("Biometric setup was cancelled. Try again or use a PIN instead.")
-      } else {
-        setError(msg || "Biometric setup failed.")
-      }
-      setStep("choose")
     }
   }
 
@@ -314,7 +389,8 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
     >
       <div className="relative w-full max-w-[400px] rounded-2xl overflow-hidden bg-background border border-border shadow-2xl text-foreground">
 
-        {!required && step !== "saving" && step !== "saving-sq" && step !== "done" && step !== "passkey-setup" && (
+        {!required &&
+          step !== "saving" && step !== "saving-sq" && step !== "done" && (
           <button
             onClick={dismiss}
             className="absolute top-4 right-4 z-10 h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground/70 hover:text-foreground hover:bg-muted transition-colors"
@@ -325,94 +401,141 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
 
         <div className="p-6">
 
-          {/* ── Choose method ─────────────────────────────────────────── */}
-          {step === "choose" && (
+          {/* ── Step: verify current PIN (change mode) ────────────────── */}
+          {step === "change-verify" && (
             <>
               <div className="text-center mb-6">
                 <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-muted border border-border">
                   <ShieldCheck size={20} className="text-muted-foreground" />
                 </div>
-                <h2 className="text-base font-semibold">Secure your wallet</h2>
+                <h2 className="text-base font-semibold">Change PIN</h2>
                 <p className="text-xs mt-1.5 leading-relaxed text-muted-foreground">
-                  Choose how you'll authorise transactions. A stolen session token
-                  can't move funds without this.
+                  Enter your current PIN to continue, or use your security questions if you've forgotten it.
                 </p>
               </div>
 
-              {error && <p className="text-xs mb-4 text-center text-destructive">{error}</p>}
-
-              <div className="flex flex-col gap-3 mb-5">
+              <div className="relative mb-4">
+                <input
+                  ref={currentPinRef}
+                  type={showCurrentPin ? "text" : "password"}
+                  inputMode="numeric"
+                  value={currentPin}
+                  onChange={e => { setCurrentPin(digits(e.target.value)); setCurrentPinErr("") }}
+                  onKeyDown={e => { if (e.key === "Enter" && currentPin.length === 6) handleVerifyCurrentPin() }}
+                  placeholder="Current PIN"
+                  maxLength={6}
+                  className={`w-full px-3 py-2.5 rounded-xl text-center text-lg font-mono tracking-[0.4em] pr-10 bg-muted border text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all ${
+                    currentPinErr ? "border-destructive" : "border-border"
+                  }`}
+                  autoComplete="current-password"
+                />
                 <button
-                  onClick={handlePasskeySetup}
-                  className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border text-left transition-all hover:scale-[1.01] active:scale-[0.99] bg-primary/5 border-primary/25 hover:bg-primary/10"
+                  type="button"
+                  onClick={() => setShowCurrentPin(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:opacity-80 transition-opacity"
+                  tabIndex={-1}
                 >
-                  <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 bg-primary/10">
-                    <Fingerprint className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">Fingerprint / Face ID</p>
-                    <p className="text-xs mt-0.5 text-muted-foreground">Use your device biometric — fastest and most secure</p>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => setStep("pin-setup")}
-                  className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border text-left transition-all hover:scale-[1.01] active:scale-[0.99] bg-muted/40 border-border hover:bg-muted/60"
-                >
-                  <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 bg-muted">
-                    <span className="text-lg font-mono font-bold text-muted-foreground">••••</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">6-digit PIN</p>
-                    <p className="text-xs mt-0.5 text-muted-foreground">Set a numeric PIN you'll enter before each transaction</p>
-                  </div>
+                  {showCurrentPin ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
 
-              {!required && (
-                <button
-                  onClick={dismiss}
-                  className="w-full py-2 text-xs text-muted-foreground opacity-30 hover:opacity-60 transition-opacity"
-                >
-                  Set this up later
-                </button>
-              )}
+              {currentPinErr && <p className="text-xs mb-3 text-center text-destructive">{currentPinErr}</p>}
+
+              <button
+                onClick={handleVerifyCurrentPin}
+                disabled={currentPin.length !== 6}
+                className="w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 bg-primary text-primary-foreground mb-3"
+              >
+                Continue
+              </button>
+
+              <button
+                onClick={() => setStep("change-verify-sq")}
+                className="w-full py-2 text-xs text-muted-foreground opacity-50 hover:opacity-80 transition-opacity"
+              >
+                Forgot PIN? Use security questions
+              </button>
             </>
           )}
 
-          {/* ── Passkey waiting ───────────────────────────────────────── */}
-          {step === "passkey-setup" && (
-            <div className="text-center py-10">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 bg-muted border border-border">
-                <Fingerprint size={28} className="text-primary" />
-              </div>
-              <p className="text-sm font-semibold mb-2">Follow your device prompt</p>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Use your fingerprint, face, or device PIN when prompted.
-              </p>
-              <Loader2 className="animate-spin mx-auto mt-6 text-muted-foreground" size={20} />
-            </div>
-          )}
-
-          {/* ── PIN setup ─────────────────────────────────────────────── */}
-          {step === "pin-setup" && (
+          {/* ── Step: answer security questions (change mode fallback) ── */}
+          {step === "change-verify-sq" && (
             <>
               <div className="flex items-center gap-3 mb-5">
                 <button
-                  onClick={() => { setStep("choose"); setError(""); setPin(""); setConfirm("") }}
+                  onClick={() => setStep("change-verify")}
                   className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 bg-muted hover:bg-muted/70 transition-colors"
                 >
                   <X className="h-3.5 w-3.5 text-muted-foreground" />
                 </button>
                 <div>
-                  <h2 className="text-base font-semibold">Set a PIN</h2>
+                  <h2 className="text-base font-semibold">Security questions</h2>
+                  <p className="text-xs text-muted-foreground">Answer correctly to reset your PIN</p>
+                </div>
+              </div>
+
+              {loadingSq ? (
+                <div className="py-8 text-center">
+                  <Loader2 className="animate-spin mx-auto mb-2 text-muted-foreground" size={24} />
+                  <p className="text-xs text-muted-foreground">Loading questions…</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3 mb-5 max-h-[300px] overflow-y-auto pr-0.5">
+                    {sqAnswers.map((item, idx) => (
+                      <div key={idx} className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground px-1">{item.question}</p>
+                        <input
+                          type="text"
+                          value={item.answer}
+                          onChange={e => updateAnswer(idx, e.target.value)}
+                          placeholder="Your answer…"
+                          className="w-full px-3 py-2 rounded-xl text-xs bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
+                          autoComplete="off"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {sqAnswerErrs && <p className="text-xs mb-3 text-destructive">{sqAnswerErrs}</p>}
+
+                  <button
+                    onClick={handleVerifySecurityAnswers}
+                    disabled={sqAnswers.some(a => !a.answer.trim())}
+                    className="w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 bg-primary text-primary-foreground"
+                  >
+                    Verify answers
+                  </button>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ── Step: set new PIN ─────────────────────────────────────── */}
+          {step === "pin-setup" && (
+            <>
+              <div className="flex items-center gap-3 mb-5">
+                {mode === "change" && (
+                  <button
+                    onClick={() => setStep("change-verify")}
+                    className="h-7 w-7 rounded-full flex items-center justify-center shrink-0 bg-muted hover:bg-muted/70 transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                )}
+                <div>
+                  <h2 className="text-base font-semibold">
+                    {mode === "change" ? "New PIN" : "Set a PIN"}
+                  </h2>
                   <p className="text-xs text-muted-foreground">6 digits, required before every transaction</p>
                 </div>
               </div>
 
               <div className="space-y-3 mb-5">
                 <div>
-                  <label className="block text-[11px] mb-1.5 font-medium text-muted-foreground">Choose PIN</label>
+                  <label className="block text-[11px] mb-1.5 font-medium text-muted-foreground">
+                    {mode === "change" ? "New PIN" : "Choose PIN"}
+                  </label>
                   <div className="relative">
                     <input
                       ref={inputRef}
@@ -420,38 +543,53 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
                       inputMode="numeric"
                       value={pin}
                       onChange={e => { setPin(digits(e.target.value)); setError("") }}
-                      onKeyDown={e => { if (e.key === "Enter" && pin.length === 6) document.getElementById("pin-confirm")?.focus() }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter" && pin.length === 6) confirmRef.current?.focus()
+                      }}
                       placeholder="••••••"
                       maxLength={6}
                       className="w-full px-3 py-2.5 rounded-xl text-sm font-mono tracking-widest pr-10 bg-muted border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
                       autoComplete="new-password"
                     />
-                    <button type="button" onClick={() => setShowPin(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:opacity-80 transition-opacity" tabIndex={-1}>
+                    <button
+                      type="button"
+                      onClick={() => setShowPin(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:opacity-80 transition-opacity"
+                      tabIndex={-1}
+                    >
                       {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   </div>
                   <div className="flex gap-1 mt-2">
                     {Array.from({ length: 6 }).map((_, i) => (
-                      <div key={i} className={`flex-1 h-0.5 rounded-full transition-all duration-150 ${i < pin.length ? "bg-primary" : "bg-border"}`} />
+                      <div
+                        key={i}
+                        className={`flex-1 h-0.5 rounded-full transition-all duration-150 ${
+                          i < pin.length ? "bg-primary" : "bg-border"
+                        }`}
+                      />
                     ))}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] mb-1.5 font-medium text-muted-foreground" htmlFor="pin-confirm">
+                  <label className="block text-[11px] mb-1.5 font-medium text-muted-foreground">
                     Confirm PIN
                   </label>
                   <input
-                    id="pin-confirm"
+                    ref={confirmRef}
                     type={showPin ? "text" : "password"}
                     inputMode="numeric"
                     value={confirm}
                     onChange={e => { setConfirm(digits(e.target.value)); setError("") }}
-                    onKeyDown={e => { if (e.key === "Enter" && confirm.length === 6) handlePinSubmit() }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && confirm.length === 6) handlePinSubmit()
+                    }}
                     placeholder="••••••"
                     maxLength={6}
-                    className={`w-full px-3 py-2.5 rounded-xl text-sm font-mono tracking-widest bg-muted border text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all ${error && confirm ? "border-destructive" : "border-border"}`}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm font-mono tracking-widest bg-muted border text-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all ${
+                      error && confirm ? "border-destructive" : "border-border"
+                    }`}
                     autoComplete="new-password"
                   />
                 </div>
@@ -464,12 +602,12 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
                 disabled={pin.length !== 6 || confirm.length !== 6}
                 className="w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 bg-primary text-primary-foreground"
               >
-                Set PIN
+                {mode === "change" ? "Set new PIN" : "Set PIN"}
               </button>
             </>
           )}
 
-          {/* ── Security questions ────────────────────────────────────── */}
+          {/* ── Step: security questions (setup only) ─────────────────── */}
           {step === "security-questions" && (
             <>
               <div className="text-center mb-5">
@@ -478,8 +616,7 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
                 </div>
                 <h2 className="text-base font-semibold">Recovery questions</h2>
                 <p className="text-xs mt-1.5 leading-relaxed text-muted-foreground">
-                  These let you change your PIN if you forget it, or prove ownership
-                  when connecting a new device. Pick 3 questions and memorise your answers.
+                  These let you change your PIN if you forget it. Pick 3 questions and memorise your answers.
                 </p>
               </div>
 
@@ -539,9 +676,13 @@ export function PinSetupModal({ onDone, onSkip, required = false, open: openProp
               <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-muted border border-border">
                 <ShieldCheck size={22} className="text-green-600" />
               </div>
-              <p className="text-base font-semibold mb-1">All set!</p>
+              <p className="text-base font-semibold mb-1">
+                {mode === "change" ? "PIN changed!" : "All set!"}
+              </p>
               <p className="text-xs text-muted-foreground">
-                Your wallet is protected. You'll be prompted before every transaction.
+                {mode === "change"
+                  ? "Your new PIN is active."
+                  : "Your wallet is protected. You'll be prompted before every transaction."}
               </p>
             </div>
           )}

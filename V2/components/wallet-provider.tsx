@@ -4,32 +4,27 @@ import {
   createContext, useContext, useEffect, useRef,
   useState, useCallback, type ReactNode,
 } from "react"
-import { BrowserProvider, JsonRpcProvider, JsonRpcSigner } from "ethers"
+import { BrowserProvider, ethers, JsonRpcProvider, Wallet, type JsonRpcSigner } from "ethers"
 import { toast } from "sonner"
 import { usePrivy } from "@privy-io/react-auth"
 import { supportedChains, DEFAULT_CHAIN_ID, CHAIN_RPC } from "@/config/chain"
-import { registerSignerGetter } from "@/lib/get-signer"
- import { EmbeddedBackendSigner } from "@/lib/embedded-signer"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SocialProvider =
-  | "google" | "twitter" | "telegram" | "discord"
-  | "github" | "farcaster" | "passkey"
+export type SocialProvider = "google" | "twitter" | "telegram" | "discord" | "github" | "farcaster" | "passkey"
+
 
 export interface WalletSession {
   address:        string
   walletType:     "embedded" | "external"
   provider?:      string
   chainId:        number
-  pinMethod?: "pin" | "passkey"
   token?:         string
   linkedSocials?: SocialProvider[]
   solanaAddress?:  string | null
   stellarAddress?: string | null
-  hasPIN?:         boolean
   // ── Legacy Privy import fields ──
   legacyFound?:       boolean
   legacyPrivyId?:     string | null
@@ -57,16 +52,15 @@ interface WalletContextType {
   showModal:        boolean
   solanaAddress:    string | null
   stellarAddress:   string | null
-  hasPIN:           boolean
   legacyFound?:       boolean
   legacyPrivyId?:     string | null
   legacyEvmAddress?:  string | null
   legacySolAddress?:  string | null
-  markPINSet: (method?: "pin" | "passkey") => void
+  getEmbeddedSigner: (chainId: number) => Promise<Wallet | null>
+getActiveSigner:   (chainId?: number) => Promise<JsonRpcSigner | Wallet | null>
 
-  clearLegacy:             () => void
-  fetchNonEvmAddresses:    () => Promise<void>
-  
+  clearLegacy:      () => void
+  fetchNonEvmAddresses: () => Promise<void>
 
   setShowModal:             (val: boolean) => void
   connectExternalWallet:    (wallet: DetectedWallet) => Promise<void>
@@ -76,9 +70,6 @@ interface WalletContextType {
   ensureCorrectNetwork:     (requiredChainId: number) => Promise<boolean>
   linkSocial:               (provider: SocialProvider, credential: string) => Promise<void>
   refreshProvider:          () => Promise<void>
-
-  getExternalSigner:        () => Promise<JsonRpcSigner | null>
-  getActiveSigner:          () => Promise<JsonRpcSigner | EmbeddedBackendSigner | null>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -86,9 +77,7 @@ interface WalletContextType {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = "wallet_session"
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -98,6 +87,7 @@ function detectWallets(): DetectedWallet[] {
   if (typeof window === "undefined") return []
   const eth = (window as any).ethereum
   if (!eth) return []
+  // Return a single generic entry — the browser decides which wallet to use
   return [{ name: "Browser Wallet", icon: "🌐", provider: eth }]
 }
 
@@ -106,9 +96,7 @@ async function buildProvider(raw: any) {
     const p = new BrowserProvider(raw)
     const [network, s] = await Promise.all([p.getNetwork(), p.getSigner()])
     return { provider: p, signer: s, chainId: Number(network.chainId) }
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 function saveSession(s: WalletSession) {
@@ -117,13 +105,10 @@ function saveSession(s: WalletSession) {
 
 function loadSession(): WalletSession | null {
   if (typeof window === "undefined") return null
-  try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null")
-  } catch {
-    return null
-  }
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") } catch { return null }
 }
 
+/** Wipe all per-address import-dismissed markers from sessionStorage */
 function clearImportSessionKeys() {
   if (typeof window === "undefined") return
   Object.keys(sessionStorage)
@@ -132,17 +117,17 @@ function clearImportSessionKeys() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Context default
+// Context
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const WalletContext = createContext<WalletContextType>({
   session: null, address: null, chainId: null,
   isConnected: false, isConnecting: false, walletType: null,
   provider: null, signer: null, detectedWallets: [], showModal: false,
-  hasPIN: false,
   setShowModal: () => {},
   connectExternalWallet: async () => {},
   connectSocial: async () => {},
+  getEmbeddedSigner: async () => null,
   disconnect: () => {},
   switchChain: async () => {},
   ensureCorrectNetwork: async () => false,
@@ -152,14 +137,9 @@ export const WalletContext = createContext<WalletContextType>({
   stellarAddress: null,
   clearLegacy:      () => {},
   fetchNonEvmAddresses: async () => {},
-  markPINSet:       () => {},
-  getExternalSigner: async () => null,
   getActiveSigner:   async () => null,
+  
 })
-
-// ─────────────────────────────────────────────────────────────────────────────
-// OAuth popup helper (exported for use in connect-modal)
-// ─────────────────────────────────────────────────────────────────────────────
 
 export async function openOAuthPopup(
   apiBase: string,
@@ -233,18 +213,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [detectedWallets, setDetectedWallets] = useState<DetectedWallet[]>([])
   const rawProviderRef = useRef<any>(null)
 
+  // ── Privy SDK logout hook ──────────────────────────────────────────────
+  // We need this so that disconnecting / switching accounts on this app
+  // also clears Privy's OWN internal session/wallet cache. Without this,
+  // Privy's useWallets() can keep returning the previous user's embedded
+  // wallet address even after our own session has switched to a new user.
   const { logout: privyLogout, authenticated: privyAuthenticated } = usePrivy()
 
   const forcePrivyLogout = useCallback(async () => {
     try {
-      if (privyAuthenticated) await privyLogout()
-    } catch { /* non-fatal */ }
+      if (privyAuthenticated) {
+        await privyLogout()
+      }
+    } catch {
+      // non-fatal — Privy logout failing shouldn't block our own disconnect
+    }
   }, [privyLogout, privyAuthenticated])
 
-
-  function resolveRpcUrl(chainId: number): string | undefined {
-  return CHAIN_RPC[chainId] ?? supportedChains.find(c => c.id === chainId)?.rpcUrls.default.http[0]
-}
   const isConnected = !!session?.address
   const address     = session?.address ?? null
   const chainId     = session?.chainId ?? null
@@ -257,7 +242,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const handler = (e: any) => {
       const { info, provider: p } = e.detail
       setDetectedWallets(prev => {
-        if (prev.some(w => w.name === info.name)) return prev
+        const exists = prev.some(w => w.name === info.name)
+        if (exists) return prev
         return [...prev, { name: info.name, icon: info.icon ?? "🌐", provider: p }]
       })
     }
@@ -284,7 +270,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("eip6963:announceProvider", handler)
   }, [])
 
-  // ── Fetch Solana + Stellar addresses ─────────────────────────────────────
+  // ── Fetch Solana + Stellar addresses from backend ─────────────────────────
   const fetchNonEvmAddresses = useCallback(async () => {
     const s = session
     if (!s?.token || s.walletType !== "embedded") return
@@ -304,46 +290,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
       setSession(updated)
       saveSession(updated)
-    } catch { /* non-fatal */ }
+    } catch {
+      // non-fatal
+    }
   }, [session])
 
   useEffect(() => {
     if (session?.walletType === "embedded" && session.solanaAddress === undefined) {
       fetchNonEvmAddresses()
     }
-  }, [session?.address, session?.walletType])
+  }, [session?.address, session?.walletType, session?.solanaAddress])
 
-  // ── Check whether PIN is already set (on restore or first login) ──────────
-const fetchPinStatus = useCallback(async (token: string): Promise<boolean | undefined> => {
-  try {
-    const res = await fetch(`${API_BASE}/wallet/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) return undefined   // don't assume false on error
-    const data = await res.json()
-    return !!data.has_pin
-  } catch {
-    return undefined                // network error → unknown, not false
-  }
-}, [])
-
-  
   useEffect(() => {
-    if (
-      session?.walletType === "embedded" &&
-      session.hasPIN === undefined &&
-      session.token
-    ) {
-      fetchPinStatus(session.token).then(hasPIN => {
-        setSession(prev => {
-          if (!prev) return prev
-          const updated = { ...prev, hasPIN }
-          saveSession(updated)
-          return updated
-        })
-      })
+    if (session?.walletType === "embedded" && session.solanaAddress === undefined) {
+      fetchNonEvmAddresses()
     }
-  }, [session?.address, session?.walletType, session?.hasPIN])
+  }, [session?.address, session?.walletType])
 
   // ── External wallet listeners ─────────────────────────────────────────────
   useEffect(() => {
@@ -354,9 +316,7 @@ const fetchPinStatus = useCallback(async (token: string): Promise<boolean | unde
         if (!result) return
         setProvider(result.provider)
         setSigner(result.signer)
-        setSession(prev =>
-          prev ? { ...prev, chainId: result.chainId, address: result.signer.address } : prev
-        )
+        setSession(prev => prev ? { ...prev, chainId: result.chainId, address: result.signer.address } : prev)
       })
     }
     raw.on?.("chainChanged", rebuild)
@@ -380,24 +340,28 @@ const fetchPinStatus = useCallback(async (token: string): Promise<boolean | unde
       setSigner(result.signer)
 
       const res = await fetch(`${API_BASE}/wallet/external-login`, {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ address: result.signer.address }),
+        body: JSON.stringify({ address: result.signer.address }),
       })
       const data = await res.json()
 
+      // Clear any stale import state from a previous user, including
+      // Privy's own cached session — an external wallet connect should
+      // never leave a stale embedded-wallet session behind either.
       await forcePrivyLogout()
       clearImportSessionKeys()
       localStorage.removeItem(SESSION_KEY)
 
       const newSession: WalletSession = {
-        address:      result.signer.address,
-        walletType:   "external",
-        provider:     wallet.name,
-        chainId:      result.chainId,
-        token:        data.token,
+        address:    result.signer.address,
+        walletType: "external",
+        provider:   wallet.name,
+        chainId:    result.chainId,
+        token:      data.token,
         linkedSocials: data.linked_socials,
       }
+
       setSession(newSession)
       saveSession(newSession)
       setShowModal(false)
@@ -411,45 +375,49 @@ const fetchPinStatus = useCallback(async (token: string): Promise<boolean | unde
     }
   }, [forcePrivyLogout])
 
-  // ── Get signer for external wallets only ──────────────────────────────────
-  const getExternalSigner = useCallback(async (): Promise<JsonRpcSigner | null> => {
-    if (session?.walletType !== "external") return null
-    if (signer) return signer
-    const raw = rawProviderRef.current
-    if (!raw) return null
-    const result = await buildProvider(raw)
-    if (result) {
-      setProvider(result.provider)
-      setSigner(result.signer)
-      return result.signer
-    }
+  // Add this inside WalletProvider, before the return
+const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
+  if (!session?.token || session.walletType !== "embedded") return null
+  try {
+    const res = await fetch(
+      `${API_BASE}/wallet/export-privatekey?chain_id=${targetChainId}`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.token}` },
+      }
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data.private_key) return null
+    const provider = new JsonRpcProvider(CHAIN_RPC[targetChainId])
+    return new ethers.Wallet(data.private_key, provider)
+  } catch {
     return null
-  }, [session?.walletType, signer])
-
-  
- 
-const getActiveSigner = useCallback(async (): Promise<JsonRpcSigner | EmbeddedBackendSigner | null> => {
-  if (session?.walletType === "external") return getExternalSigner()
-  if (session?.walletType === "embedded" && session.token && session.address) {
-    const rpcUrl = resolveRpcUrl(session.chainId)
-    if (!rpcUrl) return null
-    return new EmbeddedBackendSigner(session.address, session.token, session.chainId, new JsonRpcProvider(rpcUrl))
   }
-  return null
-}, [session?.walletType, session?.token, session?.address, session?.chainId, getExternalSigner])
+}, [session?.token, session?.walletType])
+const getActiveSigner = useCallback(async (targetChainId?: number) => {
+  // External wallet — rebuild provider if signer is stale/null
+  if (session?.walletType === "external") {
+    if (signer) return signer
 
-useEffect(() => {
-  registerSignerGetter(async (requestedChainId) => {
-    if (session?.walletType === "external") return getExternalSigner()
-    if (session?.walletType === "embedded" && session.token && session.address) {
-      const targetChain = requestedChainId ?? session.chainId
-      const rpcUrl = resolveRpcUrl(targetChain)
-      if (!rpcUrl) return null
-      return new EmbeddedBackendSigner(session.address, session.token, targetChain, new JsonRpcProvider(rpcUrl))
+    // Signer is null but wallet may still be connected — try rebuilding
+    const raw = rawProviderRef.current
+    if (raw) {
+      const result = await buildProvider(raw)
+      if (result) {
+        setProvider(result.provider)
+        setSigner(result.signer)
+        return result.signer
+      }
     }
     return null
-  })
-}, [session, getExternalSigner])
+  }
+
+  // Embedded wallet — fetch private key and build local signer
+  const cid = targetChainId ?? chainId
+  if (!cid) return null
+  return getEmbeddedSigner(cid)
+}, [session?.walletType, signer, chainId, getEmbeddedSigner])
 
   // ── Connect social (embedded wallet via backend) ──────────────────────────
   const connectSocial = useCallback(async (socialProvider: SocialProvider, credential: string) => {
@@ -477,11 +445,12 @@ useEffect(() => {
         needs_seed_import:  boolean
       } = await res.json()
 
+      // ── Clear ALL stale import/session state from any previous user ──
+      // NOTE: we intentionally do NOT call forcePrivyLogout() here — this
+      // is the path where Privy auth is what we're actively establishing
+      // (e.g. via the export flow), so logging out here would undo it.
       clearImportSessionKeys()
       localStorage.removeItem(SESSION_KEY)
-
-      // Fetch PIN status right away so PinSetupModal can decide whether to show
-      const hasPIN = await fetchPinStatus(data.token)
 
       const newSession: WalletSession = {
         address:        data.address,
@@ -490,9 +459,11 @@ useEffect(() => {
         chainId:        DEFAULT_CHAIN_ID,
         token:          data.token,
         linkedSocials:  data.linked_socials,
+        // Start as undefined so fetchNonEvmAddresses runs, but if backend
+        // already returned stellar/solana from the login response, use it.
         solanaAddress:  undefined,
         stellarAddress: data.stellar_address ?? undefined,
-        hasPIN,
+        // ── Legacy fields ──
         legacyFound:      data.legacy_found || data.needs_seed_import,
         legacyEvmAddress: data.legacy_evm_address ?? data.address,
         legacyPrivyId:    data.legacy_privy_id,
@@ -514,19 +485,13 @@ useEffect(() => {
     } finally {
       setIsConnecting(false)
     }
-  }, [fetchPinStatus])
+  }, [])
 
-  // ── Mark PIN as set (called by PinSetupModal on success) ─────────────────
-  const markPINSet = useCallback((method: "pin" | "passkey" = "pin") => {
-  setSession(prev => {
-    if (!prev) return prev
-    const updated = { ...prev, hasPIN: true, pinMethod: method }
-    saveSession(updated)
-    return updated
-  })
-}, [])
-
-  // ── Clear legacy import flags ─────────────────────────────────────────────
+  // ── Clear legacy import flags ────────────────────────────────────────────
+  // Called both on successful import AND when the modal is dismissed/skipped.
+  // We force a Privy logout here too: once the legacy-import flow is done
+  // (or abandoned), we don't want Privy's embedded-wallet session lingering
+  // around to confuse the NEXT social login on this device.
   const clearLegacy = useCallback(() => {
     setSession(prev => {
       if (!prev) return prev
@@ -631,7 +596,10 @@ useEffect(() => {
       if (!res.ok) throw new Error((await res.json()).detail)
       const data = await res.json()
 
-      const updated: WalletSession = { ...session, linkedSocials: data.linked_socials }
+      const updated: WalletSession = {
+        ...session,
+        linkedSocials: data.linked_socials,
+      }
       setSession(updated)
       saveSession(updated)
       toast.success(`${socialProvider} linked!`)
@@ -652,26 +620,25 @@ useEffect(() => {
     <WalletContext.Provider value={{
       session, address, chainId, isConnected, isConnecting,
       walletType, provider, signer, detectedWallets, showModal,
-      hasPIN: session?.hasPIN ?? false,
       setShowModal, connectExternalWallet, connectSocial,
       disconnect, switchChain, ensureCorrectNetwork,
       linkSocial, refreshProvider,
       solanaAddress:        session?.solanaAddress  ?? null,
       stellarAddress:       session?.stellarAddress ?? null,
       fetchNonEvmAddresses,
-      getExternalSigner,
+      getEmbeddedSigner,
       getActiveSigner,
       legacyFound:      session?.legacyFound      ?? false,
       legacyEvmAddress: session?.legacyEvmAddress ?? null,
       legacySolAddress: session?.legacySolAddress ?? null,
       legacyPrivyId:    session?.legacyPrivyId    ?? null,
       clearLegacy,
-      markPINSet,
     }}>
       {children}
     </WalletContext.Provider>
   )
 }
+
 
 export function useWallet() {
   return useContext(WalletContext)

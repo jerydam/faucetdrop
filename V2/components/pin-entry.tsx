@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { ShieldAlert, X, Eye, EyeOff } from "lucide-react"
+import { ShieldAlert, X, Eye, EyeOff, ShieldOff } from "lucide-react"
+import { useWallet } from "@/components/wallet-provider"
 
 type Resolver = (pin: string) => void
 type Rejecter = (err: Error) => void
@@ -18,6 +19,8 @@ export function openPinEntryModal(resolve: Resolver, reject: Rejecter) {
 }
 
 export function PinEntryModal() {
+  const { session } = useWallet()
+
   const [open,    setOpen]    = useState(false)
   const [mounted, setMounted] = useState(false)
   const [pin,     setPin]     = useState("")
@@ -25,6 +28,7 @@ export function PinEntryModal() {
   const [error,   setError]   = useState("")
 
   const inputRef = useRef<HTMLInputElement>(null)
+  const hasPin = session?.hasPIN !== false   // treat undefined as "has PIN" to avoid flash
 
   useEffect(() => { _setOpen = setOpen; return () => { _setOpen = null } }, [])
   useEffect(() => setMounted(true), [])
@@ -32,7 +36,7 @@ export function PinEntryModal() {
   useEffect(() => {
     if (!open) { setPin(""); setError(""); return }
     setPin(""); setError("")
-    setTimeout(() => inputRef.current?.focus(), 80)
+    if (hasPin) setTimeout(() => inputRef.current?.focus(), 80)
   }, [open])
 
   const resolveWith = (resolvedPin: string) => {
@@ -61,6 +65,34 @@ export function PinEntryModal() {
 
   if (!open || !mounted) return null
 
+  // ── User has no PIN yet — show setup nudge instead of PIN input ───────
+  if (!hasPin) {
+    return createPortal(
+      <Backdrop onClose={cancel}>
+        <Modal onClose={cancel}>
+          <div className="p-6 text-center">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 bg-amber-500/10 border border-amber-500/30">
+              <ShieldOff size={20} className="text-amber-500" />
+            </div>
+            <h2 className="text-base font-semibold mb-1.5">No PIN set</h2>
+            <p className="text-xs leading-relaxed text-muted-foreground mb-5">
+              You need a transaction PIN before you can sign anything.
+              Set one up in <span className="font-medium text-foreground">Profile → Security</span>.
+            </p>
+            <button
+              onClick={cancel}
+              className="w-full py-2.5 rounded-xl text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              Got it
+            </button>
+          </div>
+        </Modal>
+      </Backdrop>,
+      document.body,
+    )
+  }
+
+  // ── Normal PIN entry ──────────────────────────────────────────────────
   return createPortal(
     <Backdrop onClose={cancel}>
       <Modal onClose={cancel}>
@@ -163,3 +195,6 @@ function Modal({ children, onClose }: { children: React.ReactNode; onClose?: () 
     </div>
   )
 }
+
+
+

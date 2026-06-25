@@ -246,10 +246,10 @@ export const networks: Network[] = [
     symbol: "BOT",
     chainId: BOTCHAIN_CHAIN_ID,
     rpcUrl: [
-      process.env.NEXT_PUBLIC_BOTCHAIN_URL || "https://rpc.bohr.life",
+      process.env.NEXT_PUBLIC_BOTCHAIN_URL || "https://rpc.botchain.ai",
     ],
-    blockExplorerUrls: "https://scan.bohr.life",
-    explorerUrl: "https://scan.bohr.life",
+    blockExplorerUrls: "https://rpc.botchain.ai",
+    explorerUrl: "https://scan.botchain.ai",
     color: "#14F195",
     logoUrl: "/botc.png",
     iconUrl: "/botc.png",

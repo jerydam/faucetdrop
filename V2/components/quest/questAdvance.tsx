@@ -35,7 +35,7 @@
       import { toast } from 'sonner'
 
       const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
-      const BACKEND_WALLET_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
+      const BACKEND_WALLET_ADDRESS = "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2"
 
       // =========================================================
       // TYPES & CONSTANTS

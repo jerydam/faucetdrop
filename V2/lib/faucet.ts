@@ -286,7 +286,7 @@ export interface NameValidationResult {
 }
 
 // Load backend address from .env
-export const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
+export const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2"
 export const BACKUP_BACKEND_ADDRESS = "0x3207D4728c32391405C7122E59CCb115A4af31eA" 
 // Storage contract address
 const STORAGE_CONTRACT_ADDRESS = "0xc26c4Ea50fd3b63B6564A5963fdE4a3A474d4024"

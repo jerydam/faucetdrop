@@ -19,7 +19,7 @@ import { usePathname } from "next/navigation"
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ADMIN_ADDRESSES = [
-  "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785",
+  "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2",
 ].map(a => a.toLowerCase())
 
 interface Props { className?: string }

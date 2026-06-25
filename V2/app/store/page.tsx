@@ -17,7 +17,7 @@ import { Header } from '@/components/header';
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-const PLATFORM_OWNER = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
+const PLATFORM_OWNER = "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2";
 
 const POINTS_CONTRACT_ADDRESSES: Record<number, string> = {
   42220: "0xF8F6D74E61A0FC2dd2feCd41dE384ba2fbf91b9D",

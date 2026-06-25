@@ -51,7 +51,7 @@ interface SocialMediaLink {
 }
 
 const DEFAULT_FAUCET_IMAGE = "/default.jpeg"
-const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785"
+const FACTORY_OWNER_ADDRESS = "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2"
 const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}."
 const DEFAULT_X_POST_TEMPLATE = "Drip created by {@yourhandle} for {#the_hashtag}."
 const CONSTANT_X_POST = "I just dripped {amount} {token} from @FaucetDrops on {network}.Verify Drop 💧: {explorer}"

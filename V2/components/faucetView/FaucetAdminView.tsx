@@ -107,7 +107,7 @@ import {
 import { Connection, PublicKey } from "@solana/web3.js";
 
 type FaucetType = "dropcode" | "droplist" | "custom";
-const FACTORY_OWNER_ADDRESS = "0x9fBC2A0de6e5C5Fd96e8D11541608f5F328C0785";
+const FACTORY_OWNER_ADDRESS = "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2";
 const FIXED_TWEET_PREFIX = "I just dripped {amount} {token} from @FaucetDrops on {network}.";
 
 const PLATFORM_BASE_URLS: Record<string, string> = {

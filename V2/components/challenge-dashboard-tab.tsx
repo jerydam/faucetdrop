@@ -57,7 +57,7 @@ const ERC20_ABI = [
 ];
 
 /** ─── Admin address ──────────────────────────────────────────────────────── */
-const ADMIN_ADDRESS = "0x9fbc2a0de6e5c5fd96e8d11541608f5f328c0785";
+const ADMIN_ADDRESS = "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2";
 
 async function submitDropsClaim(
   payload: { contract: string; amount: string; timestamp: number; signature: string },

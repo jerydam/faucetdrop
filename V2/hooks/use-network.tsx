@@ -258,7 +258,7 @@ export const networks: Network[] = [
     factories: {
       droplist: "0xe77Da13684158f7e6C4912730b46ea825b3CA56F",
       dropcode: "0x034863545dfE877932F1F5261CeC9A6Be81b82EB",
-      custom: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
+      custom: "0x0837EACf85472891F350cba74937cB02D90E60A4",
       quest: "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
       quiz: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
     },

@@ -1557,6 +1557,25 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
                       <span className="ml-1.5 text-xs">Withdraw</span>
                     </Button>
                   </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[10, 15, 25, 50, 75, 100].map((pct) => (
+                      <Button
+                        key={pct}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2.5 text-xs font-medium"
+                        onClick={() => {
+                          if (!faucetDetails?.balance) return;
+                          const balance = faucetDetails.balance as bigint;
+                          const portion = (balance * BigInt(pct)) / BigInt(100);
+                          setWithdrawAmount(formatUnits(portion, tokenDecimals));
+                        }}
+                      >
+                        {pct}%
+                      </Button>
+                    ))}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {onSolana
                       ? "Only callable after the claim period ends."

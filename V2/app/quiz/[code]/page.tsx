@@ -97,7 +97,7 @@
     return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
   }
   const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
-
+  const DEFAULT_QUIZ_COVER = "/quiz.jpeg";
   // ── Safe WS URL ──
   function getWsBaseUrl(): string {
     if (typeof window === "undefined") return "wss://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
@@ -776,22 +776,15 @@
 
           <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6 pb-20">
             <div className="text-center space-y-2">
-              {rQuiz?.coverImageUrl ? (
-                <div className="relative w-full max-w-md mx-auto aspect-video rounded-2xl overflow-hidden shadow-lg border border-surface mb-4">
-                  <img src={rQuiz.coverImageUrl} alt={rQuiz.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <h1 className="text-white font-black text-lg sm:text-2xl text-left [text-shadow:0_2px_8px_rgba(0,0,0,0.9),0_1px_3px_rgba(0,0,0,1)]">
-                      {rQuiz.title}
-                    </h1>
-                  </div>
+              <div className="relative w-full max-w-md mx-auto aspect-video rounded-2xl overflow-hidden shadow-lg border border-surface mb-4">
+                <img src={rQuiz?.coverImageUrl || DEFAULT_QUIZ_COVER} alt={rQuiz?.title} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <h1 className="text-white font-black text-lg sm:text-2xl text-left [text-shadow:0_2px_8px_rgba(0,0,0,0.9),0_1px_3px_rgba(0,0,0,1)]">
+                    {rQuiz?.title || quizMeta?.title}
+                  </h1>
                 </div>
-              ) : (
-                <>
-                  <div className="text-4xl sm:text-6xl mb-2">🏆</div>
-                  <h1 className="text-2xl sm:text-3xl font-black text-surface-primary">{rQuiz?.title || quizMeta?.title}</h1>
-                </>
-              )}
+              </div>
               <div className="flex items-center justify-center gap-3 flex-wrap text-surface-secondary text-sm">
                 <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{totalPlayers} players</span>
                 <span className="text-slate-300 dark:text-slate-700">•</span>
@@ -2272,16 +2265,14 @@
           </div>
 
           {/* Cover image */}
-          {quizMeta?.coverImageUrl && (
-            <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-xl border border-white/10">
-              <img
-                src={quizMeta.coverImageUrl}
-                alt={quizMeta.title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-            </div>
-          )}
+          <div className="relative w-full aspect-video rounded-2xl overflow-hidden shadow-xl border border-white/10">
+            <img
+              src={quizMeta?.coverImageUrl || DEFAULT_QUIZ_COVER}
+              alt={quizMeta?.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          </div>
 
           {/* Meta */}
           <div className="space-y-1">
@@ -2626,21 +2617,14 @@
               <div className="space-y-5">
 
                 {/* Quiz cover + info hero */}
-                {quizMeta?.coverImageUrl ? (
-                  <div className="relative w-full max-w-2xl mx-auto aspect-video rounded-2xl overflow-hidden border border-surface shadow-xl">
-                    <img src={quizMeta.coverImageUrl} alt={quizMeta.title} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                    <div className="absolute bottom-4 left-4 right-4">
-                      <h1 className="text-surface-primary font-black text-xl sm:text-2xl drop-shadow">{quizMeta.title}</h1>
-                      <p className="text-surface-secondary text-sm">{quizMeta.totalQuestions} questions</p>
-                    </div>
+                <div className="relative w-full max-w-2xl mx-auto aspect-video rounded-2xl overflow-hidden border border-surface shadow-xl">
+                  <img src={quizMeta?.coverImageUrl || DEFAULT_QUIZ_COVER} alt={quizMeta?.title} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <h1 className="text-surface-primary font-black text-xl sm:text-2xl drop-shadow">{quizMeta?.title}</h1>
+                    <p className="text-surface-secondary text-sm">{quizMeta?.totalQuestions} questions</p>
                   </div>
-                ) : (
-                  <div className="text-center py-4">
-                    <h1 className="text-surface-primary font-black text-2xl sm:text-3xl">{quizMeta?.title}</h1>
-                    <p className="text-surface-secondary text-sm mt-1">{quizMeta?.totalQuestions} questions</p>
-                  </div>
-                )}
+                </div>
 
                 {/* Players grid */}
                 <div className="bg-surface-card border border-surface rounded-2xl overflow-hidden">

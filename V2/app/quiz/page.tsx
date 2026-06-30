@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import Loading from "../loading/page";
 
 const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+const DEFAULT_QUIZ_COVER = "/quiz.jpeg";
 
 interface QuizCard {
   code: string;
@@ -99,17 +100,11 @@ function QuizCardItem({
     >
       {/* Cover */}
       <div className="relative h-32 overflow-hidden bg-muted">
-        {quiz.coverImageUrl ? (
-          <img
-            src={quiz.coverImageUrl}
-            alt=""
-            className="w-full h-full object-cover opacity-50 group-hover:opacity-70 group-hover:scale-105 transition-all duration-300"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Gamepad2 className="h-14 w-14 text-muted-foreground/10" />
-          </div>
-        )}
+        <img
+          src={quiz.coverImageUrl || DEFAULT_QUIZ_COVER}
+          alt=""
+          className="w-full h-full object-cover opacity-50 group-hover:opacity-70 group-hover:scale-105 transition-all duration-300"
+        />
 
         {/* Gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent" />

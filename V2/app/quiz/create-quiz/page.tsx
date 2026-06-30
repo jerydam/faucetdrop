@@ -97,6 +97,7 @@ function parseOnchainError(err: any): string {
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
 const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+const DEFAULT_QUIZ_COVER = "/quiz.jpeg";
 
 interface QuizOption { id: "A" | "B" | "C" | "D"; text: string }
 interface QuizQuestion {
@@ -928,8 +929,8 @@ const handlePdfUpload = async () => {
 
   const buildPayload = () => ({
     title, description, questions, timePerQuestion: 30, maxParticipants,
-    startTime: startTime || null, creatorAddress: userWalletAddress,
-    creatorUsername, coverImageUrl: coverImageUrl || null, chainId,
+  startTime: startTime || null, creatorAddress: userWalletAddress,
+  creatorUsername, coverImageUrl: coverImageUrl || DEFAULT_QUIZ_COVER, chainId,
     reward: {
       poolAmount: parseFloat(reward.poolAmount) || 0,
       tokenAddress: reward.tokenAddress, tokenSymbol: reward.tokenSymbol,
@@ -1111,7 +1112,7 @@ const handleGenerateAI = async () => {
         timePerQuestion: aiTimePerQ,
         creatorAddress: userWalletAddress,
         creatorUsername,
-        coverImageUrl: coverImageUrl || null,
+        coverImageUrl: coverImageUrl || DEFAULT_QUIZ_COVER,
         title: title || undefined,
         chainId,
         faucetAddress: contractAddress,
@@ -1161,11 +1162,10 @@ const handleGenerateAI = async () => {
                   🏆 {reward.poolAmount} {reward.tokenSymbol} for top {reward.totalWinners} winners
                 </p>
               </div>
-              {coverImageUrl && (
-                <div className="rounded-2xl overflow-hidden h-24 border-2 border-border">
-                  <img src={coverImageUrl} alt="Cover" className="w-full h-full object-cover" />
-                </div>
-              )}
+              
+              <div className="rounded-2xl overflow-hidden h-24 border-2 border-border">
+              <img src={coverImageUrl || DEFAULT_QUIZ_COVER} alt="Cover" className="w-full h-full object-cover" />
+            </div>
               <div className="bg-primary/5 rounded-2xl p-6 border-2 border-primary/20">
                 <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">Quiz Code</p>
                 <div className="text-5xl font-black tracking-[0.15em] text-primary">{createdCode}</div>
@@ -1788,7 +1788,7 @@ const handleGenerateAI = async () => {
       <div className="rounded-3xl border-2 border-border bg-card overflow-hidden">
         {coverImageUrl && (
           <div className="h-32 relative">
-            <img src={coverImageUrl} alt="" className="w-full h-full object-cover" />
+            <img src={coverImageUrl || DEFAULT_QUIZ_COVER} alt="" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
             <div className="absolute bottom-3 left-4">
               <p className="text-white font-black text-lg leading-tight drop-shadow">{title || "Untitled Quiz"}</p>

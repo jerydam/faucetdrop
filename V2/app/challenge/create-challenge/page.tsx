@@ -18,18 +18,12 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  createWalletClient,
-  createPublicClient,
-  custom,
-  http,
   keccak256,
   toBytes,
-  parseUnits,
   type Address,
 } from "viem";
 import { getChainConfig, getEnabledChains, CELO_CHAIN_ID, BOTCHAIN_CHAIN_ID, type ChainConfig } from "@/lib/chain";
-import { celo } from "viem/chains";
-import { QUIZ_HUB_ABI } from "@/lib/abis";
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -716,7 +710,7 @@ useEffect(() => {
           : "border-border bg-card text-muted-foreground hover:border-primary/40",
       )}
     >
-      <span>{c.icon}</span> {c.shortName}
+
     </button>
   ))}
 </div>

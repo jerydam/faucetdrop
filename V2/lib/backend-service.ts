@@ -81,7 +81,7 @@ const SUPPORTED_CHAIN_IDS = [
   421614, // Arbitrum Sepolia
   137,    // Polygon Mainnet
   56,
-  968
+  677
 ];
 
 // ─── Core Error Extractor ────────────────────────────────────────────────────

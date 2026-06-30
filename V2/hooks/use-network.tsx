@@ -256,15 +256,15 @@ export const networks: Network[] = [
     // TODO: fill in once Botchain factory contracts are deployed
     factoryAddresses: [],
     factories: {
-      droplist: "0xe77Da13684158f7e6C4912730b46ea825b3CA56F",
-      dropcode: "0x034863545dfE877932F1F5261CeC9A6Be81b82EB",
-      custom: "0x0837EACf85472891F350cba74937cB02D90E60A4",
-      quest: "0x42355492298A89eb1EF7FB2fFE4555D979f1Eee9",
-      quiz: "0x9D6f441b31FBa22700bb3217229eb89b13FB49de",
+      droplist: "0xDa66c58e6941aC1bec3Cf7CF15386AB7858A4A0F",
+      dropcode: "0x636685bCFeEf6Baeb05872f01e69405077eAF633",
+      custom: "0xd73170170E002b45eA4AA51e7E93302D61c30173",
+      quest: "0xE7f93A609BABfe25912402F57e46aeB94115FBd6",
+      quiz: "0x8Ec988f892034f7CB7b80576590B1A9eC000ad54",
     },
     tokenAddress: ZeroAddress,
     nativeCurrency: { name: "Botchain", symbol: "BOT", decimals: 18 },
-    isTestnet: true,
+    isTestnet: false,
   },
 ]
 

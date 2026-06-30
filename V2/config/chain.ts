@@ -2,7 +2,7 @@ import { type Chain, defineChain } from "viem"
 import { arbitrum, base, lisk, celo, bsc } from "viem/chains"
 
 export const botchain = defineChain({
-  id: 968,
+  id: 677,
   name: "Botchain Testnet",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {

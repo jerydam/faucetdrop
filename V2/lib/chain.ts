@@ -10,8 +10,7 @@ import {
 export interface ChainConfig {
   id: number;
   name: string;
-  shortName: string;          // for compact UI (badges, pills)
-  icon: string;                // emoji or local asset path
+  shortName: string;          // for compact UI (badges, pills)              // emoji or local asset path
   rpcUrl: string;
   explorerUrl: string;
   explorerName: string;
@@ -28,14 +27,13 @@ export interface ChainConfig {
 }
 
 export const CELO_CHAIN_ID = 42220;
-export const BOTCHAIN_CHAIN_ID = 968; // ← placeholder, swap when Botchain assigns a real chain ID
+export const BOTCHAIN_CHAIN_ID = 677; // ← placeholder, swap when Botchain assigns a real chain ID
 
 export const CHAINS: Record<number, ChainConfig> = {
   [CELO_CHAIN_ID]: {
     id: CELO_CHAIN_ID,
     name: "Celo Mainnet",
     shortName: "Celo",
-    icon: "🟡",
     rpcUrl: "https://forno.celo.org",
     explorerUrl: "https://celoscan.io",
     explorerName: "CeloScan",
@@ -56,7 +54,6 @@ export const CHAINS: Record<number, ChainConfig> = {
     id: BOTCHAIN_CHAIN_ID,
     name: "Botchain",
     shortName: "Botchain",
-    icon: "🤖",
     // ← placeholder RPC, swap once Botchain ships a public endpoint
     rpcUrl: process.env.NEXT_PUBLIC_BOTCHAIN_RPC_URL ?? "https://rpc.botchain.example",
     explorerUrl: process.env.NEXT_PUBLIC_BOTCHAIN_EXPLORER_URL ?? "https://explorer.botchain.example",
@@ -66,12 +63,12 @@ export const CHAINS: Record<number, ChainConfig> = {
       // ← placeholders — Botchain is EVM-compatible so the same ABIs apply,
       // just swap these addresses once deployed.
       dropsToken: (process.env.NEXT_PUBLIC_DROPS_CONTRACT_BOTCHAIN ??
-        "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1") as `0x${string}`,
+        "0xBAd791F200f1F8Fb639d83125FcF732F5f6eCD03") as `0x${string}`,
       quizHub: (process.env.NEXT_PUBLIC_QUIZ_HUB_BOTCHAIN ??
-        "0x90Fae824F272e502f9f565f280485F84157Ca731") as `0x${string}`,
-      dropsRedeemPool: (process.env.NEXT_PUBLIC_DROPS_REDEEM_POOL_CELO ??
-        "0x4B8c7A12660C4847c65662a953F517198fBFc0ED") as `0x${string}`,  
-      gToken: "0xFE7DB2549d0c03A4E3557e77c8d798585dD80Cc1",
+        "0xE7F217A8447087600C1CBFb63192586edFa619fe") as `0x${string}`,
+      dropsRedeemPool: (process.env.NEXT_PUBLIC_DROPS_REDEEM_POOL_BOTCHAIN ??
+        "0x9825670865B896738CF8E6c98d093aD5b40F0A11") as `0x${string}`,  
+      gToken: "0xD5452816194a3784dBa983426cCe7c122F4abd30",
       // No DROPS redeem pool / $G on Botchain yet — buy/redeem-to-$G flow
       // stays Celo-only until that's live there too.
     },

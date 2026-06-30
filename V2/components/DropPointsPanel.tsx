@@ -60,6 +60,13 @@ const CHAIN_CONFIG: Record<
     rpc: "https://arb1.arbitrum.io/rpc",
     contract: "0xEcb026D22f9aA7FD9Aa83B509834dB8Fd66B27F6",
   },
+   677: {
+    name: "Botchain",
+    color: "#14F195",
+    explorer: "https://scan.botchain.ai/tx/",
+    rpc: "https://rpc.botchain.ai",
+    contract: "0xBAd791F200f1F8Fb639d83125FcF732F5f6eCD03",
+  },
 };
 
 const CHAIN_IDS = Object.keys(CHAIN_CONFIG).map(Number);

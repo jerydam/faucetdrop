@@ -544,7 +544,7 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "Binance-Peg BUSD Token",
     },
 ],
-  968:[
+  677:[
     {
       address: zeroAddress,
       name: "BOT",
@@ -555,20 +555,12 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       description: "Native BOT for transaction fees",
     },
     {
-      address: "0x75edC9335175Fc0552D51D48439F229c10420fe3",
+      address: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C",
       name: "Tether USD",
       symbol: "USDT",
       decimals: 18,
       logoUrl: "/usdt.jpg", 
       description: "Binance-Peg BSC-USD",
-    },
-    {
-      address: "0x4cF0ce056B1C39032c41EE97e09bC8e72c7D69f4",
-      name: "CA Token",
-      symbol: "CAT",
-      decimals: 18,
-      logoUrl: "/ca.png", 
-      description: "Binance-Peg BUSD Token",
     },
 ],
 102: [  // SOLANA_CHAIN_ID

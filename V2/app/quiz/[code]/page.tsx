@@ -285,6 +285,7 @@
     42161: "https://arb1.arbitrum.io/rpc",
     8453:  "https://mainnet.base.org",
     56:    "https://bsc-dataseed.binance.org",
+    677:   "https://rpc.botchain.ai"
   };
 
   const activeWallet =
@@ -604,6 +605,7 @@
     42161: "https://arbiscan.io/tx/",
     8453:  "https://basescan.org/tx/",
     56:    "https://bscscan.com/tx/",
+    677:   "https://scan.botchain.ai/tx/"
   };
 
   // ── Reusable claim status badge ──
@@ -1180,6 +1182,7 @@
       42161: "https://arbiscan.io/tx/",
       8453: "https://basescan.org/tx/",
       56: "https://bscscan.com/tx/",
+      677: "https://scan.botchain.ai/tx/"
     };
 
     return (

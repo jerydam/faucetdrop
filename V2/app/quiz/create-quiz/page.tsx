@@ -34,6 +34,7 @@ import {
 } from "@/lib/solana"
 import { getAnchorWalletFromPrivy } from "@/lib/privy-solana-wallet"
 import { useSolanaWallet } from "@/hooks/use-solana"
+import { zeroAddress } from "viem";
 
 // Inside the component, add alongside existing hooks:
 
@@ -155,14 +156,33 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
     { address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", name: "BUSD", symbol: "BUSD", decimals: 18, logoUrl: "/busd.png", description: "Binance-Peg BUSD Token" },
     { address: "0x33A3d962955A3862C8093D1273344719f03cA17C", name: "SPORE", symbol: "SPR", decimals: 9, logoUrl: "/spore.png", description: "Binance meme Token" },
   ],
+  677:[
+          {
+            address: "0x0000000000000000000000000000000000000000",
+            name: "BOT",
+            symbol: "BOT",
+            decimals: 18,
+            isNative: true,
+            logoUrl: "/bot.png", 
+            description: "Native BOT for transaction fees",
+          },
+          {
+            address: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C",
+            name: "Tether USD",
+            symbol: "USDT",
+            decimals: 18,
+            logoUrl: "/usdt.jpg", 
+            description: "Tether USD stablecoin",
+          },
+         ]
 };
 
 const COINGECKO_IDS: Record<string, string> = {
   CELO: "celo", cUSD: "celo-dollar", USDT: "tether", USDC: "usd-coin",
-  ETH: "ethereum", LSK: "lisk", BNB: "binance-coin", BUSD: "binance-usd",
+  ETH: "ethereum", LSK: "lisk", BNB: "binance-coin", BUSD: "binance-usd", BOT: "bot-chain"
 };
 const CHAIN_NAMES: Record<number, string> = {
-  42220: "Celo", 1135: "Lisk", 42161: "Arbitrum", 8453: "Base", 56: "BNB Chain",
+  42220: "Celo", 1135: "Lisk", 42161: "Arbitrum", 8453: "Base", 56: "BNB Chain", 677: "BOTCHAIN"
 };
 
 // Kahoot-inspired option colors — bright and fun

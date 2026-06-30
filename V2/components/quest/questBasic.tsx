@@ -70,12 +70,12 @@ const networks: Network[] = [
     {
         name: "Botchain Testnet",
         symbol: "BOT",
-        chainId: BigInt(968),
+        chainId: BigInt(677),
         rpcUrl: [
-          process.env.NEXT_PUBLIC_BOTCHAIN_URL || "https://rpc.bohr.life",
+          process.env.NEXT_PUBLIC_BOTCHAIN_URL || "https://rpc.botchain.ai",
         ],
-        blockExplorer: "https://scan.bohr.life",
-        explorerUrl: "https://scan.bohr.life",
+        blockExplorer: "https://scan.botchain.ai",
+        explorerUrl: "https://scan.botchain.ai",
         color: "#14F195",
         logoUrl: "/botc.png",
         iconUrl: "/botc.png",
@@ -83,11 +83,11 @@ const networks: Network[] = [
         factoryAddresses: [],
         factories: {
 
-          custom: "0x0a5C19B5c0f4B9260f0F8966d26bC05AAea2009C",
+          custom: "0xE7f93A609BABfe25912402F57e46aeB94115FBd6",
         },
         tokenAddress: ZeroAddress,
         nativeCurrency: { name: "Botchain", symbol: "BOT", decimals: 18 },
-        isTestnet: true,
+        isTestnet: false,
       },
 ]
 
@@ -116,7 +116,7 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
         { address: "0x55d398326f99059fF775485246999027B3197955", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/usdt.jpg", description: "Binance-Peg BSC-USD" },
         { address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", name: "BUSD", symbol: "BUSD", decimals: 18, logoUrl: "/busd.png", description: "Binance-Peg BUSD Token" },
     ],
-    968:[
+    677:[
         {
           address: ZeroAddress,
           name: "BOT",
@@ -127,21 +127,14 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
           description: "Native BOT for transaction fees",
         },
         {
-          address: "0x75edC9335175Fc0552D51D48439F229c10420fe3",
+          address: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C",
           name: "Tether USD",
           symbol: "USDT",
           decimals: 18,
           logoUrl: "/usdt.jpg", 
-          description: "Binance-Peg BSC-USD",
+          description: "Tether USD stablecoin",
         },
-        {
-          address: "0x4cF0ce056B1C39032c41EE97e09bC8e72c7D69f4",
-          name: "CA Token",
-          symbol: "CAT",
-          decimals: 18,
-          logoUrl: "/ca.png", 
-          description: "Binance-Peg BUSD Token",
-        },]
+       ]
 }
 const ALL_TOKENS_BY_CHAIN_EXTENDED: Record<number, TokenConfiguration[]> = {
   ...ALL_TOKENS_BY_CHAIN,
@@ -156,6 +149,7 @@ const COINGECKO_IDS: Record<string, string> = {
     "LSK": "lisk",
     "BNB": "bnb",
     "BUSD": "binance-usd",
+    "BOT" : "botchain"
 }
 
 // ==== TYPES ====

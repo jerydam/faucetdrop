@@ -68,7 +68,7 @@ const networks: Network[] = [
         logoUrl: "/bnb.png", iconUrl: "/bnb.png", factoryAddresses: ["0x587b840140321DD8002111282748acAdaa8fA206"], factories: { custom: "0x587b840140321DD8002111282748acAdaa8fA206" }, tokenAddress: ZeroAddress, nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 }, isTestnet: false,
     },
     {
-        name: "Botchain Testnet",
+        name: "Botchain",
         symbol: "BOT",
         chainId: BigInt(677),
         rpcUrl: [

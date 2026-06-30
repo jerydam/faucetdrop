@@ -3,7 +3,7 @@ import { arbitrum, base, lisk, celo, bsc } from "viem/chains"
 
 export const botchain = defineChain({
   id: 677,
-  name: "Botchain Testnet",
+  name: "Botchain",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {
     default: { http: [process.env.NEXT_PUBLIC_BOTCHAIN_URL ?? "https://rpc.botchain.al"] },

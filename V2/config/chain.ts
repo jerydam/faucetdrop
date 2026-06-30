@@ -6,10 +6,10 @@ export const botchain = defineChain({
   name: "Botchain Testnet",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {
-    default: { http: [process.env.NEXT_PUBLIC_BOTCHAIN_URL ?? "https://rpc.bohr.life"] },
+    default: { http: [process.env.NEXT_PUBLIC_BOTCHAIN_URL ?? "https://rpc.botchain.al"] },
   },
   blockExplorers: {
-    default: { name: "Botchain Explorer", url: "https://scan.bohr.life" },
+    default: { name: "Botchain Explorer", url: "https://scan.botchain.al" },
   },
   testnet: true,
 })
@@ -33,7 +33,7 @@ export const CHAIN_RPC: Record<number, string> = {
   [celo.id]:     process.env.NEXT_PUBLIC_RPC_CELO     ?? "https://forno.celo.org",
   [lisk.id]:     process.env.NEXT_PUBLIC_RPC_LISK     ?? "https://rpc.api.lisk.com",
   [bsc.id]:      process.env.NEXT_PUBLIC_RPC_BSC      ?? "https://bsc-dataseed.binance.org",
-  [botchain.id]: process.env.NEXT_PUBLIC_BOTCHAIN_URL ?? "https://rpc.bohr.life",
+  [botchain.id]: process.env.NEXT_PUBLIC_BOTCHAIN_URL ?? "https://rpc.botchain.al",
   [solana.id]: process.env.NEXT_PUBLIC_BOTCHAIN_URL ?? "https://api.devnet.solana.com",
 
 }
@@ -44,7 +44,7 @@ export const CHAIN_EXPLORERS: Record<number, { name: string; url: string }> = {
   [celo.id]:     { name: "Celoscan",  url: "https://celoscan.io"  },
   [lisk.id]:     { name: "Lisk Scan", url: "https://liskscan.com" },
   [bsc.id]:      { name: "BscScan",   url: "https://bscscan.com"  },
-  [botchain.id]: { name: "Botchain Explorer", url: "https://scan.bohr.life" },
+  [botchain.id]: { name: "Botchain Explorer", url: "https://scan.botchain.al" },
   [solana.id]: { name: "Botchain Explorer", url: "https://solscan.io/?cluster=devnet" },
 }
 

@@ -55,8 +55,8 @@ export const CHAINS: Record<number, ChainConfig> = {
     name: "Botchain",
     shortName: "Botchain",
     // ← placeholder RPC, swap once Botchain ships a public endpoint
-    rpcUrl: process.env.NEXT_PUBLIC_BOTCHAIN_RPC_URL ?? "https://rpc.botchain.example",
-    explorerUrl: process.env.NEXT_PUBLIC_BOTCHAIN_EXPLORER_URL ?? "https://explorer.botchain.example",
+    rpcUrl: process.env.NEXT_PUBLIC_BOTCHAIN_RPC_URL ?? "https://rpc.botchain.ai",
+    explorerUrl: process.env.NEXT_PUBLIC_BOTCHAIN_EXPLORER_URL ?? "https://explorer.botchain.ai",
     explorerName: "BotchainScan",
     nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
     contracts: {

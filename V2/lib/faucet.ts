@@ -287,7 +287,6 @@ export interface NameValidationResult {
 
 // Load backend address from .env
 export const BACKEND_ADDRESS = process.env.BACKEND_ADDRESS || "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2"
-export const BACKUP_BACKEND_ADDRESS = "0x3207D4728c32391405C7122E59CCb115A4af31eA" 
 // Storage contract address
 const STORAGE_CONTRACT_ADDRESS = "0xc26c4Ea50fd3b63B6564A5963fdE4a3A474d4024"
 
@@ -327,7 +326,6 @@ if (!isAddress(BACKEND_ADDRESS)) {
 }
 
 const VALID_BACKEND_ADDRESS = getAddress(BACKEND_ADDRESS)
-const AVAILABLE_BACKEND_ADDRESS = getAddress(BACKUP_BACKEND_ADDRESS) 
 const faucetDetailsCache: Map<string, any> = new Map()
 
 // LocalStorage keys
@@ -659,7 +657,6 @@ export async function createCustomFaucet(
         const signer = await provider.getSigner();
         // NOTE: VALID_BACKEND_ADDRESS must be defined/imported in faucet.ts
         const backendAddress = VALID_BACKEND_ADDRESS; 
-        const backendaddressess = BACKUP_BACKEND_ADDRESS; // Placeholder if you want to modify how backend address is determined
         // Factory Contract using the Signer for a write transaction
         const factoryContract = new Contract(factoryAddress, config.abi, signer);
 
@@ -997,7 +994,6 @@ export async function getAllAdmins(
     // added to the admins array in the constructor — inject it manually here
     const backendAddresses = [
       VALID_BACKEND_ADDRESS.toLowerCase(),
-      AVAILABLE_BACKEND_ADDRESS.toLowerCase(),
     ]
     for (const backendAddr of backendAddresses) {
       if (!admins.some((a: string) => a.toLowerCase() === backendAddr)) {
@@ -1937,13 +1933,12 @@ export async function createQuizReward(
   claimWindowDuration: number, // seconds — e.g. 172800 for 48h, saved in your backend at quiz creation
 ): Promise<string> {
   const backendA = VALID_BACKEND_ADDRESS;
-  const backendB = BACKUP_BACKEND_ADDRESS;
 
   // --- 1. Validation ---
   if (!isAddress(factoryAddress) || !isAddress(tokenAddress)) {
     throw new Error("Invalid factory or token address");
   }
-  if (!isAddress(backendA) || !isAddress(backendB)) {
+  if (!isAddress(backendA)) {
     throw new Error("Invalid backend address configuration");
   }
   if (!provider) {
@@ -1961,7 +1956,7 @@ export async function createQuizReward(
       name,
       tokenAddress,
       backendA,
-      backendB,
+      
       claimWindowDuration,
       signerAddress,
     });
@@ -1971,7 +1966,6 @@ export async function createQuizReward(
       name,
       tokenAddress,
       backendA,
-      backendB,
       claimWindowDuration,
     ]);
 

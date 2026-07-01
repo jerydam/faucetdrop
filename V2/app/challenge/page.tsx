@@ -166,9 +166,14 @@ export default function QuizListPage() {
   const handleRegister = async () => {
     if (!userWalletAddress || isRegistering) return;
     setIsRegistering(true);
+
+    const activeChainId = chainId ?? CELO_CHAIN_ID;
+    const activeCfg     = getChainConfig(activeChainId);
+    const dropsTokenAddr = activeCfg.contracts.dropsToken;
+
     try {
       const res = await fetch(
-        `${API_BASE_URL}/api/players/register?wallet=${userWalletAddress.toLowerCase()}&username=User${userWalletAddress.slice(-4).toUpperCase()}`,
+        `${API_BASE_URL}/api/players/register?wallet=${userWalletAddress.toLowerCase()}&username=User${userWalletAddress.slice(-4).toUpperCase()}&chainId=${activeChainId}`,
         { method: "POST" }
       );
       const data = await res.json();
@@ -183,10 +188,11 @@ export default function QuizListPage() {
         return;
       }
 
-      const onCelo = await ensureCorrectNetwork(CELO_CHAIN_ID);
-      if (!onCelo) { toast.error("Please switch to Celo Mainnet."); return; }
+      // ── Use the chain the user is actually on, not Celo ──────────────────
+      const onCorrectChain = await ensureCorrectNetwork(activeChainId);
+      if (!onCorrectChain) { toast.error(`Please switch to ${activeCfg.name}.`); return; }
 
-      const signer = await getActiveSigner(CELO_CHAIN_ID);
+      const signer = await getActiveSigner(activeChainId);
       if (!signer) { toast.error("Could not get wallet signer."); return; }
 
       const WELCOME_ABI = [{
@@ -195,7 +201,7 @@ export default function QuizListPage() {
       }] as const;
 
       toast.info("Please confirm the welcome transaction in your wallet…");
-      const contract = new ethers.Contract(DROP_TOKEN_CONTRACT, WELCOME_ABI, signer);
+      const contract = new ethers.Contract(dropsTokenAddr, WELCOME_ABI, signer);
 
       let tx: ethers.ContractTransactionResponse;
       try {
@@ -223,6 +229,7 @@ export default function QuizListPage() {
           body: JSON.stringify({
             walletAddress: userWalletAddress.toLowerCase(),
             txHash: tx.hash,
+            chainId: activeChainId,   // ← was missing entirely before
           }),
         });
       } catch {

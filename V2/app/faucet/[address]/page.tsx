@@ -470,98 +470,117 @@ export default function FaucetDetails() {
   // ── Load user-specific on-chain data ──────────────────────────────────────
 
   const loadUserSpecificData = useCallback(
-    async (row: FaucetDetailRow, type: FaucetType, net: any) => {
-      // Determine which address to use
-      const userAddr = net?.chainId === SOLANA_CHAIN_ID ? solanaAddress : address
-      if (!userAddr || !net) return
+  async (row: FaucetDetailRow, type: FaucetType, net: any) => {
+    const userAddr = net?.chainId === SOLANA_CHAIN_ID ? solanaAddress : address
+    if (!userAddr || !net || !row?.faucet_address) return
 
-      const netChainId: number = net.chainId
+    const netChainId: number = net.chainId
 
-      try {
-        // ── Solana path ────────────────────────────────────────────────────
-        if (netChainId === SOLANA_CHAIN_ID) {
-          // hasClaimed
-          const claimed = await withFallback((conn) =>
+    try {
+      if (netChainId === SOLANA_CHAIN_ID) {
+        const [claimStatus, isAdmin] = await Promise.allSettled([
+          withFallback((conn) =>
             getFaucetClaimStatus(conn, row.faucet_address, userAddr)
-          ).then((s) => s.claimed).catch(() => false)
-          setHasClaimed(claimed)
-
-          // whitelist / custom amount
-          if (type === "droplist" || type === "custom") {
-            const entry = await withFallback((conn) =>
-              getWhitelistEntry(conn, row.faucet_address, userAddr)
-            ).catch(() => ({ isWhitelisted: false, customAmount: BigInt(0) }))
-
-            if (type === "droplist") {
-              setUserIsWhitelisted(entry.isWhitelisted)
-            }
-            if (type === "custom") {
-              const hasCustom = entry.isWhitelisted && entry.customAmount > BigInt(0)
-              setUserCustomClaimAmount(entry.customAmount)
-              setHasCustomAmount(hasCustom)
-            }
-          }
-
-          // isAdmin
-          const isAdmin = await withFallback((conn) =>
+          ),
+          withFallback((conn) =>
             isFaucetAdmin(conn, row.faucet_address, userAddr)
-          ).catch(() => false)
-          setUserIsAdmin(isAdmin)
+          ),
+        ])
 
-          // admin popup
-          if (isAdmin || userAddr.toLowerCase() === row.owner_address.toLowerCase()) {
-            const dontShow = await getAdminPopupPreference(userAddr, row.faucet_address)
-            if (!dontShow) setShowAdminPopup(true)
+        if (claimStatus.status === "fulfilled") {
+          setHasClaimed(claimStatus.value.claimed)
+        }
+
+        if (type === "droplist" || type === "custom") {
+          const entryResult = await withFallback((conn) =>
+            getWhitelistEntry(conn, row.faucet_address, userAddr)
+          ).catch(() => ({ isWhitelisted: false, customAmount: BigInt(0) }))
+
+          if (type === "droplist") {
+            setUserIsWhitelisted(entryResult.isWhitelisted)
           }
-
-          // Solana has no getAllAdmins equivalent exposed via SDK —
-          // just set owner in list for now.
-          const all: string[] = []
-          if (row.owner_address) all.push(row.owner_address)
-          setAdminList(all)
-          return
+          if (type === "custom") {
+            const hasCustom =
+              entryResult.isWhitelisted && entryResult.customAmount > BigInt(0)
+            setUserCustomClaimAmount(entryResult.customAmount)
+            setHasCustomAmount(hasCustom)
+          }
         }
 
-        // ── EVM path ───────────────────────────────────────────────────────
-        const safeRpc = Array.isArray(net.rpcUrl) ? net.rpcUrl[0] : net.rpcUrl
-        const p = new JsonRpcProvider(safeRpc)
+        const adminResult = isAdmin.status === "fulfilled" ? isAdmin.value : false
+        setUserIsAdmin(adminResult)
 
-        const claimed = await checkHasClaimed(p, row.faucet_address, userAddr, type, netChainId)
-        setHasClaimed(claimed)
-
-        if (type === "droplist") {
-          const wl = await checkIsWhitelisted(p, row.faucet_address, userAddr, type, netChainId)
-          setUserIsWhitelisted(wl)
-        }
-        if (type === "custom") {
-          const ci = await getUserCustomClaimAmount(
-            p, userAddr, row.faucet_address, row.token_decimals, netChainId
-          )
-          setUserCustomClaimAmount(ci.amount)
-          setHasCustomAmount(ci.hasCustom)
-        }
-
-        const isAdmin = await checkIsAdmin(p, row.faucet_address, userAddr, type, netChainId)
-        setUserIsAdmin(isAdmin)
-
-        if (isAdmin || userAddr.toLowerCase() === row.owner_address.toLowerCase()) {
+        if (adminResult || userAddr.toLowerCase() === row.owner_address.toLowerCase()) {
           const dontShow = await getAdminPopupPreference(userAddr, row.faucet_address)
           if (!dontShow) setShowAdminPopup(true)
         }
 
-        const admins = await getAllAdmins(p, row.faucet_address, type)
-        const all = [...admins]
-        if (row.owner_address && !all.some((a) => a.toLowerCase() === row.owner_address.toLowerCase()))
-          all.unshift(row.owner_address)
-        if (!all.some((a) => a.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase()))
-          all.push(FACTORY_OWNER_ADDRESS)
+        const all: string[] = []
+        if (row.owner_address) all.push(row.owner_address)
         setAdminList(all)
-      } catch (err) {
-        console.warn("loadUserSpecificData error:", err)
+        return
       }
-    },
-    [address, solanaAddress]
-  )
+
+      // EVM path
+      const safeRpc = Array.isArray(net.rpcUrl) ? net.rpcUrl[0] : net.rpcUrl
+      const p = new JsonRpcProvider(safeRpc)
+
+      const [claimed, isAdmin] = await Promise.allSettled([
+        checkHasClaimed(p, row.faucet_address, userAddr, type, netChainId),
+        checkIsAdmin(p, row.faucet_address, userAddr, type, netChainId),
+      ])
+
+      if (claimed.status === "fulfilled") setHasClaimed(claimed.value)
+
+      if (type === "droplist") {
+        const wl = await checkIsWhitelisted(
+          p, row.faucet_address, userAddr, type, netChainId
+        ).catch(() => false)
+        setUserIsWhitelisted(wl)
+      }
+
+      if (type === "custom") {
+        const ci = await getUserCustomClaimAmount(
+          p, userAddr, row.faucet_address, row.token_decimals, netChainId
+        ).catch(() => ({ amount: BigInt(0), hasCustom: false }))
+        setUserCustomClaimAmount(ci.amount)
+        setHasCustomAmount(ci.hasCustom)
+      }
+
+      const adminResult = isAdmin.status === "fulfilled" ? isAdmin.value : false
+      setUserIsAdmin(adminResult)
+
+      if (adminResult || userAddr.toLowerCase() === row.owner_address.toLowerCase()) {
+        const dontShow = await getAdminPopupPreference(userAddr, row.faucet_address)
+        if (!dontShow) setShowAdminPopup(true)
+      }
+
+      const admins = await getAllAdmins(p, row.faucet_address, type).catch(() => [])
+      const all = [...admins]
+      if (
+        row.owner_address &&
+        !all.some((a) => a.toLowerCase() === row.owner_address.toLowerCase())
+      ) {
+        all.unshift(row.owner_address)
+      }
+      if (!all.some((a) => a.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase())) {
+        all.push(FACTORY_OWNER_ADDRESS)
+      }
+      setAdminList(all)
+    } catch (err) {
+      console.warn("loadUserSpecificData error:", err)
+    }
+  },
+  [address, solanaAddress]
+)
+
+// Add this effect right after the loadUserSpecificData definition:
+useEffect(() => {
+  if (!faucetRow || !faucetType || !selectedNetwork) return
+  const userAddr = isSolanaNetwork ? solanaAddress : address
+  if (!userAddr) return
+  loadUserSpecificData(faucetRow, faucetType, selectedNetwork)
+}, [address, solanaAddress, faucetRow, faucetType, selectedNetwork])
 
   // ── Resolve faucet from URL param ──────────────────────────────────────────
 
@@ -997,6 +1016,7 @@ export default function FaucetDetails() {
               provider={provider}
               router={router}
               faucetMetadata={faucetMetadata}
+              activeSolanaWallet={activeSolanaAccount}  // ← was missing
             />
           ) : (
             <FaucetUserView
@@ -1034,6 +1054,7 @@ export default function FaucetDetails() {
               showClaimPopup={showClaimPopup}
               setShowClaimPopup={setShowClaimPopup}
               handleVerifyAllTasks={handleVerifyAllTasks}
+              
             />
           )}
         </div>

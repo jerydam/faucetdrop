@@ -357,32 +357,38 @@ async function checkPermissions(
   faucetType?: FaucetType
 ): Promise<{ isOwner: boolean; isAdmin: boolean; isPaused: boolean }> {
   try {
-    // Detect faucet type if not provided
     const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
-    
-    const faucetContract = new Contract(faucetAddress, config.abi, provider);
-    const [owner, adminsResponse, isPaused] = await Promise.all([
+
+    const faucetContract = new Contract(faucetAddress, config.abi, provider)
+
+    // Fetch owner and paused separately, use getAllAdmins() which already
+    // injects BACKEND addresses into a mutable array
+    const [owner, admins, isPaused] = await Promise.all([
       faucetContract.owner(),
-      faucetContract.getAllAdmins(),
+      getAllAdmins(provider, faucetAddress, detectedFaucetType),
       faucetContract.paused(),
-    ]);
-    // Flatten the admins array
-    const admins = Array.isArray(adminsResponse)
-      ? adminsResponse.flat().filter((admin: string) => isAddress(admin))
-      : [];
-    const isAdmin = admins.some((admin: string) => admin.toLowerCase() === callerAddress.toLowerCase());
+    ])
+
+    const normalizedCaller = callerAddress.toLowerCase()
+
+    const isOwner = owner.toLowerCase() === normalizedCaller
+    const isAdminResult = admins.some(
+      (admin: string) => admin.toLowerCase() === normalizedCaller
+    )
+
     console.log(
-      `Permissions for ${callerAddress}: isOwner=${owner.toLowerCase() === callerAddress.toLowerCase()}, isAdmin=${isAdmin}, isPaused=${isPaused}`,
-    );
+      `Permissions for ${callerAddress}: isOwner=${isOwner}, isAdmin=${isAdminResult}, isPaused=${isPaused}`
+    )
+
     return {
-      isOwner: owner.toLowerCase() === callerAddress.toLowerCase(),
-      isAdmin,
+      isOwner,
+      isAdmin: isAdminResult,
       isPaused,
-    };
+    }
   } catch (error: any) {
-    console.error(`Error checking permissions for ${faucetAddress}:`, error);
-    throw new Error("Failed to check permissions");
+    console.error(`Error checking permissions for ${faucetAddress}:`, error)
+    throw new Error("Failed to check permissions")
   }
 }
 
@@ -973,23 +979,37 @@ export async function getAllAdmins(
 ): Promise<string[]> {
   try {
     if (!isAddress(faucetAddress)) {
-      throw new Error("Invalid faucet address");
+      throw new Error("Invalid faucet address")
     }
 
-    // Detect faucet type if not provided
     const detectedFaucetType = faucetType || await detectFaucetType(provider, faucetAddress)
     const config = getFaucetConfig(detectedFaucetType)
 
-    const faucetContract = new Contract(faucetAddress, config.abi, provider);
-    const adminsResponse = await faucetContract.getAllAdmins();
-    const admins = Array.isArray(adminsResponse)
-      ? adminsResponse.flat().filter((admin: string) => isAddress(admin))
-      : [];
-    console.log(`Fetched admins for faucet ${faucetAddress}:`, admins);
-    return admins;
-  }  catch (error: any) {
-    console.error(`Error fetching admins for ${faucetAddress}:`, error);
-    throw new Error(error.message || "Failed to fetch admins");
+    const faucetContract = new Contract(faucetAddress, config.abi, provider)
+    const adminsResponse = await faucetContract.getAllAdmins()
+
+    // Spread into a new plain array — ethers Result objects are frozen/non-extensible
+    const admins: string[] = [...adminsResponse]
+      .flat()
+      .filter((admin: string) => isAddress(admin))
+
+    // BACKEND has implicit admin rights via the onlyAdmin modifier but is never
+    // added to the admins array in the constructor — inject it manually here
+    const backendAddresses = [
+      VALID_BACKEND_ADDRESS.toLowerCase(),
+      AVAILABLE_BACKEND_ADDRESS.toLowerCase(),
+    ]
+    for (const backendAddr of backendAddresses) {
+      if (!admins.some((a: string) => a.toLowerCase() === backendAddr)) {
+        admins.push(getAddress(backendAddr))
+      }
+    }
+
+    console.log(`Fetched admins for faucet ${faucetAddress}:`, admins)
+    return admins
+  } catch (error: any) {
+    console.error(`Error fetching admins for ${faucetAddress}:`, error)
+    throw new Error(error.message || "Failed to fetch admins")
   }
 }
 
@@ -1375,13 +1395,12 @@ export async function getFaucetsForNetwork(
     }
 }
 
-// Fetch transaction history for a specific faucet (admin only)
 export async function getFaucetTransactionHistory(
   provider: BrowserProvider,
   faucetAddress: string,
   network: Network,
   faucetType?: FaucetType,
-  signerAddress?: string  // Pass the connected wallet address from the caller
+  signerAddress?: string
 ): Promise<{
   faucetAddress: string
   transactionType: string
@@ -1395,64 +1414,77 @@ export async function getFaucetTransactionHistory(
       throw new Error(`Invalid faucet address: ${faucetAddress}`)
     }
 
-    // Get signer address - use passed address or try to get from provider
-    let resolvedSignerAddress = signerAddress
-    if (!resolvedSignerAddress) {
-      try {
-        const signer = await provider.getSigner()
-        resolvedSignerAddress = await signer.getAddress()
-      } catch (e) {
-        throw new Error("Wallet not connected. Please connect your wallet to view transaction history.")
-      }
+    const code = await provider.getCode(faucetAddress)
+    if (code === "0x") {
+      throw new Error(`No contract deployed at ${faucetAddress}`)
     }
 
-    const permissions = await checkPermissions(provider, faucetAddress, resolvedSignerAddress, faucetType)
-    if (!permissions.isOwner && !permissions.isAdmin) {
-      throw new Error("Only the owner or admin can view transaction history")
+    // Determine ABI based on faucet type
+    let abi: any[]
+    if (faucetType === "droplist") {
+      const { FAUCET_ABI_DROPLIST } = await import("@/lib/abis")
+      abi = FAUCET_ABI_DROPLIST
+    } else if (faucetType === "custom") {
+      const { FAUCET_ABI_CUSTOM } = await import("@/lib/abis")
+      abi = FAUCET_ABI_CUSTOM
+    } else {
+      const { FAUCET_ABI_DROPCODE } = await import("@/lib/abis")
+      abi = FAUCET_ABI_DROPCODE
     }
 
+    const faucetContract = new Contract(faucetAddress, abi, provider)
+
+    // Try calling getTransactionHistory directly on the faucet contract
     let transactions: any[] = []
+    try {
+      const rawTxs = await faucetContract.getTransactionHistory()
+      transactions = rawTxs
+    } catch (directErr) {
+      console.warn("getTransactionHistory failed on faucet, trying factory fallback:", directErr)
 
-    for (const factoryAddress of network.factoryAddresses) {
-      if (!isAddress(factoryAddress)) {
-        console.warn(`Invalid factory address ${factoryAddress} on ${network.name}, skipping`)
-        continue
-      }
+      // Factory fallback — iterate factory addresses
+      for (const factoryAddress of network.factoryAddresses) {
+        if (!isAddress(factoryAddress)) {
+          console.warn(`Invalid factory address ${factoryAddress}, skipping`)
+          continue
+        }
 
-      let factoryType: FactoryType
-      let config: FactoryConfig
+        const factoryCode = await provider.getCode(factoryAddress)
+        if (factoryCode === "0x") {
+          console.warn(`No contract at factory address ${factoryAddress}`)
+          continue
+        }
 
-      try {
-        factoryType = await detectFactoryType(provider, factoryAddress)
-        config = getFactoryConfig(factoryType)
-      } catch (error) {
-        console.warn(`Could not detect factory type for ${factoryAddress}, skipping:`, error)
-        continue
-      }
+        let factoryType: FactoryType
+        let config: FactoryConfig
+        try {
+          factoryType = await detectFactoryType(provider, factoryAddress)
+          config = getFactoryConfig(factoryType)
+        } catch (error) {
+          console.warn(`Could not detect factory type for ${factoryAddress}, skipping:`, error)
+          continue
+        }
 
-      const code = await provider.getCode(factoryAddress)
-      if (code === "0x") {
-        console.warn(`No contract at factory address ${factoryAddress} on ${network.name}`)
-        continue
-      }
-
-      const factoryContract = new Contract(factoryAddress, config.abi, provider)
-
-      try {
-        const factoryTxs = await factoryContract.getFaucetTransactions(faucetAddress)
-        transactions.push(...factoryTxs)
-      } catch (error) {
-        console.warn(`Error fetching transactions from factory ${factoryAddress}:`, error)
+        const factoryContract = new Contract(factoryAddress, config.abi, provider)
+        try {
+          const factoryTxs = await factoryContract.getFaucetTransactions(faucetAddress)
+          transactions.push(...factoryTxs)
+        } catch (error) {
+          console.warn(`Error fetching from factory ${factoryAddress}:`, error)
+        }
       }
     }
 
     const filteredTransactions = transactions
-      .filter((tx: any) => tx.faucetAddress.toLowerCase() === faucetAddress.toLowerCase())
+      .filter((tx: any) =>
+        !tx.faucetAddress ||
+        tx.faucetAddress.toLowerCase() === faucetAddress.toLowerCase()
+      )
       .map((tx: any) => ({
-        faucetAddress: tx.faucetAddress as string,
+        faucetAddress: faucetAddress,
         transactionType: tx.transactionType as string,
         initiator: tx.initiator as string,
-        amount: BigInt(tx.amount),
+        amount: BigInt(tx.amount ?? 0),
         isEther: tx.isEther as boolean,
         timestamp: Number(tx.timestamp),
       }))

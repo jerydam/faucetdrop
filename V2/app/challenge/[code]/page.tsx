@@ -8,13 +8,14 @@ import { useWallet } from "@/hooks/use-wallet";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {makePublicClient,makeWalletClient,toViemChain,ensureChainNetwork} from "@/lib/chain"
+import {makePublicClient,makeWalletClient,toViemChain,isSupportedChain, getEnabledChains,ensureChainNetwork} from "@/lib/chain"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Loader2, Trophy, Zap, Check, X,
   ArrowLeft, Share2, Home, Plus, Users, ShieldCheck,
   MessageSquare, Send, RefreshCw, Clock, AlertTriangle,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -508,7 +509,10 @@ export default function ChallengePage() {
   const params  = useParams();
   const router  = useRouter();
   const code    = ((params.code as string) ?? "").toUpperCase();
-  const { address: userWalletAddress, getActiveSigner, ensureCorrectNetwork, walletType } = useWallet();
+  const { address: userWalletAddress, getActiveSigner, ensureCorrectNetwork, walletType, chainId } = useWallet();
+  const isUnsupported = !!chainId && !isSupportedChain(chainId);
+  const activeChainId = (chainId && isSupportedChain(chainId)) ? chainId : CELO_CHAIN_ID;
+  const chainCfg = useMemo(() => getChainConfig(activeChainId), [activeChainId]);
   const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
   const searchParams     = useSearchParams();
   const agreedStake      = searchParams.get("stake");
@@ -523,10 +527,6 @@ export default function ChallengePage() {
   const [hasJoined, setHasJoined] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
   const [claimedCodes, setClaimedCodes] = useState<Set<string>>(new Set());
-  const chainCfg = useMemo(
-  () => getChainConfig(challenge?.chainId ?? CELO_CHAIN_ID),
-  [challenge?.chainId]
-);
   const DROPS_ADDRESS = chainCfg.contracts.dropsToken;
   // ── Passive expiry (createdAt from challenge load, no backend polling) ────
   const [createdAt, setCreatedAt] = useState<number | null>(null);
@@ -1024,7 +1024,7 @@ const handleStake = useCallback(async () => {
     if (!userWalletAddress || !challenge) return;
     setIsStaking(true);
  
-    const activeChainId = challenge.chainId ?? CELO_CHAIN_ID;
+    const activeChainId = chainId ?? CELO_CHAIN_ID; // Use wallet chainId
     const activeCfg     = getChainConfig(activeChainId);
     const DROPS_ADDRESS = activeCfg.contracts.dropsToken;
  
@@ -1193,8 +1193,8 @@ const handleStake = useCallback(async () => {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          code: claimCode, walletAddress: userWalletAddress, chainId: activeChainId,
-        }),
+        code: claimCode, walletAddress: userWalletAddress, chainId: activeChainId,
+      }),
       });
       const d = await res.json();
       if (!d.success && !d.alreadyClaimed) throw new Error(d.detail ?? "Claim failed");
@@ -1280,6 +1280,36 @@ const handleStake = useCallback(async () => {
       </div>
     );
   }
+ if (isUnsupported) {
+  const supportedChains = getEnabledChains();
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center gap-4">
+      <AlertCircle className="h-12 w-12 text-destructive mb-2" />
+      <h2 className="text-xl font-black">Unsupported Network</h2>
+      <p className="text-sm text-muted-foreground max-w-xs">
+        This challenge isn't available on your current network. Switch to a supported chain to continue.
+      </p>
+      <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
+        {supportedChains.map(chain => (
+          <Button
+            key={chain.id}
+            className="w-full"
+            onClick={async () => {
+              try {
+                await ensureChainNetwork(chain.id);
+                window.location.reload();
+              } catch (err: any) {
+                toast.error(err?.message ?? `Could not switch to ${chain.name}`);
+              }
+            }}
+          >
+            Switch to {chain.name}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
   // ── Countdown ───────────────────────────────────────────────────────────────
   if (phase === "countdown") {
@@ -1694,7 +1724,7 @@ const handleStake = useCallback(async () => {
                   <Badge variant="secondary" className="text-[10px] uppercase">{DROPS_SYMBOL}</Badge>
                 </div>
                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{challenge?.topic}</p>
-                <span className="text-lg" title={chainCfg.name}>{chainCfg.icon}</span>
+               
               </div>
             </div>
             <div className="flex items-center gap-3">

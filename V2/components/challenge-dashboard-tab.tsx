@@ -18,14 +18,11 @@ import { useToast } from "@/hooks/use-toast";
 import { ethers } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
 import { getGoodDollarPrice } from "@/lib/getGoodDollarPrice";
-import { getChainConfig, CELO_CHAIN_ID } from "@/lib/chain";
+import { getChainConfig, CELO_CHAIN_ID, isSupportedChain,ensureChainNetwork, getEnabledChains  } from "@/lib/chain";
 
 const BACKEND_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 /** ─── Contract config ────────────────────────────────────────────────────── */
-const DROPS_REDEEM_POOL_ADDRESS =
-  getChainConfig(CELO_CHAIN_ID).contracts.dropsRedeemPool!;
-
 const DROPS_REDEEM_POOL_ABI = [
   "function freeLiquidity() view returns (uint256)",
   "function poolGBalance() view returns (uint256)",
@@ -94,16 +91,16 @@ interface ChallengeDashboardTabProps {
 }
 
 interface StakePool {
-id: string;
-drops_staked: number | null;
-g_value_usd: number | null;   // ← was non-nullable
-apy_pct: number;
-staked_at: string;
-matures_at: string;
-matured: boolean;
-claimed: boolean;
-claimed_at: string | null;
-g_earned: number | null;
+  id: string;
+  drops_staked: number | null;
+  g_value_usd: number | null;
+  apy_pct: number;
+  staked_at: string;
+  matures_at: string;
+  matured: boolean;
+  claimed: boolean;
+  claimed_at: string | null;
+  g_earned: number | null;
 }
 
 interface RedeemHistory {
@@ -136,8 +133,8 @@ interface RedeemPreview {
   feeG: number;
   stakedDrops: number;
   stakedG: number;
-  stakeEarnedDrops: number;   // ← NEW: APY yield in actual DROPS terms
-  stakeEarnedG: number;       // estimated $G value of that yield, AT TODAY'S PRICE ONLY
+  stakeEarnedDrops: number;
+  stakeEarnedG: number;
   apyPct: number;
   sufficient: boolean;
 }
@@ -202,7 +199,6 @@ function timeUntil(iso: string): string {
   return `${h}h`;
 }
 
-/** Precise live countdown "Xd Xh Xm Xs" computed against an arbitrary `now` timestamp (ms). */
 function countdownTo(iso: string, now: number): string {
   const diff = new Date(iso).getTime() - now;
   if (diff <= 0) return "Matured";
@@ -216,18 +212,12 @@ function countdownTo(iso: string, now: number): string {
   return `${s}s`;
 }
 
-/**
- * Linear-accrual display estimate of $G earned so far on a stake, based on
- * elapsed time vs. the full stake term (staked_at → matures_at). Clamped to
- * the full APY yield once matured. This is a frontend approximation only —
- * the authoritative payout is computed server-side at claim time.
- */
 function computeAccrued(stake: StakePool, now: number) {
   const stakedAt  = new Date(stake.staked_at).getTime();
   const maturesAt = new Date(stake.matures_at).getTime();
-  const totalMs   = Math.max(maturesAt - stakedAt, 1); // guard against /0
+  const totalMs   = Math.max(maturesAt - stakedAt, 1);
   const elapsedMs = Math.min(Math.max(now - stakedAt, 0), totalMs);
-  const fraction  = elapsedMs / totalMs; // 0 → 1
+  const fraction  = elapsedMs / totalMs;
 
   const gValue      = stake.g_value_usd ?? 0;
   const fullYieldG  = gValue * (stake.apy_pct / 100);
@@ -258,11 +248,6 @@ function isAdmin(address: string) {
   return address.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
 }
 
-/**
- * Pure client-side redeem preview — mirrors the backend split exactly:
- *   75% of USD value → player_g (gross), minus 10% fee = net player_g
- *   25% of USD value → staked as DROPS in the pool
- */
 function computeRedeemPreview(
   drops: number,
   gPriceUsd: number,
@@ -272,10 +257,10 @@ function computeRedeemPreview(
   const usdValue = drops / DROPS_PER_USD;
   const playerUsd = usdValue * 0.75;
   const stakedUsd = usdValue * 0.25;
-  const feeUsd    = playerUsd * 0.10;   // computed off the 75% slice, but NOT subtracted from it
+  const feeUsd    = playerUsd * 0.10;
 
-  const playerG          = playerUsd / gPriceUsd;   // ← CHANGED: full 75%, no fee subtracted
-  const feeG              = feeUsd / gPriceUsd;       // pool pays this on top, from its own reserves
+  const playerG          = playerUsd / gPriceUsd;
+  const feeG             = feeUsd / gPriceUsd;
   const stakedDrops        = drops * 0.25;
   const stakedG            = stakedUsd / gPriceUsd;
   const stakeEarnedDrops   = stakedDrops * (apyPct / 100.0);
@@ -290,16 +275,18 @@ function computeRedeemPreview(
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-interface Props {
-  walletAddress: string;
-}
-
 export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey }: ChallengeDashboardTabProps) {
   const [activeSubtab, setActiveSubtab] = useState(initialSubtab || "overview");
   const { toast } = useToast();
   const wallet = walletAddress.toLowerCase();
   const adminMode = isAdmin(wallet);
-  const { getActiveSigner, ensureCorrectNetwork } = useWallet();
+  const { getActiveSigner, ensureCorrectNetwork, chainId } = useWallet();
+  const isUnsupported = !!chainId && !isSupportedChain(chainId);
+  // ── Dynamic chain derivation ───────────────────────────────────────────────
+  const activeChainId = (chainId && isSupportedChain(chainId)) ? chainId : CELO_CHAIN_ID;
+  const chainCfg = getChainConfig(activeChainId);
+  const DROPS_REDEEM_POOL_ADDRESS = chainCfg.contracts.dropsRedeemPool;
+  const G_TOKEN = chainCfg.contracts.gToken;
 
   // ── Data state ─────────────────────────────────────────────────────────────
   const [balance, setBalance] = useState<DropsBalance | null>(null);
@@ -313,12 +300,12 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [loadingOnChain, setLoadingOnChain] = useState(false);
   const [redeemResult, setRedeemResult] = useState<{
-playerG: number;
-stakedDrops: number;
-apyPct: number;
-txHash: string;
-stakeId: string;
-} | null>(null);
+    playerG: number;
+    stakedDrops: number;
+    apyPct: number;
+    txHash: string;
+    stakeId: string;
+  } | null>(null);
 
   // ── Inner tab ──────────────────────────────────────────────────────────────
   type InnerTab = "overview" | "redeem" | "pools" | "history" | "buy" | "admin";
@@ -364,7 +351,6 @@ stakeId: string;
     }
   }, []);
 
-  // Fetch fresh price whenever the user opens redeem or buy tab
   useEffect(() => {
     if (innerTab === "redeem" || innerTab === "buy") {
       fetchGoodDollarPrice();
@@ -376,7 +362,6 @@ stakeId: string;
   const [redeemPreview, setRedeemPreview] = useState<RedeemPreview | null>(null);
   const [redeemLoading, setRedeemLoading] = useState(false);
 
-  // Recompute preview locally whenever amount or price changes — no backend call
   useEffect(() => {
     const drops = parseFloat(redeemAmount);
     if (!redeemAmount || isNaN(drops) || drops <= 0 || !gPriceUsd || !balance) {
@@ -390,7 +375,7 @@ stakeId: string;
 
   const [claimingStake, setClaimingStake] = useState<string | null>(null);
 
-  // ── Live ticker for pool countdowns / accrual (1s tick, only while Pools tab is open) ──
+  // ── Live ticker for pool countdowns / accrual ──────────────────────────────
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (innerTab !== "pools") return;
@@ -416,7 +401,6 @@ stakeId: string;
   const [buyLoading, setBuyLoading] = useState(false);
   const [gTxHash, setGTxHash] = useState("");
 
-  // ── Buy DROPS: Calculate cost ─────────────────────────────────────────────
   const handleCalculate = async () => {
     const drops = parseFloat(dropsToBuy);
     if (!drops || drops < 10) {
@@ -457,20 +441,18 @@ stakeId: string;
     setBuyStep("processing");
     setBuyResult(null);
 
-    const cfg     = getChainConfig(CELO_CHAIN_ID);
-    const G_TOKEN = cfg.contracts.gToken;
-    if (!G_TOKEN) {
-      toast({ title: "No $G token configured for this chain", variant: "destructive" });
+    if (!G_TOKEN || !DROPS_REDEEM_POOL_ADDRESS) {
+      toast({ title: "Not available on this network", description: "Switch to Celo to use $G features.", variant: "destructive" });
       setBuyStep("deposit");
       setBuyLoading(false);
       return;
     }
 
     try {
-      const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
+      const switched = await ensureCorrectNetwork(activeChainId);
       if (!switched) throw new Error("Please connect your wallet first.");
 
-      const signer = await getActiveSigner(CELO_CHAIN_ID);
+      const signer = await getActiveSigner(activeChainId);
       if (!signer) throw new Error("No wallet connected");
 
       const signerAddr = await signer.getAddress();
@@ -520,7 +502,7 @@ stakeId: string;
           dropsAmount:     drops,
           expectedGAmount: gCostDisplay,
           gTxHash:         tx.hash,
-          chainId:         CELO_CHAIN_ID,
+          chainId:         activeChainId,
         }),
       });
 
@@ -558,12 +540,12 @@ stakeId: string;
     setBuyStep("input");
   };
 
-  /** Get a signer-backed contract instance, ensuring Celo network */
+  /** Get a signer-backed contract instance, ensuring active network */
   const getSignerContract = useCallback(async () => {
-    if (typeof window === "undefined" || !window.ethereum) {
-      throw new Error("No wallet detected.");
-    }
-    const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
+    if (!DROPS_REDEEM_POOL_ADDRESS) throw new Error("Redeem pool not available on this network.");
+    if (typeof window === "undefined" || !window.ethereum) throw new Error("No wallet detected.");
+    
+    const switched = await ensureCorrectNetwork(activeChainId);
     if (!switched) throw new Error("Please connect your wallet to continue.");
 
     const provider   = new ethers.BrowserProvider(window.ethereum);
@@ -573,25 +555,25 @@ stakeId: string;
       throw new Error(`Wallet mismatch. Connect as ${walletAddress} to perform admin actions.`);
     }
     return new ethers.Contract(DROPS_REDEEM_POOL_ADDRESS, DROPS_REDEEM_POOL_ABI, signer);
-  }, [wallet, walletAddress, ensureCorrectNetwork]);
+  }, [wallet, walletAddress, ensureCorrectNetwork, activeChainId, DROPS_REDEEM_POOL_ADDRESS]);
 
   /** Read-only contract (no wallet needed) */
   const getReadContract = useCallback(() => {
-    const cfg      = getChainConfig(CELO_CHAIN_ID);
-    const provider = new ethers.JsonRpcProvider(cfg.rpcUrl);
+    if (!DROPS_REDEEM_POOL_ADDRESS) return null;
+    const provider = new ethers.JsonRpcProvider(chainCfg.rpcUrl);
     return new ethers.Contract(DROPS_REDEEM_POOL_ADDRESS, DROPS_REDEEM_POOL_ABI, provider);
-  }, []);
+  }, [DROPS_REDEEM_POOL_ADDRESS, chainCfg.rpcUrl]);
 
   // ── Fetch helpers ──────────────────────────────────────────────────────────
   const fetchBalance = useCallback(async () => {
     setLoadingBalance(true);
     try {
-      const res  = await fetch(`${BACKEND_URL}/api/drops/balance/${wallet}?chainId=${CELO_CHAIN_ID}`);
+      const res  = await fetch(`${BACKEND_URL}/api/drops/balance/${wallet}?chainId=${activeChainId}`);
       const data = await res.json();
       if (data.success) setBalance(data);
     } catch { /* silent */ }
     finally { setLoadingBalance(false); }
-  }, [wallet]);
+  }, [wallet, activeChainId]);
 
   useEffect(() => { fetchBalance(); }, [fetchBalance]);
 
@@ -600,9 +582,6 @@ stakeId: string;
     fetchBalance();
   }, [refreshKey, fetchBalance]);
 
- 
-
-  // canRedeem: price must be loaded and amount must be valid
   const canRedeem =
     !redeemLoading &&
     !!balance?.rematchBadge &&
@@ -615,12 +594,12 @@ stakeId: string;
   const fetchStakes = useCallback(async () => {
     setLoadingStakes(true);
     try {
-      const res  = await fetch(`${BACKEND_URL}/api/drops/stakes/${wallet}?chainId=${CELO_CHAIN_ID}`);
+      const res  = await fetch(`${BACKEND_URL}/api/drops/stakes/${wallet}?chainId=${activeChainId}`);
       const data = await res.json();
       if (data.success) setStakes(data.stakes ?? []);
     } catch { /* silent */ }
     finally { setLoadingStakes(false); }
-  }, [wallet]);
+  }, [wallet, activeChainId]);
 
   const fetchHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -646,6 +625,7 @@ stakeId: string;
     setLoadingOnChain(true);
     try {
       const contract = getReadContract();
+      if (!contract) throw new Error("No redeem pool contract on this network");
       const [
         gBalRaw, freeLiqRaw, dropsBalRaw, gPriceRaw,
         nextId, ownerAddr, resolverAddr, serviceAddr,
@@ -681,6 +661,7 @@ stakeId: string;
     } catch (err) {
       console.error("On-chain fetch error:", err);
       toast({ title: "Failed to read on-chain stats", variant: "destructive" });
+      setOnChainStats(null);
     } finally {
       setLoadingOnChain(false);
     }
@@ -728,6 +709,8 @@ stakeId: string;
   const handleDeposit = () => {
     const amt = parseFloat(depositAmount);
     if (!amt || amt <= 0) return;
+    if (!DROPS_REDEEM_POOL_ADDRESS) return;
+
     contractWrite("deposit", "Deposit $G", async (contract) => {
       if (!onChainStats?.gTokenAddress) throw new Error("$G token address not loaded");
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -790,123 +773,120 @@ stakeId: string;
   };
 
   // ── Redeem handler ────────────────────────────────────────────────────────
-  /**
-   * On submit we refresh the price one final time (same pattern as Buy DROPS
-   * handleCalculate) so the backend receives the freshest possible numbers.
-   * The backend now trusts these pre-calculated values rather than re-fetching.
-   */
   const handleRedeem = async () => {
-const drops = parseFloat(redeemAmount);
-if (!drops || drops <= 0) return;
-if (!balance?.rematchBadge) {
-  toast({ title: "Rematch badge required", variant: "destructive" });
-  return;
-}
-if (drops > (balance?.rewardDrops ?? 0)) {
-  toast({ title: "Insufficient reward drops", variant: "destructive" });
-  return;
-}
+    const drops = parseFloat(redeemAmount);
+    if (!drops || drops <= 0) return;
+    
+    if (!DROPS_REDEEM_POOL_ADDRESS) {
+      toast({ title: "Not available on this network", description: "Switch to Celo to redeem.", variant: "destructive" });
+      return;
+    }
 
-setRedeemLoading(true);
+    if (!balance?.rematchBadge) {
+      toast({ title: "Rematch badge required", variant: "destructive" });
+      return;
+    }
+    if (drops > (balance?.rewardDrops ?? 0)) {
+      toast({ title: "Insufficient reward drops", variant: "destructive" });
+      return;
+    }
 
-// Refresh price right before submitting
-let freshPrice: number;
-try {
-  freshPrice = await getGoodDollarPrice();
-  setGPriceUsd(freshPrice);
-  setGPriceFetchedAt(Date.now());
-} catch {
-  toast({
-    title: "Could not refresh $G price",
-    description: "Check your connection and try again.",
-    variant: "destructive",
-  });
-  setRedeemLoading(false);
-  return;
-}
+    setRedeemLoading(true);
 
-const preview = computeRedeemPreview(drops, freshPrice, balance.apyPct, balance.rewardDrops);
-setRedeemPreview(preview);
+    let freshPrice: number;
+    try {
+      freshPrice = await getGoodDollarPrice();
+      setGPriceUsd(freshPrice);
+      setGPriceFetchedAt(Date.now());
+    } catch {
+      toast({
+        title: "Could not refresh $G price",
+        description: "Check your connection and try again.",
+        variant: "destructive",
+      });
+      setRedeemLoading(false);
+      return;
+    }
 
-try {
-  // ── Step 1: Player burns their DROPS on-chain ──────────────────────
-  toast({ title: "⏳ Step 1/2 — Confirm burn in your wallet…" });
+    const preview = computeRedeemPreview(drops, freshPrice, balance.apyPct, balance.rewardDrops);
+    setRedeemPreview(preview);
 
-  const switched = await ensureCorrectNetwork(CELO_CHAIN_ID);
-  if (!switched) throw new Error("Please connect your wallet first.");
+    try {
+      toast({ title: "⏳ Step 1/2 — Confirm burn in your wallet…" });
 
-  const signer = await getActiveSigner(CELO_CHAIN_ID);
-  if (!signer) throw new Error("No wallet connected");
+      const switched = await ensureCorrectNetwork(activeChainId);
+      if (!switched) throw new Error("Please connect your wallet first.");
 
-  const signerAddr = await signer.getAddress();
-  if (signerAddr.toLowerCase() !== wallet) {
-    throw new Error(`Connect as ${walletAddress} to proceed`);
-  }
+      const signer = await getActiveSigner(activeChainId);
+      if (!signer) throw new Error("No wallet connected");
 
-  const cfg = getChainConfig(CELO_CHAIN_ID);
-  const dropsContract = new ethers.Contract(
-    cfg.contracts.dropsToken!,
-    ["function redeem(uint256 amount, string calldata rewardId) external"],
-    signer,
-  );
+      const signerAddr = await signer.getAddress();
+      if (signerAddr.toLowerCase() !== wallet) {
+        throw new Error(`Connect as ${walletAddress} to proceed`);
+      }
 
-  const totalWei = ethers.parseUnits(drops.toString(), 18);
-  const burnTx   = await dropsContract.redeem(totalWei, `redeem_${Date.now()}`);
+      const dropsContract = new ethers.Contract(
+        chainCfg.contracts.dropsToken!,
+        ["function redeem(uint256 amount, string calldata rewardId) external"],
+        signer,
+      );
 
-  toast({ title: "📡 Burn sent, waiting for confirmation…" });
-  const receipt = await burnTx.wait();
-  if (!receipt || receipt.status !== 1) {
-    throw new Error("Burn transaction failed on-chain");
-  }
+      const totalWei = ethers.parseUnits(drops.toString(), 18);
+      const burnTx   = await dropsContract.redeem(totalWei, `redeem_${Date.now()}`);
 
-  // ── Step 2: Backend mints 100% to pool → redeemForPlayer ──────────
-  toast({ title: "⏳ Step 2/2 — Processing redemption…" });
+      toast({ title: "📡 Burn sent, waiting for confirmation…" });
+      const receipt = await burnTx.wait();
+      if (!receipt || receipt.status !== 1) {
+        throw new Error("Burn transaction failed on-chain");
+      }
 
-  const res = await fetch(`${BACKEND_URL}/api/drops/redeem`, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      walletAddress: wallet,
-      dropsAmount:   drops,
-      chainId:       CELO_CHAIN_ID,
-      gPriceUsd:     freshPrice,
-      playerG:       preview.playerG,
-      feeG:          preview.feeG,
-      stakedDrops:   preview.stakedDrops,
-      apyPct:        preview.apyPct,
-    }),
-  });
+      toast({ title: "⏳ Step 2/2 — Processing redemption…" });
 
-  const data = await res.json();
-  if (data.success) {
-    console.log("redeem success data:", data);  // ← add this
-    setRedeemResult({
-      playerG:     data.playerG ?? preview.playerG,
-      stakedDrops: data.stakedDrops ?? preview.stakedDrops,
-      apyPct:      data.apyPct ?? preview.apyPct,
-      txHash:      data.txHash,
-      stakeId:     data.stakeId,
-    });
-      setRedeemAmount("");
-      setRedeemPreview(null);
-      fetchBalance();
-      fetchStakes();
-      fetchHistory();
-    }else {
-    toast({
-      title: "Redeem failed",
-      description: data.detail ?? "Unknown error",
-      variant: "destructive",
-    });
-  }
+      const res = await fetch(`${BACKEND_URL}/api/drops/redeem`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletAddress: wallet,
+          dropsAmount:   drops,
+          chainId:       activeChainId,
+          gPriceUsd:     freshPrice,
+          playerG:       preview.playerG,
+          feeG:          preview.feeG,
+          stakedDrops:   preview.stakedDrops,
+          apyPct:        preview.apyPct,
+        }),
+      });
 
-} catch (err: any) {
-  const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error";
-  toast({ title: "Transaction failed", description: msg, variant: "destructive" });
-} finally {
-  setRedeemLoading(false);
-}
-};
+      const data = await res.json();
+      if (data.success) {
+        console.log("redeem success data:", data);
+        setRedeemResult({
+          playerG:     data.playerG ?? preview.playerG,
+          stakedDrops: data.stakedDrops ?? preview.stakedDrops,
+          apyPct:      data.apyPct ?? preview.apyPct,
+          txHash:      data.txHash,
+          stakeId:     data.stakeId,
+        });
+        setRedeemAmount("");
+        setRedeemPreview(null);
+        fetchBalance();
+        fetchStakes();
+        fetchHistory();
+      } else {
+        toast({
+          title: "Redeem failed",
+          description: data.detail ?? "Unknown error",
+          variant: "destructive",
+        });
+      }
+
+    } catch (err: any) {
+      const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error";
+      toast({ title: "Transaction failed", description: msg, variant: "destructive" });
+    } finally {
+      setRedeemLoading(false);
+    }
+  };
 
   const handleClaimStake = async (stakeId: string) => {
     setClaimingStake(stakeId);
@@ -914,7 +894,7 @@ try {
       const res = await fetch(`${BACKEND_URL}/api/drops/claim-stake`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: wallet, stakeId, chainId: CELO_CHAIN_ID }),
+        body: JSON.stringify({ walletAddress: wallet, stakeId, chainId: activeChainId }),
       });
       const data = await res.json();
       if (data.success) {
@@ -926,7 +906,8 @@ try {
     } catch {
       toast({ title: "Network error", variant: "destructive" });
     } finally {
-      setClaimingStake(null); }
+      setClaimingStake(null); 
+    }
   };
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -939,6 +920,40 @@ try {
   const wins                  = matchHistory.filter(m => m.winner_address?.toLowerCase() === wallet);
   const matureUnclaimedStakes = stakes.filter(s => s.matured && !s.claimed);
 
+  if (isUnsupported) {
+  const supportedChains = getEnabledChains();
+  return (
+    <div className="w-full py-12 flex flex-col items-center justify-center text-center px-4 animate-in fade-in duration-300 gap-4">
+      <div className="w-16 h-16 rounded-full bg-destructive/10 border-2 border-destructive/20 flex items-center justify-center">
+        <AlertCircle className="h-8 w-8 text-destructive" />
+      </div>
+      <div>
+        <h2 className="text-xl font-black text-foreground">Unsupported Network</h2>
+        <p className="text-sm text-muted-foreground max-w-sm mt-2 leading-relaxed">
+          The Duel Arena is not active on chain ID {chainId}. Switch to a supported chain to continue.
+        </p>
+      </div>
+      <div className="flex flex-col gap-2 w-full max-w-xs">
+        {supportedChains.map(chain => (
+          <Button
+            key={chain.id}
+            className="w-full font-bold h-11"
+            onClick={async () => {
+              try {
+                await ensureChainNetwork(chain.id);
+                window.location.reload();
+              } catch (err: any) {
+                toast({ title: err?.message ?? `Could not switch to ${chain.name}`, variant: "destructive" });
+              }
+            }}
+          >
+            Switch to {chain.name}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loadingBalance) {
     return (
@@ -1112,6 +1127,14 @@ try {
       ════════════════════════════════════════════════════════════════════ */}
       {innerTab === "redeem" && (
         <div className="space-y-4">
+          {!DROPS_REDEEM_POOL_ADDRESS && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Redemption and $G features are currently only available on Celo. Switch your network to access them.
+              </p>
+            </div>
+          )}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -1191,13 +1214,13 @@ try {
                     placeholder="0"
                     min={1}
                     className="flex-1 font-mono font-bold text-lg h-12"
-                    disabled={!balance?.rematchBadge || !gPriceUsd}
+                    disabled={!balance?.rematchBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
                   />
                   <Button
                     variant="outline" size="sm"
                     className="h-12 px-3 text-xs font-bold"
                     onClick={() => setRedeemAmount(String(Math.floor(balance?.rewardDrops ?? 0)))}
-                    disabled={!balance?.rematchBadge || !gPriceUsd}
+                    disabled={!balance?.rematchBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
                   >
                     MAX
                   </Button>
@@ -1217,7 +1240,7 @@ try {
                 {[10, 25, 50, 100].filter(v => (balance?.rewardDrops ?? 0) >= v).map(v => (
                   <button
                     key={v} onClick={() => setRedeemAmount(String(v))}
-                    disabled={!balance?.rematchBadge || !gPriceUsd}
+                    disabled={!balance?.rematchBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
                     className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all ${parseFloat(redeemAmount) === v ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"} disabled:opacity-40`}
                   >
                     {v}
@@ -1284,7 +1307,7 @@ try {
               <Button
                 className="w-full"
                 onClick={handleRedeem}
-                disabled={!canRedeem}
+                disabled={!canRedeem || !DROPS_REDEEM_POOL_ADDRESS}
               >
                 {redeemLoading
                   ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Redeeming…</>
@@ -1300,80 +1323,88 @@ try {
         </div>
       )}
       {/* ── Redeem Success Modal ─────────────────────────────────────────── */}
-{redeemResult && (
-<div
-  className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-  onClick={() => setRedeemResult(null)}
->
-  <div
-    className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-sm p-6 space-y-5"
-    onClick={e => e.stopPropagation()}
-  >
-    {/* Header */}
-    <div className="text-center space-y-2">
-      <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
-        <CheckCircle2 className="h-8 w-8 text-green-500" />
-      </div>
-      <h2 className="text-lg font-black text-foreground">Redemption Complete!</h2>
-      <p className="text-xs text-muted-foreground">Your DROPS have been converted to $G</p>
-    </div>
-
-    {/* Stats */}
-    <div className="space-y-2">
-      <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/50">
-        <span className="text-sm text-muted-foreground font-medium">$G sent to wallet</span>
-        <span className="text-sm font-black text-green-600 dark:text-green-400">
-          +{fmt(redeemResult.playerG, 4)} $G
-        </span>
-      </div>
-      <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
-        <span className="text-sm text-muted-foreground font-medium">Staked for 30 days</span>
-        <span className="text-sm font-black text-foreground">
-          {fmt(redeemResult.stakedDrops, 0)} DROPS
-        </span>
-      </div>
-      <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
-        <span className="text-sm text-muted-foreground font-medium">Stake APY</span>
-        <span className="text-sm font-black text-primary">{redeemResult.apyPct}%</span>
-      </div>
-    </div>
-
-    {/* Tx link */}
-    <a
-      href={celoScanTx(redeemResult.txHash)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-primary transition-colors"
-    >
-      <ExternalLink className="h-3 w-3" />
-      {shortAddr(redeemResult.txHash)}
-    </a>
-
-    {/* Actions */}
-    <div className="flex gap-2">
-      <Button
-        variant="outline"
-        className="flex-1"
-        onClick={() => { setRedeemResult(null); setInnerTab("pools"); }}
-      >
-        <TrendingUp className="h-4 w-4 mr-2" /> View Stake
-      </Button>
-      <Button
-        className="flex-1"
+      {redeemResult && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
         onClick={() => setRedeemResult(null)}
       >
-        Done
-      </Button>
-    </div>
-  </div>
-</div>
-)}
+        <div
+          className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-sm p-6 space-y-5"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="text-center space-y-2">
+            <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="h-8 w-8 text-green-500" />
+            </div>
+            <h2 className="text-lg font-black text-foreground">Redemption Complete!</h2>
+            <p className="text-xs text-muted-foreground">Your DROPS have been converted to $G</p>
+          </div>
+
+          {/* Stats */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/50">
+              <span className="text-sm text-muted-foreground font-medium">$G sent to wallet</span>
+              <span className="text-sm font-black text-green-600 dark:text-green-400">
+                +{fmt(redeemResult.playerG, 4)} $G
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
+              <span className="text-sm text-muted-foreground font-medium">Staked for 30 days</span>
+              <span className="text-sm font-black text-foreground">
+                {fmt(redeemResult.stakedDrops, 0)} DROPS
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
+              <span className="text-sm text-muted-foreground font-medium">Stake APY</span>
+              <span className="text-sm font-black text-primary">{redeemResult.apyPct}%</span>
+            </div>
+          </div>
+
+          {/* Tx link */}
+          <a
+            href={celoScanTx(redeemResult.txHash)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-primary transition-colors"
+          >
+            <ExternalLink className="h-3 w-3" />
+            {shortAddr(redeemResult.txHash)}
+          </a>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => { setRedeemResult(null); setInnerTab("pools"); }}
+            >
+              <TrendingUp className="h-4 w-4 mr-2" /> View Stake
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => setRedeemResult(null)}
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      </div>
+      )}
 
       {/* ════════════════════════════════════════════════════════════════════
           BUY DROPS
       ════════════════════════════════════════════════════════════════════ */}
       {innerTab === "buy" && (
         <div className="space-y-4">
+          {!DROPS_REDEEM_POOL_ADDRESS && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Purchasing and $G features are currently only available on Celo. Switch your network to access them.
+              </p>
+            </div>
+          )}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -1468,6 +1499,7 @@ try {
                       min="10"
                       step="10"
                       className="font-mono font-bold text-lg h-12"
+                      disabled={!DROPS_REDEEM_POOL_ADDRESS}
                     />
                     {dropsToBuy && parseFloat(dropsToBuy) > 0 && gPriceUsd && (
                       <p className="text-xs text-muted-foreground pl-1">
@@ -1487,10 +1519,11 @@ try {
                       <button
                         key={v}
                         onClick={() => setDropsToBuy(String(v))}
+                        disabled={!DROPS_REDEEM_POOL_ADDRESS}
                         className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all
                           ${parseFloat(dropsToBuy) === v
                             ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:border-primary/40"}`}
+                            : "border-border text-muted-foreground hover:border-primary/40"} disabled:opacity-40`}
                       >
                         <span className="block">{v >= 1000 ? `${v / 1000}k` : v}</span>
                         {gPriceUsd && (
@@ -1505,7 +1538,7 @@ try {
                   <Button
                     className="w-full"
                     onClick={handleCalculate}
-                    disabled={!dropsToBuy || parseFloat(dropsToBuy) < 10 || gPriceLoading || !gPriceUsd}
+                    disabled={!dropsToBuy || parseFloat(dropsToBuy) < 10 || gPriceLoading || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
                   >
                     {gPriceLoading
                       ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Fetching Price…</>
@@ -1546,7 +1579,7 @@ try {
                     <Button variant="outline" className="flex-1" onClick={handleBuyReset} disabled={buyLoading}>
                       Back
                     </Button>
-                    <Button className="flex-1" onClick={handleConfirmDeposit} disabled={buyLoading}>
+                    <Button className="flex-1" onClick={handleConfirmDeposit} disabled={buyLoading || !DROPS_REDEEM_POOL_ADDRESS}>
                       {buyLoading
                         ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing…</>
                         : <><Zap className="h-4 w-4 mr-2" /> Send $G &amp; Mint DROPS</>
@@ -1891,7 +1924,7 @@ try {
                           className="w-full"
                           size="sm"
                           onClick={() => handleClaimStake(stake.id)}
-                          disabled={isClaiming}
+                          disabled={isClaiming || !DROPS_REDEEM_POOL_ADDRESS}
                         >
                           {isClaiming
                             ? <><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Claiming…</>
@@ -2015,6 +2048,14 @@ try {
       ════════════════════════════════════════════════════════════════════ */}
       {innerTab === "admin" && adminMode && (
         <div className="space-y-4">
+          {!DROPS_REDEEM_POOL_ADDRESS && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Admin features are currently only available on Celo. Switch your network to access them.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700">
             <ShieldCheck className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -2022,13 +2063,15 @@ try {
               <p className="text-xs font-black text-amber-700 dark:text-amber-300">Admin · On-Chain Mode</p>
               <p className="text-[10px] text-amber-600 dark:text-amber-500 font-mono truncate">{walletAddress}</p>
             </div>
-            <a
-              href={`https://celoscan.io/address/${DROPS_REDEEM_POOL_ADDRESS}`}
-              target="_blank" rel="noopener noreferrer"
-              className="text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 flex items-center gap-1 shrink-0"
-            >
-              <ExternalLink className="h-3 w-3" /> Contract
-            </a>
+            {DROPS_REDEEM_POOL_ADDRESS && (
+              <a
+                href={`https://celoscan.io/address/${DROPS_REDEEM_POOL_ADDRESS}`}
+                target="_blank" rel="noopener noreferrer"
+                className="text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 flex items-center gap-1 shrink-0"
+              >
+                <ExternalLink className="h-3 w-3" /> Contract
+              </a>
+            )}
           </div>
 
           {lastTxHash && (
@@ -2047,7 +2090,7 @@ try {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-300">
                 <Activity className="h-4 w-4" /> On-Chain Pool Stats
-                <button onClick={fetchOnChainStats} className="ml-auto p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
+                <button onClick={fetchOnChainStats} disabled={!DROPS_REDEEM_POOL_ADDRESS} className="ml-auto p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">
                   <RefreshCw className={`h-3 w-3 ${loadingOnChain ? "animate-spin" : ""}`} />
                 </button>
               </CardTitle>
@@ -2066,7 +2109,7 @@ try {
                       { label: "DROPS in Pool",  value: onChainStats.dropsBalance,             icon: Droplets   },
                       { label: "Total Stakes",   value: String(onChainStats.nextStakeId - 1),  icon: TrendingUp },
                       { label: "$G Price (USD)", value: `$${onChainStats.gPriceUsd.toFixed(6)}`, icon: BarChart3 },
-                      { label: "Stake IDs",      value: `0 – ${onChainStats.nextStakeId - 1}`, icon: Coins     },
+                      { label: "Stake IDs",      value: `0 – ${onChainStats.nextStakeId - 1}`, icon: Coins      },
                     ].map(({ label, value, icon: Icon }) => (
                       <div key={label} className="bg-muted/40 rounded-xl p-3 border border-border">
                         <div className="flex items-center gap-1.5 mb-1">
@@ -2099,7 +2142,7 @@ try {
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground text-center py-4">Failed to load — check RPC connection.</p>
+                <p className="text-xs text-muted-foreground text-center py-4">Failed to load — check RPC connection or network.</p>
               )}
             </CardContent>
           </Card>
@@ -2116,9 +2159,9 @@ try {
                 Approves and calls <code className="font-mono text-[10px] bg-muted px-1 rounded">depositG(amount)</code>.
               </p>
               <div className="flex gap-2">
-                <Input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Amount in $G" className="flex-1 font-mono font-bold h-10" />
+                <Input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Amount in $G" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                 <Button size="sm" className="h-10 bg-green-600 hover:bg-green-700 text-white px-4 min-w-[100px]"
-                  disabled={!depositAmount || parseFloat(depositAmount) <= 0 || !!adminActionLoading}
+                  disabled={!depositAmount || parseFloat(depositAmount) <= 0 || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS}
                   onClick={handleDeposit}>
                   {adminActionLoading === "deposit" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><ArrowDownToLine className="h-3.5 w-3.5 mr-1.5" /> Deposit</>}
                 </Button>
@@ -2144,9 +2187,9 @@ try {
                 </div>
               )}
               <div className="flex gap-2">
-                <Input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder="Amount in $G" className="flex-1 font-mono font-bold h-10" />
+                <Input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder="Amount in $G" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                 <Button variant="outline" size="sm" className="h-10 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 px-4 min-w-[100px]"
-                  disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || !!adminActionLoading}
+                  disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS}
                   onClick={handleWithdraw}>
                   {adminActionLoading === "withdraw" ? <Loader2 className="h-4 w-4 animate-spin" /> : <><ArrowUpFromLine className="h-3.5 w-3.5 mr-1.5" /> Withdraw</>}
                 </Button>
@@ -2172,9 +2215,9 @@ try {
                 </div>
               )}
               <div className="flex gap-2">
-                <Input type="number" value={newGPrice} onChange={e => setNewGPrice(e.target.value)} placeholder="New price in USD (e.g. 0.001)" step="0.000001" className="flex-1 font-mono font-bold h-10" />
+                <Input type="number" value={newGPrice} onChange={e => setNewGPrice(e.target.value)} placeholder="New price in USD (e.g. 0.001)" step="0.000001" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                 <Button size="sm" variant="outline" className="h-10 px-4 min-w-[90px]"
-                  disabled={!newGPrice || parseFloat(newGPrice) <= 0 || !!adminActionLoading}
+                  disabled={!newGPrice || parseFloat(newGPrice) <= 0 || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS}
                   onClick={handleSetGPrice}>
                   {adminActionLoading === "price" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Set Price"}
                 </Button>
@@ -2191,17 +2234,17 @@ try {
             </CardHeader>
             <CardContent className="space-y-5">
               {[
-                { label: "Resolver Address",    placeholder: "0x…", value: newResolver,       setValue: setNewResolver,       key: "resolver",    fn: handleSetResolver,       desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setResolver(address)</code>. The backend wallet for resolver-gated functions.</> },
-                { label: "Service (Fee) Address", placeholder: "0x…", value: newServiceAddress, setValue: setNewServiceAddress, key: "service",     fn: handleSetServiceAddress, desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setServiceAddress(address)</code>. Receives 10% fee on redemptions.</> },
-                { label: "DROPS Token Address", placeholder: "0x…", value: newDropsToken,     setValue: setNewDropsToken,     key: "dropsToken",  fn: handleSetDropsToken,     desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setDropsToken(address)</code>. Updates DROPS ERC20 reference.</> },
+                { label: "Resolver Address",    placeholder: "0x…", value: newResolver,       setValue: setNewResolver,       key: "resolver",   fn: handleSetResolver,      desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setResolver(address)</code>. The backend wallet for resolver-gated functions.</> },
+                { label: "Service (Fee) Address", placeholder: "0x…", value: newServiceAddress, setValue: setNewServiceAddress, key: "service",    fn: handleSetServiceAddress, desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setServiceAddress(address)</code>. Receives 10% fee on redemptions.</> },
+                { label: "DROPS Token Address", placeholder: "0x…", value: newDropsToken,     setValue: setNewDropsToken,     key: "dropsToken", fn: handleSetDropsToken,    desc: <>Calls <code className="font-mono bg-muted px-1 rounded text-[10px]">setDropsToken(address)</code>. Updates DROPS ERC20 reference.</> },
               ].map(({ label, placeholder, value, setValue, key, fn, desc }) => (
                 <div key={key} className="space-y-2">
                   <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{label}</Label>
                   <p className="text-[10px] text-muted-foreground">{desc}</p>
                   <div className="flex gap-2">
-                    <Input value={value} onChange={e => setValue(e.target.value)} placeholder={placeholder} className="flex-1 font-mono text-xs h-10" />
+                    <Input value={value} onChange={e => setValue(e.target.value)} placeholder={placeholder} className="flex-1 font-mono text-xs h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                     <Button size="sm" variant="outline" className="h-10 px-4 min-w-[90px]"
-                      disabled={!value || !!adminActionLoading} onClick={fn}>
+                      disabled={!value || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS} onClick={fn}>
                       {adminActionLoading === key ? <Loader2 className="h-4 w-4 animate-spin" /> : "Update"}
                     </Button>
                   </div>
@@ -2214,13 +2257,19 @@ try {
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
               <Wallet className="h-3.5 w-3.5" /> Contract
             </p>
-            <a
-              href={`https://celoscan.io/address/${DROPS_REDEEM_POOL_ADDRESS}`}
-              target="_blank" rel="noopener noreferrer"
-              className="font-mono text-xs text-foreground hover:text-primary flex items-center gap-1.5 break-all"
-            >
-              {DROPS_REDEEM_POOL_ADDRESS} <ExternalLink className="h-3 w-3 shrink-0" />
-            </a>
+            {DROPS_REDEEM_POOL_ADDRESS ? (
+              <a
+                href={`https://celoscan.io/address/${DROPS_REDEEM_POOL_ADDRESS}`}
+                target="_blank" rel="noopener noreferrer"
+                className="font-mono text-xs text-foreground hover:text-primary flex items-center gap-1.5 break-all"
+              >
+                {DROPS_REDEEM_POOL_ADDRESS} <ExternalLink className="h-3 w-3 shrink-0" />
+              </a>
+            ) : (
+              <span className="font-mono text-xs text-muted-foreground break-all">
+                Not deployed on this network
+              </span>
+            )}
             <p className="text-[10px] text-muted-foreground">
               All admin actions are signed by your connected wallet and sent directly to the contract on Celo Mainnet.
             </p>

@@ -22,8 +22,7 @@ import {
   toBytes,
   type Address,
 } from "viem";
-import { getChainConfig, getEnabledChains, CELO_CHAIN_ID, BOTCHAIN_CHAIN_ID, type ChainConfig } from "@/lib/chain";
-
+import { getChainConfig, getEnabledChains, CELO_CHAIN_ID, isSupportedChain } from "@/lib/chain";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Config
@@ -124,7 +123,6 @@ export default function CreateChallengePage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const { address: userWalletAddress, chainId: walletChainId, ensureCorrectNetwork } = useWallet();
-
   const [wizardStep, setWizardStep]   = useState(0);
   const [txPhase, setTxPhase]         = useState<TxPhase>("idle");
   const [createdCode, setCreatedCode] = useState<string | null>(null);
@@ -132,13 +130,14 @@ export default function CreateChallengePage() {
   const negotiationLocked = totalDuels < 10;
   const [gameDrops, setGameDrops] = useState<number>(0)
   const [balanceLoading, setBalanceLoading] = useState(true)
+  const activeChainId = (walletChainId && isSupportedChain(walletChainId)) ? walletChainId : CELO_CHAIN_ID;
+  const isUnsupported = !!userWalletAddress && !isSupportedChain(walletChainId);
+  const chainCfg = getChainConfig(activeChainId);
   // Step 0 — Topic & Visibility
   const [topic, setTopic]                     = useState("");
   const [creatorUsername, setCreatorUsername] = useState("");
   const [isPublic, setIsPublic]               = useState(!searchParams.get("inviteUsername"));
   const [questionCount, setQuestionCount]     = useState(15);
-  const [selectedChainId, setSelectedChainId] = useState<number>(CELO_CHAIN_ID);
-  const chainCfg = getChainConfig(selectedChainId);
   const QUIZ_HUB_ADDRESS = chainCfg.contracts.quizHub;
   const DROPS_ADDRESS    = chainCfg.contracts.dropsToken;
   // Duel routing
@@ -221,7 +220,7 @@ useEffect(() => {
   }
 
   try {
-    await ensureCorrectNetwork(selectedChainId)
+    await ensureCorrectNetwork(activeChainId)
   } catch {
     return
   }
@@ -247,7 +246,7 @@ useEffect(() => {
         creatorUsername: creatorUsername || userWalletAddress.slice(0, 8),
         stakeAmount:     stake,
         tokenSymbol:     DROPS_SYMBOL,
-        chainId:         selectedChainId,
+        chainId:         activeChainId,
         isPublic,
         inviteWallet:    !isPublic && inviteWallet.trim() ? inviteWallet.trim() : undefined,
       }),
@@ -262,7 +261,7 @@ useEffect(() => {
     await new Promise(r => setTimeout(r, 400))
 
     // ── Use WalletContext signer (works for BOTH embedded + external) ──
-    const activeSigner = await getActiveSigner(selectedChainId)
+    const activeSigner = await getActiveSigner(activeChainId)
     if (!activeSigner) throw new Error("No signer available — please reconnect your wallet.")
 
     const quizId = deriveQuizId(code as string)
@@ -299,7 +298,7 @@ useEffect(() => {
       body: JSON.stringify({
         creatorWallet: userWalletAddress,
         txHash:        receipt.hash,
-        chainId:       selectedChainId,  
+        chainId:       activeChainId,  
       }),
     })
 
@@ -320,7 +319,7 @@ useEffect(() => {
       fetch(`${API_BASE_URL}/api/challenge/${code}/cancel`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creatorWallet: userWalletAddress, reason: "tx_rejected",chainId: selectedChainId, }),
+        body: JSON.stringify({ creatorWallet: userWalletAddress, reason: "tx_rejected",chainId: activeChainId, }),
       }).catch(() => {})
     }
 
@@ -671,15 +670,15 @@ useEffect(() => {
       </div>
 
       <button
-  onClick={handleCreate}
-  disabled={txPhase !== "idle" || !userWalletAddress || insufficientBalance || balanceLoading}
-  className={cn(
-    "w-full h-16 rounded-2xl font-black text-lg transition-all",
-    userWalletAddress && !insufficientBalance
-      ? "bg-primary text-primary-foreground hover:opacity-90"
-      : "bg-muted text-muted-foreground cursor-not-allowed",
-  )}
->
+      onClick={handleCreate}
+      disabled={txPhase !== "idle" || !userWalletAddress || insufficientBalance || balanceLoading || isUnsupported}
+        className={cn(
+          "w-full h-16 rounded-2xl font-black text-lg transition-all",
+          userWalletAddress && !insufficientBalance && !isUnsupported
+            ? "bg-primary text-primary-foreground hover:opacity-90"
+            : "bg-muted text-muted-foreground cursor-not-allowed",
+        )}
+    >
   {txPhase !== "idle" ? (
     <><Loader2 className="h-5 w-5 animate-spin mr-2 inline" /> Creating…</>
   ) : insufficientBalance ? (
@@ -697,23 +696,14 @@ useEffect(() => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header pageTitle="Create Challenge" />
-{/* Chain switcher row */}
-<div className="max-w-2xl mx-auto w-full px-4 pt-3 flex gap-2">
-  {getEnabledChains().map(c => (
-    <button
-      key={c.id}
-      onClick={() => setSelectedChainId(c.id)}
-      className={cn(
-        "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-all",
-        selectedChainId === c.id
-          ? "border-primary bg-primary/10 text-primary"
-          : "border-border bg-card text-muted-foreground hover:border-primary/40",
+      {isUnsupported && (
+        <div className="max-w-2xl mx-auto w-full px-4 pt-3">
+          <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-destructive/10 border-2 border-destructive/30 text-destructive text-sm font-bold">
+            <AlertCircle className="h-5 w-5" />
+            Unsupported network. Please switch to Celo or Botchain in your wallet.
+          </div>
+        </div>
       )}
-    >
-
-    </button>
-  ))}
-</div>
       <div className="relative z-10 flex-1 max-w-2xl mx-auto w-full px-4 pb-24 pt-6 space-y-6">
         <div className="flex items-center gap-3">
           <button

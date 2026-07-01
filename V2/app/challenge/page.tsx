@@ -7,15 +7,15 @@ import { Header } from "@/components/challengeheader";
 import {
   Plus, Trophy, Loader2, Gamepad2,
   RefreshCw, ChevronRight, Zap, Gift, CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import Loading from "@/app/loading";
 import { BottomNav } from "@/components/bottom-nav";
 import { ethers } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
-
+import { getChainConfig, CELO_CHAIN_ID, isSupportedChain,getEnabledChains,ensureChainNetwork } from "@/lib/chain";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
-const CELO_CHAIN_ID = 42220;
 const DROP_TOKEN_CONTRACT = "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B";
 
 interface LobbyChallenge {
@@ -72,8 +72,8 @@ const S = `
 
 export default function QuizListPage() {
   const router = useRouter();
-  const { address: userWalletAddress, getActiveSigner, ensureCorrectNetwork } = useWallet();
-
+  const { address: userWalletAddress, getActiveSigner,chainId, ensureCorrectNetwork } = useWallet();
+  const isUnsupported = !!chainId && !isSupportedChain(chainId);
   const [tab, setTab] = useState<"lobby" | "history">("lobby");
   const [lobbyChallenges, setLobbyChallenges] = useState<LobbyChallenge[]>([]);
   const [history, setHistory] = useState<HistoryChallenge[]>([]);
@@ -253,9 +253,19 @@ export default function QuizListPage() {
     try {
       const r = await fetch(`${API_BASE_URL}/api/challenge/lobby`);
       const d = await r.json();
-      if (d.success) setLobbyChallenges((d.challenges as LobbyChallenge[]).filter(c => c.chain_id === CELO_CHAIN_ID));
-    } catch { toast.error("Failed to sync lobby"); }
-    finally { setIsLoading(false); setIsRefreshing(false); }
+      if (d.success) {
+        // Filter by checking if the chain_id from the backend exists in your supported list
+        const allChallenges = d.challenges as LobbyChallenge[];
+        const filtered = allChallenges.filter(c => isSupportedChain(c.chain_id));
+        setLobbyChallenges(filtered);
+      }
+    } catch { 
+      toast.error("Failed to sync lobby"); 
+    }
+    finally { 
+      setIsLoading(false); 
+      setIsRefreshing(false); 
+    }
   };
 
   const fetchHistory = async () => {
@@ -313,7 +323,39 @@ export default function QuizListPage() {
   };
 
   const tierColor = dropsBalance ? (TIER_COLOR[dropsBalance.tier] ?? "#64748b") : "#64748b";
-
+  if (isUnsupported) {
+  const supportedChains = getEnabledChains();
+  return (
+    <div className="dd-page flex flex-col items-center justify-center min-h-screen text-center p-6 gap-4">
+      <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-2">
+        <AlertCircle className="h-8 w-8 text-red-500" />
+      </div>
+      <h2 className="text-xl font-black">Unsupported Network</h2>
+      <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+        This network is not supported. Switch to a supported chain to play.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", maxWidth: 280, marginTop: 8 }}>
+        {supportedChains.map(chain => (
+          <button
+            key={chain.id}
+            className="btn-blue"
+            style={{ height: 46, borderRadius: 12, fontSize: 14, width: "100%" }}
+            onClick={async () => {
+              try {
+                await ensureChainNetwork(chain.id);
+                window.location.reload();
+              } catch (err: any) {
+                toast.error(err?.message ?? `Could not switch to ${chain.name}`);
+              }
+            }}
+          >
+            Switch to {chain.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
   return (
     <>
       <style>{S}</style>
@@ -543,17 +585,15 @@ export default function QuizListPage() {
                         onClick={() => handleJoinAction(c.code)}
                         style={{ padding: 16, textAlign: "left", width: "100%" }}
                       >
-                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <h3 className="d" style={{ fontSize: 16, fontWeight: 900, color: "var(--dd-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {c.topic}
-                            </h3>
-                            <p style={{ fontSize: 11, color: "var(--dd-text-mute)", marginTop: 2 }}>@{c.creator_username}</p>
-                          </div>
-                          <span style={{ padding: "4px 10px", borderRadius: 6, background: "var(--dd-blue)", color: "#fff", fontSize: 10, fontWeight: 900, textTransform: "uppercase", flexShrink: 0 }}>
-                            Join Pool
-                          </span>
-                        </div>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                              <span style={{ padding: "4px 8px", borderRadius: 6, background: "rgba(100,116,139,0.1)", color: "var(--dd-text-dim)", fontSize: 10, fontWeight: 900 }}>
+                                {getChainConfig(c.chain_id).shortName}
+                              </span>
+                              <span style={{ padding: "4px 10px", borderRadius: 6, background: "var(--dd-blue)", color: "#fff", fontSize: 10, fontWeight: 900, textTransform: "uppercase", flexShrink: 0 }}>
+                                Join Pool
+                              </span>
+                            </div>
+                          
                         <div style={{ display: "flex", alignItems: "center", borderTop: "1px solid var(--dd-line)", borderBottom: "1px solid var(--dd-line)", padding: "10px 0", marginBottom: 10, gap: 0 }}>
                           <div style={{ flex: 1, textAlign: "center" }}>
                             <p style={{ fontSize: 10, color: "var(--dd-text-mute)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Entry</p>

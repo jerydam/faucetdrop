@@ -479,37 +479,55 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
   // ── Activity log ───────────────────────────────────────────────────────────
 
-  const loadTransactionHistory = useCallback(async () => {
-    if (!selectedNetwork || !faucetAddress) return;
-    setIsHistoryLoading(true);
+ const loadTransactionHistory = useCallback(async () => {
+  if (!selectedNetwork || !faucetAddress) return
 
+  // Validate address format before proceeding
+  if (onSolana) {
     try {
-      if (onSolana) {
-        // ── Solana: fetch from RPC ───────────────────────────────────────────
-        const txs = await loadSolanaTransactionHistory(faucetAddress, selectedNetwork);
-        setTransactions(txs);
-      } else {
-        // ── EVM: existing logic ─────────────────────────────────────────────
-        const { JsonRpcProvider } = await import("ethers");
-        const safeRpc = Array.isArray(selectedNetwork.rpcUrl)
-          ? selectedNetwork.rpcUrl[0]
-          : selectedNetwork.rpcUrl;
-        const rpcProvider = new JsonRpcProvider(safeRpc);
-        const txs = await getFaucetTransactionHistory(
-          rpcProvider as any,
-          faucetAddress,
-          selectedNetwork,
-          faucetType || undefined,
-          address ?? undefined
-        );
-        setTransactions(txs.sort((a, b) => b.timestamp - a.timestamp));
-      }
-    } catch (error: any) {
-      toast.error(`Failed to load Activity Log: ${error.message}`);
-    } finally {
-      setIsHistoryLoading(false);
+      new PublicKey(faucetAddress)
+    } catch {
+      toast.error("Invalid Solana faucet address — cannot load activity log.")
+      return
     }
-  }, [faucetAddress, selectedNetwork, faucetType, setTransactions, address, onSolana]);
+  } else {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(faucetAddress)) {
+      toast.error("Invalid EVM faucet address — cannot load activity log.")
+      return
+    }
+  }
+
+  setIsHistoryLoading(true)
+  try {
+    if (onSolana) {
+      const txs = await loadSolanaTransactionHistory(
+        faucetAddress,
+        selectedNetwork
+      )
+      setTransactions(txs)
+    } else {
+      const { JsonRpcProvider } = await import("ethers")
+      const safeRpc = Array.isArray(selectedNetwork.rpcUrl)
+        ? selectedNetwork.rpcUrl[0]
+        : selectedNetwork.rpcUrl
+
+      const rpcProvider = new JsonRpcProvider(safeRpc)
+
+      const txs = await getFaucetTransactionHistory(
+        rpcProvider as any,
+        faucetAddress,
+        selectedNetwork,
+        faucetType || undefined,
+        address ?? undefined
+      )
+      setTransactions(txs.sort((a, b) => b.timestamp - a.timestamp))
+    }
+  } catch (error: any) {
+    toast.error(`Failed to load Activity Log: ${error.message}`)
+  } finally {
+    setIsHistoryLoading(false)
+  }
+}, [faucetAddress, selectedNetwork, faucetType, setTransactions, address, onSolana])
 
   useEffect(() => {
     if (activeTab === "history" && selectedNetwork) loadTransactionHistory();

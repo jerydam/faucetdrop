@@ -1023,31 +1023,24 @@ useEffect(() => {
 const handleStake = useCallback(async () => {
     if (!userWalletAddress || !challenge) return;
     setIsStaking(true);
- 
-    const activeChainId = chainId ?? CELO_CHAIN_ID; // Use wallet chainId
+
+    const activeChainId = chainId ?? CELO_CHAIN_ID;
     const activeCfg     = getChainConfig(activeChainId);
     const DROPS_ADDRESS = activeCfg.contracts.dropsToken;
- 
+
     try {
       const stakeAmt = agreedStake ? parseFloat(agreedStake) : challenge.stake;
       toast.info(`Staking ${stakeAmt} DROPS — confirm in your wallet…`);
- 
-      // ── ensureCorrectNetwork comes from useWallet() — handles both wallet types ──
-      // For embedded: updates session.chainId in-memory, no RPC prompt.
-      // For external: calls wallet_switchEthereumChain via the raw provider.
+
       const switched = await ensureCorrectNetwork(activeChainId);
       if (!switched) throw new Error("Please connect your wallet first.");
- 
-      // ── getActiveSigner from useWallet() — handles both wallet types ──
-      // For embedded: fetches private key from backend, returns ethers.Wallet.
-      // For external: returns the live JsonRpcSigner from BrowserProvider.
+
       const activeSigner = await getActiveSigner(activeChainId);
       if (!activeSigner) throw new Error("No wallet available. Please reconnect.");
- 
+
       let txHash: string;
- 
+
       if (walletType === "embedded") {
-        // ── Embedded path: ethers only, no viem needed ──────────────────────
         const { ethers } = await import("ethers");
         const dropsIface = new ethers.Interface([
           "function redeem(uint256 amount, string rewardId)",
@@ -1057,17 +1050,13 @@ const handleStake = useCallback(async () => {
         const tx       = await (activeSigner as any).sendTransaction({ to: DROPS_ADDRESS, data });
         const receipt  = await tx.wait();
         txHash = receipt.hash;
- 
       } else {
-        // ── External path: viem WalletClient + PublicClient ─────────────────
-        // ensureCorrectNetwork() already switched the chain above, so
-        // makeWalletClient() will find the right chain in window.ethereum.
         const chainObj     = toViemChain(activeChainId);
         const walletClient = makeWalletClient(activeChainId);
         const publicClient = makePublicClient(activeChainId);
         const [userAddr]   = await walletClient.getAddresses();
         const stakeWei     = parseUnits(stakeAmt.toString(), DROPS_DECIMALS);
- 
+
         const hash = await walletClient.writeContract({
           address:      DROPS_ADDRESS,
           abi:          DROPS_REDEEM_ABI,
@@ -1076,12 +1065,30 @@ const handleStake = useCallback(async () => {
           account:      userAddr,
           chain:        chainObj,
         });
- 
+
         const receipt = await publicClient.waitForTransactionReceipt({ hash });
         txHash = receipt.transactionHash;
       }
- 
-      // ── Join (if not already in lobby) ────────────────────────────────────
+
+      // ── Tx confirmed on-chain — this IS the stake. Trust it now. ──────────
+      // Optimistically flip local state so the Ready button appears
+      // immediately, instead of waiting on the backend round-trip.
+      setPlayers(prev => {
+        const already = prev.some(p => p.walletAddress.toLowerCase() === myWallet);
+        if (!already) {
+          return [...prev, {
+            walletAddress: userWalletAddress, username, points: 0,
+            ready: false, txVerified: true, avatarUrl: avatarUrl ?? "",
+          }];
+        }
+        return prev.map(p =>
+          p.walletAddress.toLowerCase() === myWallet ? { ...p, txVerified: true } : p
+        );
+      });
+      toast.success("DROPS staked! Click Ready to start.");
+
+      // ── Join (if not already in lobby) — still awaited, needed so the
+      // backend has a player row at all before we call confirm-burn. ───────
       if (!hasJoined) {
         const res = await fetch(`${API_BASE_URL}/api/challenge/${code}/join`, {
           method:  "POST",
@@ -1096,18 +1103,13 @@ const handleStake = useCallback(async () => {
         const d = await res.json();
         if (!d.success) throw new Error(d.detail ?? "Join failed");
         setHasJoined(true);
-        setPlayers(prev => {
-          if (prev.some(p => p.walletAddress.toLowerCase() === myWallet)) return prev;
-          return [...prev, {
-            walletAddress: userWalletAddress, username, points: 0,
-            ready: false, txVerified: false, avatarUrl: avatarUrl ?? "",
-          }];
-        });
       }
- 
-      // ── Confirm burn on backend ────────────────────────────────────────────
-      toast.loading("Verifying stake on-chain…", { id: "confirm-burn" });
-      const burnRes = await fetch(`${API_BASE_URL}/api/challenge/${code}/confirm-burn`, {
+
+      // ── Confirm burn on backend — fire in the background. Don't block
+      // or gate the UI on this; it's bookkeeping (deduct game_drops,
+      // flip server-side txVerified, register on-chain), not a prerequisite
+      // for the user to proceed. Retry silently via sync-stake if it fails. ──
+      fetch(`${API_BASE_URL}/api/challenge/${code}/confirm-burn`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1116,29 +1118,30 @@ const handleStake = useCallback(async () => {
           success: true,
           chainId: activeChainId,
         }),
-      });
-      const burnData = await burnRes.json();
-      toast.dismiss("confirm-burn");
- 
-      if (!burnData.success && !burnData.alreadyVerified) {
-        toast.error("Could not verify burn automatically. Use 'Already staked? Sync my stake' below.");
-        sendStakeConfirmed(txHash);
-        return;
-      }
-      setPlayers(prev => prev.map(p =>
-        p.walletAddress.toLowerCase() === myWallet ? { ...p, txVerified: true } : p
-      ));
-      toast.success("DROPS staked! Click Ready to start.");
+      })
+        .then(r => r.json())
+        .then(burnData => {
+          if (!burnData.success && !burnData.alreadyVerified) {
+            console.warn("confirm-burn failed, falling back to sync-stake:", burnData);
+            // quiet retry — no toast, no UI interruption
+            fetch(`${API_BASE_URL}/api/challenge/${code}/sync-stake`, {
+              method:  "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ walletAddress: userWalletAddress, chainId: activeChainId }),
+            }).catch(() => {});
+          }
+        })
+        .catch(err => console.warn("confirm-burn request failed:", err));
+
     } catch (err: any) {
-      toast.dismiss("confirm-burn");
       toast.error(err?.message ?? "Stake failed.");
     } finally {
       setIsStaking(false);
     }
   }, [
     userWalletAddress, challenge, hasJoined, code, username,
-    sendStakeConfirmed, agreedStake, myWallet, avatarUrl,
-    getActiveSigner, ensureCorrectNetwork, walletType,
+    agreedStake, myWallet, avatarUrl,
+    getActiveSigner, ensureCorrectNetwork, walletType, chainId,
   ]);
  
  

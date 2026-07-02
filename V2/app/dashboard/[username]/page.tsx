@@ -31,7 +31,6 @@ import { MyCreationsModal } from "@/components/my-creations-modal"
 import { CreateNewModal } from "@/components/create-new-modal" 
 import { usePrivy } from "@privy-io/react-auth" 
 import { EmbeddedWalletControlProduction } from "@/components/embeddedwallet"
-import { SelfVerificationModal } from "@/components/self-verification-modal"
 import { VerifiedAvatar, VerifyPill, VerifiedBadge } from "@/components/verified-profile-avatar"
 import Loading from "@/app/loading"
 
@@ -109,7 +108,7 @@ export default function DashboardPage() {
     const { toast } = useToast();
     const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
     // --- COMBINED WALLET LOGIC ---
-    const { address: evmAddress } = useWallet(); 
+    const { address: evmAddress, stellarAddress, fetchNonEvmAddresses } = useWallet();
     const { publicKey: solanaPublicKey } = useSolanaWallet();
     // Resolve to whatever is actively connected
     const currentConnectedAddress = solanaPublicKey?.toBase58() || evmAddress;
@@ -126,7 +125,7 @@ export default function DashboardPage() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
     
-    const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
+    
     const [isVerified, setIsVerified] = useState(false);
     const [initialSubtab, setInitialSubtab] = useState<string | null>(null);
     const getNativeTokenSymbol = (networkName: string): string => {
@@ -234,38 +233,31 @@ export default function DashboardPage() {
     }
 
     useEffect(() => {
-        if (profile?.wallet_address) {
-            const stored = localStorage.getItem(`verification_${profile.wallet_address.toLowerCase()}`);
-            if (stored) {
-                const data = JSON.parse(stored);
-                if (data.verified && (Date.now() - data.timestamp < 30 * 24 * 60 * 60 * 1000)) {
-                    setIsVerified(true);
-                }
-            }
-        }
-    }, [profile]);
+    if (!profile?.wallet_address) return;
+    fetch(`${backendUrl}/api/users/${profile.wallet_address.toLowerCase()}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data?.is_verified) setIsVerified(true);
+        })
+        .catch(() => {});
+}, [profile?.wallet_address, backendUrl]);
 
-    const handleVerificationSuccess = async (data: any) => {
-        try {
-            const response = await fetch(`${backendUrl}/api/users/${profile?.wallet_address.toLowerCase()}/verify`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    is_verified: true,
-                    verification_data: data 
-                }),
-            });
-
-            if (response.ok) {
-                setIsVerified(true);
-                localStorage.setItem(`verification_${profile?.wallet_address.toLowerCase()}`, JSON.stringify(data));
-                toast({ title: "Identity Verified!", description: "Your status is now permanently saved to your profile." });
-            }
-        } catch (error) {
-            console.error("Failed to save verification:", error);
-            toast({ title: "Error", description: "Verification succeeded but failed to save to profile.", variant: "destructive" });
-        }
-    };
+    const handleVerifyClick = useCallback(async () => {
+    let addr = stellarAddress;
+    if (!addr) {
+        const fetched = await fetchNonEvmAddresses();
+        addr = fetched?.stellar ?? null;
+    }
+    if (addr) {
+        router.push(`/verify?stellar_address=${encodeURIComponent(addr)}`);
+    } else {
+        toast({
+            title: "No Stellar wallet found",
+            description: "Connect or create an embedded wallet to verify your identity.",
+            variant: "destructive",
+        });
+    }
+}, [stellarAddress, fetchNonEvmAddresses, router, toast]);
 
     const displayAvatar = getDisplayAvatar();
     const displayName = getDisplayName();
@@ -584,19 +576,14 @@ export default function DashboardPage() {
                                 isOwner={isOwner}
                             />
 
-                            <SelfVerificationModal
-                                isOpen={isVerifyModalOpen}
-                                onOpenChange={setIsVerifyModalOpen}
-                                account={currentConnectedAddress || ""}
-                                onSuccess={handleVerificationSuccess}
-                            />
+                            
                             
                             <div className="flex-1 space-y-2">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
                                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
                                         {displayName}
                                     </h1>
-                                    {isOwner && !isVerified && <VerifyPill onClick={() => setIsVerifyModalOpen(true)} />}
+                                    {isOwner && !isVerified && <VerifyPill onClick={handleVerifyClick} />}
                                     {isVerified && <VerifiedBadge />}
                                     <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
                                         {profile?.twitter_handle && (

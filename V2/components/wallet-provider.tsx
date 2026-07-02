@@ -64,7 +64,7 @@ interface WalletContextType {
   getActiveSigner:   (chainId?: number) => Promise<JsonRpcSigner | Wallet | null>
 
   clearLegacy:      () => void
-  fetchNonEvmAddresses: () => Promise<void>
+  fetchNonEvmAddresses: () => Promise<{ solana: string | null; stellar: string | null } | null>
 
   setShowModal:             (val: boolean) => void
   connectExternalWallet:    (wallet: DetectedWallet) => Promise<void>
@@ -141,7 +141,7 @@ export const WalletContext = createContext<WalletContextType>({
   solanaAddress:  null,
   stellarAddress: null,
   clearLegacy:      () => {},
-  fetchNonEvmAddresses: async () => {},
+  fetchNonEvmAddresses: async () => null,
   getActiveSigner:   async () => null,
   
 })
@@ -278,6 +278,7 @@ const SIGNER_CACHE_TTL_MS = 60_000
     return () => window.removeEventListener("eip6963:announceProvider", handler)
   }, [])
 
+  
   const markPINSet = useCallback((type: "pin" | "passkey" | null) => {
   setSession(prev => {
     if (!prev) return prev
@@ -289,28 +290,29 @@ const SIGNER_CACHE_TTL_MS = 60_000
 
   // ── Fetch Solana + Stellar addresses from backend ─────────────────────────
   const fetchNonEvmAddresses = useCallback(async () => {
-    const s = session
-    if (!s?.token || s.walletType !== "embedded") return
-    if (s.solanaAddress !== undefined) return
+  const s = session
+  if (!s?.token || s.walletType !== "embedded") return null
+  if (s.solanaAddress !== undefined) return { solana: s.solanaAddress, stellar: s.stellarAddress }
 
-    try {
-      const res  = await fetch(`${API_BASE}/wallet/addresses`, {
-        headers: { Authorization: `Bearer ${s.token}` },
-      })
-      if (!res.ok) return
-      const data = await res.json()
+  try {
+    const res  = await fetch(`${API_BASE}/wallet/addresses`, {
+      headers: { Authorization: `Bearer ${s.token}` },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
 
-      const updated: WalletSession = {
-        ...s,
-        solanaAddress:  data.solana  ?? null,
-        stellarAddress: data.stellar ?? null,
-      }
-      setSession(updated)
-      saveSession(updated)
-    } catch {
-      // non-fatal
+    const updated: WalletSession = {
+      ...s,
+      solanaAddress:  data.solana  ?? null,
+      stellarAddress: data.stellar ?? null,
     }
-  }, [session])
+    setSession(updated)
+    saveSession(updated)
+    return { solana: data.solana ?? null, stellar: data.stellar ?? null } // <-- return it
+  } catch {
+    return null
+  }
+}, [session])
 
   useEffect(() => {
     if (session?.walletType === "embedded" && session.solanaAddress === undefined) {

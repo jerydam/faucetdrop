@@ -30,11 +30,10 @@ import {
   toBytes,
   type Address,
 } from "viem";
-import { celo } from "viem/chains";
+import { getChainConfig, CELO_CHAIN_ID, } from "@/lib/chain";
 import { useSearchParams } from "next/navigation";
 import { toast as sonnerToast } from "sonner";
 import { RematchPopup, RematchInvite } from "@/components/RematchPopup";
-import { getChainConfig, CELO_CHAIN_ID, } from "@/lib/chain";
 
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -110,32 +109,6 @@ function LinearTimer({ seconds, total }: { seconds: number; total: number }) {
 }
 
 function deriveQuizId(code: string): `0x${string}` { return keccak256(toBytes(code)); }
-
-async function ensureCeloNetwork(): Promise<void> {
-  if (!window.ethereum) throw new Error("No wallet detected.");
-  const chainIdHex = await (window.ethereum as any).request({ method: "eth_chainId" });
-  if (parseInt(chainIdHex, 16) !== CELO_CHAIN_ID) {
-    try {
-      await (window.ethereum as any).request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x" + CELO_CHAIN_ID.toString(16) }],
-      });
-    } catch (switchErr: any) {
-      if (switchErr.code === 4902) {
-        await (window.ethereum as any).request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId:           "0x" + CELO_CHAIN_ID.toString(16),
-            chainName:         "Celo Mainnet",
-            nativeCurrency:    { name: "CELO", symbol: "CELO", decimals: 18 },
-            rpcUrls:           ["https://forno.celo.org"],
-            blockExplorerUrls: ["https://celoscan.io"],
-          }],
-        });
-      } else throw switchErr;
-    }
-  }
-}
 
 const CONFETTI_COLORS = ["#FFD700","#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7"];
 function Confetti({ active }: { active: boolean }) {

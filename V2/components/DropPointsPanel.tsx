@@ -30,7 +30,7 @@ const CHAIN_CONFIG: Record<
     color: "#FCFF52",
     explorer: "https://celoscan.io/tx/",
     rpc: "https://forno.celo.org",
-    contract: "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B",
+    contract: "0x9825670865B896738CF8E6c98d093aD5b40F0A11",
   },
   8453: {
     name: "Base",

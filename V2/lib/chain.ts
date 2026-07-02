@@ -40,11 +40,11 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
     contracts: {
       dropsToken: (process.env.NEXT_PUBLIC_DROPS_CONTRACT_CELO ??
-        "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B") as `0x${string}`,
+        "0x9825670865B896738CF8E6c98d093aD5b40F0A11") as `0x${string}`,
       quizHub: (process.env.NEXT_PUBLIC_QUIZ_HUB_CELO ??
-        "0xB19aA952c94faB37716131D8C3d9Bb564e6253Ed") as `0x${string}`,
+        "0xd73170170E002b45eA4AA51e7E93302D61c30173") as `0x${string}`,
       dropsRedeemPool: (process.env.NEXT_PUBLIC_DROPS_REDEEM_POOL_CELO ??
-        "0xBC6D8A2D7CB11273834f46e8ad9047ca46AA4553") as `0x${string}`,
+        "0x636685bCFeEf6Baeb05872f01e69405077eAF633") as `0x${string}`,
       gToken: "0x62B8B11039FcfE5aB0C56E502b1C372A3d2a9c7A",
     },
     enabled: true,

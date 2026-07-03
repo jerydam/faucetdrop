@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
 import { ArrowLeft, Swords, Search, ChevronUp, ChevronDown, Minus } from "lucide-react";
 import { usePresence } from "@/components/presence-provider"; // ← Global presence hook
-
+import {getChainConfig} from '@/lib/chain'
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 // ─── Tier system ──────────────────────────────────────────────────────────────
@@ -230,23 +230,23 @@ function PodiumCard({
 
 export default function RanksPage() {
   const router = useRouter();
-  const { address: myWallet } = useWallet();
-
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch]   = useState("");
   const [filter, setFilter] = useState<"all" | "top10" | "myrank" | "online">("top10");
+  const { address: myWallet, chainId } = useWallet();
 
   // 👇 Grab the global online set from your new provider
   const onlineSet = usePresence();
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/ranks`)
-      .then(r => r.json())
-      .then(d => { if (d.success) setPlayers(d.players ?? []); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const chain = chainId ?? 42220;
+  fetch(`${API_BASE}/api/ranks?chain_id=${chain}`)
+    .then(r => r.json())
+    .then(d => { if (d.success) setPlayers(d.players ?? []); })
+    .catch(() => {})
+    .finally(() => setLoading(false));
+}, [chainId]); // ← re-fetch when chain switches
 
   const isOnline = (wallet: string) => onlineSet.has(wallet.toLowerCase());
 
@@ -473,7 +473,7 @@ export default function RanksPage() {
           <div>
             <div className="page-title">Rankings</div>
             <div className="page-subtitle">
-              {players.length} duelists · {onlineSet.size} online
+              {players.length} duelists · {onlineSet.size} online · {chainId ? getChainConfig(chainId).shortName : "Celo"}
             </div>
           </div>
         </div>

@@ -116,34 +116,38 @@ export default function QuizListPage() {
   }, []);
 
   // ── Load DROPS balance & determine if registered ──────────────────────────
-  const fetchDropsBalance = useCallback(async () => {
-    if (!userWalletAddress) return;
-    setDropsLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/drops/balance/${userWalletAddress.toLowerCase()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setDropsBalance(data);
-          if (data.alreadyMinted || data.gameDrops > 0) {
-            setRegistered(true);
-            setShowRegisterBanner(false);
-            // ── Sync droplist daily claim after balance is confirmed ──────
-            syncDroplistDaily(userWalletAddress);
-          } else {
-            setShowRegisterBanner(true);
-          }
+ const fetchDropsBalance = useCallback(async () => {
+  if (!userWalletAddress || !chainId) return;
+  setDropsLoading(true);
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/api/drops/balance/${userWalletAddress.toLowerCase()}?chainId=${chainId}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        setDropsBalance(data);
+        if (data.alreadyMinted || data.gameDrops > 0) {
+          setRegistered(true);
+          setShowRegisterBanner(false);
+          syncDroplistDaily(userWalletAddress);
+        } else {
+          setRegistered(false);        // ← also reset when switching to an unclaimed chain
+          setShowRegisterBanner(true);
         }
-      } else if (res.status === 404) {
-        setShowRegisterBanner(true);
       }
-    } catch {
-      // silently ignore
-    } finally {
-      setDropsLoading(false);
+    } else if (res.status === 404) {
+      setShowRegisterBanner(true);
     }
-  }, [userWalletAddress, syncDroplistDaily]);
+  } catch {
+  } finally {
+    setDropsLoading(false);
+  }
+}, [userWalletAddress, chainId, syncDroplistDaily]);
 
+useEffect(() => {
+  if (userWalletAddress && chainId) fetchDropsBalance();
+}, [userWalletAddress, chainId, fetchDropsBalance]);
   useEffect(() => {
     if (userWalletAddress) fetchDropsBalance();
   }, [userWalletAddress, fetchDropsBalance]);

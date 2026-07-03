@@ -104,6 +104,12 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
     { address: "0x55d398326f99059fF775485246999027B3197955", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/busd.jpg", description: "Binance-Peg BSC-USD" },
     { address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", name: "BUSD", symbol: "BUSD", decimals: 18, logoUrl: "/busdt.jpg", description: "Binance-Peg BUSD Token" },
   ],
+  677: [
+    { address: zeroAddress, name: "Botchain", symbol: "BOT", decimals: 18, isNative: true, logoUrl: "/botc.png", description: "Native Botchain for transaction fees" },
+    { address: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/usdt.jpg", description: "Botchain-Peg Tether USD" },
+    { address: "0xBAd791F200f1F8Fb639d83125FcF732F5f6eCD03", name: "FaucetDrops", symbol: "DROPS", decimals: 18, logoUrl: "/drop-token.png", description: "FaucetDrops Utility Token" },
+    
+  ],
 }
 
 export function EmbeddedWalletControlProduction() {

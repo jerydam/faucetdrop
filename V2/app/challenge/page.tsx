@@ -90,7 +90,35 @@ export default function QuizListPage() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [showRegisterBanner, setShowRegisterBanner] = useState(false);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
 
+const handleCheckin = async () => {
+  if (!userWalletAddress || isCheckingIn) return;
+  const activeChainId = chainId ?? CELO_CHAIN_ID;
+  const cfg = getChainConfig(activeChainId);
+
+  setIsCheckingIn(true);
+  try {
+    const onCorrectChain = await ensureCorrectNetwork(activeChainId);
+    if (!onCorrectChain) { toast.error(`Please switch to ${cfg.name}.`); return; }
+
+    const signer = await getActiveSigner(activeChainId);
+    if (!signer) { toast.error("Could not get wallet signer."); return; }
+
+    const CHECKIN_ABI = [{ name: "checkin", type: "function", inputs: [], stateMutability: "nonpayable" }] as const;
+    const contract = new ethers.Contract(cfg.contracts.quizHub, CHECKIN_ABI, signer);
+
+    toast.info("Confirm check-in in your wallet…");
+    const tx = await contract.checkin();
+    await tx.wait();
+    toast.success("✅ Checked in! See you on the leaderboard.");
+  } catch (err: any) {
+    const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Check-in failed";
+    if (!msg.includes("user rejected") && !msg.includes("cancelled")) toast.error(msg);
+  } finally {
+    setIsCheckingIn(false);
+  }
+};
   // ── Droplist daily sync ───────────────────────────────────────────────────
   // Runs once after balance loads. Credits +10 DROPS if player claimed on
   // Droplist within the last 24 hrs and hasn't been credited yet today.
@@ -480,7 +508,7 @@ useEffect(() => {
               STAKE <span style={{ opacity: 0.7 }}>&</span> EARN
             </h1>
             <p style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginBottom: 16 }}>
-              Celo-based 1v1 quizzes. Winner takes the pool.
+              Outsmart your opponent. Winner takes everything.
             </p>
             <div style={{ display: "flex", gap: 8 }}>
               <input
@@ -515,21 +543,33 @@ useEffect(() => {
 
           {/* ── Action buttons ────────────────────────────────────────────── */}
           <div style={{ display: "flex", gap: 10 }}>
-            <button
-              className="btn-blue"
-              onClick={() => router.push("/challenge/create-challenge")}
-              style={{ flex: 1, height: 48, borderRadius: 12, fontSize: 14 }}
-            >
-              <Plus size={16} /> Create Challenge
-            </button>
-            <button
-              className="btn-ghost"
-              onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge`)}
-              style={{ height: 48, padding: "0 16px", borderRadius: 12, fontSize: 13, flexShrink: 0 }}
-            >
-              <Trophy size={15} /> My Stats
-            </button>
-          </div>
+  <button
+    className="btn-blue"
+    onClick={() => router.push("/challenge/create-challenge")}
+    style={{ flex: 1, height: 48, borderRadius: 12, fontSize: 14 }}
+  >
+    <Plus size={16} /> Create Challenge
+  </button>
+  <button
+    className="btn-ghost"
+    onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge`)}
+    style={{ height: 48, padding: "0 16px", borderRadius: 12, fontSize: 13, flexShrink: 0 }}
+  >
+    <Trophy size={15} /> My Stats
+  </button>
+  {userWalletAddress && (
+    <button
+      className="btn-ghost"
+      onClick={handleCheckin}
+      disabled={isCheckingIn}
+      style={{ height: 48, padding: "0 16px", borderRadius: 12, fontSize: 13, flexShrink: 0, opacity: isCheckingIn ? 0.6 : 1 }}
+    >
+      {isCheckingIn
+        ? <Loader2 size={15} className="spin" />
+        : <><CheckCircle2 size={15} /> Check In</>}
+    </button>
+  )}
+</div>
 
           {/* ── Tab + Refresh ─────────────────────────────────────────────── */}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

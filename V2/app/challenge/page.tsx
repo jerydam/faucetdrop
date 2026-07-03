@@ -548,14 +548,16 @@ useEffect(() => {
     onClick={() => router.push("/challenge/create-challenge")}
     style={{ flex: 1, height: 48, borderRadius: 12, fontSize: 14 }}
   >
-    <Plus size={16} /> Create Challenge
+    <Plus size={16} />
+    <span style={{ display: "inline" }} className="btn-label">Create</span>
   </button>
   <button
     className="btn-ghost"
     onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge`)}
     style={{ height: 48, padding: "0 16px", borderRadius: 12, fontSize: 13, flexShrink: 0 }}
   >
-    <Trophy size={15} /> My Stats
+    <Trophy size={15} />
+    <span style={{ display: "inline" }} className="btn-label">My Stats</span>
   </button>
   {userWalletAddress && (
     <button
@@ -566,7 +568,7 @@ useEffect(() => {
     >
       {isCheckingIn
         ? <Loader2 size={15} className="spin" />
-        : <><CheckCircle2 size={15} /> Check In</>}
+        : <><CheckCircle2 size={15} /><span className="btn-label">Check In</span></>}
     </button>
   )}
 </div>
@@ -621,7 +623,7 @@ useEffect(() => {
                   }}>
                     <Gamepad2 size={40} style={{ color: "var(--dd-text-mute)" }} />
                     <p className="d" style={{ fontSize: 18, fontWeight: 900, color: "var(--dd-text-dim)" }}>No active duels</p>
-                    <p style={{ fontSize: 13, color: "var(--dd-text-mute)" }}>Be first to create a public challenge on Celo.</p>
+                    <p style={{ fontSize: 13, color: "var(--dd-text-mute)" }}>Be first to create a public challenge.</p>
                     <button className="btn-blue" onClick={() => router.push("/challenge/create-challenge")} style={{ padding: "11px 24px", borderRadius: 10, fontSize: 13, marginTop: 4 }}>
                       Start Duel
                     </button>

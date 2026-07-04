@@ -2,7 +2,7 @@
 import { ethers } from "ethers";
 
 // From the docs screenshot
-const BDEX_V2_FACTORY  = "0x117115F3B72C8d19891780089A67D0C26F8EE0AA3";
+const BDEX_V2_FACTORY  = "0x117115f3B72C8d1989178089A67D0C26f8EE0AA3";
 const WBOT_ADDRESS     = "0xD5452816194a3784dBa983426cCe7c122F4abd30";
 const BOTCHAIN_RPC     = process.env.NEXT_PUBLIC_BOTCHAIN_RPC_URL ?? "https://rpc.botchain.ai";
 

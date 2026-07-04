@@ -57,7 +57,9 @@ export function PresenceProvider({ children }: { children: React.ReactNode }) {
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === "presence" && Array.isArray(msg.online)) {
-          setOnlineSet(new Set(msg.online.map((w: string) => w.toLowerCase())));
+          setOnlineSet(new Set(msg.online.map((entry: { wallet: string } | string) =>
+          (typeof entry === "string" ? entry : entry.wallet).toLowerCase()
+        )));
         }
       } catch {}
     };

@@ -9,7 +9,7 @@ const BOTCHAIN_RPC     = process.env.NEXT_PUBLIC_BOTCHAIN_RPC_URL ?? "https://rp
 // You'll need to find/confirm the stablecoin address on Botchain
 // Check scan.botchain.ai for USDT or USDC deployed there
 // Placeholder — replace with the real one from "Common Tokens (Mainnet)" section of docs
-const STABLE_ADDRESS   = "	0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C"; // USDT or USDC on Botchain mainnet
+const STABLE_ADDRESS   = "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C"; // USDT or USDC on Botchain mainnet
 const STABLE_DECIMALS  = 6;
 const WBOT_DECIMALS    = 18;
 const WBOT_FALLBACK_PRICE_USD = 9.7;

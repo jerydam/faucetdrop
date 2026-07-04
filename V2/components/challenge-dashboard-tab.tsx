@@ -17,9 +17,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { ethers } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
+import { getGTokenPrice } from "@/lib/getToken";
+import { getChainConfig, CELO_CHAIN_ID, isSupportedChain,ensureChainNetwork, getEnabledChains ,BOTCHAIN_CHAIN_ID } from "@/lib/chain";
 import { getGoodDollarPrice } from "@/lib/getGoodDollarPrice";
-import { getChainConfig, CELO_CHAIN_ID, isSupportedChain,ensureChainNetwork, getEnabledChains  } from "@/lib/chain";
-
 const BACKEND_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 /** ─── Contract config ────────────────────────────────────────────────────── */
@@ -287,6 +287,11 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const chainCfg = getChainConfig(activeChainId);
   const DROPS_REDEEM_POOL_ADDRESS = chainCfg.contracts.dropsRedeemPool;
   const G_TOKEN = chainCfg.contracts.gToken;
+  const tokenSymbol = getTokenSymbol(activeChainId);
+    const explorerTxUrl = (hash: string) =>
+  activeChainId === BOTCHAIN_CHAIN_ID
+    ? `${chainCfg.explorerUrl}/tx/${hash}`
+    : `https://celoscan.io/tx/${hash}`;
 
   // ── Data state ─────────────────────────────────────────────────────────────
   const [balance, setBalance] = useState<DropsBalance | null>(null);
@@ -330,7 +335,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     if (initialSubtab === "buy-drop") setInnerTab("buy");
   }, [initialSubtab]);
 
-  // ── Shared $G price state (used by both Redeem and Buy tabs) ──────────────
+  // ── Shared {tokenSymbol} price state (used by both Redeem and Buy tabs) ──────────────
   const [gPriceUsd, setGPriceUsd]           = useState<number | null>(null);
   const [gPriceLoading, setGPriceLoading]   = useState(false);
   const [gPriceError, setGPriceError]       = useState<string | null>(null);
@@ -340,11 +345,12 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     setGPriceLoading(true);
     setGPriceError(null);
     try {
-      const price = await getGoodDollarPrice();
+      const price = await getGTokenPrice(activeChainId);
+
       setGPriceUsd(price);
       setGPriceFetchedAt(Date.now());
     } catch {
-      setGPriceError("Could not fetch $G price. Try refreshing.");
+      setGPriceError(`Could not fetch ${tokenSymbol} price. Try refreshing.`);
       setGPriceUsd(null);
     } finally {
       setGPriceLoading(false);
@@ -361,7 +367,9 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const [redeemAmount, setRedeemAmount] = useState("");
   const [redeemPreview, setRedeemPreview] = useState<RedeemPreview | null>(null);
   const [redeemLoading, setRedeemLoading] = useState(false);
-
+  function getTokenSymbol(chainId: number): string {
+  return chainId === BOTCHAIN_CHAIN_ID ? "WBOT" : "{tokenSymbol}";
+}
   useEffect(() => {
     const drops = parseFloat(redeemAmount);
     if (!redeemAmount || isNaN(drops) || drops <= 0 || !gPriceUsd || !balance) {
@@ -408,16 +416,17 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
       return;
     }
 
+    
     setGPriceLoading(true);
     setGPriceError(null);
     let freshPrice: number;
     try {
-      freshPrice = await getGoodDollarPrice();
+      freshPrice = await getGTokenPrice(activeChainId);
       setGPriceUsd(freshPrice);
       setGPriceFetchedAt(Date.now());
     } catch {
       toast({
-        title: "Could not fetch $G price",
+        title: `Could not fetch ${tokenSymbol} price`,
         description: "Check your connection and try again.",
         variant: "destructive",
       });
@@ -442,7 +451,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     setBuyResult(null);
 
     if (!G_TOKEN || !DROPS_REDEEM_POOL_ADDRESS) {
-      toast({ title: "Not available on this network", description: "Switch to Celo to use $G features.", variant: "destructive" });
+      toast({ title: "Not available on this network", description: `Switch to ${chainCfg.name} to use ${tokenSymbol} features.`, variant: "destructive" });
       setBuyStep("deposit");
       setBuyLoading(false);
       return;
@@ -477,22 +486,22 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
       if (balanceOf < gAmountWei) {
         const humanBalance = ethers.formatUnits(balanceOf, decimals);
         throw new Error(
-          `Insufficient $G balance. You have ${parseFloat(humanBalance).toFixed(4)} $G, ` +
-          `need ${gCostDisplay.toFixed(4)} $G`,
+          `Insufficient {tokenSymbol} balance. You have ${parseFloat(humanBalance).toFixed(4)} {tokenSymbol}, ` +
+          `need ${gCostDisplay.toFixed(4)} {tokenSymbol}`,
         );
       }
 
-      toast({ title: "⏳ Confirm $G transfer in your wallet…" });
+      toast({ title: "⏳ Confirm {tokenSymbol} transfer in your wallet…" });
       const tx = await gToken.transfer(DROPS_REDEEM_POOL_ADDRESS, gAmountWei);
       toast({ title: "📡 Transfer sent, waiting for confirmation…" });
 
       const receipt = await tx.wait();
       if (!receipt || receipt.status !== 1) {
-        throw new Error("$G transfer transaction failed");
+        throw new Error("{tokenSymbol} transfer transaction failed");
       }
 
       setGTxHash(tx.hash);
-      toast({ title: "✅ $G transferred! Minting your DROPS…" });
+      toast({ title: "✅ {tokenSymbol} transferred! Minting your DROPS…" });
 
       const res = await fetch(`${BACKEND_URL}/api/drops/buy`, {
         method:  "POST",
@@ -711,15 +720,15 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     if (!amt || amt <= 0) return;
     if (!DROPS_REDEEM_POOL_ADDRESS) return;
 
-    contractWrite("deposit", "Deposit $G", async (contract) => {
-      if (!onChainStats?.gTokenAddress) throw new Error("$G token address not loaded");
+    contractWrite("deposit", "Deposit {tokenSymbol}", async (contract) => {
+      if (!onChainStats?.gTokenAddress) throw new Error("{tokenSymbol} token address not loaded");
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer   = await provider.getSigner();
       const gToken   = new ethers.Contract(onChainStats.gTokenAddress, ERC20_ABI, signer);
       const amtWei   = ethers.parseUnits(depositAmount, 18);
       const allowance: bigint = await gToken.allowance(walletAddress, DROPS_REDEEM_POOL_ADDRESS);
       if (allowance < amtWei) {
-        toast({ title: "⏳ Approving $G spend…" });
+        toast({ title: "⏳ Approving {tokenSymbol} spend…" });
         const approveTx = await gToken.approve(DROPS_REDEEM_POOL_ADDRESS, amtWei);
         await approveTx.wait();
         toast({ title: "✅ Approval confirmed" });
@@ -731,7 +740,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const handleWithdraw = () => {
     const amt = parseFloat(withdrawAmount);
     if (!amt || amt <= 0) return;
-    contractWrite("withdraw", "Withdraw $G", (contract) =>
+    contractWrite("withdraw", "Withdraw {tokenSymbol}", (contract) =>
       contract.withdrawG(ethers.parseUnits(withdrawAmount, 18)),
     () => setWithdrawAmount(""));
   };
@@ -740,7 +749,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     const priceUsd = parseFloat(newGPrice);
     if (!priceUsd || priceUsd <= 0) return;
     const priceWei = ethers.parseUnits(newGPrice, 18);
-    contractWrite("price", "Set $G Price", (contract) =>
+    contractWrite("price", "Set {tokenSymbol} Price", (contract) =>
       contract.setGPrice(priceWei),
     () => setNewGPrice(""));
   };
@@ -778,7 +787,8 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     if (!drops || drops <= 0) return;
     
     if (!DROPS_REDEEM_POOL_ADDRESS) {
-      toast({ title: "Not available on this network", description: "Switch to Celo to redeem.", variant: "destructive" });
+      toast({ title: "Not available on this network", description: `Switch to ${chainCfg.name} to use ${tokenSymbol} features.`, variant: "destructive" });
+
       return;
     }
 
@@ -800,7 +810,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
       setGPriceFetchedAt(Date.now());
     } catch {
       toast({
-        title: "Could not refresh $G price",
+        title: "Could not refresh {tokenSymbol} price",
         description: "Check your connection and try again.",
         variant: "destructive",
       });
@@ -898,7 +908,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
       });
       const data = await res.json();
       if (data.success) {
-        toast({ title: "✅ Stake claimed!", description: `${fmt(data.totalG, 4)} $G (${fmt(data.earnedG, 4)} earned)` });
+        toast({ title: "✅ Stake claimed!", description: `${fmt(data.totalG, 4)} {tokenSymbol} (${fmt(data.earnedG, 4)} earned)` });
         fetchStakes();
       } else {
         toast({ title: "Claim failed", description: data.detail ?? "Unknown error", variant: "destructive" });
@@ -1027,7 +1037,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Reward DROPS</span>
                 </div>
                 <p className="text-2xl font-black text-foreground">{fmt(balance?.rewardDrops ?? 0, 0)}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Redeemable for $G</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Redeemable for {tokenSymbol}</p>
               </CardContent>
             </Card>
           </div>
@@ -1131,7 +1141,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
               <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
               <p className="text-xs text-amber-700 dark:text-amber-400">
-                Redemption and $G features are currently only available on Celo. Switch your network to access them.
+                Redemption and {tokenSymbol} features are currently only available on Celo. Switch your network to access them.
               </p>
             </div>
           )}
@@ -1139,7 +1149,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <ArrowDownToLine className="h-4 w-4 text-primary" />
-                Redeem Reward DROPS → $G
+                Redeem Reward DROPS → {tokenSymbol}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1160,10 +1170,10 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 </div>
               )}
 
-              {/* Live $G price card — identical to Buy DROPS */}
+              {/* Live {tokenSymbol} price card — identical to Buy DROPS */}
               <div className="p-3 rounded-xl bg-muted/40 border border-border space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-foreground">Live $G Rate</p>
+                  <p className="text-xs font-bold text-foreground">Live {tokenSymbol} Rate</p>
                   <button
                     onClick={fetchGoodDollarPrice}
                     disabled={gPriceLoading}
@@ -1187,7 +1197,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 ) : gPriceUsd ? (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">1 $G</span>
+                      <span className="text-xs text-muted-foreground">1 {tokenSymbol}</span>
                       <span className="text-xs font-black text-foreground">${gPriceUsd.toFixed(6)} USD</span>
                     </div>
                     <div className="flex items-center justify-between">
@@ -1263,7 +1273,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
 
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-muted-foreground">You receive (full 75%)</span>
-                    <span className="text-xs font-bold text-primary">{fmt(redeemPreview.playerG, 4)} $G</span>
+                    <span className="text-xs font-bold text-primary">{fmt(redeemPreview.playerG, 4)} {tokenSymbol}</span>
                   </div>
                   
 
@@ -1271,7 +1281,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     <span className="text-xs text-muted-foreground">Staked ({redeemPreview.apyPct}% APY, 30d)</span>
                     <div className="text-right">
                       <div className="text-xs font-bold text-foreground">{fmt(redeemPreview.stakedDrops, 0)} DROPS</div>
-                      <div className="text-[10px] text-muted-foreground/70">≈ {fmt(redeemPreview.stakedG, 4)} $G now</div>
+                      <div className="text-[10px] text-muted-foreground/70">≈ {fmt(redeemPreview.stakedG, 4)} {tokenSymbol} now</div>
                     </div>
                   </div>
 
@@ -1279,12 +1289,12 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     <span className="text-xs text-muted-foreground">Projected stake yield</span>
                     <div className="text-right">
                       <div className="text-xs font-bold text-foreground">+{fmt(redeemPreview.stakeEarnedDrops, 2)} DROPS</div>
-                      <div className="text-[10px] text-muted-foreground/70">≈ +{fmt(redeemPreview.stakeEarnedG, 4)} $G at today's rate</div>
+                      <div className="text-[10px] text-muted-foreground/70">≈ +{fmt(redeemPreview.stakeEarnedG, 4)} {tokenSymbol} at today's rate</div>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">$G price</span>
+                    <span className="text-xs text-muted-foreground">{tokenSymbol} price</span>
                     <span className="text-xs font-bold text-foreground">${fmt(redeemPreview.gPriceUsd, 6)}</span>
                   </div>
 
@@ -1292,7 +1302,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     <p className="text-xs text-red-500 font-bold pt-1">Insufficient reward drops.</p>
                   )}
                   <p className="text-[10px] text-muted-foreground/60 pt-1">
-                    Stake amount and yield are held in DROPS — the $G figures above are estimates at the current rate and may change by the time the stake matures.
+                    Stake amount and yield are held in DROPS — the {tokenSymbol} figures above are estimates at the current rate and may change by the time the stake matures.
                   </p>
                 </div>
               )}
@@ -1316,7 +1326,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
               </Button>
 
               <p className="text-[10px] text-center text-muted-foreground">
-                Reward DROPS are burned; $G is sent to your wallet. 25% staked for 30 days on Celo.
+                Reward DROPS are burned; {tokenSymbol} is sent to your wallet. 25% staked for 30 days on Celo.
               </p>
             </CardContent>
           </Card>
@@ -1338,15 +1348,15 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
               <CheckCircle2 className="h-8 w-8 text-green-500" />
             </div>
             <h2 className="text-lg font-black text-foreground">Redemption Complete!</h2>
-            <p className="text-xs text-muted-foreground">Your DROPS have been converted to $G</p>
+            <p className="text-xs text-muted-foreground">Your DROPS have been converted to {tokenSymbol}</p>
           </div>
 
           {/* Stats */}
           <div className="space-y-2">
             <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/50">
-              <span className="text-sm text-muted-foreground font-medium">$G sent to wallet</span>
+              <span className="text-sm text-muted-foreground font-medium">{tokenSymbol} sent to wallet</span>
               <span className="text-sm font-black text-green-600 dark:text-green-400">
-                +{fmt(redeemResult.playerG, 4)} $G
+                +{fmt(redeemResult.playerG, 4)} {tokenSymbol}
               </span>
             </div>
             <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
@@ -1401,7 +1411,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
               <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
               <p className="text-xs text-amber-700 dark:text-amber-400">
-                Purchasing and $G features are currently only available on Celo. Switch your network to access them.
+                Purchasing and {tokenSymbol} features are currently only available on Celo. Switch your network to access them.
               </p>
             </div>
           )}
@@ -1409,7 +1419,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <ShoppingCart className="h-4 w-4 text-primary" />
-                Buy DROPS with $G
+                Buy DROPS with {tokenSymbol}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1447,7 +1457,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 <div className="space-y-4">
                   <div className="p-3 rounded-xl bg-muted/40 border border-border space-y-2">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-foreground">Live $G Rate</p>
+                      <p className="text-xs font-bold text-foreground">Live {tokenSymbol} Rate</p>
                       <button
                         onClick={fetchGoodDollarPrice}
                         disabled={gPriceLoading}
@@ -1471,7 +1481,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     ) : gPriceUsd ? (
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">1 $G</span>
+                          <span className="text-xs text-muted-foreground">1 {tokenSymbol}</span>
                           <span className="text-xs font-black text-foreground">${gPriceUsd.toFixed(6)} USD</span>
                         </div>
                         <div className="flex items-center justify-between">
@@ -1504,7 +1514,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     {dropsToBuy && parseFloat(dropsToBuy) > 0 && gPriceUsd && (
                       <p className="text-xs text-muted-foreground pl-1">
                         ≈ <strong className="text-foreground">
-                          {((parseFloat(dropsToBuy) / 100) / gPriceUsd).toFixed(4)} $G
+                          {((parseFloat(dropsToBuy) / 100) / gPriceUsd).toFixed(4)} {tokenSymbol}
                         </strong> required
                         {" · "}
                         <span className="text-muted-foreground/60">
@@ -1528,7 +1538,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                         <span className="block">{v >= 1000 ? `${v / 1000}k` : v}</span>
                         {gPriceUsd && (
                           <span className="block text-[9px] font-normal text-muted-foreground/70 mt-0.5">
-                            {((v / 100) / gPriceUsd).toFixed(2)} $G
+                            {((v / 100) / gPriceUsd).toFixed(2)} {tokenSymbol}
                           </span>
                         )}
                       </button>
@@ -1548,7 +1558,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 </div>
               )}
 
-              {/* STEP 2 — Confirm & send $G */}
+              {/* STEP 2 — Confirm & send {tokenSymbol} */}
               {buyStep === "deposit" && gCostDisplay !== null && (
                 <div className="space-y-4">
                   <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 space-y-3">
@@ -1562,7 +1572,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     <div className="h-px bg-border" />
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">You send</span>
-                      <span className="text-xl font-black text-primary">{gCostDisplay.toFixed(6)} $G</span>
+                      <span className="text-xl font-black text-primary">{gCostDisplay.toFixed(6)} {tokenSymbol}</span>
                     </div>
                   </div>
 
@@ -1570,7 +1580,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     <Wallet className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
                     <p className="text-xs text-blue-700 dark:text-blue-400">
                       Clicking below will prompt your wallet to transfer{" "}
-                      <strong>{gCostDisplay.toFixed(6)} $G</strong> to the pool on Celo.
+                      <strong>{gCostDisplay.toFixed(6)} {tokenSymbol}</strong> to the pool on Celo.
                       DROPS are minted automatically once the transfer confirms.
                     </p>
                   </div>
@@ -1582,7 +1592,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     <Button className="flex-1" onClick={handleConfirmDeposit} disabled={buyLoading || !DROPS_REDEEM_POOL_ADDRESS}>
                       {buyLoading
                         ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing…</>
-                        : <><Zap className="h-4 w-4 mr-2" /> Send $G &amp; Mint DROPS</>
+                        : <><Zap className="h-4 w-4 mr-2" /> Send {tokenSymbol} &amp; Mint DROPS</>
                       }
                     </Button>
                   </div>
@@ -1599,7 +1609,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                   <div>
                     <p className="font-black text-foreground">Verifying deposit…</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Checking on-chain for your $G transfer and minting {parseFloat(dropsToBuy).toLocaleString()} DROPS
+                      Checking on-chain for your {tokenSymbol} transfer and minting {parseFloat(dropsToBuy).toLocaleString()} DROPS
                     </p>
                   </div>
                 </div>
@@ -1645,18 +1655,18 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
       {innerTab === "pools" && (
         <div className="space-y-3">
 
-          {/* ── $G Price banner ─────────────────────────────────────────── */}
+          {/* ── {tokenSymbol} Price banner ─────────────────────────────────────────── */}
           <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/40 border border-border">
             <div className="flex items-center gap-2">
               <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground font-medium">Live $G Rate</span>
+              <span className="text-xs text-muted-foreground font-medium">Live {tokenSymbol} Rate</span>
             </div>
             {gPriceLoading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
             ) : gPriceUsd ? (
               <div className="flex items-center gap-3">
                 <span className="text-xs font-black text-foreground">
-                  1 $G = ${gPriceUsd.toFixed(6)}
+                  1 {tokenSymbol} = ${gPriceUsd.toFixed(6)}
                 </span>
                 <button
                   onClick={fetchGoodDollarPrice}
@@ -1724,7 +1734,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                       <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide mb-1">
                         Total Staked
                       </p>
-                      <p className="text-base font-black text-foreground">{fmt(totalStakedG, 4)} $G</p>
+                      <p className="text-base font-black text-foreground">{fmt(totalStakedG, 4)} {tokenSymbol}</p>
                       <p className="text-[10px] text-muted-foreground/60 mt-0.5">at today's rate</p>
                     </div>
                     <div className="bg-green-50 dark:bg-green-950/20 rounded-xl p-3 border border-green-200 dark:border-green-800/50 text-center">
@@ -1732,7 +1742,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                         Total Earned
                       </p>
                       <p className="text-base font-black text-green-600 dark:text-green-400">
-                        {fmt(totalEarnedG, 4)} $G
+                        {fmt(totalEarnedG, 4)} {tokenSymbol}
                       </p>
                       <p className="text-[10px] text-muted-foreground/60 mt-0.5">accrued so far</p>
                     </div>
@@ -1761,19 +1771,19 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                   return { accruedG, fullYieldG, dailyRateG, progressPct: fraction * 100 }
                 })()
 
-                // $G value of the staked DROPS at today's live price
+                // {tokenSymbol} value of the staked DROPS at today's live price
                 const stakedG = gPriceUsd && stake.drops_staked != null
                   ? (stake.drops_staked / DROPS_PER_USD) / gPriceUsd
                   : null
 
-                // Earned $G: full yield if matured, else linear accrual estimate
+                // Earned {tokenSymbol}: full yield if matured, else linear accrual estimate
                 const liveEarnedG = stake.claimed
                   ? (stake.g_earned ?? 0)
                   : isMature
                     ? accrued.fullYieldG
                     : accrued.accruedG
 
-                // Total claimable = principal (in $G) + earned APY
+                // Total claimable = principal (in {tokenSymbol}) + earned APY
                 const totalClaimableG = stakedG != null
                   ? stakedG + liveEarnedG
                   : null
@@ -1831,9 +1841,9 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                       {/* ── Core stats grid ───────────────────────────────── */}
                       <div className="grid grid-cols-3 gap-2 text-center">
 
-                        {/* Staked value in $G */}
+                        {/* Staked value in {tokenSymbol} */}
                         <div className="bg-muted/40 rounded-lg p-2">
-                          <p className="text-xs text-muted-foreground">Staked ($G)</p>
+                          <p className="text-xs text-muted-foreground">Staked ({tokenSymbol})</p>
                           <p className="text-sm font-black text-foreground">
                             {stakedG != null ? `${fmt(stakedG, 4)}` : "—"}
                           </p>
@@ -1851,7 +1861,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                           <p className="text-[10px] text-muted-foreground/60">30 days</p>
                         </div>
 
-                        {/* Earned so far in $G */}
+                        {/* Earned so far in {tokenSymbol} */}
                         <div className={`rounded-lg p-2 ${
                           isMature && !stake.claimed
                             ? "bg-green-100 dark:bg-green-900/30"
@@ -1861,7 +1871,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                             {stake.claimed ? "Earned" : isMature ? "Claimable" : "Earned"}
                           </p>
                           <p className="text-sm font-black text-green-600 dark:text-green-400">
-                            {fmt(liveEarnedG, 4)} $G
+                            {fmt(liveEarnedG, 4)} {tokenSymbol}
                           </p>
                           {!stake.claimed && stakedG != null && (
                             <p className="text-[10px] text-muted-foreground/60">
@@ -1878,7 +1888,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                             <Coins className="h-3.5 w-3.5" /> Total to receive
                           </span>
                           <span className="text-sm font-black text-green-600 dark:text-green-400">
-                            {fmt(totalClaimableG, 4)} $G
+                            {fmt(totalClaimableG, 4)} {tokenSymbol}
                           </span>
                         </div>
                       )}
@@ -1890,7 +1900,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                             <TrendingUp className="h-3 w-3" /> Accruing daily
                           </span>
                           <span className="text-[10px] font-bold text-primary">
-                            +{fmt(accrued.dailyRateG, 6)} $G / day
+                            +{fmt(accrued.dailyRateG, 6)} {tokenSymbol} / day
                           </span>
                         </div>
                       )}
@@ -1902,7 +1912,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                             <BarChart3 className="h-3 w-3" /> At maturity
                           </span>
                           <span className="text-[10px] font-bold text-foreground">
-                            {fmt(stakedG + accrued.fullYieldG, 4)} $G total
+                            {fmt(stakedG + accrued.fullYieldG, 4)} {tokenSymbol} total
                           </span>
                         </div>
                       )}
@@ -1928,7 +1938,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                         >
                           {isClaiming
                             ? <><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Claiming…</>
-                            : <><ArrowUpFromLine className="h-3 w-3 mr-2" /> Claim {fmt(liveEarnedG, 4)} $G</>
+                            : <><ArrowUpFromLine className="h-3 w-3 mr-2" /> Claim {fmt(liveEarnedG, 4)} {tokenSymbol}</>
                           }
                         </Button>
                       )}
@@ -1936,7 +1946,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                       {/* ── No price warning ──────────────────────────────── */}
                       {!gPriceUsd && !gPriceLoading && (
                         <p className="text-[10px] text-muted-foreground/60 text-center">
-                          Load $G price above to see values in $G
+                          Load {tokenSymbol} price above to see values in {tokenSymbol}
                         </p>
                       )}
 
@@ -2024,7 +2034,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                       <p className="text-[10px] text-muted-foreground">{timeAgo(h.created_at)}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-xs font-black text-primary">+{fmt(h.player_g, 4)} $G</p>
+                      <p className="text-xs font-black text-primary">+{fmt(h.player_g, 4)} {tokenSymbol}</p>
                       {h.tx_hash && (
                         <a
                           href={celoScanTx(h.tx_hash)}
@@ -2104,11 +2114,11 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: "$G Balance",     value: `${onChainStats.gBalance} $G`,         icon: DollarSign },
-                      { label: "Free Liquidity", value: `${onChainStats.freeLiquidity} $G`,    icon: Unlock     },
+                      { label: "{tokenSymbol} Balance",     value: `${onChainStats.gBalance} {tokenSymbol}`,         icon: DollarSign },
+                      { label: "Free Liquidity", value: `${onChainStats.freeLiquidity} {tokenSymbol}`,    icon: Unlock     },
                       { label: "DROPS in Pool",  value: onChainStats.dropsBalance,             icon: Droplets   },
                       { label: "Total Stakes",   value: String(onChainStats.nextStakeId - 1),  icon: TrendingUp },
-                      { label: "$G Price (USD)", value: `$${onChainStats.gPriceUsd.toFixed(6)}`, icon: BarChart3 },
+                      { label: "{tokenSymbol} Price (USD)", value: `$${onChainStats.gPriceUsd.toFixed(6)}`, icon: BarChart3 },
                       { label: "Stake IDs",      value: `0 – ${onChainStats.nextStakeId - 1}`, icon: Coins      },
                     ].map(({ label, value, icon: Icon }) => (
                       <div key={label} className="bg-muted/40 rounded-xl p-3 border border-border">
@@ -2125,7 +2135,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                       { label: "Owner",           addr: onChainStats.owner            },
                       { label: "Resolver",         addr: onChainStats.resolver         },
                       { label: "Service Address",  addr: onChainStats.serviceAddress   },
-                      { label: "$G Token",         addr: onChainStats.gTokenAddress    },
+                      { label: "{tokenSymbol} Token",         addr: onChainStats.gTokenAddress    },
                       { label: "DROPS Token",      addr: onChainStats.dropsTokenAddress },
                     ].map(({ label, addr }) => (
                       <div key={label} className="flex items-center justify-between text-[11px] py-1 border-b border-border/50 last:border-0">
@@ -2147,11 +2157,11 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             </CardContent>
           </Card>
 
-          {/* Deposit $G */}
+          {/* Deposit {tokenSymbol} */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <ArrowDownToLine className="h-4 w-4 text-green-500" /> Deposit $G into Pool
+                <ArrowDownToLine className="h-4 w-4 text-green-500" /> Deposit {tokenSymbol} into Pool
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -2159,7 +2169,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 Approves and calls <code className="font-mono text-[10px] bg-muted px-1 rounded">depositG(amount)</code>.
               </p>
               <div className="flex gap-2">
-                <Input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Amount in $G" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
+                <Input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Amount in {tokenSymbol}" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                 <Button size="sm" className="h-10 bg-green-600 hover:bg-green-700 text-white px-4 min-w-[100px]"
                   disabled={!depositAmount || parseFloat(depositAmount) <= 0 || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS}
                   onClick={handleDeposit}>
@@ -2169,11 +2179,11 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             </CardContent>
           </Card>
 
-          {/* Withdraw $G */}
+          {/* Withdraw {tokenSymbol} */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <ArrowUpFromLine className="h-4 w-4 text-red-500" /> Withdraw $G from Pool
+                <ArrowUpFromLine className="h-4 w-4 text-red-500" /> Withdraw {tokenSymbol} from Pool
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -2183,11 +2193,11 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
               {onChainStats && (
                 <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border">
                   <span className="text-xs text-muted-foreground">Max withdrawable</span>
-                  <span className="text-xs font-black text-foreground">{onChainStats.freeLiquidity} $G</span>
+                  <span className="text-xs font-black text-foreground">{onChainStats.freeLiquidity} {tokenSymbol}</span>
                 </div>
               )}
               <div className="flex gap-2">
-                <Input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder="Amount in $G" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
+                <Input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder="Amount in {tokenSymbol}" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                 <Button variant="outline" size="sm" className="h-10 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 px-4 min-w-[100px]"
                   disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS}
                   onClick={handleWithdraw}>
@@ -2197,11 +2207,11 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             </CardContent>
           </Card>
 
-          {/* Set $G Price */}
+          {/* Set {tokenSymbol} Price */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-blue-500" /> Update $G Price
+                <DollarSign className="h-4 w-4 text-blue-500" /> Update {tokenSymbol} Price
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">

@@ -108,12 +108,12 @@ const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
     { address: zeroAddress, name: "Botchain", symbol: "BOT", decimals: 18, isNative: true, logoUrl: "/botc.png", description: "Native Botchain for transaction fees" },
     { address: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C", name: "Tether USD", symbol: "USDT", decimals: 18, logoUrl: "/usdt.jpg", description: "Botchain-Peg Tether USD" },
     { address: "0xBAd791F200f1F8Fb639d83125FcF732F5f6eCD03", name: "FaucetDrops", symbol: "DROPS", decimals: 18, logoUrl: "/drop-token.png", description: "FaucetDrops Utility Token" },
-    
+    { address: "0xD5452816194a3784dBa983426cCe7c122F4abd30", name: "Wrapped Botchain", symbol: "WBOT", decimals: 18, logoUrl: "/botc.png", description: "Wrapped Botchain token for liquidity pools" },
   ],
 }
 
 export function EmbeddedWalletControlProduction() {
-    const { address: evmAddress, chainId, walletType, session, signer } = useWallet()
+    const { address: evmAddress, chainId, walletType, session, signer, getActiveSigner } = useWallet()
     const { toast } = useToast()
     const [exportType,  setExportType]  = useState<"seed" | "privatekey">("privatekey")
     const [exportedKey, setExportedKey] = useState<string | null>(null)
@@ -251,6 +251,7 @@ const fetchBalances = async () => {
             42161: "https://arb1.arbitrum.io/rpc",
             8453:  "https://mainnet.base.org",
             56:    "https://bsc-dataseed.binance.org",
+            677:  "https://rpc.botchain.ai",
         };
         const DROPS_CONTRACTS: Record<number, string> = {
             42220: "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B",
@@ -258,6 +259,7 @@ const fetchBalances = async () => {
             42161: "0xEcb026D22f9aA7FD9Aa83B509834dB8Fd66B27F6",
             8453:  "0x42fcB7C4D4a36D772c430ee8C7d026f627365BcB",
             56:    "0x4C603fe32fe590D8A47B7f23b027dc24C2c762B1",
+            677:  "0xBAd791F200f1F8Fb639d83125FcF732F5f6eCD03",
         };
 
         let dropsRawBalance = "0";
@@ -351,92 +353,75 @@ const fetchBalances = async () => {
     }
 };
 
-    
-    const handleSend = async () => {
-        if (!selectedToken || !recipient || !amount || !currentAddress || !signer) {
-            toast({ title: "Please fill all fields", variant: "destructive" })
-            return
-        }
+const handleSend = async () => {
+  if (!selectedToken || !recipient || !amount || !currentAddress) {
+    toast({ title: "Please fill all fields", variant: "destructive" })
+    return
+  }
 
-        setSending(true)
-        setTxHash("")
+  if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
+    toast({ title: "Invalid recipient address", variant: "destructive" })
+    return
+  }
 
-        try {
-            let hash = ""
+  setSending(true)
+  setTxHash("")
 
-            if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
-                throw new Error("Invalid EVM recipient address");
-            }
+  try {
+    // ── Get signer — works for both embedded (PIN modal) and external ──
+    const activeSigner = await getActiveSigner(chainId ?? undefined)
+    if (!activeSigner) throw new Error("No signer available — wallet not connected")
 
-            const amountWei = parseUnits(amount, selectedToken.decimals);
+    const { ethers } = await import("ethers")
+    const amountWei = ethers.parseUnits(amount, selectedToken.decimals)
+    let hash = ""
 
-            if (selectedToken.isNative) {
-                const tx = await signer.sendTransaction({
-                    to: recipient as Address,
-                    value: amountWei,
-                });
-                hash = tx.hash
-            } else {
-                const data = encodeFunctionData({
-                    abi: [{
-                        name: 'transfer', type: 'function', stateMutability: 'nonpayable',
-                        inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
-                        outputs: [{ type: 'bool' }]
-                    }],
-                    functionName: 'transfer',
-                    args: [recipient as Address, amountWei]
-                });
+    if (selectedToken.isNative) {
+      const tx = await activeSigner.sendTransaction({
+        to:    recipient,
+        value: amountWei,
+      })
+      hash = tx.hash
 
-                const tx = await signer.sendTransaction({
-                    to: selectedToken.address as Address,
-                    data,
-                });
-                hash = tx.hash
-            }
-
-            setTxHash(hash)
-            toast({
-                title: "Transaction sent!",
-                description: `${amount} ${selectedToken.symbol} sent successfully`
-            })
-
-            setRecipient("")
-            setAmount("")
-            setTimeout(fetchBalances, 3000)
-
-        } catch (error: any) {
-            console.error("Send error:", error)
-            const errorMessage = error instanceof Error ? error.message : "Please try again"
-            toast({
-                title: "Transaction failed",
-                description: errorMessage,
-                variant: "destructive"
-            })
-        } finally {
-            setSending(false)
-        }
+    } else {
+      // Use ethers Contract — cleaner than raw viem calldata on an ethers signer
+      const erc20 = new ethers.Contract(
+        selectedToken.address,
+        [
+          "function transfer(address to, uint256 amount) returns (bool)",
+          "function balanceOf(address) view returns (uint256)",
+        ],
+        activeSigner,
+      )
+      const tx = await erc20.transfer(recipient, amountWei)
+      hash = tx.hash
     }
 
-    const handleExportKey = async () => {
-        if (!session?.token) return toast({ title: "Not authenticated", variant: "destructive" })
-        setExporting(true)
-        try {
-            const res = await fetch(`${API_BASE}/wallet/export-seed`, {
-                method: "POST",   // ← add this
-                headers: { Authorization: `Bearer ${session.token}` },
-            })
-            if (!res.ok) throw new Error("Export failed")
-            const data = await res.json()
-            setSeedPhrase(data.mnemonic)
-            setShowSeed(false)
-        } catch (error: any) {
-            toast({ title: "Export failed", description: error.message || "Failed to export", variant: "destructive" })
-        } finally {
-            setExporting(false)
-        }
+    setTxHash(hash)
+    toast({
+      title:       "Transaction sent!",
+      description: `${amount} ${selectedToken.symbol} sent successfully`,
+    })
+    setRecipient("")
+    setAmount("")
+    setTimeout(fetchBalances, 3000)
+
+  } catch (err: any) {
+    console.error("Send error:", err)
+
+    // PIN cancelled — don't show error toast, just silently abort
+    if (err?.message === "cancelled" || err?.message?.includes("cancelled")) {
+      setSending(false)
+      return
     }
 
-    const copyToClipboard = (text: string, label: string) => {
+    const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Please try again"
+    toast({ title: "Transaction failed", description: msg, variant: "destructive" })
+  } finally {
+    setSending(false)
+  }
+}
+   const copyToClipboard = (text: string, label: string) => {
         navigator.clipboard.writeText(text)
         toast({ title: `${label} copied` })
     }
@@ -447,7 +432,8 @@ const fetchBalances = async () => {
             1135: "https://blockscout.lisk.com/tx/",
             42161: "https://arbiscan.io/tx/",
             8453: "https://basescan.org/tx/",
-            56: "https://bscscan.com/tx/"
+            56: "https://bscscan.com/tx/",
+            677: "https://scan.botchain.ai/tx/",
         }
         return (explorers[chainId || 42220] || explorers[42220]) + hash
     }

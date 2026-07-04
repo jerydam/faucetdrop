@@ -14,7 +14,7 @@ import Loading from "@/app/loading";
 import { BottomNav } from "@/components/bottom-nav";
 import { ethers } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
-import { getChainConfig, CELO_CHAIN_ID, isSupportedChain,getEnabledChains,ensureChainNetwork } from "@/lib/chain";
+import { getChainConfig, CELO_CHAIN_ID, BOTCHAIN_CHAIN_ID, isSupportedChain,getEnabledChains,ensureChainNetwork } from "@/lib/chain";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 const DROP_TOKEN_CONTRACT = "0x213DF7A728E545BdAff8ff8c4BF9cFD7359Def0B";
 
@@ -481,7 +481,7 @@ useEffect(() => {
                     fontFamily: "'Figtree',sans-serif", whiteSpace: "nowrap",
                   }}
                 >
-                  Redeem $G
+                  {chainId === BOTCHAIN_CHAIN_ID ? "Redeem $BOT" : "Redeem $G"}
                 </button>
                 <button
                   

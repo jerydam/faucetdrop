@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useWallet } from "@/components/wallet-provider" 
-import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react" // <-- Added Solana Hook
+import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react"
 import { useNetwork, Network } from "@/hooks/use-network" 
 import { getUserFaucets } from "@/lib/faucet"
 import { Header } from "@/components/header"
@@ -107,10 +107,10 @@ export default function DashboardPage() {
     const router = useRouter();
     const { toast } = useToast();
     const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+
     // --- COMBINED WALLET LOGIC ---
     const { address: evmAddress, stellarAddress, fetchNonEvmAddresses } = useWallet();
     const { publicKey: solanaPublicKey } = useSolanaWallet();
-    // Resolve to whatever is actively connected
     const currentConnectedAddress = solanaPublicKey?.toBase58() || evmAddress;
     
     const { networks } = useNetwork();
@@ -125,9 +125,9 @@ export default function DashboardPage() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
     
-    
     const [isVerified, setIsVerified] = useState(false);
     const [initialSubtab, setInitialSubtab] = useState<string | null>(null);
+
     const getNativeTokenSymbol = (networkName: string): string => {
       switch (networkName) {
         case "Celo": return "CELO";
@@ -139,17 +139,18 @@ export default function DashboardPage() {
         default: return "ETH";
       }
     };
+
     const searchParams = useSearchParams();
     useEffect(() => {
-  if (searchParams.get('tab') === 'challenge') {
-    setActiveTab('challenge');
-    const subtab = searchParams.get('subtab');
-    if (subtab) {
-      // pass it down to ChallengeDashboardTab
-      setInitialSubtab(subtab);
-    }
-  }
-}, [searchParams]);
+        if (searchParams.get('tab') === 'challenge') {
+            setActiveTab('challenge');
+            const subtab = searchParams.get('subtab');
+            if (subtab) {
+                setInitialSubtab(subtab);
+            }
+        }
+    }, [searchParams]);
+
     async function fetchOwnerFaucetsMeta(supabaseClient: any, ownerAddress: string) {
       const { data, error } = await supabaseClient
         .from("network_faucets")
@@ -201,11 +202,9 @@ export default function DashboardPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [networkFilter, setNetworkFilter] = useState("all");
     const [activeTab, setActiveTab] = useState<'faucets' | 'quests' | 'quizzes' | 'challenge'>('faucets');
-
-
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-    // --- UPDATED isOwner LOGIC ---
+    // --- isOwner ---
     const isOwner = useMemo(() => {
         if (!currentConnectedAddress || !profile?.wallet_address) return false;
         return currentConnectedAddress.toLowerCase() === profile.wallet_address.toLowerCase();
@@ -233,31 +232,31 @@ export default function DashboardPage() {
     }
 
     useEffect(() => {
-    if (!profile?.wallet_address) return;
-    fetch(`${backendUrl}/api/users/${profile.wallet_address.toLowerCase()}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data?.is_verified) setIsVerified(true);
-        })
-        .catch(() => {});
-}, [profile?.wallet_address, backendUrl]);
+        if (!profile?.wallet_address) return;
+        fetch(`${backendUrl}/api/users/${profile.wallet_address.toLowerCase()}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data?.is_verified) setIsVerified(true);
+            })
+            .catch(() => {});
+    }, [profile?.wallet_address, backendUrl]);
 
     const handleVerifyClick = useCallback(async () => {
-    let addr = stellarAddress;
-    if (!addr) {
-        const fetched = await fetchNonEvmAddresses();
-        addr = fetched?.stellar ?? null;
-    }
-    if (addr) {
-        router.push(`/verify?stellar_address=${encodeURIComponent(addr)}`);
-    } else {
-        toast({
-            title: "No Stellar wallet found",
-            description: "Connect or create an embedded wallet to verify your identity.",
-            variant: "destructive",
-        });
-    }
-}, [stellarAddress, fetchNonEvmAddresses, router, toast]);
+        let addr = stellarAddress;
+        if (!addr) {
+            const fetched = await fetchNonEvmAddresses();
+            addr = fetched?.stellar ?? null;
+        }
+        if (addr) {
+            router.push(`/verify?stellar_address=${encodeURIComponent(addr)}`);
+        } else {
+            toast({
+                title: "No Stellar wallet found",
+                description: "Connect or create an embedded wallet to verify your identity.",
+                variant: "destructive",
+            });
+        }
+    }, [stellarAddress, fetchNonEvmAddresses, router, toast]);
 
     const displayAvatar = getDisplayAvatar();
     const displayName = getDisplayName();
@@ -317,40 +316,35 @@ export default function DashboardPage() {
             let userProfile: UserProfileData | null = null;
             let userWallet: string | null = null;
 
-            // Simple basic detection if it's base58 (Solana) or Hex (EVM)
-            // Anything > 42 chars that doesn't start with 0x is likely Base58 Solana
             const isHexAddress = targetUsernameOrAddress.startsWith('0x') && targetUsernameOrAddress.length === 42;
             const isBase58Address = !targetUsernameOrAddress.startsWith('0x') && targetUsernameOrAddress.length >= 32 && targetUsernameOrAddress.length <= 44;
             const isAddress = isHexAddress || isBase58Address;
             
             if (isAddress) {
-                // AFTER
                 const profRes = await fetch(`${backendUrl}/api/profile/${targetUsernameOrAddress}?t=${Date.now()}`);
                 const profData = await profRes.json()
                 const fetchedData = profData.profile
 
                 if (fetchedData) {
-                userProfile = {
-                    wallet_address: fetchedData.wallet_address || targetUsernameOrAddress.toLowerCase(),
-                    username:       fetchedData.username,
-                    email:          fetchedData.email,
-                    bio:            fetchedData.bio,
-                    avatar_url:     fetchedData.avatar_url,
-                    twitter_handle: fetchedData.twitter_handle,
-                    discord_handle: fetchedData.discord_handle,
-                    telegram_handle: fetchedData.telegram_handle,
-                    farcaster_handle: fetchedData.farcaster_handle,
-                }
+                    userProfile = {
+                        wallet_address:   fetchedData.wallet_address || targetUsernameOrAddress.toLowerCase(),
+                        username:         fetchedData.username,
+                        email:            fetchedData.email,
+                        bio:              fetchedData.bio,
+                        avatar_url:       fetchedData.avatar_url,
+                        twitter_handle:   fetchedData.twitter_handle,
+                        discord_handle:   fetchedData.discord_handle,
+                        telegram_handle:  fetchedData.telegram_handle,
+                        farcaster_handle: fetchedData.farcaster_handle,
+                    }
                 } else {
-                userProfile = {
-                    wallet_address: targetUsernameOrAddress.toLowerCase(),
-                    username: "New User",
-                    bio: "You haven't set up your profile yet.",
-                }
+                    userProfile = {
+                        wallet_address: targetUsernameOrAddress.toLowerCase(),
+                        username: "New User",
+                        bio: "You haven't set up your profile yet.",
+                    }
                 }
                 userWallet = fetchedData?.wallet_address || targetUsernameOrAddress.toLowerCase()
-
-                
             } else {
                 const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsernameOrAddress}?t=${Date.now()}`);
                 const profData = await profRes.json();
@@ -373,49 +367,49 @@ export default function DashboardPage() {
                 const detailMap = await fetchOwnerFaucetsDetails(supabase, metaList.map((m: any) => m.faucetAddress));
 
                 const enrichedFaucets: FaucetData[] = metaList.map((meta: any) => {
-                const row = detailMap[meta.faucetAddress.toLowerCase()];
-                const chainNetwork = networks.find((n) => n.chainId === (meta as any).chainId);
+                    const row = detailMap[meta.faucetAddress.toLowerCase()];
+                    const chainNetwork = networks.find((n) => n.chainId === (meta as any).chainId);
 
-                if (row) {
+                    if (row) {
+                        return {
+                            faucetAddress:  row.faucet_address,
+                            name:           row.faucet_name,
+                            slug:           row.slug || meta.slug,
+                            tokenSymbol:    row.token_symbol || (row.is_ether ? getNativeTokenSymbol(chainNetwork?.name || "Ethereum") : "TOK"),
+                            tokenDecimals:  row.token_decimals ?? 18,
+                            isEther:        row.is_ether,
+                            claimAmount:    row.claim_amount ? BigInt(row.claim_amount) : undefined,
+                            startTime:      row.start_time,
+                            endTime:        row.end_time,
+                            isClaimActive:  row.is_claim_active,
+                            token:          row.token_address,
+                            network:        chainNetwork,
+                            createdAt:      row.start_time,
+                            description:    row.description,
+                            imageUrl:       row.image_url || "/default.jpeg",
+                            owner:          row.owner_address,
+                            factoryAddress: row.factory_address || meta.factoryAddress,
+                            faucetType:     meta.factoryType || "dropcode",
+                            chainId:        (meta as any).chainId,
+                        } as FaucetData & { chainId: number };
+                    }
+
                     return {
-                        faucetAddress: row.faucet_address,
-                        name:          row.faucet_name,
-                        slug:          row.slug || meta.slug,
-                        tokenSymbol:   row.token_symbol || (row.is_ether ? getNativeTokenSymbol(chainNetwork?.name || "Ethereum") : "TOK"),
-                        tokenDecimals: row.token_decimals ?? 18,
-                        isEther:       row.is_ether,
-                        claimAmount:   row.claim_amount ? BigInt(row.claim_amount) : undefined,
-                        startTime:     row.start_time,
-                        endTime:       row.end_time,
-                        isClaimActive: row.is_claim_active,
-                        token:         row.token_address,
-                        network:       chainNetwork,
-                        createdAt:     row.start_time,
-                        description:   row.description,
-                        imageUrl:      row.image_url || "/default.jpeg",
-                        owner:         row.owner_address,
-                        factoryAddress: row.factory_address || meta.factoryAddress,
-                        faucetType:    meta.factoryType || "dropcode",
-                        chainId:       (meta as any).chainId,
+                        faucetAddress:  meta.faucetAddress,
+                        name:           meta.name,
+                        slug:           meta.slug,
+                        tokenSymbol:    meta.tokenSymbol || (meta.isEther ? getNativeTokenSymbol(chainNetwork?.name || "Ethereum") : "TOK"),
+                        tokenDecimals:  18,
+                        isEther:        meta.isEther,
+                        isClaimActive:  meta.isClaimActive,
+                        network:        chainNetwork,
+                        createdAt:      meta.createdAt,
+                        owner:          meta.owner,
+                        factoryAddress: meta.factoryAddress,
+                        imageUrl:       "/default.jpeg",
+                        faucetType:     meta.factoryType || "dropcode",
+                        chainId:        (meta as any).chainId,
                     } as FaucetData & { chainId: number };
-                }
-
-                return {
-                    faucetAddress: meta.faucetAddress,
-                    name:          meta.name,
-                    slug:          meta.slug,
-                    tokenSymbol:   meta.tokenSymbol || (meta.isEther ? getNativeTokenSymbol(chainNetwork?.name || "Ethereum") : "TOK"),
-                    tokenDecimals: 18,
-                    isEther:       meta.isEther,
-                    isClaimActive: meta.isClaimActive,
-                    network:       chainNetwork,
-                    createdAt:     meta.createdAt,
-                    owner:         meta.owner,
-                    factoryAddress: meta.factoryAddress,
-                    imageUrl:      "/default.jpeg",
-                    faucetType:    meta.factoryType || "dropcode",
-                    chainId:       (meta as any).chainId,
-                } as FaucetData & { chainId: number };
                 });
 
                 setFaucets(enrichedFaucets);
@@ -428,14 +422,14 @@ export default function DashboardPage() {
                         .filter((q: any) => q.creatorAddress?.toLowerCase() === userWallet!.toLowerCase())
                         .map((q: any) => ({
                             ...q,
-                            slug: q.slug || q.faucetAddress, 
-                            faucetAddress: q.faucetAddress
+                            slug:         q.slug || q.faucetAddress, 
+                            faucetAddress: q.faucetAddress,
                         }));
                     
                     const published = myQuests.filter((q: any) => !q.isDraft).map((q: any) => ({
-                            ...q,
-                            isDemo: q.faucetAddress?.startsWith("draft-") || q.faucetAddress?.startsWith("demo-")
-                        }));
+                        ...q,
+                        isDemo: q.faucetAddress?.startsWith("draft-") || q.faucetAddress?.startsWith("demo-"),
+                    }));
                     setPublishedQuests(published);
                 }
 
@@ -448,12 +442,12 @@ export default function DashboardPage() {
                             if (dData.success) {
                                 const formattedDrafts = dData.drafts.map((d: any) => ({
                                     ...d,
-                                    faucetAddress: d.faucet_address, 
+                                    faucetAddress:  d.faucet_address, 
                                     creatorAddress: d.creator_address,
-                                    imageUrl: d.image_url,
-                                    title: d.title,
-                                    description: d.description,
-                                    isDemo: !d.is_subscribed
+                                    imageUrl:       d.image_url,
+                                    title:          d.title,
+                                    description:    d.description,
+                                    isDemo:         !d.is_subscribed,
                                 }));
                                 setDraftQuests(formattedDrafts);
                             }
@@ -508,7 +502,7 @@ export default function DashboardPage() {
     const getSocialUrl = (platform: string, handle: string) => {
         const cleanHandle = handle.replace('@', '').trim();
         switch (platform) {
-            case 'twitter': return `https://x.com/${cleanHandle}`;
+            case 'twitter':  return `https://x.com/${cleanHandle}`;
             case 'telegram': return `https://t.me/${cleanHandle}`;
             case 'farcaster': return `https://farcaster.xyz/${cleanHandle}`;
             default: return '#';
@@ -523,7 +517,7 @@ export default function DashboardPage() {
     const filteredFaucets = useMemo(() => {
         return faucets.filter(f => {
             const matchesSearch = f.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                f.faucetAddress.toLowerCase().includes(searchQuery.toLowerCase());
+                                  f.faucetAddress.toLowerCase().includes(searchQuery.toLowerCase());
             const matchesNetwork = networkFilter === "all" || f.chainId.toString() === networkFilter;
             return matchesSearch && matchesNetwork;
         });
@@ -560,6 +554,7 @@ export default function DashboardPage() {
                     hideAction={true} 
                 />
 
+                {/* ── Profile card — always visible ── */}
                 <div className="mb-10">
                     <Card className="border-none bg-gradient-to-r from-primary/5 via-primary/10 to-background shadow-sm">
                         <CardContent className="p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center gap-6 relative">
@@ -576,8 +571,6 @@ export default function DashboardPage() {
                                 isOwner={isOwner}
                             />
 
-                            
-                            
                             <div className="flex-1 space-y-2">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
                                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
@@ -593,13 +586,11 @@ export default function DashboardPage() {
                                                 </Badge>
                                             </a>
                                         )}
-
                                         {profile?.discord_handle && (
                                             <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-100 gap-1.5 pl-2 pr-2.5">
                                                 Discord: {profile.discord_handle}
                                             </Badge>
                                         )}
-
                                         {profile?.telegram_handle && (
                                             <a href={getSocialUrl('telegram', profile.telegram_handle)} target="_blank" rel="noopener noreferrer" className="no-underline">
                                                 <Badge variant="secondary" className="bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-100 gap-1.5 pl-2 pr-2.5 cursor-pointer">
@@ -607,7 +598,6 @@ export default function DashboardPage() {
                                                 </Badge>
                                             </a>
                                         )}
-
                                         {profile?.farcaster_handle && (
                                             <a href={getSocialUrl('farcaster', profile.farcaster_handle)} target="_blank" rel="noopener noreferrer" className="no-underline">
                                                 <Badge variant="secondary" className="bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-100 gap-1.5 pl-2 pr-2.5 cursor-pointer">
@@ -631,6 +621,7 @@ export default function DashboardPage() {
                                 </p>
                             </div>
 
+                            {/* Stats — always visible */}
                             <div className="flex items-center gap-6 bg-background/50 p-4 rounded-xl border self-start md:self-center w-full md:w-auto justify-around md:justify-start">
                                 <div className="text-center">
                                     <div className="text-2xl font-bold">{faucets.length}</div>
@@ -638,12 +629,12 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="h-10 w-[1px] bg-border" />
                                 <div className="text-center">
-                                    <div className="text-2xl font-bold">{publishedQuests.length}</div> 
+                                    <div className="text-2xl font-bold">{publishedQuests.length}</div>
                                     <div className="text-xs text-muted-foreground uppercase font-semibold">Quests</div>
                                 </div>
                                 <div className="h-10 w-[1px] bg-border" />
                                 <div className="text-center">
-                                    <div className="text-2xl font-bold">{quizCount}</div> 
+                                    <div className="text-2xl font-bold">{quizCount}</div>
                                     <div className="text-xs text-muted-foreground uppercase font-semibold">Quizzes</div>
                                 </div>
                             </div>
@@ -651,168 +642,190 @@ export default function DashboardPage() {
                     </Card>
                 </div>
 
-                <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg overflow-x-auto tab-scrollbar">
-    <button 
-        onClick={() => setActiveTab('faucets')}
-        className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'faucets' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-    >
-        Faucets ({faucets.length})
-    </button>
-    <button 
-        onClick={() => setActiveTab('quests')}
-        className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'quests' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-    >
-        Quests ({publishedQuests.length})
-    </button>
-    <button 
-        onClick={() => setActiveTab('quizzes')}
-        className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'quizzes' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-    >
-        Quizzes ({quizCount})
-    </button>
-    <button
-        onClick={() => setActiveTab('challenge')}
-        className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'challenge' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-    >
-        Challenge
-    </button>
-</div>
-
-                {/* TAB: FAUCETS */}
-                {activeTab === 'faucets' && (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                         <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input placeholder="Search faucets..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                            </div>
-                            <Select value={networkFilter} onValueChange={setNetworkFilter}>
-                                <SelectTrigger className="w-full sm:w-[180px]">
-                                    <SelectValue placeholder="All Networks" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Networks</SelectItem>
-                                    {networks.map(n => <SelectItem key={n.chainId} value={n.chainId.toString()}>{n.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                {/* ── Tabs + content — owner only ── */}
+                {isOwner && (
+                    <>
+                        {/* Tab bar */}
+                        <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg overflow-x-auto tab-scrollbar mb-6">
+                            <button
+                                onClick={() => setActiveTab('faucets')}
+                                className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'faucets' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Faucets ({faucets.length})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('quests')}
+                                className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'quests' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Quests ({publishedQuests.length})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('quizzes')}
+                                className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'quizzes' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Quizzes ({quizCount})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('challenge')}
+                                className={`px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex-shrink-0 ${activeTab === 'challenge' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Challenge
+                            </button>
                         </div>
 
-                        <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "space-y-4"}>
-                            {filteredFaucets.length > 0 ? filteredFaucets.map((faucet) => (
-                                <FaucetCard 
-                                    key={faucet.faucetAddress} 
-                                    faucet={faucet} 
-                                    getNetworkName={getNetworkName}
-                                    getNetworkColor={getNetworkColor}
-                                    onManage={() => router.push(
-                                        faucet.slug
-                                            ? `/faucet/${faucet.slug}`
-                                            : `/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`
-                                        )}
-                                    isOwner={isOwner}
-                                />
-                            )) : (
-                                <div className="col-span-full text-center py-10 text-muted-foreground">No faucets found matching your filters.</div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* TAB: QUESTS */}
-                {activeTab === 'quests' && (
-                    <div className="space-y-10">
-                        <div>
-                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                <Rocket className="h-5 w-5 text-blue-500" /> Published Quests
-                            </h3>
-                            {publishedQuests.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {publishedQuests.map((quest) => (
-                                        <QuestCard 
-                                            key={quest.faucetAddress} 
-                                            quest={quest} 
-                                            type="published"
-                                            onClick={() => router.push(`/quest/${quest.slug || quest.faucetAddress}`)}
+                        {/* TAB: FAUCETS */}
+                        {activeTab === 'faucets' && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            placeholder="Search faucets..."
+                                            className="pl-9"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
                                         />
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-8">No published quests yet.</div>
-                            )}
-                        </div>
-                
-                        {isOwner && (
-                            <div>
-                                <div className="flex items-center gap-3 mb-4">
-                                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                                        <PencilRuler className="h-5 w-5 text-orange-500" /> Drafts
-                                    </h3>
-                                    <Badge variant="outline" className="border-orange-200 text-orange-600 bg-orange-50">{draftQuests.length}</Badge>
-                                </div>
-                                
-                                {draftQuests.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {draftQuests.map((quest) => (
-                                            <QuestCard 
-                                                key={quest.faucetAddress} 
-                                                quest={quest} 
-                                                type="draft"
-                                                onClick={() => router.push(`/quest/create-quest?draftId=${quest.faucetAddress}${quest.isDemo ? '&demo=true' : ''}`)}
-                                                onDelete={(quest) => {
-                                                    setDeleteDialog({ open: true, quest })
-                                                    setDeleteConfirmInput("")
-                                                }}
-                                            />
-                                        ))}
                                     </div>
-                                ) : (
-                                    <div className="text-center py-8 border border-dashed rounded-lg bg-muted/10 text-muted-foreground">
-                                        No drafts in progress.
-                                    </div>
-                                )}
+                                    <Select value={networkFilter} onValueChange={setNetworkFilter}>
+                                        <SelectTrigger className="w-full sm:w-[180px]">
+                                            <SelectValue placeholder="All Networks" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Networks</SelectItem>
+                                            {networks.map(n => (
+                                                <SelectItem key={n.chainId} value={n.chainId.toString()}>{n.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "space-y-4"}>
+                                    {filteredFaucets.length > 0 ? filteredFaucets.map((faucet) => (
+                                        <FaucetCard
+                                            key={faucet.faucetAddress}
+                                            faucet={faucet}
+                                            getNetworkName={getNetworkName}
+                                            getNetworkColor={getNetworkColor}
+                                            onManage={() => router.push(
+                                                faucet.slug
+                                                    ? `/faucet/${faucet.slug}`
+                                                    : `/faucet/${faucet.faucetAddress}?networkId=${faucet.chainId}`
+                                            )}
+                                            isOwner={isOwner}
+                                        />
+                                    )) : (
+                                        <div className="col-span-full text-center py-10 text-muted-foreground">
+                                            No faucets found matching your filters.
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
-                    </div>
-                )}
-                
-                {/* TAB: QUIZZES */}
-                {activeTab === 'quizzes' && (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div>
-                            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                🧠 Created Quizzes
-                            </h3>
-                            {userQuizzes.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {userQuizzes.map((quiz) => (
-                                        <QuizCard 
-                                            key={quiz.code} 
-                                            quiz={quiz} 
-                                            onClick={() => router.push(`/quiz/${quiz.code}`)} 
-                                        />
-                                    ))}
+
+                        {/* TAB: QUESTS */}
+                        {activeTab === 'quests' && (
+                            <div className="space-y-10">
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                        <Rocket className="h-5 w-5 text-blue-500" /> Published Quests
+                                    </h3>
+                                    {publishedQuests.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {publishedQuests.map((quest) => (
+                                                <QuestCard
+                                                    key={quest.faucetAddress}
+                                                    quest={quest}
+                                                    type="published"
+                                                    onClick={() => router.push(`/quest/${quest.slug || quest.faucetAddress}`)}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8">No published quests yet.</div>
+                                    )}
                                 </div>
-                            ) : (
-                                <div className="text-center py-8 border border-dashed rounded-lg bg-muted/10 text-muted-foreground">
-                                    No quizzes created yet.
+
+                                <div>
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                                            <PencilRuler className="h-5 w-5 text-orange-500" /> Drafts
+                                        </h3>
+                                        <Badge variant="outline" className="border-orange-200 text-orange-600 bg-orange-50">
+                                            {draftQuests.length}
+                                        </Badge>
+                                    </div>
+                                    {draftQuests.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {draftQuests.map((quest) => (
+                                                <QuestCard
+                                                    key={quest.faucetAddress}
+                                                    quest={quest}
+                                                    type="draft"
+                                                    onClick={() => router.push(`/quest/create-quest?draftId=${quest.faucetAddress}${quest.isDemo ? '&demo=true' : ''}`)}
+                                                    onDelete={(quest) => {
+                                                        setDeleteDialog({ open: true, quest })
+                                                        setDeleteConfirmInput("")
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 border border-dashed rounded-lg bg-muted/10 text-muted-foreground">
+                                            No drafts in progress.
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-                {/* TAB: CHALLENGE */}
-                {activeTab === 'challenge' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <ChallengeDashboardTab 
-                    refreshKey={dashboardRefreshKey}
-                    walletAddress={profile.wallet_address}
-                    initialSubtab={initialSubtab}
-                    />
-                </div>
+                            </div>
+                        )}
+
+                        {/* TAB: QUIZZES */}
+                        {activeTab === 'quizzes' && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                        🧠 Created Quizzes
+                                    </h3>
+                                    {userQuizzes.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {userQuizzes.map((quiz) => (
+                                                <QuizCard
+                                                    key={quiz.code}
+                                                    quiz={quiz}
+                                                    onClick={() => router.push(`/quiz/${quiz.code}`)}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 border border-dashed rounded-lg bg-muted/10 text-muted-foreground">
+                                            No quizzes created yet.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB: CHALLENGE */}
+                        {activeTab === 'challenge' && (
+                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <ChallengeDashboardTab
+                                    refreshKey={dashboardRefreshKey}
+                                    walletAddress={profile.wallet_address}
+                                    initialSubtab={initialSubtab}
+                                />
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
-            <Dialog open={deleteDialog.open} onOpenChange={(open) => { setDeleteDialog({ open, quest: open ? deleteDialog.quest : null }); setDeleteConfirmInput("") }}>
+            {/* Delete draft dialog */}
+            <Dialog
+                open={deleteDialog.open}
+                onOpenChange={(open) => {
+                    setDeleteDialog({ open, quest: open ? deleteDialog.quest : null });
+                    setDeleteConfirmInput("");
+                }}
+            >
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Delete Draft</DialogTitle>
@@ -822,7 +835,10 @@ export default function DashboardPage() {
                     </DialogHeader>
                     <div className="space-y-3 py-2">
                         <p className="text-sm font-medium text-foreground">
-                            Quest name: <span className="font-bold text-destructive">{deleteDialog.quest?.title || "Untitled Quest"}</span>
+                            Quest name:{" "}
+                            <span className="font-bold text-destructive">
+                                {deleteDialog.quest?.title || "Untitled Quest"}
+                            </span>
                         </p>
                         <div className="space-y-1.5">
                             <Label className="text-xs text-muted-foreground">Type the quest name to confirm</Label>
@@ -834,7 +850,13 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => { setDeleteDialog({ open: false, quest: null }); setDeleteConfirmInput("") }}>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setDeleteDialog({ open: false, quest: null });
+                                setDeleteConfirmInput("");
+                            }}
+                        >
                             Cancel
                         </Button>
                         <Button
@@ -851,7 +873,7 @@ export default function DashboardPage() {
     )
 }
 
-// --- SUB-COMPONENTS (unchanged) ---
+// --- SUB-COMPONENTS ---
 
 function FaucetCard({ faucet, getNetworkName, getNetworkColor, onManage, isOwner }: any) {
     const networkName = getNetworkName(faucet.chainId)
@@ -902,8 +924,8 @@ function QuizCard({ quiz, onClick }: { quiz: QuizData; onClick: () => void }) {
                         <span className="text-primary/40 text-4xl font-bold uppercase">{quiz.title?.charAt(0) || "Q"}</span>
                     </div>
                 )}
-                <Badge 
-                    className="absolute top-2 right-2 capitalize" 
+                <Badge
+                    className="absolute top-2 right-2 capitalize"
                     variant={quiz.status === 'active' ? 'default' : quiz.status === 'finished' ? 'secondary' : 'outline'}
                 >
                     {quiz.status}
@@ -924,9 +946,7 @@ function QuizCard({ quiz, onClick }: { quiz: QuizData; onClick: () => void }) {
                         <span className="text-primary">Players: {quiz.playerCount}</span>
                         {quiz.maxParticipants > 0 && <span>/ {quiz.maxParticipants}</span>}
                     </div>
-                    <span>
-                        {quiz.createdAt ? new Date(quiz.createdAt).toLocaleDateString() : ""}
-                    </span>
+                    <span>{quiz.createdAt ? new Date(quiz.createdAt).toLocaleDateString() : ""}</span>
                 </div>
             </CardContent>
         </Card>
@@ -943,11 +963,11 @@ interface QuestCardProps {
 function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
     return (
         <Card className={`hover:shadow-md transition-all group ${type === 'draft' ? 'border-dashed border-orange-200 bg-orange-50/10' : ''}`}>
-           <div className="relative aspect-square w-full bg-muted overflow-hidden rounded-t-lg cursor-pointer" onClick={onClick}>
-            {quest.imageUrl && (
-                <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
-            )}
-               <div className="absolute top-2 right-2 flex gap-1">
+            <div className="relative aspect-square w-full bg-muted overflow-hidden rounded-t-lg cursor-pointer" onClick={onClick}>
+                {quest.imageUrl && (
+                    <img src={quest.imageUrl} alt={quest.title} className="w-full h-full object-cover" />
+                )}
+                <div className="absolute top-2 right-2 flex gap-1">
                     <Badge variant={type === 'draft' ? "outline" : "default"}>
                         {type === 'draft' ? 'Draft' : 'Published'}
                     </Badge>
@@ -962,10 +982,10 @@ function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
                     {quest.description || "No description provided."}
                 </p>
                 <div className="flex gap-2">
-                    <Button 
-                        variant={type === 'draft' ? "outline" : "default"} 
-                        size="sm" 
-                        className="flex-1" 
+                    <Button
+                        variant={type === 'draft' ? "outline" : "default"}
+                        size="sm"
+                        className="flex-1"
                         onClick={onClick}
                     >
                         {type === 'draft' ? (
@@ -975,10 +995,10 @@ function QuestCard({ quest, type, onClick, onDelete }: QuestCardProps) {
                         )}
                     </Button>
                     {type === 'draft' && onDelete && (
-                        <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="px-2" 
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="px-2"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onDelete(quest);

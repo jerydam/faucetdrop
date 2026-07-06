@@ -168,6 +168,7 @@ export default function QuizListPage() {
   const [codeInput, setCodeInput] = useState("");
   const [navigating, setNavigating] = useState<string | null>(null);
   const [showFullModal, setShowFullModal] = useState(false);
+  const [showWelcomePopup, setShowWelcomePopup] = useState(false);
 
   // ── Register / DROPS state ────────────────────────────────────────────────
   const [dropsBalance, setDropsBalance] = useState<DropsBalance | null>(null);
@@ -226,6 +227,11 @@ const stopCheckinMusic = () => {
 const closeCheckinPopup = () => {
   stopCheckinMusic();
   setShowCheckinSuccess(false);
+};
+
+const closeWelcomePopup = () => {
+  stopCheckinMusic(); // reuse same audio stop
+  setShowWelcomePopup(false);
 };
   // ── Droplist daily sync ───────────────────────────────────────────────────
   // Runs once after balance loads. Credits +10 DROPS if player claimed on
@@ -380,7 +386,8 @@ useEffect(() => {
         ? `🎉 Welcome! ${fmt(data.totalCredited)} DROPS added (100 bonus + ${fmt(data.existingBalanceFolded)} from your wallet).`
         : "🎉 Welcome! 100 DROPS minted to your wallet!";
       toast.success(creditMsg);
-
+      setShowWelcomePopup(true); // ← add this
+      playCheckinMusic(); 
       setRegistered(true);
       setTimeout(() => setShowRegisterBanner(false), 3000);
       setTimeout(() => fetchDropsBalance(), 4000);
@@ -1007,6 +1014,153 @@ useEffect(() => {
           </div>
         </div>
       )}
+      {showWelcomePopup && (
+  <div
+    style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: "0 24px", background: "rgba(0,0,0,0.7)",
+      backdropFilter: "blur(4px)",
+    }}
+    onClick={closeWelcomePopup}
+  >
+    {/* Confetti */}
+    {Array.from({ length: 50 }).map((_, i) => {
+      const colors = ["#2563eb","#6366f1","#f59e0b","#10b981","#ef4444","#8b5cf6","#ec4899","#fff","#fbbf24"];
+      const size = 6 + Math.random() * 10;
+      const isCircle = Math.random() > 0.5;
+      return (
+        <div
+          key={i}
+          className="confetti-piece"
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: `-${Math.random() * 20}px`,
+            width: `${size}px`,
+            height: isCircle ? `${size}px` : `${size * 0.4}px`,
+            background: colors[i % colors.length],
+            borderRadius: isCircle ? "50%" : "2px",
+            animationDuration: `${1.8 + Math.random() * 2.5}s`,
+            animationDelay: `${Math.random() * 0.8}s`,
+            transform: `rotate(${Math.random() * 360}deg)`,
+          }}
+        />
+      );
+    })}
+
+    <div
+      className="checkin-popup"
+      onClick={e => e.stopPropagation()}
+      style={{
+        borderRadius: 28, padding: "40px 28px 28px",
+        maxWidth: 340, width: "100%",
+        textAlign: "center",
+        border: "1.5px solid rgba(255,255,255,0.12)",
+        boxShadow: "0 32px 100px rgba(37,99,235,0.6), 0 0 0 1px rgba(99,102,241,0.2)",
+        position: "relative", overflow: "hidden",
+        background: "linear-gradient(145deg,#0f0c29,#1e1b4b,#10b981)",
+        backgroundSize: "300% 300%",
+        animation: "popIn 0.55s cubic-bezier(0.34,1.56,0.64,1) forwards, bgPulse 4s ease infinite",
+      }}
+    >
+      {/* Pulse rings */}
+      {[0, 1, 2].map(i => (
+        <div key={i} className="ring" style={{
+          width: 80, height: 80,
+          top: "50%", left: "50%",
+          marginTop: -40, marginLeft: -40,
+          animationDelay: `${i * 0.5}s`,
+        }} />
+      ))}
+
+      {/* Inner glow */}
+      <div style={{
+        position: "absolute", top: -60, left: "50%", transform: "translateX(-50%)",
+        width: 260, height: 260,
+        background: "radial-gradient(circle, rgba(16,185,129,0.35) 0%, transparent 70%)",
+        pointerEvents: "none",
+      }} />
+
+      {/* Emoji */}
+      <div className="party-icon" style={{ fontSize: 72, marginBottom: 16, display: "block" }}>
+        🎉
+      </div>
+
+      {/* Title */}
+      <h2
+        className="d shine-text"
+        style={{ fontSize: 36, fontWeight: 900, marginBottom: 6, letterSpacing: "-0.5px" }}
+      >
+        WELCOME!
+      </h2>
+
+      {/* Subtitle */}
+      <p style={{
+        fontSize: 13, color: "rgba(255,255,255,0.6)",
+        marginBottom: 24, fontFamily: "'Figtree',sans-serif", lineHeight: 1.5,
+      }}>
+        Your wallet is now in the arena. 100 DROPS minted! 💧<br/>
+        <span style={{ fontSize: 11, opacity: 0.5 }}>Tap anywhere or close to dismiss</span>
+      </p>
+
+      {/* Stats */}
+      {dropsBalance && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+          {[
+            { label: "Game DROPS", val: fmt(dropsBalance.gameDrops), icon: "💧" },
+            { label: "Tier",       val: dropsBalance.tier,           icon: "⚡" },
+            { label: "Duels",      val: dropsBalance.totalDuels,     icon: "⚔️" },
+          ].map(s => (
+            <div key={s.label} style={{
+              flex: 1, padding: "12px 6px", borderRadius: 14,
+              background: "rgba(255,255,255,0.07)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              backdropFilter: "blur(4px)",
+            }}>
+              <p style={{ fontSize: 18, marginBottom: 2 }}>{s.icon}</p>
+              <p className="d" style={{ fontSize: 20, fontWeight: 900, color: "#fff" }}>{s.val}</p>
+              <p style={{
+                fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.4)",
+                textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 3,
+              }}>{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* CTAs */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <button
+          onClick={() => { closeWelcomePopup(); router.push("/challenge/create-challenge"); }}
+          style={{
+            height: 50, borderRadius: 14, border: "none",
+            background: "linear-gradient(135deg,#fff,#d1fae5)",
+            color: "#059669", fontWeight: 900, fontSize: 14,
+            cursor: "pointer", fontFamily: "'Figtree',sans-serif",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            boxShadow: "0 4px 20px rgba(255,255,255,0.2)",
+          }}
+        >
+          <Zap size={16} /> Start Your First Duel
+        </button>
+        <button
+          onClick={closeWelcomePopup}
+          style={{
+            height: 42, borderRadius: 12,
+            border: "1.5px solid rgba(255,255,255,0.15)",
+            background: "rgba(255,255,255,0.05)",
+            color: "rgba(255,255,255,0.6)",
+            fontWeight: 700, fontSize: 13, cursor: "pointer",
+            fontFamily: "'Figtree',sans-serif",
+            transition: "background .2s",
+          }}
+        >
+          🔇 Stop Music &amp; Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* Full Modal */}
       {showFullModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "0 24px" }}>

@@ -1135,7 +1135,7 @@ useEffect(() => {
           style={{
             height: 50, borderRadius: 14, border: "none",
             background: "linear-gradient(135deg,#fff,#d1fae5)",
-            color: "#059669", fontWeight: 900, fontSize: 14,
+            color: "#2563eb", fontWeight: 900, fontSize: 14,
             cursor: "pointer", fontFamily: "'Figtree',sans-serif",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             boxShadow: "0 4px 20px rgba(255,255,255,0.2)",

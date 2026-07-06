@@ -54,7 +54,7 @@ const ERC20_ABI = [
 ];
 
 /** ─── Admin address ──────────────────────────────────────────────────────── */
-const ADMIN_ADDRESS = "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2";
+const ADMIN_ADDRESS = ["0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2","0xB591842B0F3976373FdC06d3fA745C836c942cC3"];
 
 async function submitDropsClaim(
   payload: { contract: string; amount: string; timestamp: number; signature: string },
@@ -245,7 +245,7 @@ function celoScanTx(hash: string) {
 }
 
 function isAdmin(address: string) {
-  return address.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+  return ADMIN_ADDRESS.some(a => a.toLowerCase() === address.toLowerCase());
 }
 
 function computeRedeemPreview(
@@ -805,12 +805,12 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
 
     let freshPrice: number;
     try {
-      freshPrice = await getGoodDollarPrice();
+      freshPrice = await getGTokenPrice(activeChainId);
       setGPriceUsd(freshPrice);
       setGPriceFetchedAt(Date.now());
     } catch {
       toast({
-        title: "Could not refresh {tokenSymbol} price",
+        title: `Could not refresh ${tokenSymbol} price`,
         description: "Check your connection and try again.",
         variant: "destructive",
       });
@@ -908,7 +908,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
       });
       const data = await res.json();
       if (data.success) {
-        toast({ title: "✅ Stake claimed!", description: `${fmt(data.totalG, 4)} {tokenSymbol} (${fmt(data.earnedG, 4)} earned)` });
+        toast({ title: "✅ Stake claimed!", description: `${fmt(data.totalG, 4)} ${tokenSymbol} (${fmt(data.earnedG, 4)} earned)` });
         fetchStakes();
       } else {
         toast({ title: "Claim failed", description: data.detail ?? "Unknown error", variant: "destructive" });

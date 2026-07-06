@@ -368,7 +368,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const [redeemPreview, setRedeemPreview] = useState<RedeemPreview | null>(null);
   const [redeemLoading, setRedeemLoading] = useState(false);
   function getTokenSymbol(chainId: number): string {
-  return chainId === BOTCHAIN_CHAIN_ID ? "WBOT" : "{tokenSymbol}";
+  return chainId === BOTCHAIN_CHAIN_ID ? "WBOT" : "$G";
 }
   useEffect(() => {
     const drops = parseFloat(redeemAmount);
@@ -486,22 +486,22 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
       if (balanceOf < gAmountWei) {
         const humanBalance = ethers.formatUnits(balanceOf, decimals);
         throw new Error(
-          `Insufficient {tokenSymbol} balance. You have ${parseFloat(humanBalance).toFixed(4)} {tokenSymbol}, ` +
-          `need ${gCostDisplay.toFixed(4)} {tokenSymbol}`,
+          `Insufficient $${tokenSymbol} balance. You have ${parseFloat(humanBalance).toFixed(4)} ${tokenSymbol}, ` +
+          `need ${gCostDisplay.toFixed(4)} ${tokenSymbol}`,
         );
       }
 
-      toast({ title: "⏳ Confirm {tokenSymbol} transfer in your wallet…" });
+      toast({ title: `⏳ Confirm ${tokenSymbol} transfer in your wallet…` });
       const tx = await gToken.transfer(DROPS_REDEEM_POOL_ADDRESS, gAmountWei);
       toast({ title: "📡 Transfer sent, waiting for confirmation…" });
 
       const receipt = await tx.wait();
       if (!receipt || receipt.status !== 1) {
-        throw new Error("{tokenSymbol} transfer transaction failed");
+        throw new Error(`${tokenSymbol} transfer transaction failed`);
       }
 
       setGTxHash(tx.hash);
-      toast({ title: "✅ {tokenSymbol} transferred! Minting your DROPS…" });
+      toast({ title: `✅ ${tokenSymbol} transferred! Minting your DROPS…` });
 
       const res = await fetch(`${BACKEND_URL}/api/drops/buy`, {
         method:  "POST",
@@ -720,15 +720,15 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     if (!amt || amt <= 0) return;
     if (!DROPS_REDEEM_POOL_ADDRESS) return;
 
-    contractWrite("deposit", "Deposit {tokenSymbol}", async (contract) => {
-      if (!onChainStats?.gTokenAddress) throw new Error("{tokenSymbol} token address not loaded");
+    contractWrite("deposit", `Deposit ${tokenSymbol}`, async (contract) => {
+      if (!onChainStats?.gTokenAddress) throw new Error(`${tokenSymbol} token address not loaded`);
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer   = await provider.getSigner();
       const gToken   = new ethers.Contract(onChainStats.gTokenAddress, ERC20_ABI, signer);
       const amtWei   = ethers.parseUnits(depositAmount, 18);
       const allowance: bigint = await gToken.allowance(walletAddress, DROPS_REDEEM_POOL_ADDRESS);
       if (allowance < amtWei) {
-        toast({ title: "⏳ Approving {tokenSymbol} spend…" });
+        toast({ title: `⏳ Approving ${tokenSymbol} spend…` });
         const approveTx = await gToken.approve(DROPS_REDEEM_POOL_ADDRESS, amtWei);
         await approveTx.wait();
         toast({ title: "✅ Approval confirmed" });
@@ -740,7 +740,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const handleWithdraw = () => {
     const amt = parseFloat(withdrawAmount);
     if (!amt || amt <= 0) return;
-    contractWrite("withdraw", "Withdraw {tokenSymbol}", (contract) =>
+    contractWrite("withdraw", `Withdraw ${tokenSymbol}`, (contract) =>
       contract.withdrawG(ethers.parseUnits(withdrawAmount, 18)),
     () => setWithdrawAmount(""));
   };
@@ -749,7 +749,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     const priceUsd = parseFloat(newGPrice);
     if (!priceUsd || priceUsd <= 0) return;
     const priceWei = ethers.parseUnits(newGPrice, 18);
-    contractWrite("price", "Set {tokenSymbol} Price", (contract) =>
+    contractWrite("price", `Set ${tokenSymbol} Price`, (contract) =>
       contract.setGPrice(priceWei),
     () => setNewGPrice(""));
   };
@@ -758,7 +758,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     if (!ethers.isAddress(newResolver)) {
       toast({ title: "Invalid address", variant: "destructive" }); return;
     }
-    contractWrite("resolver", "Set Resolver", (contract) =>
+    contractWrite("resolver", `Set ${tokenSymbol} Resolver`, (contract) =>
       contract.setResolver(newResolver),
     () => setNewResolver(""));
   };
@@ -2114,11 +2114,11 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { label: "{tokenSymbol} Balance",     value: `${onChainStats.gBalance} {tokenSymbol}`,         icon: DollarSign },
-                      { label: "Free Liquidity", value: `${onChainStats.freeLiquidity} {tokenSymbol}`,    icon: Unlock     },
+                      { label: `${tokenSymbol} Balance`,     value: `${onChainStats.gBalance} ${tokenSymbol}`,         icon: DollarSign },
+                      { label: "Free Liquidity", value: `${onChainStats.freeLiquidity} ${tokenSymbol}`,    icon: Unlock     },
                       { label: "DROPS in Pool",  value: onChainStats.dropsBalance,             icon: Droplets   },
                       { label: "Total Stakes",   value: String(onChainStats.nextStakeId - 1),  icon: TrendingUp },
-                      { label: "{tokenSymbol} Price (USD)", value: `$${onChainStats.gPriceUsd.toFixed(6)}`, icon: BarChart3 },
+                      { label: `${tokenSymbol} Price (USD)`, value: `$${onChainStats.gPriceUsd.toFixed(6)}`, icon: BarChart3 },
                       { label: "Stake IDs",      value: `0 – ${onChainStats.nextStakeId - 1}`, icon: Coins      },
                     ].map(({ label, value, icon: Icon }) => (
                       <div key={label} className="bg-muted/40 rounded-xl p-3 border border-border">
@@ -2135,7 +2135,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                       { label: "Owner",           addr: onChainStats.owner            },
                       { label: "Resolver",         addr: onChainStats.resolver         },
                       { label: "Service Address",  addr: onChainStats.serviceAddress   },
-                      { label: "{tokenSymbol} Token",         addr: onChainStats.gTokenAddress    },
+                      { label: `${tokenSymbol} Token`,         addr: onChainStats.gTokenAddress    },
                       { label: "DROPS Token",      addr: onChainStats.dropsTokenAddress },
                     ].map(({ label, addr }) => (
                       <div key={label} className="flex items-center justify-between text-[11px] py-1 border-b border-border/50 last:border-0">
@@ -2169,7 +2169,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 Approves and calls <code className="font-mono text-[10px] bg-muted px-1 rounded">depositG(amount)</code>.
               </p>
               <div className="flex gap-2">
-                <Input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder="Amount in {tokenSymbol}" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
+                <Input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} placeholder={`Amount in ${tokenSymbol}`} className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                 <Button size="sm" className="h-10 bg-green-600 hover:bg-green-700 text-white px-4 min-w-[100px]"
                   disabled={!depositAmount || parseFloat(depositAmount) <= 0 || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS}
                   onClick={handleDeposit}>
@@ -2188,7 +2188,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Calls <code className="font-mono text-[10px] bg-muted px-1 rounded">withdrawG(amount)</code>. Only free liquidity can be withdrawn.
+                Calls <code className="font-mono text-[10px] bg-muted px-1 rounded">{`withdraw${tokenSymbol}(amount)`}</code>. Only free liquidity can be withdrawn.
               </p>
               {onChainStats && (
                 <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border">
@@ -2197,7 +2197,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 </div>
               )}
               <div className="flex gap-2">
-                <Input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder="Amount in {tokenSymbol}" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
+                <Input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder={`Amount in ${tokenSymbol}`} className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                 <Button variant="outline" size="sm" className="h-10 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 px-4 min-w-[100px]"
                   disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS}
                   onClick={handleWithdraw}>
@@ -2211,12 +2211,12 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-blue-500" /> Update {tokenSymbol} Price
+                <DollarSign className="h-4 w-4 text-blue-500" /> {`Update ${tokenSymbol} Price`}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Calls <code className="font-mono text-[10px] bg-muted px-1 rounded">setGPrice(priceWei)</code>. Enter USD — converted to 1e18 precision.
+                Calls <code className="font-mono text-[10px] bg-muted px-1 rounded">set{tokenSymbol}Price(priceWei)</code>. Enter USD — converted to 1e18 precision.
               </p>
               {onChainStats && (
                 <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border">
@@ -2225,7 +2225,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 </div>
               )}
               <div className="flex gap-2">
-                <Input type="number" value={newGPrice} onChange={e => setNewGPrice(e.target.value)} placeholder="New price in USD (e.g. 0.001)" step="0.000001" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
+                <Input type="number" value={newGPrice} onChange={e => setNewGPrice(e.target.value)} placeholder={`New price in USD (e.g. 0.001)`} step="0.000001" className="flex-1 font-mono font-bold h-10" disabled={!DROPS_REDEEM_POOL_ADDRESS} />
                 <Button size="sm" variant="outline" className="h-10 px-4 min-w-[90px]"
                   disabled={!newGPrice || parseFloat(newGPrice) <= 0 || !!adminActionLoading || !DROPS_REDEEM_POOL_ADDRESS}
                   onClick={handleSetGPrice}>

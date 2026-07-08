@@ -4,6 +4,7 @@ import type React from "react"
 import { useEffect, useMemo } from "react"
 import { Inter } from "next/font/google"
 import "./globals.css"
+import { usePathname } from "next/navigation"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "sonner"
 import { NetworkProvider } from "@/hooks/use-network"
@@ -58,7 +59,12 @@ function SolanaProviders({ children }: { children: React.ReactNode }) {
     </ConnectionProvider>
   )
 }
-
+function FooterWrapper() {
+  const pathname = usePathname()
+  const HIDE_ON = ["/challenge/create"]
+  if (HIDE_ON.some(p => pathname.startsWith(p))) return null
+  return <Footer />
+}
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -152,9 +158,9 @@ export default function RootLayout({
                   <Providers>
                   <SubscriptionModalProvider>
                     <div className="min-h-screen flex flex-col">
-                      <main className="flex-1">{children}</main>
-                      <Footer />
-                    </div>
+                    <main className="flex-1">{children}</main>
+                    <FooterWrapper />
+                  </div>
                     <Toaster richColors position="top-center" closeButton />
                   </SubscriptionModalProvider>
                   </Providers>

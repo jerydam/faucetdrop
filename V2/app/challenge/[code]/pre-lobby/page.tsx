@@ -775,11 +775,7 @@ export default function PreLobbyPage() {
 
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="font-mono font-black">{code}</Badge>
-            {chainCfg && (
-              <Badge variant="outline" className="text-[10px] font-bold gap-1">
-                <span>{chainCfg.icon}</span> {chainCfg.shortName}
-              </Badge>
-            )}
+            
             <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/30 text-[10px] font-bold">
               PRE-LOBBY
             </Badge>
@@ -826,11 +822,7 @@ export default function PreLobbyPage() {
                   </div>
                   <span className="text-muted-foreground/30">·</span>
                   <Badge variant="secondary" className="text-[10px]">{challenge.token}</Badge>
-                  {chainCfg && (
-                    <Badge variant="secondary" className="text-[10px] gap-1">
-                      <span>{chainCfg.icon}</span> {chainCfg.shortName}
-                    </Badge>
-                  )}
+                  
                   {!challenge.isPublic && (
                     <Badge variant="outline" className="text-[10px] gap-1">
                       <Lock className="h-2.5 w-2.5" /> Private

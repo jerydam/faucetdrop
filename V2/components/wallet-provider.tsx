@@ -570,6 +570,18 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
 
   // ── Disconnect ────────────────────────────────────────────────────────────
   const disconnect = useCallback(() => {
+  // ── Revoke external wallet connection if possible ──
+  const raw = rawProviderRef.current
+  if (raw && session?.walletType === "external") {
+    // EIP-1102: some wallets support wallet_revokePermissions
+    raw.request?.({
+      method: "wallet_revokePermissions",
+      params: [{ eth_accounts: {} }],
+    }).catch(() => {
+      // Not all wallets support this — silently ignore
+    })
+  }
+
   forcePrivyLogout()
   clearImportSessionKeys()
   localStorage.removeItem(SESSION_KEY)
@@ -579,8 +591,7 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
   setSigner(null)
   rawProviderRef.current = null
   toast.success("Disconnected")
-}, [forcePrivyLogout])
-
+}, [forcePrivyLogout, session?.walletType])
   // ── Switch chain ──────────────────────────────────────────────────────────
   const switchChain = useCallback(async (targetChainId: number) => {
     const viemChain = supportedChains.find(c => c.id === targetChainId)

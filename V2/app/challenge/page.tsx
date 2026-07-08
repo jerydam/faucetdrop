@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
 import { Header } from "@/components/challengeheader";
 import {
-  Plus, Trophy, Loader2, Gamepad2,
-  RefreshCw, ChevronRight, Zap, Gift, CheckCircle2,
-  AlertCircle,
-} from "lucide-react";
+   Plus, Trophy, Loader2, Gamepad2,
+   RefreshCw, ChevronRight, Zap, Gift, CheckCircle2, AlertCircle, Swords,} from "lucide-react";
 import { toast } from "sonner";
 import Loading from "@/app/loading";
 import { BottomNav } from "@/components/bottom-nav";
@@ -68,22 +66,19 @@ const S = `
   @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   .spin{animation:spin 1s linear infinite}
   .drops-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:800;font-family:'Figtree',sans-serif}
- @keyframes confettiFall {
-    0%   { transform: translateY(-100%) rotate(0deg);   opacity: 1; }
-    100% { transform: translateY(100vh)  rotate(720deg); opacity: 0; }
+  @keyframes confettiFall {
+    0%   { transform: translateY(-10px) rotate(0deg);   opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
   }
   @keyframes popIn {
-    0%   { transform: scale(0.5) translateY(40px); opacity: 0; }
-    70%  { transform: scale(1.05) translateY(-6px); }
+    0%   { transform: scale(0.4) translateY(60px); opacity: 0; }
+    70%  { transform: scale(1.06) translateY(-8px); }
     100% { transform: scale(1) translateY(0);       opacity: 1; }
   }
   @keyframes float {
     0%, 100% { transform: translateY(0px); }
     50%       { transform: translateY(-8px); }
   }
-  .checkin-popup { animation: popIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-  .confetti-piece { position: absolute; width: 10px; height: 10px; animation: confettiFall linear forwards; }
-  .party-icon { animation: float 2s ease-in-out infinite; display: inline-block; }
   @keyframes checkinGlow {
     0%,100% { box-shadow: 0 0 8px 2px rgba(37,99,235,0.4), 0 0 0px rgba(37,99,235,0); border-color: rgba(37,99,235,0.5); }
     50%      { box-shadow: 0 0 18px 6px rgba(37,99,235,0.9), 0 0 32px 8px rgba(99,102,241,0.4); border-color: rgba(99,102,241,0.9); }
@@ -109,15 +104,6 @@ const S = `
   @keyframes shimmer {
     100% { transform: translateX(100%); }
   }
-  @keyframes confettiFall {
-    0%   { transform: translateY(-10px) rotate(0deg);   opacity: 1; }
-    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
-  }
-  @keyframes popIn {
-    0%   { transform: scale(0.4) translateY(60px); opacity: 0; }
-    70%  { transform: scale(1.06) translateY(-8px); }
-    100% { transform: scale(1) translateY(0);       opacity: 1; }
-  }
   @keyframes partyBounce {
     0%,100% { transform: scale(1) rotate(-5deg); }
     25%     { transform: scale(1.2) rotate(5deg); }
@@ -136,6 +122,10 @@ const S = `
     0%   { background-position: -200% center; }
     100% { background-position: 200% center; }
   }
+  @keyframes sheetUp {
+    from { transform: translateY(24px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
   .checkin-popup { animation: popIn 0.55s cubic-bezier(0.34,1.56,0.64,1) forwards; }
   .party-icon { animation: partyBounce 0.6s ease-in-out infinite; display: inline-block; }
   .confetti-piece { position: absolute; animation: confettiFall linear forwards; pointer-events: none; }
@@ -153,7 +143,106 @@ const S = `
     border: 3px solid rgba(99,102,241,0.6);
     animation: ringPulse 1.5s ease-out infinite;
   }
+  .create-sheet { animation: sheetUp 0.25s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+  .create-choice-card { transition: border-color .15s, transform .15s, background .15s; cursor: pointer; }
+  .create-choice-card:hover { border-color: var(--dd-blue); background: var(--dd-blue-bg); }
+  .create-choice-card:active { transform: scale(.97); }
 `;
+
+/** Popup shown when tapping "Create" — choose 1v1 duel vs. solo-vs-bot. */
+function CreateChoiceModal({
+  onPickDuel, onPickSolo, onClose,
+}: { onPickDuel: () => void; onPickSolo: () => void; onClose: () => void }) {
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+        padding: "0", background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="create-sheet dd-page"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 480, borderRadius: "20px 20px 0 0",
+          padding: "14px 20px 28px", border: "1px solid var(--dd-card-border)",
+          borderBottom: "none",
+        }}
+      >
+        <div style={{ width: 36, height: 4, borderRadius: 99, background: "var(--dd-line)", margin: "0 auto 18px" }} />
+        <h2 className="d" style={{ fontSize: 20, fontWeight: 900, color: "var(--dd-text)", textAlign: "center", marginBottom: 2 }}>
+          Start a Challenge
+        </h2>
+        <p style={{ fontSize: 12, color: "var(--dd-text-mute)", textAlign: "center", marginBottom: 18 }}>
+          Pick who you want to face.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+          <button
+            className="create-choice-card"
+            onClick={onPickDuel}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+              padding: "18px 12px", borderRadius: 16,
+              border: "1.5px solid var(--dd-card-border)", background: "var(--dd-surface)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{
+              width: 44, height: 44, borderRadius: 12, background: "var(--dd-blue-bg)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Zap size={20} style={{ color: "var(--dd-blue)" }} />
+            </div>
+            <div>
+              <p className="d" style={{ fontSize: 15, fontWeight: 900, color: "var(--dd-text)" }}>Duel a Player</p>
+              <p style={{ fontSize: 10.5, color: "var(--dd-text-mute)", marginTop: 3, lineHeight: 1.4 }}>
+                Public or invite-only stake match
+              </p>
+            </div>
+          </button>
+
+          <button
+            className="create-choice-card"
+            onClick={onPickSolo}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+              padding: "18px 12px", borderRadius: 16,
+              border: "1.5px solid var(--dd-card-border)", background: "var(--dd-surface)",
+              textAlign: "center",
+            }}
+          >
+            <div style={{
+              width: 44, height: 44, borderRadius: 12, background: "var(--dd-blue-bg)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Swords size={20} style={{ color: "var(--dd-blue)" }} />
+            </div>
+            <div>
+              <p className="d" style={{ fontSize: 15, fontWeight: 900, color: "var(--dd-text)" }}>Play Solo</p>
+              <p style={{ fontSize: 10.5, color: "var(--dd-text-mute)", marginTop: 3, lineHeight: 1.4 }}>
+                Face a bot at your difficulty
+              </p>
+            </div>
+          </button>
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%", height: 38, borderRadius: 10, border: "none", background: "transparent",
+            color: "var(--dd-text-mute)", fontWeight: 700, fontSize: 12, cursor: "pointer",
+            fontFamily: "'Figtree',sans-serif",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function QuizListPage() {
   const router = useRouter();
@@ -169,6 +258,7 @@ export default function QuizListPage() {
   const [navigating, setNavigating] = useState<string | null>(null);
   const [showFullModal, setShowFullModal] = useState(false);
   const [showWelcomePopup, setShowWelcomePopup] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // ── Register / DROPS state ────────────────────────────────────────────────
   const [dropsBalance, setDropsBalance] = useState<DropsBalance | null>(null);
@@ -574,15 +664,11 @@ useEffect(() => {
               border: "1.5px solid var(--dd-card-border)", background: "var(--dd-surface)",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                
-                
-      
                   <p style={{ fontSize: 15, fontWeight: 900, color: "var(--dd-text)", fontFamily: "'Big Shoulders Display',sans-serif" }}>
                     {fmt(dropsBalance.gameDrops)} <span style={{ fontSize: 11, fontWeight: 700, color: "var(--dd-text-mute)" }}>game</span>
                     {" · "}
                     {fmt(dropsBalance.rewardDrops)} <span style={{ fontSize: 11, fontWeight: 700, color: "var(--dd-text-mute)" }}>reward</span>
                   </p>
-                  
               </div>
 
               {/* ── Action buttons + tier ── */}
@@ -599,7 +685,6 @@ useEffect(() => {
                   {chainId === BOTCHAIN_CHAIN_ID ? "Redeem $BOT" : "Redeem $G"}
                 </button>
                 <button
-                  
                   onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge&subtab=buy-drop`)}
                   style={{
                     fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
@@ -660,12 +745,13 @@ useEffect(() => {
           <div style={{ display: "flex", gap: 10 }}>
   <button
     className="btn-blue"
-    onClick={() => router.push("/challenge/create-challenge")}
+    onClick={() => setShowCreateModal(true)}
     style={{ flex: 1, height: 48, borderRadius: 12, fontSize: 14 }}
   >
     <Plus size={16} />
     <span style={{ display: "inline" }} className="btn-label">Create</span>
   </button>
+  
   <button
     className="btn-ghost"
     onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge`)}
@@ -751,7 +837,7 @@ useEffect(() => {
                     <Gamepad2 size={40} style={{ color: "var(--dd-text-mute)" }} />
                     <p className="d" style={{ fontSize: 18, fontWeight: 900, color: "var(--dd-text-dim)" }}>No active duels</p>
                     <p style={{ fontSize: 13, color: "var(--dd-text-mute)" }}>Be first to create a public challenge.</p>
-                    <button className="btn-blue" onClick={() => router.push("/challenge/create-challenge")} style={{ padding: "11px 24px", borderRadius: 10, fontSize: 13, marginTop: 4 }}>
+                    <button className="btn-blue" onClick={() => setShowCreateModal(true)} style={{ padding: "11px 24px", borderRadius: 10, fontSize: 13, marginTop: 4 }}>
                       Start Duel
                     </button>
                   </div>
@@ -865,6 +951,16 @@ useEffect(() => {
           )}
         </div>
       </div>
+
+      {/* ── Create-choice popup ─────────────────────────────────────────── */}
+      {showCreateModal && (
+        <CreateChoiceModal
+          onPickDuel={() => { setShowCreateModal(false); router.push("/challenge/create-challenge"); }}
+          onPickSolo={() => { setShowCreateModal(false); router.push("/challenge/create-single-challenge"); }}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
+
       {/* ── Check-in Success Modal ──────────────────────────────────────── */}
       {showCheckinSuccess && (
         <div
@@ -984,7 +1080,7 @@ useEffect(() => {
             {/* CTAs */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <button
-                onClick={() => { closeCheckinPopup(); router.push("/challenge/create-challenge"); }}
+                onClick={() => { closeCheckinPopup(); setShowCreateModal(true); }}
                 style={{
                   height: 50, borderRadius: 14, border: "none",
                   background: "linear-gradient(135deg,#fff,#e0e7ff)",
@@ -1131,7 +1227,7 @@ useEffect(() => {
       {/* CTAs */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <button
-          onClick={() => { closeWelcomePopup(); router.push("/challenge/create-challenge"); }}
+          onClick={() => { closeWelcomePopup(); setShowCreateModal(true); }}
           style={{
             height: 50, borderRadius: 14, border: "none",
             background: "linear-gradient(135deg,#fff,#d1fae5)",

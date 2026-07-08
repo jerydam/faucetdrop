@@ -719,10 +719,10 @@ useEffect(() => {
                 </button>
                 <button
                   onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge&subtab=buy-drop`)}
-                  className={dropsBalance.gameDrops < 50 ? "danger-btn-glow" : ""}
+                  className={dropsBalance.gameDrops <= 50 ? "danger-btn-glow" : ""}
                   style={{
                     fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
-                    ...(dropsBalance.gameDrops < 50
+                    ...(dropsBalance.gameDrops <= 50
                       ? {}
                       : {
                           background: "var(--dd-surface)",
@@ -734,7 +734,7 @@ useEffect(() => {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {dropsBalance.gameDrops < 50
+                  {dropsBalance.gameDrops <= 50
                     ? (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                         <span style={{ fontSize: 12 }}>⚠️</span>

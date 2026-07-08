@@ -319,7 +319,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     { key: "redeem",   label: "Redeem"   },
     { key: "pools",    label: "Pools"    },
     { key: "history",  label: "History"  },
-    { key: "buy",      label: "Buy Drop" },
+    { key: "buy",      label: "Buy Drops" },
     ...(adminMode ? [{ key: "admin" as InnerTab, label: "Admin" }] : []),
   ];
 

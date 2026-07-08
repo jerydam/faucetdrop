@@ -583,82 +583,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
   // HANDLERS
   // ──────────────────────────────────────────────────────────────────────────
 
-  // ── Update Faucet Name ─────────────────────────────────────────────────────
-  const handleUpdateFaucetName = async () => {
-    if (!address || !newFaucetName.trim() || !checkNetwork()) return;
 
-    try {
-      setIsUpdatingName(true);
-
-      if (onSolana) {
-        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
-        const conn = createSolanaConnection();
-        await solanaUpdateFaucetName(conn, activeSolanaWallet, faucetAddress, newFaucetName);
-      } else {
-        if (!chainId) { toast.error("No chain selected"); return; }
-        await updateFaucetName(
-          faucetAddress,
-          newFaucetName,
-          BigInt(chainId),
-          BigInt(Number(selectedNetwork.chainId)),
-          faucetType || undefined
-        );
-      }
-
-      toast.success("Faucet name updated");
-      setShowEditNameDialog(false);
-      await loadFaucetDetails();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update faucet name");
-    } finally {
-      setIsUpdatingName(false);
-    }
-  };
-
-  // ── Delete Faucet ──────────────────────────────────────────────────────────
-  const handleDeleteFaucet = async () => {
-    if (!address || !checkNetwork()) return;
-
-    try {
-      setIsDeletingFaucet(true);
-
-      if (onSolana) {
-        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
-        const conn = createSolanaConnection();
-        await solanaDeleteFaucet(conn, activeSolanaWallet, faucetAddress);
-      } else {
-        if (!chainId) { toast.error("No chain selected"); return; }
-        await deleteFaucet(
-          
-          faucetAddress,
-          BigInt(chainId),
-          BigInt(Number(selectedNetwork.chainId)),
-          faucetType || undefined
-        );
-      }
-
-      // Always clean up backend metadata
-      try {
-        await fetch("https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/delete-faucet-metadata", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            faucetAddress,
-            userAddress: address,
-            chainId: onSolana ? SOLANA_CHAIN_ID : Number(chainId),
-          }),
-        });
-      } catch {}
-
-      toast.success("Faucet deleted successfully");
-      setShowDeleteDialog(false);
-      router.push("/");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete faucet");
-    } finally {
-      setIsDeletingFaucet(false);
-    }
-  };
 
   // ── Fund ───────────────────────────────────────────────────────────────────
   const handleFund = async () => {
@@ -667,41 +592,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     setShowFundPopup(true);
   };
 
-  const confirmFund = async () => {
-    if (!address || !adjustedFundAmount) return;
-
-    try {
-      setIsFunding(true);
-
-      if (onSolana) {
-        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
-        const conn = createSolanaConnection();
-        const amount = toSolanaUnits(adjustedFundAmount, tokenDecimals);
-        await solanaFundFaucet(conn, activeSolanaWallet, faucetAddress, amount);
-      } else {
-      if (!chainId) { toast.error("No chain selected"); return; }
-      const amount = parseUnits(adjustedFundAmount, tokenDecimals);
-      await fundFaucet(
-          faucetAddress,
-          amount,
-          faucetDetails.isEther,
-          BigInt(chainId),
-          BigInt(Number(selectedNetwork.chainId)),
-          faucetType || undefined
-        );
-      }
-
-      toast.success("Faucet funded successfully");
-      setFundAmount("");
-      setShowFundPopup(false);
-      await loadFaucetDetails();
-      await loadTransactionHistory();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to fund faucet");
-    } finally {
-      setIsFunding(false);
-    }
-  };
+  
 
   // ── Withdraw ───────────────────────────────────────────────────────────────
   const handleWithdraw = async () => {
@@ -1036,65 +927,208 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
     setIsAddingAdmin(!adminList.some((a) => a.toLowerCase() === inputAddress.toLowerCase()));
   };
 
-  const handleManageAdmin = async () => {
-    if (!address || !newAdminAddress.trim() || !checkNetwork()) return;
-    if (
-      newAdminAddress.toLowerCase() === faucetDetails?.owner.toLowerCase() ||
-      (!onSolana && newAdminAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase())
-    ) {
-      toast.error("Cannot add/remove the owner as admin");
+// ── Fund ───────────────────────────────────────────────────────────────────
+const confirmFund = async () => {
+  if (!address || !adjustedFundAmount) return;
+
+  // Close the dialog BEFORE requesting the signer so the PIN modal isn't buried underneath it
+  setShowFundPopup(false);
+
+  try {
+    setIsFunding(true);
+
+    if (onSolana) {
+      if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+      const conn = createSolanaConnection();
+      const amount = toSolanaUnits(adjustedFundAmount, tokenDecimals);
+      await solanaFundFaucet(conn, activeSolanaWallet, faucetAddress, amount);
+    } else {
+      if (!chainId) { toast.error("No chain selected"); return; }
+      const amount = parseUnits(adjustedFundAmount, tokenDecimals);
+      await fundFaucet(
+        faucetAddress,
+        amount,
+        faucetDetails.isEther,
+        BigInt(chainId),
+        BigInt(Number(selectedNetwork.chainId)),
+        faucetType || undefined
+      );
+    }
+
+    toast.success("Faucet funded successfully");
+    setFundAmount("");
+    await loadFaucetDetails();
+    await loadTransactionHistory();
+  } catch (err: any) {
+    if (err?.message === "cancelled" || err?.message?.includes("cancelled")) {
+      setShowFundPopup(true);
+      setIsFunding(false);
       return;
     }
+    toast.error(err.message || "Failed to fund faucet");
+    setShowFundPopup(true);
+  } finally {
+    setIsFunding(false);
+  }
+};
 
-    try {
-      setIsManagingAdmin(true);
+// ── Update Faucet Name ─────────────────────────────────────────────────────
+const handleUpdateFaucetName = async () => {
+  if (!address || !newFaucetName.trim() || !checkNetwork()) return;
 
-      if (onSolana) {
-        if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
-        const conn = createSolanaConnection();
+  // Close the dialog BEFORE requesting the signer so the PIN modal isn't buried underneath it
+  setShowEditNameDialog(false);
 
-        if (isAddingAdmin) {
-          await solanaAddFaucetAdmin(conn, activeSolanaWallet, faucetAddress, newAdminAddress);
-          toast.success(`${newAdminAddress} added as admin`);
-        } else {
-          await solanaRemoveFaucetAdmin(conn, activeSolanaWallet, faucetAddress, newAdminAddress);
-          toast.success(`${newAdminAddress} removed from admins`);
-        }
-      } else {
-        if (!chainId) { toast.error("No chain selected"); return; }
-        if (isAddingAdmin) {
-          await addAdmin(
-            
-            faucetAddress,
-            newAdminAddress,
-            BigInt(chainId),
-            BigInt(Number(selectedNetwork.chainId)),
-            faucetType || undefined
-          );
-          toast.success(`${newAdminAddress} added as admin`);
-        } else {
-          await removeAdmin(
-            
-            faucetAddress,
-            newAdminAddress,
-            BigInt(chainId),
-            BigInt(Number(selectedNetwork.chainId)),
-            faucetType || undefined
-          );
-          toast.success(`${newAdminAddress} removed from admins`);
-        }
-      }
+  try {
+    setIsUpdatingName(true);
 
-      setNewAdminAddress("");
-      setShowAddAdminDialog(false);
-      await loadFaucetDetails();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to manage admin");
-    } finally {
-      setIsManagingAdmin(false);
+    if (onSolana) {
+      if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+      const conn = createSolanaConnection();
+      await solanaUpdateFaucetName(conn, activeSolanaWallet, faucetAddress, newFaucetName);
+    } else {
+      if (!chainId) { toast.error("No chain selected"); return; }
+      await updateFaucetName(
+        faucetAddress,
+        newFaucetName,
+        BigInt(chainId),
+        BigInt(Number(selectedNetwork.chainId)),
+        faucetType || undefined
+      );
     }
-  };
 
+    toast.success("Faucet name updated");
+    await loadFaucetDetails();
+  } catch (err: any) {
+    if (err?.message === "cancelled" || err?.message?.includes("cancelled")) {
+      setShowEditNameDialog(true);
+      setIsUpdatingName(false);
+      return;
+    }
+    toast.error(err.message || "Failed to update faucet name");
+    setShowEditNameDialog(true);
+  } finally {
+    setIsUpdatingName(false);
+  }
+};
+
+// ── Delete Faucet ──────────────────────────────────────────────────────────
+const handleDeleteFaucet = async () => {
+  if (!address || !checkNetwork()) return;
+
+  // Close the dialog BEFORE requesting the signer so the PIN modal isn't buried underneath it
+  setShowDeleteDialog(false);
+
+  try {
+    setIsDeletingFaucet(true);
+
+    if (onSolana) {
+      if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+      const conn = createSolanaConnection();
+      await solanaDeleteFaucet(conn, activeSolanaWallet, faucetAddress);
+    } else {
+      if (!chainId) { toast.error("No chain selected"); return; }
+      await deleteFaucet(
+        faucetAddress,
+        BigInt(chainId),
+        BigInt(Number(selectedNetwork.chainId)),
+        faucetType || undefined
+      );
+    }
+
+    // Always clean up backend metadata
+    try {
+      await fetch("https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/delete-faucet-metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          faucetAddress,
+          userAddress: address,
+          chainId: onSolana ? SOLANA_CHAIN_ID : Number(chainId),
+        }),
+      });
+    } catch {}
+
+    toast.success("Faucet deleted successfully");
+    router.push("/");
+  } catch (err: any) {
+    if (err?.message === "cancelled" || err?.message?.includes("cancelled")) {
+      setShowDeleteDialog(true);
+      setIsDeletingFaucet(false);
+      return;
+    }
+    toast.error(err.message || "Failed to delete faucet");
+    setShowDeleteDialog(true);
+  } finally {
+    setIsDeletingFaucet(false);
+  }
+};
+
+// ── Admin Management ───────────────────────────────────────────────────────
+const handleManageAdmin = async () => {
+  if (!address || !newAdminAddress.trim() || !checkNetwork()) return;
+  if (
+    newAdminAddress.toLowerCase() === faucetDetails?.owner.toLowerCase() ||
+    (!onSolana && newAdminAddress.toLowerCase() === FACTORY_OWNER_ADDRESS.toLowerCase())
+  ) {
+    toast.error("Cannot add/remove the owner as admin");
+    return;
+  }
+
+  // Close the dialog BEFORE requesting the signer so the PIN modal isn't buried underneath it
+  setShowAddAdminDialog(false);
+
+  try {
+    setIsManagingAdmin(true);
+
+    if (onSolana) {
+      if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
+      const conn = createSolanaConnection();
+
+      if (isAddingAdmin) {
+        await solanaAddFaucetAdmin(conn, activeSolanaWallet, faucetAddress, newAdminAddress);
+        toast.success(`${newAdminAddress} added as admin`);
+      } else {
+        await solanaRemoveFaucetAdmin(conn, activeSolanaWallet, faucetAddress, newAdminAddress);
+        toast.success(`${newAdminAddress} removed from admins`);
+      }
+    } else {
+      if (!chainId) { toast.error("No chain selected"); return; }
+      if (isAddingAdmin) {
+        await addAdmin(
+          faucetAddress,
+          newAdminAddress,
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+        toast.success(`${newAdminAddress} added as admin`);
+      } else {
+        await removeAdmin(
+          faucetAddress,
+          newAdminAddress,
+          BigInt(chainId),
+          BigInt(Number(selectedNetwork.chainId)),
+          faucetType || undefined
+        );
+        toast.success(`${newAdminAddress} removed from admins`);
+      }
+    }
+
+    setNewAdminAddress("");
+    await loadFaucetDetails();
+  } catch (err: any) {
+    if (err?.message === "cancelled" || err?.message?.includes("cancelled")) {
+      setShowAddAdminDialog(true);
+      setIsManagingAdmin(false);
+      return;
+    }
+    toast.error(err.message || "Failed to manage admin");
+    setShowAddAdminDialog(true);
+  } finally {
+    setIsManagingAdmin(false);
+  }
+};
   // ── Secret Code ────────────────────────────────────────────────────────────
   const handleRetrieveSecretCode = async () => {
     if (faucetType !== "dropcode" || !faucetAddress || !address) return;

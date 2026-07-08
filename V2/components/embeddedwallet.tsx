@@ -358,7 +358,6 @@ const handleSend = async () => {
     toast({ title: "Please fill all fields", variant: "destructive" })
     return
   }
-
   if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
     toast({ title: "Invalid recipient address", variant: "destructive" })
     return
@@ -367,30 +366,29 @@ const handleSend = async () => {
   setSending(true)
   setTxHash("")
 
+  // Close dialog BEFORE requesting signer so PIN modal isn't buried
+  setOpen(false)
+
   try {
-    // ── Get signer — works for both embedded (PIN modal) and external ──
     const activeSigner = await getActiveSigner(chainId ?? undefined)
-    if (!activeSigner) throw new Error("No signer available — wallet not connected")
+    if (!activeSigner) {
+      toast({ title: "No signer available", variant: "destructive" })
+      setOpen(true)
+      setSending(false)
+      return
+    }
 
     const { ethers } = await import("ethers")
     const amountWei = ethers.parseUnits(amount, selectedToken.decimals)
     let hash = ""
 
     if (selectedToken.isNative) {
-      const tx = await activeSigner.sendTransaction({
-        to:    recipient,
-        value: amountWei,
-      })
+      const tx = await activeSigner.sendTransaction({ to: recipient, value: amountWei })
       hash = tx.hash
-
     } else {
-      // Use ethers Contract — cleaner than raw viem calldata on an ethers signer
       const erc20 = new ethers.Contract(
         selectedToken.address,
-        [
-          "function transfer(address to, uint256 amount) returns (bool)",
-          "function balanceOf(address) view returns (uint256)",
-        ],
+        ["function transfer(address to, uint256 amount) returns (bool)"],
         activeSigner,
       )
       const tx = await erc20.transfer(recipient, amountWei)
@@ -398,25 +396,21 @@ const handleSend = async () => {
     }
 
     setTxHash(hash)
-    toast({
-      title:       "Transaction sent!",
-      description: `${amount} ${selectedToken.symbol} sent successfully`,
-    })
+    toast({ title: "Transaction sent!", description: `${amount} ${selectedToken.symbol} sent` })
     setRecipient("")
     setAmount("")
+    setOpen(true)
     setTimeout(fetchBalances, 3000)
 
   } catch (err: any) {
-    console.error("Send error:", err)
-
-    // PIN cancelled — don't show error toast, just silently abort
     if (err?.message === "cancelled" || err?.message?.includes("cancelled")) {
+      setOpen(true)
       setSending(false)
       return
     }
-
     const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Please try again"
     toast({ title: "Transaction failed", description: msg, variant: "destructive" })
+    setOpen(true)
   } finally {
     setSending(false)
   }

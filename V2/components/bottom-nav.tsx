@@ -1,21 +1,20 @@
 "use client";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { Home, Trophy, User, Gavel, Swords, X } from "lucide-react";
+import { Home, Trophy, User, Swords } from "lucide-react";
 import { useWallet } from "@/components/wallet-provider";
 
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+const API_BASE_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 const tabs = [
   { id: "home",    label: "Home",    icon: Home,   href: "/" },
   { id: "ranks",   label: "Ranks",   icon: Trophy, href: "/rank" },
-  { id: "profile", label: "Profile", icon: User,   href: "/dashboard" }, 
+  { id: "profile", label: "Profile", icon: User,   href: "/dashboard" },
 ];
 
 export function BottomNav() {
   const router   = useRouter();
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
 
   const { address, isConnected } = useWallet();
   const [dbUsername, setDbUsername] = useState<string | null>(null);
@@ -55,14 +54,16 @@ export function BottomNav() {
   if (isGamePage) return null;
 
   const profileHref = dbUsername
-  ? `/dashboard/${dbUsername}?tab=challenge`
-  : address
-  ? `/dashboard/${address.toLowerCase()}?tab=challenge`
-  : "/dashboard";
+    ? `/dashboard/${dbUsername}`
+    : address
+    ? `/dashboard/${address.toLowerCase()}`
+    : "/dashboard";
 
- const resolvedTabs = tabs.map(t =>
-  t.id === "profile" ? { ...t, href: profileHref } : t
-);
+  const resolvedTabs = tabs.map(t =>
+    t.id === "profile" ? { ...t, href: profileHref } : t
+  );
+
+  const isDuelActive = pathname.startsWith("/challenge");
 
   return (
     <nav
@@ -85,50 +86,15 @@ export function BottomNav() {
         </button>
       ))}
 
-      {/* Play button — Second position */}
-      <div className="relative flex flex-col items-center">
-        {open && (
-          <div
-            className="absolute bottom-[52px] left-1/2 -translate-x-1/2 rounded-2xl overflow-hidden"
-            style={{
-              background: "var(--dd-bg)",
-              border:     "1px solid var(--dd-line)",
-              minWidth:   160,
-              boxShadow:  "0 8px 32px rgba(0,0,0,0.18)",
-            }}
-          >
-            <button
-              onClick={() => { router.push("/challenge"); setOpen(false); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold transition-colors"
-              style={{ color: "var(--dd-text)" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--dd-line)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-            >
-              <Gavel size={16} color="var(--dd-blue)" /> 1v1 Duel
-            </button>
-            <div style={{ height: 1, background: "var(--dd-line)", margin: "0 12px" }} />
-            <button
-              onClick={() => { router.push("/quiz"); setOpen(false); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-bold transition-colors"
-              style={{ color: "var(--dd-text)" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--dd-line)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-            >
-              <Trophy size={16} color="var(--dd-blue)" /> Tournament
-            </button>
-          </div>
-        )}
-        <button
-          onClick={() => setOpen(o => !o)}
-          className="flex items-center justify-center px-3 py-1"
-          style={{ background: "none", border: "none", color: open ? "var(--dd-blue)" : "var(--dd-dim)" }}
-        >
-          {open ? <X size={22} strokeWidth={1.8} /> : <Swords size={22} strokeWidth={1.8} />}
-        </button>
-        <span style={{ fontSize: 11, fontWeight: 500, color: open ? "var(--dd-blue)" : "var(--dd-dim)" }}>
-          Play
-        </span>
-      </div>
+      {/* Duel button — Second position */}
+      <button
+        onClick={() => router.push("/challenge")}
+        className="flex flex-col items-center gap-1 px-3 py-1"
+        style={{ color: isDuelActive ? "var(--dd-blue)" : "var(--dd-dim)" }}
+      >
+        <Swords size={22} strokeWidth={1.8} />
+        <span style={{ fontSize: 11, fontWeight: 500 }}>Duel</span>
+      </button>
 
       {/* Right tabs: Ranks, Profile */}
       {resolvedTabs.slice(1).map(t => (

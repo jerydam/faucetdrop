@@ -13,6 +13,9 @@ import { BottomNav } from "@/components/bottom-nav";
 import { ethers } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
 import { getChainConfig, CELO_CHAIN_ID, BOTCHAIN_CHAIN_ID, isSupportedChain,getEnabledChains,ensureChainNetwork } from "@/lib/chain";
+import { useProfileRoute } from "@/hooks/use-profile-route";
+
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 interface LobbyChallenge {
@@ -279,7 +282,8 @@ function CreateChoiceModal({
 
 export default function QuizListPage() {
   const router = useRouter();
-  const { address: userWalletAddress, getActiveSigner,chainId, ensureCorrectNetwork } = useWallet();
+  const { address: userWalletAddress, getActiveSigner, chainId, ensureCorrectNetwork } = useWallet();
+  const { profileHref, buildProfileHref } = useProfileRoute();
   const isUnsupported = !!chainId && !isSupportedChain(chainId);
   const [tab, setTab] = useState<"lobby" | "history">("lobby");
   const [lobbyChallenges, setLobbyChallenges] = useState<LobbyChallenge[]>([]);
@@ -707,7 +711,7 @@ useEffect(() => {
               {/* ── Action buttons + tier ── */}
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <button
-                  onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge&subtab=redeem`)}
+                  onClick={() => router.push(buildProfileHref({ tab: "challenge", subtab: "redeem" }))}
                   style={{
                     fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
                     background: "var(--dd-surface)", color: "var(--dd-text)",
@@ -718,7 +722,7 @@ useEffect(() => {
                   {chainId === BOTCHAIN_CHAIN_ID ? "Redeem $BOT" : "Redeem $G"}
                 </button>
                 <button
-                  onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge&subtab=buy-drop`)}
+                  onClick={() => router.push(buildProfileHref({ tab: "challenge", subtab: "buy-drop" }))}
                   className={dropsBalance.gameDrops <= 50 ? "danger-btn-glow" : ""}
                   style={{
                     fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
@@ -804,7 +808,7 @@ useEffect(() => {
   
   <button
     className="btn-ghost"
-    onClick={() => router.push(`/dashboard/${userWalletAddress}?tab=challenge`)}
+    onClick={() => router.push(buildProfileHref({ tab: "challenge" }))}
     style={{ height: 48, padding: "0 16px", borderRadius: 12, fontSize: 13, flexShrink: 0 }}
   >
     <Trophy size={15} />

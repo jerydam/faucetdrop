@@ -1,8 +1,7 @@
 "use client";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
 import { Home, Trophy, User, Swords } from "lucide-react";
-import { useWallet } from "@/components/wallet-provider";
+import { useProfileRoute } from "@/hooks/use-profile-route";
 
 const API_BASE_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
@@ -15,49 +14,17 @@ const tabs = [
 export function BottomNav() {
   const router   = useRouter();
   const pathname = usePathname();
-
-  const { address, isConnected } = useWallet();
-  const [dbUsername, setDbUsername] = useState<string | null>(null);
-  const hasFetchedRef = useRef(false);
-
+  const { profileHref } = useProfileRoute();
+ 
   // ── Hide nav on active challenge/lobby/game pages ──────────────────────────
   // Pattern: /challenge/SOMECODE  or  /challenge/SOMECODE/pre-lobby
   // Keep nav on: /challenge (hub list), /challenge/create, /challenge/create-quiz
   const isGamePage = /^\/challenge\/[A-Z0-9]{5,}(\/|$)/i.test(pathname);
-
-  useEffect(() => {
-    if (!isConnected || !address) {
-      setDbUsername(null);
-      hasFetchedRef.current = false;
-      return;
-    }
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
-    fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}`)
-      .then(r => r.json())
-      .then(data => {
-        const username = data.profile?.username;
-        if (username && username !== "Dropee") setDbUsername(username);
-      })
-      .catch(() => {});
-  }, [address, isConnected]);
-
-  useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      if (e.detail?.username) setDbUsername(e.detail.username);
-    };
-    window.addEventListener("profileUpdated" as any, handler);
-    return () => window.removeEventListener("profileUpdated" as any, handler);
-  }, []);
-
+ 
   // Don't render nav during game/lobby/pre-lobby
+  // (hook is called above this early return — keep it that way for React rules)
   if (isGamePage) return null;
-
-  const profileHref = dbUsername
-    ? `/dashboard/${dbUsername}`
-    : address
-    ? `/dashboard/${address.toLowerCase()}`
-    : "/dashboard";
+ 
 
   const resolvedTabs = tabs.map(t =>
     t.id === "profile" ? { ...t, href: profileHref } : t

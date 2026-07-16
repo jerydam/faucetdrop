@@ -82,6 +82,9 @@ interface DropsBalance {
   totalDuels: number;
   gamesUntilBadge: number;
   maxStake: number | null;
+  redeemBadge: boolean;
+  qualifyingDuels: number;
+  gamesUntilRedeemBadge: number;
 }
 
 interface ChallengeDashboardTabProps {
@@ -593,7 +596,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
 
   const canRedeem =
     !redeemLoading &&
-    !!balance?.rematchBadge &&
+    !!balance?.redeemBadge &&
     !!gPriceUsd &&
     !gPriceLoading &&
     parseFloat(redeemAmount) > 0 &&
@@ -792,8 +795,12 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
       return;
     }
 
-    if (!balance?.rematchBadge) {
-      toast({ title: "Rematch badge required", variant: "destructive" });
+    if (!balance?.redeemBadge) {
+      toast({
+        title: "Redeem Badge required",
+        description: `Play ${balance?.gamesUntilRedeemBadge ?? 10} more qualifying game(s) — 1v1 duels or solo vs Downpour/Torrent/Flood.`,
+        variant: "destructive",
+      });
       return;
     }
     if (drops > (balance?.rewardDrops ?? 0)) {
@@ -1084,11 +1091,12 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
           )}
 
           {balance && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {[
                 { label: "Total Duels", value: balance.totalDuels, icon: BarChart3 },
                 { label: "Rematch Badge", value: balance.rematchBadge ? "✅" : `${balance.gamesUntilBadge} left`, icon: Trophy },
-                { label: "Max Stake", value: balance.maxStake ? `${balance.maxStake} DROPS` : "Unlimited", icon: Coins },
+                { label: "Redeem Badge", value: balance.redeemBadge ? "✅" : `${balance.gamesUntilRedeemBadge} left`, icon: Coins },
+                { label: "Max Stake", value: balance.maxStake ? `${balance.maxStake} DROPS` : "Unlimited", icon: Zap },
               ].map(({ label, value, icon: Icon }) => (
                 <div key={label} className="bg-muted/40 rounded-xl p-3 border border-border text-center">
                   <Icon className="h-4 w-4 text-muted-foreground mx-auto mb-1" />
@@ -1118,14 +1126,25 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
             </Button>
           )}
 
-          {balance && !balance.rematchBadge && (
+          {balance && (!balance.rematchBadge || !balance.redeemBadge) && (
             <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
               <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-bold text-amber-700 dark:text-amber-400">Pre-Badge Restrictions</p>
-                <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
-                  Play {balance.gamesUntilBadge} more game{balance.gamesUntilBadge !== 1 ? "s" : ""} to unlock the Rematch Badge.
-                </p>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-amber-700 dark:text-amber-400">Badge Progress</p>
+                {!balance.rematchBadge && (
+                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                    🏆 Rematch Badge: play {balance.gamesUntilBadge} more
+                    game{balance.gamesUntilBadge !== 1 ? "s" : ""} (any mode) — unlocks
+                    rematches, custom stakes &amp; negotiation.
+                  </p>
+                )}
+                {!balance.redeemBadge && (
+                  <p className="text-xs text-amber-600 dark:text-amber-500">
+                    💎 Redeem Badge: play {balance.gamesUntilRedeemBadge} more qualifying
+                    game{balance.gamesUntilRedeemBadge !== 1 ? "s" : ""} (1v1, or solo vs
+                    Downpour/Torrent/Flood) — unlocks all redeem pool actions.
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -1161,11 +1180,13 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
               </div>
 
               {/* Badge gate */}
-              {balance && !balance.rematchBadge && (
+              {balance && !balance.redeemBadge && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/50">
                   <Lock className="h-4 w-4 text-red-500 shrink-0" />
                   <p className="text-xs text-red-600 dark:text-red-400">
-                    Play 10 games before redeeming. {balance.gamesUntilBadge} remaining.
+                    Redeem Badge required — play {balance.gamesUntilRedeemBadge} more
+                    qualifying game{balance.gamesUntilRedeemBadge !== 1 ? "s" : ""} (1v1
+                    duels, or solo vs Downpour/Torrent/Flood).
                   </p>
                 </div>
               )}
@@ -1224,13 +1245,13 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                     placeholder="0"
                     min={1}
                     className="flex-1 font-mono font-bold text-lg h-12"
-                    disabled={!balance?.rematchBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
+                    disabled={!balance?.redeemBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
                   />
                   <Button
                     variant="outline" size="sm"
                     className="h-12 px-3 text-xs font-bold"
                     onClick={() => setRedeemAmount(String(Math.floor(balance?.rewardDrops ?? 0)))}
-                    disabled={!balance?.rematchBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
+                    disabled={!balance?.redeemBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
                   >
                     MAX
                   </Button>
@@ -1250,7 +1271,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                 {[10, 25, 50, 100].filter(v => (balance?.rewardDrops ?? 0) >= v).map(v => (
                   <button
                     key={v} onClick={() => setRedeemAmount(String(v))}
-                    disabled={!balance?.rematchBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
+                    disabled={!balance?.redeemBadge || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
                     className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all ${parseFloat(redeemAmount) === v ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"} disabled:opacity-40`}
                   >
                     {v}
@@ -1934,7 +1955,8 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
                           className="w-full"
                           size="sm"
                           onClick={() => handleClaimStake(stake.id)}
-                          disabled={isClaiming || !DROPS_REDEEM_POOL_ADDRESS}
+                          disabled={isClaiming || !DROPS_REDEEM_POOL_ADDRESS || !balance?.redeemBadge}
+                          title={!balance?.redeemBadge ? "Redeem Badge required to claim stakes" : undefined}
                         >
                           {isClaiming
                             ? <><Loader2 className="h-3 w-3 mr-2 animate-spin" /> Claiming…</>

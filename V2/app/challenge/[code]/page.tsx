@@ -49,7 +49,8 @@ function getWsBaseUrl(): string {
 
 const DROPS_DECIMALS = 18;
 const DROPS_SYMBOL   = "DROPS";
-const BADGE_THRESHOLD = 10;
+const BADGE_THRESHOLD = 10;          // Rematch Badge — any 10 games
+const REDEEM_BADGE_THRESHOLD = 10;   // Redeem Badge — 10 qualifying games
 const STALE_WINDOW_SECONDS = 5 * 3600; // 5 hours — must match backend
 
 const DROPS_REDEEM_ABI = [
@@ -80,6 +81,7 @@ interface PlayerState {
   avatarUrl:     string;
 }
 interface BadgeUnlockedPopupProps {
+  badge: "rematch" | "redeem";
   onDismiss: () => void;
 }
 interface QuizOption      { id: string; text: string }
@@ -136,16 +138,17 @@ function Confetti({ active }: { active: boolean }) {
 // ── Passive expiry countdown (NO backend calls until expired) ─────────────────
 // createdAt is a unix timestamp (seconds). We just count down locally.
 // Only when it hits zero do we call the backend to confirm + cancel.
-function BadgeUnlockedPopup({ onDismiss }: BadgeUnlockedPopupProps) {
+function BadgeUnlockedPopup({ badge, onDismiss }: BadgeUnlockedPopupProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
+  const isRedeem = badge === "redeem";
+ 
   useEffect(() => {
     const audio = new Audio("/sounds/winner.mp3");
     audio.loop = true;
     audio.volume = 0.5;
     audio.play().catch(() => {});
     audioRef.current = audio;
-
+ 
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
@@ -154,7 +157,7 @@ function BadgeUnlockedPopup({ onDismiss }: BadgeUnlockedPopupProps) {
       }
     };
   }, []);
-
+ 
   const handleDismiss = () => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -163,30 +166,46 @@ function BadgeUnlockedPopup({ onDismiss }: BadgeUnlockedPopupProps) {
     }
     onDismiss();
   };
-
+ 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
       <div
         className="w-full max-w-sm bg-card border border-border rounded-3xl p-6 text-center space-y-4 shadow-2xl"
         style={{ animation: "badgePopIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)" }}
       >
-        <div className="text-6xl">🏆</div>
+        <div className="text-6xl">{isRedeem ? "💎" : "🏆"}</div>
         <div className="space-y-1">
-          <h2 className="text-xl font-black text-foreground">Rematch Badge Earned!</h2>
+          <h2 className="text-xl font-black text-foreground">
+            {isRedeem ? "Redeem Badge Earned!" : "Rematch Badge Earned!"}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            You've played 10 games and unlocked the Rematch Badge.
+            {isRedeem
+              ? "You've completed 10 qualifying games (1v1 duels or solo vs Downpour, Torrent or Flood)."
+              : "You've played 10 games and unlocked the Rematch Badge."}
           </p>
         </div>
         <div className="bg-primary/10 border border-primary/20 rounded-2xl p-3 space-y-1">
           <p className="text-xs font-bold text-primary">What's unlocked:</p>
           <ul className="text-xs text-muted-foreground space-y-0.5 text-left list-disc list-inside">
-            <li>Request rematches with past opponents</li>
-            <li>Stake above the {10} DROPS limit</li>
-            <li>Redeem Reward DROPS for $G</li>
+            {isRedeem ? (
+              <>
+                <li>Redeem Reward DROPS for $G</li>
+                <li>Claim matured stake pools</li>
+                <li>All redeem pool actions</li>
+              </>
+            ) : (
+              <>
+                <li>Request rematches with past opponents</li>
+                <li>Stake above the 10 DROPS limit</li>
+                <li>Stake negotiation in the pre-lobby</li>
+              </>
+            )}
           </ul>
         </div>
         <p className="text-xs text-muted-foreground">
-          Keep playing to climb tiers and earn higher APY on your DROPS.
+          {isRedeem
+            ? "Head to the Drops dashboard to redeem your Reward Pouch."
+            : "Play 1v1 duels or high-difficulty solo games to earn the Redeem Badge next."}
         </p>
         <Button className="w-full h-11 font-bold" onClick={handleDismiss}>
           Nice! 🎉
@@ -558,6 +577,12 @@ export default function ChallengePage() {
   const expiry = usePassiveExpiry(createdAt, code, phase);
   const [showBadgeUnlocked, setShowBadgeUnlocked] = useState(false);
   const badgeUnlockShownRef = useRef(false);
+  const [showRedeemBadgeUnlocked, setShowRedeemBadgeUnlocked] = useState(false);
+  const redeemBadgeShownRef = useRef(false);
+  // Single-player payout info from the game_over broadcast
+  const [spPayout, setSpPayout] = useState<{
+    payout: number; pouch: string; result: string;
+  } | null>(null);
   // ── Staking state ─────────────────────────────────────────────────────────
   const [isStaking, setIsStaking]           = useState(false);
   const [stakeTxHash, setStakeTxHash]       = useState<string | null>(null);
@@ -745,8 +770,6 @@ useEffect(() => {
       .catch(console.error);
   }, [cameFromPreLobby, agreedStake, userWalletAddress, challenge, code, username]);
 
-  // ── Pending claims + badge data on game over ───────────────────────────────
-  // ── New state, alongside other badge/rematch state ──────────────────────
 
 // ── Pending claims + badge data on game over ───────────────────────────────
 useEffect(() => {
@@ -773,7 +796,21 @@ useEffect(() => {
       }
     })
     .catch(() => {});
-
+      // ── Redeem Badge check (per-chain, from the balance endpoint) ──────
+  fetch(`${API_BASE_URL}/api/drops/balance/${myWallet}?chainId=${challenge?.chainId ?? CELO_CHAIN_ID}`)
+    .then(r => r.json())
+    .then(d => {
+      // Fires only on the game that pushed qualifyingDuels to exactly 10.
+      if (
+        d.redeemBadge &&
+        (d.qualifyingDuels ?? 0) === REDEEM_BADGE_THRESHOLD &&
+        !redeemBadgeShownRef.current
+      ) {
+        redeemBadgeShownRef.current = true;
+        setShowRedeemBadgeUnlocked(true);
+      }
+    })
+    .catch(() => {});
   const opponentW = Object.keys(finalScores).find(w => w.toLowerCase() !== myWallet) ?? null;
   setOpponentWallet(opponentW);
 
@@ -954,6 +991,13 @@ useEffect(() => {
         case "game_over": {
           setFinalScores(msg.finalScores ?? {}); setGameOutcome(msg.outcome);
           setWinner(msg.winner ?? null); setCanRematch(!!msg.canRematch); setPhase("game_over");
+          if (msg.singlePlayer) {
+            setSpPayout({
+              payout: msg.payout ?? 0,
+              pouch:  msg.pouch  ?? "game",
+              result: msg.result ?? msg.outcome,
+            });
+          }
           if (msg.winner === currentMyWallet) { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 6000); }
           break;
         }
@@ -1363,7 +1407,10 @@ const handleStake = useCallback(async () => {
   const globalOverlays = (
     <>
     {showBadgeUnlocked && (
-      <BadgeUnlockedPopup onDismiss={() => setShowBadgeUnlocked(false)} />
+      <BadgeUnlockedPopup badge="rematch" onDismiss={() => setShowBadgeUnlocked(false)} />
+    )}
+    {!showBadgeUnlocked && showRedeemBadgeUnlocked && (
+      <BadgeUnlockedPopup badge="redeem" onDismiss={() => setShowRedeemBadgeUnlocked(false)} />
     )}
       {rematchInvite && (
         <RematchPopup
@@ -1637,7 +1684,24 @@ const handleStake = useCallback(async () => {
                 <span className="text-primary">🏆 {totalPool} {DROPS_SYMBOL} pool</span>
               </div>
             </div>
-
+            {spPayout && spPayout.result !== "loss" && (
+              <div className={cn(
+                "rounded-2xl border p-4 text-center space-y-1",
+                spPayout.pouch === "reward"
+                  ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800"
+                  : "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800",
+              )}>
+                <p className="font-black text-sm text-foreground">
+                  +{spPayout.payout} {DROPS_SYMBOL} → {spPayout.pouch === "reward" ? "Reward Pouch 💎" : "Game Pouch ⚡"}
+                </p>
+                {spPayout.pouch === "reward" && (
+                  <p className="text-xs text-muted-foreground">
+                    High-difficulty wins pay into your Reward Pouch — redeemable
+                    for $G once you've earned the Redeem Badge.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="bg-card rounded-2xl border border-border overflow-hidden">
               <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                 <h2 className="text-sm font-bold text-foreground flex items-center gap-2">

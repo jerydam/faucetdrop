@@ -44,17 +44,18 @@ const TIERS: Tier[] = [
   {
     level: 3, tierName: "Downpour", emoji: "🌧", botUsername: "Downpour 🌧",
     stake: 30, questionCount: 21, accuracy: 63,
-    label: "Hard", description: "More questions, sharper opponent. Stay focused.",
+      label: "Hard", description: "More questions, sharper opponent. Wins pay your Reward Pouch 💎 and count toward the Redeem Badge.",
+
   },
   {
     level: 4, tierName: "Torrent", emoji: "⛈", botUsername: "Torrent ⛈",
     stake: 40, questionCount: 24, accuracy: 76,
-    label: "Expert", description: "Fast and accurate bot. Expect a real fight.",
+    label: "Expert", description: "Fast and accurate bot. Wins pay your Reward Pouch 💎 and count toward the Redeem Badge.",
   },
   {
     level: 5, tierName: "Flood", emoji: "🌊", botUsername: "Flood 🌊",
     stake: 50, questionCount: 30, accuracy: 90,
-    label: "Max", description: "30 Qs. 90% accuracy. No mercy.",
+    label: "Max", description: "30 Qs. 90% accuracy. No mercy. Wins pay your Reward Pouch 💎 and count toward the Redeem Badge.",
   },
 ];
 
@@ -220,7 +221,9 @@ export default function CreateSinglePage() {
         <div>
           <h1 className="font-black text-xl text-foreground">Pick your challenge</h1>
           <p className="text-xs text-muted-foreground mt-1">
-            Play solo against a bot. Win earnings go straight to your game wallet.
+            Play solo against a bot. Wins vs Droplet &amp; Drizzle pay your Game
+            Pouch; wins vs Downpour, Torrent &amp; Flood pay your <strong>Reward
+            Pouch</strong> and count toward the Redeem Badge.
           </p>
         </div>
 
@@ -317,7 +320,7 @@ export default function CreateSinglePage() {
                   ["Opponent",   selectedTier.botUsername],
                   ["Stake",      `${selectedTier.stake} DROPS`],
                   ["Questions",  selectedTier.questionCount.toString()],
-                  ["Win payout", `${selectedTier.stake * 2} DROPS`],
+                  ["Win payout", `${selectedTier.stake * 2} DROPS → ${selectedTier.level >= 3 ? "Reward Pouch 💎" : "Game Pouch ⚡"}`],
                 ] as [string, string][]
               ).map(([label, value], i) => (
                 <div key={label}>

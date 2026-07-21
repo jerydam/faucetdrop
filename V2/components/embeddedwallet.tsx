@@ -138,7 +138,19 @@ export function EmbeddedWalletControlProduction() {
     const [exporting, setExporting] = useState(false)
     const [seedPhrase, setSeedPhrase] = useState<string | null>(null)
     const [showSeed, setShowSeed] = useState(false)
+    const [exportPin, setExportPin] = useState("")
 
+    const getSigningGrant = async (): Promise<string> => {
+      if (!session?.token) throw new Error("Not authenticated")
+      if (!/^\d{6}$/.test(exportPin)) throw new Error("Enter your 6-digit PIN first")
+      const res = await fetch(`${API_BASE}/wallet/verify-pin`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+        body:    JSON.stringify({ pin: exportPin }),
+      })
+      if (!res.ok) throw new Error((await res.json()).detail || "PIN verification failed")
+      return (await res.json()).signing_grant
+    }
     const currentAddress = evmAddress
     useEffect(() => {
         if (!open) {
@@ -147,6 +159,7 @@ export function EmbeddedWalletControlProduction() {
             setExportedKey(null)   // ← add
             setShowKey(false)      // ← add
             setExportChain("")     // ← add
+            setExportPin("")     // ← add
         }
         }, [open])
 
@@ -159,58 +172,53 @@ const getChainDisplay = () => {
 }
 
 const handleExportPrivateKey = async () => {
-  if (!session?.token) return toast({ title: "Error message", variant: "destructive", description:"Not authenticated" })
   const targetChainId = chainId ?? DEFAULT_CHAIN_ID
   setExporting(true)
   setExportedKey(null)
   try {
-    const res = await fetch(
-      `${API_BASE}/wallet/export-privatekey?chain_id=${targetChainId}`,
-      {
-        method:  "POST",
-        headers: { Authorization: `Bearer ${session.token}` },
-      }
-    )
+    const grant = await getSigningGrant()          // fresh grant — single-use
+    const res = await fetch(`${API_BASE}/wallet/export-privatekey`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session!.token}` },
+      body:    JSON.stringify({ chain_id: targetChainId, signing_grant: grant }),
+    })
     if (!res.ok) throw new Error((await res.json()).detail || "Export failed")
     const data = await res.json()
-
-    // Solana returns a byte array — convert to base58 for display
-    // For simplicity show hex for all, users can import via their wallet
     let keyDisplay: string
     if (data.chain === "solana") {
-      // Show the 64-byte array as comma-separated for Phantom import,
-      // or hex seed for other importers
       keyDisplay = Array.isArray(data.private_key)
         ? `[${data.private_key.join(",")}]`
         : data.private_key_hex
     } else {
       keyDisplay = data.private_key
     }
-
     setExportedKey(keyDisplay)
     setExportChain(data.chain)
     setShowKey(false)
+    setExportPin("")
   } catch (err: any) {
-    toast({ title: "Error message", variant: "destructive", description:"export failed" })
+    toast({ title: "Export failed", variant: "destructive", description: err.message })
   } finally {
     setExporting(false)
   }
 }
 
 const handleExportSeed = async () => {
-  if (!session?.token) return toast({ title: "Error message", variant: "destructive", description:"Not authenticated" })
   setExporting(true)
   try {
+    const grant = await getSigningGrant()
     const res = await fetch(`${API_BASE}/wallet/export-seed`, {
       method:  "POST",
-      headers: { Authorization: `Bearer ${session.token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session!.token}` },
+      body:    JSON.stringify({ signing_grant: grant }),   // ← this was missing → 422
     })
-    if (!res.ok) throw new Error("Export failed")
+    if (!res.ok) throw new Error((await res.json()).detail || "Export failed")
     const data = await res.json()
     setSeedPhrase(data.mnemonic)
     setShowSeed(false)
+    setExportPin("")
   } catch (err: any) {
-    toast({ title: "Error message", variant: "destructive", description:"export failed" })
+    toast({ title: "Export failed", variant: "destructive", description: err.message })
   } finally {
     setExporting(false)
   }
@@ -629,7 +637,18 @@ const handleSend = async () => {
                             </Alert>
                         )}
                     </TabsContent>
-
+                        <div className="space-y-2">
+                      <Label className="text-xs sm:text-sm">Transaction PIN</Label>
+                      <Input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="••••••"
+                        value={exportPin}
+                        onChange={e => setExportPin(e.target.value.replace(/\D/g, ""))}
+                        className="text-xs sm:text-sm h-9 sm:h-10 tracking-widest"
+                      />
+                    </div>
                     {/* EXPORT KEY TAB */}
                     <TabsContent value="export" className="space-y-3 sm:space-y-4">
   <Alert variant="destructive">

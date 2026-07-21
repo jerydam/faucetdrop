@@ -12,13 +12,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getChainConfig } from "@/lib/chain";
+import { getChainConfig, BOTCHAIN_CHAIN_ID } from "@/lib/chain";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
-
-interface Tier {
+  interface Tier {
   level:         number;
   tierName:      string;
   emoji:         string;
@@ -80,20 +79,24 @@ function AccuracyBar({ pct, level }: { pct: number; level: number }) {
 }
 
 function TierCard({
-  tier, selected, onSelect,
-}: { tier: Tier; selected: boolean; onSelect: (l: number) => void }) {
+  tier, selected, onSelect, disabled = false,
+}: { tier: Tier; selected: boolean; onSelect: (l: number) => void; disabled?: boolean }) {
   const ac = TIER_ACCENT[tier.level];
   return (
     <button
-      onClick={() => onSelect(tier.level)}
+      onClick={() => { if (!disabled) onSelect(tier.level); }}
+      disabled={disabled}
+      title={disabled ? `${tier.tierName} isn't available on this network yet` : undefined}
       className={cn(
         "relative flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition-all duration-150 text-center w-full",
-        selected
+        disabled
+          ? "border-border bg-muted/30 opacity-45 grayscale cursor-not-allowed"
+          : selected
           ? cn("border-2", ac.ring, ac.bg, "shadow-sm")
           : "border-border bg-card hover:border-muted-foreground/30 hover:bg-muted/20",
       )}
     >
-      {tier.level === 5 && (
+      {tier.level === 5 && !disabled && (
         <span className={cn(
           "absolute -top-2 left-1/2 -translate-x-1/2 text-[8px] font-black px-1.5 py-0.5 rounded-full whitespace-nowrap border",
           ac.bg, ac.text, ac.ring,
@@ -101,11 +104,16 @@ function TierCard({
           HARDEST
         </span>
       )}
+      {disabled && (
+        <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[8px] font-black px-1.5 py-0.5 rounded-full whitespace-nowrap border border-border bg-muted text-muted-foreground">
+          UNAVAILABLE
+        </span>
+      )}
 
       <span className="text-2xl leading-none mt-1">{tier.emoji}</span>
 
       <div>
-        <p className={cn("font-black text-xs leading-tight", selected ? ac.text : "text-foreground")}>
+        <p className={cn("font-black text-xs leading-tight", selected && !disabled ? ac.text : "text-foreground")}>
           {tier.tierName}
         </p>
         <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">{tier.label}</p>
@@ -117,13 +125,13 @@ function TierCard({
       </div>
 
       <div className="space-y-0.5 w-full">
-        <p className={cn("text-xs font-black", selected ? ac.text : "text-foreground")}>
+        <p className={cn("text-xs font-black", selected && !disabled ? ac.text : "text-foreground")}>
           {tier.stake} <span className="text-[9px] font-bold text-muted-foreground">DROPS</span>
         </p>
         <p className="text-[9px] text-muted-foreground font-medium">{tier.questionCount} Qs</p>
       </div>
 
-      {selected && (
+      {selected && !disabled && (
         <div className={cn("absolute inset-0 rounded-2xl pointer-events-none opacity-10", ac.bar)} />
       )}
     </button>
@@ -143,12 +151,27 @@ export default function CreateSinglePage() {
 
   const selectedTier = TIERS.find(t => t.level === difficulty) ?? null;
   const username     = session?.provider ?? address?.slice(0, 8) ?? null;
-
+   // On Botchain only Droplet's bot wallet is funded — lock the rest
+  const isBotchain = chainId === BOTCHAIN_CHAIN_ID;
+  const isTierLocked = useCallback(
+    (level: number) => isBotchain && level > 1,
+    [isBotchain]
+  );
   const canSubmit =
     topic.trim().length >= 3 &&
     difficulty !== null &&
+    !isTierLocked(difficulty) &&
     !!address &&
     !submitting;
+
+   
+
+  // If the user picked a higher tier and then switched to Botchain,
+  // drop the invalid selection so the CTA can't submit it.
+  React.useEffect(() => {
+    if (difficulty !== null && isTierLocked(difficulty)) setDifficulty(null);
+  }, [difficulty, isTierLocked]);
+
 
   const handleCreate = async () => {
   if (!address || !selectedTier) return
@@ -266,7 +289,12 @@ export default function CreateSinglePage() {
               <HelpCircle className="h-3 w-3" /> Stake &amp; questions fixed per tier
             </span>
           </div>
-
+          {isBotchain && (
+            <p className="text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              Only Droplet is available on this network for now.
+            </p>
+          )}
           {/* Row 1: 3 cards */}
           <div className="grid grid-cols-3 gap-2">
             {TIERS.slice(0, 3).map(tier => (
@@ -275,6 +303,7 @@ export default function CreateSinglePage() {
                 tier={tier}
                 selected={difficulty === tier.level}
                 onSelect={setDifficulty}
+                disabled={isTierLocked(tier.level)}
               />
             ))}
           </div>
@@ -287,6 +316,7 @@ export default function CreateSinglePage() {
                 tier={tier}
                 selected={difficulty === tier.level}
                 onSelect={setDifficulty}
+                disabled={isTierLocked(tier.level)}
               />
             ))}
           </div>

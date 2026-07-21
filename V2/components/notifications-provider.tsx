@@ -492,11 +492,19 @@ const navigateToChallenge = useCallback(async (code: string, type: string) => {
           )}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/30">
               <span className="text-sm font-black text-foreground">Activity</span>
-              {unreadCount > 0 && (
-                <button onClick={markAllRead} className="text-xs font-bold text-blue-500 hover:text-blue-600 transition-colors">
-                  Clear All
+              <div className="flex items-center gap-3">
+                {unreadCount > 0 && (
+                  <button onClick={markAllRead} className="text-xs font-bold text-blue-500 hover:text-blue-600 transition-colors">
+                    Clear All
+                  </button>
+                )}
+                <button
+                  onClick={() => setOpen(false)}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
                 </button>
-              )}
+              </div>
             </div>
 
             <div className="overflow-y-auto max-h-[60vh] sm:max-h-96">

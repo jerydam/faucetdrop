@@ -118,8 +118,8 @@ interface RematchProgressState {
 }
 
 function RematchProgressPopup({
-  step, error, opponentName,
-}: { step: RematchStep; error?: string; opponentName: string }) {
+  step, error, opponentName, onDismiss,
+}: { step: RematchStep; error?: string; opponentName: string; onDismiss?: () => void }) {
   const steps: { key: RematchStep; label: string }[] = [
     { key: "creating",   label: "Setting up rematch" },
     { key: "sign",       label: "Confirm in your wallet" },
@@ -140,11 +140,18 @@ function RematchProgressPopup({
           {step === "error" ? "Rematch setup failed" : `Rematch vs ${opponentName}`}
         </p>
 
-        {step === "error" ? (
-          <div className="space-y-1 text-center">
-            <p className="text-sm text-red-500">{error}</p>
-          </div>
-        ) : (
+        // In RematchProgressPopup error block, fix the button:
+          {step === "error" ? (
+            <div className="space-y-3 text-center">
+              <p className="text-sm text-red-500">{error}</p>
+              <button
+                onClick={onDismiss}  // ← was empty before
+                className="text-xs text-muted-foreground underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : (
           <div className="space-y-3">
             {steps.map((s, i) => (
               <div key={s.key} className="flex items-center gap-3">
@@ -180,6 +187,7 @@ function RematchProgressPopup({
 
 // ── createQuiz() on-chain — requester signs this after opponent accepts ───────
 
+// ── Fix 1: callCreateQuizOnChain — fix embedded wallet path ──────────────────
 async function callCreateQuizOnChain(
   code: string,
   activeChainId: number,
@@ -188,19 +196,28 @@ async function callCreateQuizOnChain(
 ): Promise<string> {
   const activeCfg        = getChainConfig(activeChainId);
   const QUIZ_HUB_ADDRESS = activeCfg.contracts.quizHub as Address;
-  const quizId            = deriveQuizId(code);
+  const quizId           = deriveQuizId(code);
 
   if (walletType === "embedded") {
     const { ethers } = await import("ethers");
     const hubIface = new ethers.Interface([
       "function createQuiz(bytes32 quizId)",
     ]);
-    const data    = hubIface.encodeFunctionData("createQuiz", [quizId]);
-    const tx      = await (activeSigner as any).sendTransaction({ to: QUIZ_HUB_ADDRESS, data });
-    const receipt = await tx.wait();
-    return receipt.hash;
+    const data = hubIface.encodeFunctionData("createQuiz", [quizId]);
+
+    // MiniPay/embedded signers may be ethers.JsonRpcSigner or a provider-wrapped signer
+    // sendTransaction returns a TransactionResponse; hash is on the response itself
+    const txResponse = await activeSigner.sendTransaction({
+      to:   QUIZ_HUB_ADDRESS,
+      data,
+    });
+    // Wait for confirmation — receipt has transactionHash, response has hash
+    await txResponse.wait();
+    // Use hash from the response (available immediately after send)
+    return txResponse.hash as string;
   }
 
+  // External wallet path (viem)
   const chainObj     = toViemChain(activeChainId);
   const walletClient = makeWalletClient(activeChainId);
   const publicClient = makePublicClient(activeChainId);
@@ -987,39 +1004,52 @@ useEffect(() => {
 }, [userWalletAddress, myWallet, sendWhenReady]);
 
   // ── Requester: create the on-chain quiz for the rematch after opponent accepts ──
-  const handleRequesterCreateQuiz = useCallback(async (
-    newCode: string, opponentName: string
-  ) => {
-    if (!userWalletAddress) return;
-    setRematchProgress({ step: "creating", newCode, opponentName });
-    try {
-      const targetChainId = chainId ?? CELO_CHAIN_ID;
-      const switched = await ensureCorrectNetwork(targetChainId);
-      if (!switched) throw new Error("Please connect your wallet.");
+ // ── Fix 2: handleRequesterCreateQuiz — set progress BEFORE awaiting anything ──
+const handleRequesterCreateQuiz = useCallback(async (
+  newCode: string, opponentName: string
+) => {
+  if (!userWalletAddress) return;
 
-      const activeSigner = await getActiveSigner(targetChainId);
-      if (!activeSigner) throw new Error("No wallet available. Please reconnect.");
+  // Set the popup state SYNCHRONOUSLY before any await,
+  // so it renders immediately when opponent accepts
+  setRematchProgress({ step: "creating", newCode, opponentName });
+  setRematchPending(false);
+  setRematchCountdown(null);
+  clearRematchTimers();
 
-      setRematchProgress(p => (p ? { ...p, step: "sign" } : p));
+  try {
+    const targetChainId = chainId ?? CELO_CHAIN_ID;
 
-      const txHash = await callCreateQuizOnChain(newCode, targetChainId, activeSigner, walletType);
+    setRematchProgress(p => p ? { ...p, step: "sign" } : p);
 
-      setRematchProgress(p => (p ? { ...p, step: "confirming" } : p));
+    const switched = await ensureCorrectNetwork(targetChainId);
+    if (!switched) throw new Error("Please connect your wallet.");
 
-      const res = await fetch(`${API_BASE_URL}/api/challenge/${newCode}/rematch-on-chain-confirmed`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creatorWallet: userWalletAddress, txHash }),
-      });
-      const d = await res.json();
-      if (!d.success) throw new Error(d.detail ?? "Confirmation failed");
+    const activeSigner = await getActiveSigner(targetChainId);
+    if (!activeSigner) throw new Error("No wallet available. Please reconnect.");
 
-      setRematchProgress(p => (p ? { ...p, step: "done" } : p));
-      router.push(`/challenge/${newCode}/pre-lobby`);
-    } catch (err: any) {
-      setRematchProgress(p => (p ? { ...p, step: "error", error: err?.message ?? "Something went wrong." } : p));
-    }
-  }, [userWalletAddress, chainId, ensureCorrectNetwork, getActiveSigner, walletType, router]);
+    const txHash = await callCreateQuizOnChain(newCode, targetChainId, activeSigner, walletType);
+
+    setRematchProgress(p => p ? { ...p, step: "confirming" } : p);
+
+    const res = await fetch(`${API_BASE_URL}/api/challenge/${newCode}/rematch-on-chain-confirmed`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creatorWallet: userWalletAddress, txHash }),
+    });
+    const d = await res.json();
+    if (!d.success) throw new Error(d.detail ?? "Confirmation failed");
+
+    setRematchProgress(p => p ? { ...p, step: "done" } : p);
+    // Small delay so user sees "done" before routing
+    await new Promise(r => setTimeout(r, 600));
+    router.push(`/challenge/${newCode}/pre-lobby`);
+  } catch (err: any) {
+    setRematchProgress(p =>
+      p ? { ...p, step: "error", error: err?.message ?? "Something went wrong." } : p
+    );
+  }
+}, [userWalletAddress, chainId, ensureCorrectNetwork, getActiveSigner, walletType, router, clearRematchTimers]);
 
   // ── WS refs ───────────────────────────────────────────────────────────────
   const usernameRef = useRef(username);
@@ -1204,15 +1234,18 @@ useEffect(() => {
           break;
         }
         case "rematch_invite_accepted": {
-          if (msg.acceptorWallet?.toLowerCase() !== currentMyWallet) {
-            clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
-            // Requester now signs createQuiz() on-chain for the new challenge.
-            // RematchProgressPopup shows step-by-step status until routing.
+          // The requester (not the acceptor) handles this
+          if (msg.requesterWallet?.toLowerCase() === currentMyWallet) {
+            clearRematchTimers();
+            setRematchPending(false);
+            setRematchCountdown(null);
+            // handleRequesterCreateQuiz sets the progress popup synchronously
             handleRequesterCreateQuiz(msg.newCode, msg.acceptorName);
           }
           break;
         }
         case "rematch_ready": {
+          // The ACCEPTOR (not the requester) routes here when requester confirms on-chain
           if (msg.requesterWallet?.toLowerCase() !== currentMyWallet) {
             stopGameOverAudio();
             toast.success("Rematch ready! Heading to pre-lobby…");
@@ -1591,6 +1624,7 @@ const handleStake = useCallback(async () => {
           step={rematchProgress.step}
           error={rematchProgress.error}
           opponentName={rematchProgress.opponentName}
+          onDismiss={() => setRematchProgress(null)}
         />
       )}
     </>
@@ -2060,6 +2094,7 @@ const handleStake = useCallback(async () => {
           step={rematchProgress.step}
           error={rematchProgress.error}
           opponentName={rematchProgress.opponentName}
+          onDismiss={() => setRematchProgress(null)}
         />
       )}
       <div className="min-h-screen bg-background flex flex-col">

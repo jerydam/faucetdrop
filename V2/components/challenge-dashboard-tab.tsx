@@ -360,11 +360,6 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     }
   }, []);
 
-  useEffect(() => {
-    if (innerTab === "redeem" || innerTab === "buy") {
-      fetchGoodDollarPrice();
-    }
-  }, [innerTab, fetchGoodDollarPrice]);
 
   // ── Redeem form state ──────────────────────────────────────────────────────
   const [redeemAmount, setRedeemAmount] = useState("");
@@ -411,15 +406,15 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const [buyResult, setBuyResult] = useState<{ dropsAmount: number; mintTxHash: string } | null>(null);
   const [buyLoading, setBuyLoading] = useState(false);
   const [gTxHash, setGTxHash] = useState("");
-
+  const [gWalletBalance, setGWalletBalance] = useState<number | null>(null);
+  const [gWalletBalanceLoading, setGWalletBalanceLoading] = useState(false);
+ 
   const handleCalculate = async () => {
     const drops = parseFloat(dropsToBuy);
     if (!drops || drops < 10) {
       toast({ title: "Minimum 10 DROPS", variant: "destructive" });
       return;
     }
-
-    
     setGPriceLoading(true);
     setGPriceError(null);
     let freshPrice: number;
@@ -443,7 +438,48 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     setGCostDisplay(gCost);
     setBuyStep("deposit");
   };
+     const fetchGWalletBalance = useCallback(async () => {
+  if (!walletAddress || !G_TOKEN) return;
+  setGWalletBalanceLoading(true);
+  try {
+    const provider = new ethers.JsonRpcProvider(chainCfg.rpcUrl);
+    const token = new ethers.Contract(
+      G_TOKEN,
+      [
+        "function balanceOf(address account) view returns (uint256)",
+        "function decimals() view returns (uint8)",
+      ],
+      provider,
+    );
+    const [rawBal, decimals]: [bigint, number] = await Promise.all([
+      token.balanceOf(walletAddress),
+      token.decimals(),
+    ]);
+    setGWalletBalance(parseFloat(ethers.formatUnits(rawBal, decimals)));
+  } catch {
+    setGWalletBalance(null);
+  } finally {
+    setGWalletBalanceLoading(false);
+  }
+}, [walletAddress, G_TOKEN, chainCfg.rpcUrl]);
 
+useEffect(() => {
+  if (innerTab === "redeem" || innerTab === "buy") {
+    fetchGoodDollarPrice();
+  }
+  if (innerTab === "buy") {
+    fetchGWalletBalance();
+  }
+}, [innerTab, fetchGoodDollarPrice, fetchGWalletBalance]);
+ 
+  const maxAffordableDrops: number | null =
+  gWalletBalance !== null && gPriceUsd
+    ? Math.floor((gWalletBalance * gPriceUsd * 100) / 1) // (gBalance × price × 100 DROPS/USD)
+    // simplified: gBalance in USD = gWalletBalance * gPriceUsd
+    //             DROPS = USD × 100
+    //             = gWalletBalance * gPriceUsd * 100
+    : null;
+ 
   // ── Contract interaction helpers ───────────────────────────────────────────
   const handleConfirmDeposit = async () => {
     const drops = parseFloat(dropsToBuy);
@@ -1474,110 +1510,187 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
               </div>
 
               {/* STEP 1 — Enter DROPS amount */}
-              {buyStep === "input" && (
-                <div className="space-y-4">
-                  <div className="p-3 rounded-xl bg-muted/40 border border-border space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-foreground">Live {tokenSymbol} Rate</p>
-                      <button
-                        onClick={fetchGoodDollarPrice}
-                        disabled={gPriceLoading}
-                        className="flex items-center gap-1 text-[10px] text-primary hover:opacity-70 transition-opacity"
-                      >
-                        <RefreshCw className={`h-3 w-3 ${gPriceLoading ? "animate-spin" : ""}`} />
-                        Refresh
-                      </button>
-                    </div>
-
-                    {gPriceLoading ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Fetching price…</span>
-                      </div>
-                    ) : gPriceError ? (
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="h-3.5 w-3.5 text-destructive" />
-                        <span className="text-xs text-destructive">{gPriceError}</span>
-                      </div>
-                    ) : gPriceUsd ? (
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">1 {tokenSymbol}</span>
-                          <span className="text-xs font-black text-foreground">${gPriceUsd.toFixed(6)} USD</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">100 DROPS</span>
-                          <span className="text-xs font-black text-foreground">$1.00 USD</span>
-                        </div>
-                        {gPriceFetchedAt && (
-                          <p className="text-[10px] text-muted-foreground/60 pt-0.5">
-                            Updated {Math.floor((Date.now() - gPriceFetchedAt) / 1000)}s ago · CoinGecko
-                          </p>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
-                      DROPS to Buy
-                    </Label>
-                    <Input
-                      type="number"
-                      value={dropsToBuy}
-                      onChange={e => setDropsToBuy(e.target.value)}
-                      placeholder="e.g. 100"
-                      min="10"
-                      step="10"
-                      className="font-mono font-bold text-lg h-12"
-                      disabled={!DROPS_REDEEM_POOL_ADDRESS}
-                    />
-                    {dropsToBuy && parseFloat(dropsToBuy) > 0 && gPriceUsd && (
-                      <p className="text-xs text-muted-foreground pl-1">
-                        ≈ <strong className="text-foreground">
-                          {((parseFloat(dropsToBuy) / 100) / gPriceUsd).toFixed(4)} {tokenSymbol}
-                        </strong> required
-                        {" · "}
-                        <span className="text-muted-foreground/60">
-                          ${(parseFloat(dropsToBuy) / 100).toFixed(2)} USD
-                        </span>
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    {[100, 500, 1000, 5000].map(v => (
-                      <button
-                        key={v}
-                        onClick={() => setDropsToBuy(String(v))}
-                        disabled={!DROPS_REDEEM_POOL_ADDRESS}
-                        className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all
-                          ${parseFloat(dropsToBuy) === v
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:border-primary/40"} disabled:opacity-40`}
-                      >
-                        <span className="block">{v >= 1000 ? `${v / 1000}k` : v}</span>
-                        {gPriceUsd && (
-                          <span className="block text-[9px] font-normal text-muted-foreground/70 mt-0.5">
-                            {((v / 100) / gPriceUsd).toFixed(2)} {tokenSymbol}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-
-                  <Button
-                    className="w-full"
-                    onClick={handleCalculate}
-                    disabled={!dropsToBuy || parseFloat(dropsToBuy) < 10 || gPriceLoading || !gPriceUsd || !DROPS_REDEEM_POOL_ADDRESS}
-                  >
-                    {gPriceLoading
-                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Fetching Price…</>
-                      : <><Coins className="h-4 w-4 mr-2" /> Calculate Cost & Continue</>
-                    }
-                  </Button>
-                </div>
-              )}
+            
+{buyStep === "input" && (
+  <div className="space-y-4">
+    {/* Live price card */}
+    <div className="p-3 rounded-xl bg-muted/40 border border-border space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-foreground">Live {tokenSymbol} Rate</p>
+        <button
+          onClick={fetchGoodDollarPrice}
+          disabled={gPriceLoading}
+          className="flex items-center gap-1 text-[10px] text-primary hover:opacity-70 transition-opacity"
+        >
+          <RefreshCw className={`h-3 w-3 ${gPriceLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+      </div>
+      {gPriceLoading ? (
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Fetching price…</span>
+        </div>
+      ) : gPriceError ? (
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+          <span className="text-xs text-destructive">{gPriceError}</span>
+        </div>
+      ) : gPriceUsd ? (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">1 {tokenSymbol}</span>
+            <span className="text-xs font-black text-foreground">${gPriceUsd.toFixed(6)} USD</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">100 DROPS</span>
+            <span className="text-xs font-black text-foreground">$1.00 USD</span>
+          </div>
+          {gPriceFetchedAt && (
+            <p className="text-[10px] text-muted-foreground/60 pt-0.5">
+              Updated {Math.floor((Date.now() - gPriceFetchedAt) / 1000)}s ago · CoinGecko
+            </p>
+          )}
+        </div>
+      ) : null}
+    </div>
+ 
+    {/* ── Wallet balance card — NEW ─────────────────────────────────────── */}
+    <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
+      <div className="flex items-center gap-2">
+        <Wallet className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-medium text-muted-foreground">Your {tokenSymbol} balance</span>
+      </div>
+      <div className="text-right">
+        {gWalletBalanceLoading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        ) : gWalletBalance !== null ? (
+          <div>
+            <span className="text-sm font-black text-foreground">
+              {gWalletBalance.toFixed(4)} {tokenSymbol}
+            </span>
+            {gPriceUsd && (
+              <span className="block text-[10px] text-muted-foreground/70">
+                ≈ ${(gWalletBalance * gPriceUsd).toFixed(4)} USD
+                {maxAffordableDrops !== null && ` · up to ${maxAffordableDrops.toLocaleString()} DROPS`}
+              </span>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={fetchGWalletBalance}
+            className="text-xs text-primary hover:opacity-70 flex items-center gap-1"
+          >
+            <RefreshCw className="h-3 w-3" /> Load
+          </button>
+        )}
+      </div>
+    </div>
+ 
+    {/* DROPS input */}
+    <div className="space-y-1.5">
+      <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+        DROPS to Buy
+      </Label>
+      <div className="flex gap-2">
+        <Input
+          type="number"
+          value={dropsToBuy}
+          onChange={e => setDropsToBuy(e.target.value)}
+          placeholder="e.g. 100"
+          min="10"
+          step="10"
+          className="flex-1 font-mono font-bold text-lg h-12"
+          disabled={!DROPS_REDEEM_POOL_ADDRESS}
+        />
+        {/* MAX button — only if we know the wallet balance */}
+        {maxAffordableDrops !== null && maxAffordableDrops >= 10 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-12 px-3 text-xs font-bold"
+            onClick={() => setDropsToBuy(String(maxAffordableDrops))}
+          >
+            MAX
+          </Button>
+        )}
+      </div>
+      {dropsToBuy && parseFloat(dropsToBuy) > 0 && gPriceUsd && (
+        <p className="text-xs text-muted-foreground pl-1">
+          ≈ <strong className="text-foreground">
+            {((parseFloat(dropsToBuy) / 100) / gPriceUsd).toFixed(4)} {tokenSymbol}
+          </strong> required
+          {" · "}
+          <span className="text-muted-foreground/60">
+            ${(parseFloat(dropsToBuy) / 100).toFixed(2)} USD
+          </span>
+        </p>
+      )}
+      {/* Warn if input exceeds wallet balance */}
+      {dropsToBuy && parseFloat(dropsToBuy) > 0 && gPriceUsd && gWalletBalance !== null && (
+        (() => {
+          const needed = (parseFloat(dropsToBuy) / 100) / gPriceUsd;
+          return needed > gWalletBalance ? (
+            <p className="text-xs text-red-500 font-bold pl-1">
+              ⚠ Insufficient {tokenSymbol} — you have {gWalletBalance.toFixed(4)}, need {needed.toFixed(4)}
+            </p>
+          ) : null;
+        })()
+      )}
+    </div>
+ 
+    {/* Quick picks — filtered to what the wallet can afford */}
+    <div className="flex gap-2">
+      {[100, 500, 1000, 5000]
+        .filter(v => maxAffordableDrops === null || v <= maxAffordableDrops)
+        .map(v => (
+          <button
+            key={v}
+            onClick={() => setDropsToBuy(String(v))}
+            disabled={!DROPS_REDEEM_POOL_ADDRESS}
+            className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all
+              ${parseFloat(dropsToBuy) === v
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/40"} disabled:opacity-40`}
+          >
+            <span className="block">{v >= 1000 ? `${v / 1000}k` : v}</span>
+            {gPriceUsd && (
+              <span className="block text-[9px] font-normal text-muted-foreground/70 mt-0.5">
+                {((v / 100) / gPriceUsd).toFixed(2)} {tokenSymbol}
+              </span>
+            )}
+          </button>
+        ))}
+      {/* If wallet can't afford any preset, show a note */}
+      {maxAffordableDrops !== null && maxAffordableDrops < 100 && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 self-center pl-1">
+          Top up {tokenSymbol} to unlock presets
+        </p>
+      )}
+    </div>
+ 
+    <Button
+      className="w-full"
+      onClick={handleCalculate}
+      disabled={
+        !dropsToBuy ||
+        parseFloat(dropsToBuy) < 10 ||
+        gPriceLoading ||
+        !gPriceUsd ||
+        !DROPS_REDEEM_POOL_ADDRESS ||
+        // Disable if we know the user can't afford it
+        (gWalletBalance !== null && gPriceUsd
+          ? (parseFloat(dropsToBuy) / 100) / gPriceUsd > gWalletBalance
+          : false)
+      }
+    >
+      {gPriceLoading
+        ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Fetching Price…</>
+        : <><Coins className="h-4 w-4 mr-2" /> Calculate Cost & Continue</>
+      }
+    </Button>
+  </div>
+)}
 
               {/* STEP 2 — Confirm & send {tokenSymbol} */}
               {buyStep === "deposit" && gCostDisplay !== null && (

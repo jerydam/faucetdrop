@@ -249,10 +249,11 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
               try { popup?.close() } catch {}
               settle()
               await connectSocial("farcaster", JSON.stringify({
-                fid:      status.fid,
-                username: status.username ?? "",
+                fid:       status.fid,
+                message:   status.message,
+                signature: status.signature,
               }))
-              onSuccess?.()
+                            onSuccess?.()
             }
           } catch { /* keep polling */ }
         }, 1500)

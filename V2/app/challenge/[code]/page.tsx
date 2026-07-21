@@ -118,15 +118,19 @@ interface RematchProgressState {
 }
 
 function RematchProgressPopup({
-  step, error, opponentName, onDismiss,
-}: { step: RematchStep; error?: string; opponentName: string; onDismiss?: () => void }) {
+  step, error, opponentName, onDismiss, onRetrySign, canRetrySign,
+}: {
+  step: RematchStep; error?: string; opponentName: string;
+  onDismiss?: () => void;
+  onRetrySign?: () => void;      // re-trigger the PIN/sign flow
+  canRetrySign?: boolean;        // true for embedded wallet when sign was interrupted
+}) {
   const steps: { key: RematchStep; label: string }[] = [
     { key: "creating",   label: "Setting up rematch" },
     { key: "sign",       label: "Confirm in your wallet" },
     { key: "confirming", label: "Finalizing on-chain" },
   ];
   const idx = steps.findIndex(s => s.key === step);
-
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
@@ -139,38 +143,53 @@ function RematchProgressPopup({
         <p className="font-black text-foreground text-base text-center">
           {step === "error" ? "Rematch setup failed" : `Rematch vs ${opponentName}`}
         </p>
-
-        // In RematchProgressPopup error block, fix the button:
-          {step === "error" ? (
-            <div className="space-y-3 text-center">
-              <p className="text-sm text-red-500">{error}</p>
-              <button
-                onClick={onDismiss}  // ← was empty before
-                className="text-xs text-muted-foreground underline"
-              >
-                Dismiss
-              </button>
-            </div>
-          ) : (
+        {step === "error" ? (
+          <div className="space-y-3 text-center">
+            <p className="text-sm text-red-500">{error}</p>
+            <button onClick={onDismiss} className="text-xs text-muted-foreground underline">
+              Dismiss
+            </button>
+          </div>
+        ) : (
           <div className="space-y-3">
-            {steps.map((s, i) => (
-              <div key={s.key} className="flex items-center gap-3">
-                <div className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold",
-                  i < idx ? "bg-emerald-500 text-white"
-                    : i === idx ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
-                )}>
-                  {i < idx ? "✓" : i === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : i + 1}
+            {steps.map((s, i) => {
+              const isSignRetry = s.key === "sign" && i === idx && canRetrySign;
+              const Row = (
+                <div className="flex items-center gap-3 w-full">
+                  <div className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold",
+                    i < idx ? "bg-emerald-500 text-white"
+                      : i === idx ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
+                  )}>
+                    {i < idx ? "✓" : i === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : i + 1}
+                  </div>
+                  <span className={cn(
+                    "text-sm font-bold text-left",
+                    i === idx ? "text-foreground" : i < idx ? "text-muted-foreground" : "text-muted-foreground/50"
+                  )}>
+                    {s.label}
+                  </span>
                 </div>
-                <span className={cn(
-                  "text-sm font-bold",
-                  i === idx ? "text-foreground" : i < idx ? "text-muted-foreground" : "text-muted-foreground/50"
-                )}>
-                  {s.label}
-                </span>
-              </div>
-            ))}
+              );
+              return isSignRetry ? (
+                <button
+                  key={s.key}
+                  onClick={onRetrySign}
+                  className="w-full rounded-xl border border-primary/40 bg-primary/5 p-2 hover:bg-primary/10 transition-colors"
+                >
+                  {Row}
+                  <p className="text-[10px] text-primary text-left pl-9 mt-1">
+                    PIN prompt closed? Tap here to confirm again.
+                  </p>
+                </button>
+              ) : (
+                <div key={s.key}>{Row}</div>
+              );
+            })}
+            {error && step === "sign" && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 text-center">{error}</p>
+            )}
           </div>
         )}
       </div>
@@ -181,6 +200,26 @@ function RematchProgressPopup({
           to   { transform:translateY(0) scale(1); opacity:1 }
         }
       `}</style>
+    </div>
+  );
+}
+
+// ── Acceptor-side popup: shown after accepting, until rematch_ready routes them ──
+function RematchWaitingPopup({ requesterName }: { requesterName?: string }) {
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+      style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+    >
+      <div className="w-full max-w-[340px] bg-card border-2 border-border rounded-3xl p-6 space-y-4 shadow-2xl text-center">
+        <div className="text-4xl">⚔️</div>
+        <p className="font-black text-foreground text-base">Duel being created…</p>
+        <p className="text-sm text-muted-foreground">
+          Waiting for {requesterName ?? "your opponent"} to confirm on-chain.
+          You'll be routed to the new game automatically.
+        </p>
+        <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" />
+      </div>
     </div>
   );
 }
@@ -769,7 +808,10 @@ export default function ChallengePage() {
 
   // ── Rematch on-chain progress (requester side) ─────────────────────────────
   const [rematchProgress, setRematchProgress] = useState<RematchProgressState | null>(null);
-
+  const [signRetryable, setSignRetryable]     = useState(false);
+  const pendingRematchRef = useRef<{ newCode: string; opponentName: string } | null>(null);
+  // ── Acceptor side: waiting for requester to confirm on-chain ───────────────
+  const [acceptorWaiting, setAcceptorWaiting] = useState<string | null>(null);
   // ── Refs ───────────────────────────────────────────────────────────────────
   const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
   const cdIntervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1005,33 +1047,21 @@ useEffect(() => {
 
   // ── Requester: create the on-chain quiz for the rematch after opponent accepts ──
  // ── Fix 2: handleRequesterCreateQuiz — set progress BEFORE awaiting anything ──
-const handleRequesterCreateQuiz = useCallback(async (
-  newCode: string, opponentName: string
-) => {
-  if (!userWalletAddress) return;
-
-  // Set the popup state SYNCHRONOUSLY before any await,
-  // so it renders immediately when opponent accepts
-  setRematchProgress({ step: "creating", newCode, opponentName });
-  setRematchPending(false);
-  setRematchCountdown(null);
-  clearRematchTimers();
-
+// ── Sign createQuiz() — separated so embedded-wallet users can retry it ──────
+const signRematchTx = useCallback(async () => {
+  const pending = pendingRematchRef.current;
+  if (!pending || !userWalletAddress) return;
+  const { newCode } = pending;
   try {
+    setSignRetryable(false);
+    setRematchProgress(p => p ? { ...p, step: "sign", error: undefined } : p);
     const targetChainId = chainId ?? CELO_CHAIN_ID;
-
-    setRematchProgress(p => p ? { ...p, step: "sign" } : p);
-
     const switched = await ensureCorrectNetwork(targetChainId);
     if (!switched) throw new Error("Please connect your wallet.");
-
     const activeSigner = await getActiveSigner(targetChainId);
     if (!activeSigner) throw new Error("No wallet available. Please reconnect.");
-
     const txHash = await callCreateQuizOnChain(newCode, targetChainId, activeSigner, walletType);
-
     setRematchProgress(p => p ? { ...p, step: "confirming" } : p);
-
     const res = await fetch(`${API_BASE_URL}/api/challenge/${newCode}/rematch-on-chain-confirmed`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
@@ -1039,18 +1069,43 @@ const handleRequesterCreateQuiz = useCallback(async (
     });
     const d = await res.json();
     if (!d.success) throw new Error(d.detail ?? "Confirmation failed");
-
     setRematchProgress(p => p ? { ...p, step: "done" } : p);
-    // Small delay so user sees "done" before routing
+    pendingRematchRef.current = null;
     await new Promise(r => setTimeout(r, 600));
     router.push(`/challenge/${newCode}/pre-lobby`);
   } catch (err: any) {
-    setRematchProgress(p =>
-      p ? { ...p, step: "error", error: err?.message ?? "Something went wrong." } : p
-    );
+    // Embedded wallet: PIN modal was likely dismissed or the user backed out.
+    // Stay on the "sign" step and make it tappable to re-open the PIN prompt,
+    // instead of dead-ending in the error state.
+    if (walletType === "embedded") {
+      setSignRetryable(true);
+      setRematchProgress(p =>
+        p ? { ...p, step: "sign", error: err?.message ?? "Transaction not confirmed yet." } : p
+      );
+    } else {
+      setRematchProgress(p =>
+        p ? { ...p, step: "error", error: err?.message ?? "Something went wrong." } : p
+      );
+    }
   }
-}, [userWalletAddress, chainId, ensureCorrectNetwork, getActiveSigner, walletType, router, clearRematchTimers]);
+}, [userWalletAddress, chainId, ensureCorrectNetwork, getActiveSigner, walletType, router]);
 
+const handleRequesterCreateQuiz = useCallback((newCode: string, opponentName: string) => {
+  if (!userWalletAddress) return;
+  pendingRematchRef.current = { newCode, opponentName };
+  // Popup renders IMMEDIATELY — countdown state cleared in the same tick
+  setRematchProgress({ step: "creating", newCode, opponentName });
+  setRematchPending(false);
+  setRematchCountdown(null);
+  clearRematchTimers();
+  void signRematchTx();
+}, [userWalletAddress, clearRematchTimers, signRematchTx]);
+
+// Ref so the WebSocket handler always calls the LATEST version — this is
+// what was making the countdown keep running: the socket held a stale
+// closure whenever chainId/walletType changed.
+const handleRequesterCreateQuizRef = useRef(handleRequesterCreateQuiz);
+useEffect(() => { handleRequesterCreateQuizRef.current = handleRequesterCreateQuiz; });
   // ── WS refs ───────────────────────────────────────────────────────────────
   const usernameRef = useRef(username);
   const myWalletRef = useRef(myWallet);
@@ -1204,15 +1259,15 @@ const handleRequesterCreateQuiz = useCallback(async (
           break;
         }
         case "rematch_declined":
-          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
+          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);setAcceptorWaiting(null);
           toast.error(`${msg.declinerName ?? "Opponent"} declined the rematch.`);
           break;
         case "rematch_timeout":
-          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
+          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);setAcceptorWaiting(null);
           if (msg.requesterWallet?.toLowerCase() === currentMyWallet) toast.info("Rematch request expired — opponent didn't respond.");
           break;
         case "player_left":
-          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null); setRematchInvite(null);
+          clearRematchTimers(); setRematchPending(false); setRematchCountdown(null); setRematchInvite(null);setAcceptorWaiting(null);
           toast.error(`${msg.username ?? "Opponent"} has left the game.`);
           break;
         case "chat":
@@ -1234,21 +1289,27 @@ const handleRequesterCreateQuiz = useCallback(async (
           break;
         }
         case "rematch_invite_accepted": {
-          // The requester (not the acceptor) handles this
-          if (msg.requesterWallet?.toLowerCase() === currentMyWallet) {
+          const isRequester = msg.requesterWallet?.toLowerCase() === currentMyWallet;
+          if (isRequester) {
             clearRematchTimers();
             setRematchPending(false);
             setRematchCountdown(null);
-            // handleRequesterCreateQuiz sets the progress popup synchronously
-            handleRequesterCreateQuiz(msg.newCode, msg.acceptorName);
+            handleRequesterCreateQuizRef.current(msg.newCode, msg.acceptorName);
+          } else {
+            if (inviteTimerRef.current) { clearInterval(inviteTimerRef.current); inviteTimerRef.current = null; }
+            setInviteCountdown(null);
+            setRematchInvite(prev => {
+              setAcceptorWaiting(prev?.requesterName ?? msg.requesterName ?? "opponent");
+              return null;
+            });
           }
           break;
         }
         case "rematch_ready": {
-          // The ACCEPTOR (not the requester) routes here when requester confirms on-chain
           if (msg.requesterWallet?.toLowerCase() !== currentMyWallet) {
+            setAcceptorWaiting(null);
             stopGameOverAudio();
-            toast.success("Rematch ready! Heading to pre-lobby…");
+            toast.success("Rematch ready! Heading to your duel…");
             router.push(`/challenge/${msg.newCode}/pre-lobby`);
           }
           break;
@@ -1262,8 +1323,7 @@ const handleRequesterCreateQuiz = useCallback(async (
       reconnectAttempts.current += 1;
       setTimeout(() => { if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); }, 2000 * reconnectAttempts.current);
     };
-  }, [code, userWalletAddress, startTimer, clearRematchTimers, createdAt, handleRequesterCreateQuiz]);
-
+  }, [code, userWalletAddress, startTimer, clearRematchTimers, createdAt]);
   useEffect(() => {
     if (!userWalletAddress) return;
     connectWS();
@@ -1617,14 +1677,25 @@ const handleStake = useCallback(async () => {
         <RematchPopup
           invite={rematchInvite} myWallet={myWallet}
           onDismiss={handleInviteDismiss} countdown={inviteCountdown}
+          onAccepted={() => {
+            const name = rematchInvite?.requesterName ?? null;
+            handleInviteDismiss();
+            setAcceptorWaiting(name ?? "opponent");
+          }}
+
         />
+      )}
+      {acceptorWaiting && (
+        <RematchWaitingPopup requesterName={acceptorWaiting} />
       )}
       {rematchProgress && rematchProgress.step !== "done" && (
         <RematchProgressPopup
           step={rematchProgress.step}
           error={rematchProgress.error}
           opponentName={rematchProgress.opponentName}
-          onDismiss={() => setRematchProgress(null)}
+          onDismiss={() => { setRematchProgress(null); setSignRetryable(false); }}
+          onRetrySign={() => void signRematchTx()}
+          canRetrySign={signRetryable}
         />
       )}
     </>
@@ -2087,14 +2158,24 @@ const handleStake = useCallback(async () => {
         <RematchPopup
           invite={rematchInvite} myWallet={myWallet}
           onDismiss={handleInviteDismiss} countdown={inviteCountdown}
+          onAccepted={() => {
+            const name = rematchInvite.requesterName || "opponent";
+            handleInviteDismiss();
+            setAcceptorWaiting(name);
+          }}
         />
+      )}
+      {acceptorWaiting && (
+        <RematchWaitingPopup requesterName={acceptorWaiting} />
       )}
       {rematchProgress && rematchProgress.step !== "done" && (
         <RematchProgressPopup
           step={rematchProgress.step}
           error={rematchProgress.error}
           opponentName={rematchProgress.opponentName}
-          onDismiss={() => setRematchProgress(null)}
+          onDismiss={() => { setRematchProgress(null); setSignRetryable(false); }}
+          onRetrySign={() => void signRematchTx()}
+          canRetrySign={signRetryable}
         />
       )}
       <div className="min-h-screen bg-background flex flex-col">

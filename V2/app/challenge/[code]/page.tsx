@@ -66,6 +66,18 @@ const DROPS_REDEEM_ABI = [
   },
 ] as const;
 
+// createQuiz(bytes32 quizId) — signed by the requester's wallet when
+// setting up a rematch. Minimal ABI fragment; only what this call needs.
+const QUIZ_HUB_CREATE_ABI = [
+  {
+    inputs: [{ internalType: "bytes32", name: "quizId", type: "bytes32" }],
+    name: "createQuiz",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+] as const;
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type GamePhase =
@@ -90,6 +102,122 @@ interface CurrentQuestion {
   question: string;   options: QuizOption[]; timeLimit: number; startedAt: number;
 }
 interface FinalScore { username: string; points: number }
+
+// ── Rematch on-chain progress popup ────────────────────────────────────────────
+// Shown to the REQUESTER after the opponent accepts a rematch invite, while
+// they sign createQuiz() and the backend confirms it. Distinct from
+// RematchPopup (the acceptor's accept/decline dialog).
+
+type RematchStep = "creating" | "sign" | "confirming" | "done" | "error";
+
+interface RematchProgressState {
+  step: RematchStep;
+  newCode: string;
+  error?: string;
+  opponentName: string;
+}
+
+function RematchProgressPopup({
+  step, error, opponentName,
+}: { step: RematchStep; error?: string; opponentName: string }) {
+  const steps: { key: RematchStep; label: string }[] = [
+    { key: "creating",   label: "Setting up rematch" },
+    { key: "sign",       label: "Confirm in your wallet" },
+    { key: "confirming", label: "Finalizing on-chain" },
+  ];
+  const idx = steps.findIndex(s => s.key === step);
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+      style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", animation: "rmpFadeIn 0.2s ease-out" }}
+    >
+      <div
+        className="w-full max-w-[340px] bg-card border-2 border-border rounded-3xl p-6 space-y-4 shadow-2xl"
+        style={{ animation: "rmpSlideUp 0.25s cubic-bezier(.22,1,.36,1)" }}
+      >
+        <p className="font-black text-foreground text-base text-center">
+          {step === "error" ? "Rematch setup failed" : `Rematch vs ${opponentName}`}
+        </p>
+
+        {step === "error" ? (
+          <div className="space-y-1 text-center">
+            <p className="text-sm text-red-500">{error}</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {steps.map((s, i) => (
+              <div key={s.key} className="flex items-center gap-3">
+                <div className={cn(
+                  "w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold",
+                  i < idx ? "bg-emerald-500 text-white"
+                    : i === idx ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                )}>
+                  {i < idx ? "✓" : i === idx ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : i + 1}
+                </div>
+                <span className={cn(
+                  "text-sm font-bold",
+                  i === idx ? "text-foreground" : i < idx ? "text-muted-foreground" : "text-muted-foreground/50"
+                )}>
+                  {s.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <style>{`
+        @keyframes rmpFadeIn  { from { opacity:0 } to { opacity:1 } }
+        @keyframes rmpSlideUp {
+          from { transform:translateY(20px) scale(0.97); opacity:0 }
+          to   { transform:translateY(0) scale(1); opacity:1 }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ── createQuiz() on-chain — requester signs this after opponent accepts ───────
+
+async function callCreateQuizOnChain(
+  code: string,
+  activeChainId: number,
+  activeSigner: any,
+  walletType: "embedded" | "external" | null,
+): Promise<string> {
+  const activeCfg        = getChainConfig(activeChainId);
+  const QUIZ_HUB_ADDRESS = activeCfg.contracts.quizHub as Address;
+  const quizId            = deriveQuizId(code);
+
+  if (walletType === "embedded") {
+    const { ethers } = await import("ethers");
+    const hubIface = new ethers.Interface([
+      "function createQuiz(bytes32 quizId)",
+    ]);
+    const data    = hubIface.encodeFunctionData("createQuiz", [quizId]);
+    const tx      = await (activeSigner as any).sendTransaction({ to: QUIZ_HUB_ADDRESS, data });
+    const receipt = await tx.wait();
+    return receipt.hash;
+  }
+
+  const chainObj     = toViemChain(activeChainId);
+  const walletClient = makeWalletClient(activeChainId);
+  const publicClient = makePublicClient(activeChainId);
+  const [userAddr]   = await walletClient.getAddresses();
+
+  const hash = await walletClient.writeContract({
+    address:      QUIZ_HUB_ADDRESS,
+    abi:          QUIZ_HUB_CREATE_ABI,
+    functionName: "createQuiz",
+    args:         [quizId],
+    account:      userAddr,
+    chain:        chainObj,
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  return receipt.transactionHash;
+}
 
 const OPTION_STYLES: Record<string, { bg: string; shape: string; ring: string }> = {
   A: { bg: "bg-red-500 hover:bg-red-600",     shape: "▲", ring: "ring-red-400"   },
@@ -622,6 +750,9 @@ export default function ChallengePage() {
   const [unreadCount, setUnreadCount]   = useState(0);
   const chatBottomRef                   = useRef<HTMLDivElement>(null);
 
+  // ── Rematch on-chain progress (requester side) ─────────────────────────────
+  const [rematchProgress, setRematchProgress] = useState<RematchProgressState | null>(null);
+
   // ── Refs ───────────────────────────────────────────────────────────────────
   const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
   const cdIntervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -651,73 +782,7 @@ export default function ChallengePage() {
   const myBadgeEarned       = myTotalDuels >= BADGE_THRESHOLD;
   const opponentBadgeEarned = opponentTotalDuels === null || opponentTotalDuels >= BADGE_THRESHOLD;
   const rematchAllowed      = canRematch && myBadgeEarned && opponentBadgeEarned;
-  const [rematchNewCode, setRematchNewCode]             = useState<string | null>(null);
-const [showRematchSignPrompt, setShowRematchSignPrompt] = useState(false);
-const [isSigningRematch, setIsSigningRematch]         = useState(false);
 
-const handleRematchOnChainSign = useCallback(async () => {
-  if (!rematchNewCode || !userWalletAddress || !challenge) return;
-  setIsSigningRematch(true);
-  try {
-    const switched = await ensureCorrectNetwork(activeChainId);
-    if (!switched) throw new Error("Please connect your wallet first.");
-
-    // createQuiz(keccak256(newCode)) on-chain
-    let txHash: string;
-    if (walletType === "embedded") {
-      const { ethers } = await import("ethers");
-      const quizHubIface = new ethers.Interface([
-        "function createQuiz(bytes32 quizId)",
-      ]);
-      const quizId = ethers.keccak256(ethers.toUtf8Bytes(rematchNewCode));
-      const data   = quizHubIface.encodeFunctionData("createQuiz", [quizId]);
-      const tx     = await (await getActiveSigner(activeChainId) as any)
-        .sendTransaction({ to: chainCfg.contracts.quizHub, data });
-      const receipt = await tx.wait();
-      txHash = receipt.hash;
-    } else {
-      const walletClient = makeWalletClient(activeChainId);
-      const publicClient = makePublicClient(activeChainId);
-      const [userAddr]   = await walletClient.getAddresses();
-      const quizId       = keccak256(toBytes(rematchNewCode));
-      const CREATE_QUIZ_ABI = [{
-        inputs: [{ internalType: "bytes32", name: "quizId", type: "bytes32" }],
-        name: "createQuiz", outputs: [],
-        stateMutability: "nonpayable", type: "function",
-      }] as const;
-      const hash = await walletClient.writeContract({
-        address:      chainCfg.contracts.quizHub as Address,
-        abi:          CREATE_QUIZ_ABI,
-        functionName: "createQuiz",
-        args:         [quizId],
-        account:      userAddr,
-        chain:        toViemChain(activeChainId),
-      });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      txHash = receipt.transactionHash;
-    }
-
-    // Notify backend → flips to "waiting" → broadcasts rematch_ready
-    const res = await fetch(
-      `${API_BASE_URL}/api/challenge/${rematchNewCode}/rematch-on-chain-confirmed`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creatorWallet: userWalletAddress, txHash }),
-      }
-    );
-    const d = await res.json();
-    if (!d.success) throw new Error(d.detail ?? "Failed to confirm on-chain");
-
-    setShowRematchSignPrompt(false);
-    // routing happens via rematch_ready WS message
-  } catch (err: any) {
-    toast.error(err?.message ?? "Transaction failed");
-  } finally {
-    setIsSigningRematch(false);
-  }
-}, [rematchNewCode, userWalletAddress, challenge, activeChainId,
-    walletType, chainCfg, getActiveSigner, ensureCorrectNetwork]);
   const rematchLockReason: string | null = (() => {
     if (!canRematch) return null;
     if (!myBadgeEarned)
@@ -921,6 +986,41 @@ useEffect(() => {
   ));
 }, [userWalletAddress, myWallet, sendWhenReady]);
 
+  // ── Requester: create the on-chain quiz for the rematch after opponent accepts ──
+  const handleRequesterCreateQuiz = useCallback(async (
+    newCode: string, opponentName: string
+  ) => {
+    if (!userWalletAddress) return;
+    setRematchProgress({ step: "creating", newCode, opponentName });
+    try {
+      const targetChainId = chainId ?? CELO_CHAIN_ID;
+      const switched = await ensureCorrectNetwork(targetChainId);
+      if (!switched) throw new Error("Please connect your wallet.");
+
+      const activeSigner = await getActiveSigner(targetChainId);
+      if (!activeSigner) throw new Error("No wallet available. Please reconnect.");
+
+      setRematchProgress(p => (p ? { ...p, step: "sign" } : p));
+
+      const txHash = await callCreateQuizOnChain(newCode, targetChainId, activeSigner, walletType);
+
+      setRematchProgress(p => (p ? { ...p, step: "confirming" } : p));
+
+      const res = await fetch(`${API_BASE_URL}/api/challenge/${newCode}/rematch-on-chain-confirmed`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creatorWallet: userWalletAddress, txHash }),
+      });
+      const d = await res.json();
+      if (!d.success) throw new Error(d.detail ?? "Confirmation failed");
+
+      setRematchProgress(p => (p ? { ...p, step: "done" } : p));
+      router.push(`/challenge/${newCode}/pre-lobby`);
+    } catch (err: any) {
+      setRematchProgress(p => (p ? { ...p, step: "error", error: err?.message ?? "Something went wrong." } : p));
+    }
+  }, [userWalletAddress, chainId, ensureCorrectNetwork, getActiveSigner, walletType, router]);
+
   // ── WS refs ───────────────────────────────────────────────────────────────
   const usernameRef = useRef(username);
   const myWalletRef = useRef(myWallet);
@@ -1104,29 +1204,20 @@ useEffect(() => {
           break;
         }
         case "rematch_invite_accepted": {
-          clearRematchTimers();
-          setRematchPending(false);
-          setRematchCountdown(null);
-
-          const newCode = msg.newCode as string;
-
-          if (msg.requesterWallet?.toLowerCase() === currentMyWallet) {
-            // I'm the requester — I need to sign the on-chain tx
-            setRematchNewCode(newCode);
-            setShowRematchSignPrompt(true);
-            toast.success(`${msg.acceptorName} accepted! Sign the transaction to open the lobby.`);
-          } else {
-            // I'm the acceptor — wait for rematch_ready
-            toast.info("Rematch accepted! Waiting for opponent to open the lobby…");
+          if (msg.acceptorWallet?.toLowerCase() !== currentMyWallet) {
+            clearRematchTimers(); setRematchPending(false); setRematchCountdown(null);
+            // Requester now signs createQuiz() on-chain for the new challenge.
+            // RematchProgressPopup shows step-by-step status until routing.
+            handleRequesterCreateQuiz(msg.newCode, msg.acceptorName);
           }
           break;
         }
         case "rematch_ready": {
-          stopGameOverAudio();
-          toast.success("Rematch ready! Heading to pre-lobby…");
-          router.push(`/challenge/${msg.newCode}/pre-lobby?rematch=1&isCreator=${
-            msg.requesterWallet?.toLowerCase() === currentMyWallet ? "1" : "0"
-          }`);
+          if (msg.requesterWallet?.toLowerCase() !== currentMyWallet) {
+            stopGameOverAudio();
+            toast.success("Rematch ready! Heading to pre-lobby…");
+            router.push(`/challenge/${msg.newCode}/pre-lobby`);
+          }
           break;
         }
       }
@@ -1138,7 +1229,7 @@ useEffect(() => {
       reconnectAttempts.current += 1;
       setTimeout(() => { if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); }, 2000 * reconnectAttempts.current);
     };
-  }, [code, userWalletAddress, startTimer, clearRematchTimers, createdAt]);
+  }, [code, userWalletAddress, startTimer, clearRematchTimers, createdAt, handleRequesterCreateQuiz]);
 
   useEffect(() => {
     if (!userWalletAddress) return;
@@ -1482,52 +1573,28 @@ const handleStake = useCallback(async () => {
 
   // ── Global overlays ────────────────────────────────────────────────────────
   const globalOverlays = (
-  <>
+    <>
     {showBadgeUnlocked && (
       <BadgeUnlockedPopup badge="rematch" onDismiss={() => setShowBadgeUnlocked(false)} />
     )}
     {!showBadgeUnlocked && showRedeemBadgeUnlocked && (
       <BadgeUnlockedPopup badge="redeem" onDismiss={() => setShowRedeemBadgeUnlocked(false)} />
     )}
-    {rematchInvite && (
-      <RematchPopup
-        invite={rematchInvite} myWallet={myWallet}
-        onDismiss={handleInviteDismiss} countdown={inviteCountdown}
-      />
-    )}
-    {showRematchSignPrompt && rematchNewCode && (
-      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-        <div className="w-full max-w-sm bg-card border border-border rounded-3xl p-6 text-center space-y-4 shadow-2xl">
-          <div className="text-5xl">🔏</div>
-          <h2 className="text-xl font-black text-foreground">Open the Rematch Lobby</h2>
-          <p className="text-sm text-muted-foreground">
-            Sign the on-chain transaction to create the rematch lobby.
-            Your opponent is waiting.
-          </p>
-          <div className="bg-muted/50 border border-border rounded-2xl px-4 py-3 font-mono text-sm font-bold text-foreground">
-            {rematchNewCode}
-          </div>
-          <Button
-            className="w-full h-12 font-bold"
-            onClick={handleRematchOnChainSign}
-            disabled={isSigningRematch}
-          >
-            {isSigningRematch
-              ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing…</>
-              : "Sign & Open Lobby"
-            }
-          </Button>
-          <button
-            onClick={() => setShowRematchSignPrompt(false)}
-            className="text-xs text-muted-foreground underline"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    )}
-  </>
-);
+      {rematchInvite && (
+        <RematchPopup
+          invite={rematchInvite} myWallet={myWallet}
+          onDismiss={handleInviteDismiss} countdown={inviteCountdown}
+        />
+      )}
+      {rematchProgress && rematchProgress.step !== "done" && (
+        <RematchProgressPopup
+          step={rematchProgress.step}
+          error={rematchProgress.error}
+          opponentName={rematchProgress.opponentName}
+        />
+      )}
+    </>
+  );
 
   // ─────────────────────────────────────────────────────────────────────────────
   //  RENDER
@@ -1986,6 +2053,13 @@ const handleStake = useCallback(async () => {
         <RematchPopup
           invite={rematchInvite} myWallet={myWallet}
           onDismiss={handleInviteDismiss} countdown={inviteCountdown}
+        />
+      )}
+      {rematchProgress && rematchProgress.step !== "done" && (
+        <RematchProgressPopup
+          step={rematchProgress.step}
+          error={rematchProgress.error}
+          opponentName={rematchProgress.opponentName}
         />
       )}
       <div className="min-h-screen bg-background flex flex-col">

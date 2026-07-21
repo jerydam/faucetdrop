@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
-import { useWallet, type SocialProvider, API_BASE } from "./wallet-provider"
+import { useWallet, type SocialProvider, API_BASE, openOAuthPopup } from "./wallet-provider"
 import { X, Loader2, ChevronRight, Shield, Fingerprint } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -108,57 +108,24 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
   }, [showModal])
 
   // ── Standard OAuth social login ───────────────────────────────────────────
-  const handleSocial = useCallback((providerId: SocialProvider) => {
-    if (providerId === "passkey")   { handlePasskey();       return }
-    if (providerId === "telegram")  { handleTelegramPopup(); return }
-    if (providerId === "farcaster") { handleFarcaster();     return }
+  const handleSocial = useCallback(async (providerId: SocialProvider) => {
+  if (providerId === "passkey")   { handlePasskey();       return }
+  if (providerId === "telegram")  { handleTelegramPopup(); return }
+  if (providerId === "farcaster") { handleFarcaster();     return }
 
-    setLoadingId(providerId)
-
-    const state = crypto.randomUUID()
-    const w = window.open(
-      `${API_BASE}/api/auth/${providerId}?client_state=${state}`,
-      "oauth",
-      "width=500,height=700,left=200,top=100",
-    )
-
-    if (!w) { setLoadingId(null); return }
-
-    let settled = false
-
-    const settle = (cancelled = false) => {
-      if (settled) return
-      settled = true
-      clearInterval(pollId)
-      if (cancelled) setLoadingId(null)
+  setLoadingId(providerId)
+  try {
+    const credential = await openOAuthPopup(API_BASE, providerId, () => setLoadingId(null))
+    await connectSocial(providerId, credential)
+    onSuccess?.()
+  } catch (err: any) {
+    if (err?.message !== "cancelled" && err?.message !== "OAuth timed out") {
+      console.error(`${providerId} login error:`, err)
     }
-
-    const pollId = setInterval(async () => {
-      try {
-        const res  = await fetch(`${API_BASE}/api/auth/session?state=${state}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data.status === "done") {
-            settle(false)
-            setLoadingId(null)
-            try { w.close() } catch {}
-            await connectSocial(data.provider as SocialProvider, data.credential)
-            onSuccess?.()
-            return
-          }
-        }
-      } catch { /* keep polling */ }
-
-      try {
-        if (w.closed) settle(true)
-      } catch { /* cross-origin */ }
-    }, 800)
-
-    setTimeout(() => {
-      try { w.close() } catch {}
-      settle(true)
-    }, 180_000)
-  }, [connectSocial, onSuccess])
+  } finally {
+    setLoadingId(null)
+  }
+}, [connectSocial, onSuccess])
 
   // ── Telegram popup ────────────────────────────────────────────────────────
   const handleTelegramPopup = useCallback(() => {

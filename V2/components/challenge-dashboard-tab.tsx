@@ -1050,6 +1050,7 @@ useEffect(() => {
             if (innerTab === "history") { fetchHistory(); fetchMatches(); }
             if (innerTab === "admin")   fetchOnChainStats();
             if (innerTab === "redeem" || innerTab === "buy") fetchGoodDollarPrice();
+            if (innerTab === "buy") fetchGWalletBalance();  // ← add this line
           }}
           className="ml-auto p-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -1557,35 +1558,47 @@ useEffect(() => {
  
     {/* ── Wallet balance card — NEW ─────────────────────────────────────── */}
     <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
-      <div className="flex items-center gap-2">
-        <Wallet className="h-4 w-4 text-muted-foreground" />
-        <span className="text-xs font-medium text-muted-foreground">Your {tokenSymbol} balance</span>
-      </div>
-      <div className="text-right">
-        {gWalletBalanceLoading ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-        ) : gWalletBalance !== null ? (
-          <div>
-            <span className="text-sm font-black text-foreground">
-              {gWalletBalance.toFixed(4)} {tokenSymbol}
+  <div className="flex items-center gap-2">
+    <Wallet className="h-4 w-4 text-muted-foreground" />
+    <span className="text-xs font-medium text-muted-foreground">
+      Your {tokenSymbol} balance
+    </span>
+  </div>
+  <div className="flex items-center gap-2">
+    {gWalletBalanceLoading ? (
+      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+    ) : gWalletBalance !== null ? (
+      <>
+        <div className="text-right">
+          <span className="text-sm font-black text-foreground">
+            {gWalletBalance.toFixed(4)} {tokenSymbol}
+          </span>
+          {gPriceUsd && (
+            <span className="block text-[10px] text-muted-foreground/70">
+              ≈ ${(gWalletBalance * gPriceUsd).toFixed(4)} USD
+              {maxAffordableDrops !== null &&
+                ` · up to ${maxAffordableDrops.toLocaleString()} DROPS`}
             </span>
-            {gPriceUsd && (
-              <span className="block text-[10px] text-muted-foreground/70">
-                ≈ ${(gWalletBalance * gPriceUsd).toFixed(4)} USD
-                {maxAffordableDrops !== null && ` · up to ${maxAffordableDrops.toLocaleString()} DROPS`}
-              </span>
-            )}
-          </div>
-        ) : (
-          <button
-            onClick={fetchGWalletBalance}
-            className="text-xs text-primary hover:opacity-70 flex items-center gap-1"
-          >
-            <RefreshCw className="h-3 w-3" /> Load
-          </button>
-        )}
-      </div>
-    </div>
+          )}
+        </div>
+        <button
+          onClick={fetchGWalletBalance}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          title="Refresh balance"
+        >
+          <RefreshCw className="h-3 w-3" />
+        </button>
+      </>
+    ) : (
+      <button
+        onClick={fetchGWalletBalance}
+        className="text-xs text-primary hover:opacity-70 flex items-center gap-1"
+      >
+        <RefreshCw className="h-3 w-3" /> Load
+      </button>
+    )}
+  </div>
+</div>
  
     {/* DROPS input */}
     <div className="space-y-1.5">

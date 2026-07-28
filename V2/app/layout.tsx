@@ -16,6 +16,9 @@ import { useVisitTracker } from "@/hooks/use-visit-tracker"
 import { Providers } from "@/components/privyProvider"
 import { PinSetupModal } from "@/components/pin-modal"
 import { PinEntryModal } from "@/components/pin-entry"
+import { PresenceProvider } from "@/components/presence-provider"
+import { DMProvider } from "@/components/dm-provider"
+import { DMPanel } from "@/components/dm-panel"
 // ── Solana wallet adapter ─────────────────────────────────────────────────────
 import {
   ConnectionProvider,
@@ -157,11 +160,16 @@ export default function RootLayout({
                     />
                   <Providers>
                   <SubscriptionModalProvider>
-                    <div className="min-h-screen flex flex-col">
-                    <main className="flex-1">{children}</main>
-                    <FooterWrapper />
-                  </div>
-                    <Toaster richColors position="top-center" closeButton />
+                    <PresenceProvider>
+                      <DMProvider>
+                        <div className="min-h-screen flex flex-col">
+                          <main className="flex-1">{children}</main>
+                          <FooterWrapper />
+                        </div>
+                        <DMPanel />
+                        <Toaster richColors position="top-center" closeButton />
+                      </DMProvider>
+                    </PresenceProvider>
                   </SubscriptionModalProvider>
                   </Providers>
                 </WalletProvider>

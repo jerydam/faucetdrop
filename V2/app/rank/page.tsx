@@ -172,7 +172,10 @@ export default function RanksPage() {
   }, []);
 
   const isOnline = (wallet: string) => onlineSet.has(wallet.toLowerCase());
-
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) router.back();
+    else router.push("/");
+  };
   // ── Duel routing — always private invite ──
     const { openChat } = useDM();
 
@@ -310,6 +313,20 @@ export default function RanksPage() {
           align-items: center;
           animation: fadeUp 0.35s ease forwards; opacity: 0;
         }
+          .ranks-page button {
+          -webkit-tap-highlight-color: transparent;
+          touch-action: manipulation;
+          transition: transform 0.12s ease, filter 0.12s ease, background 0.15s;
+        }
+        .ranks-page button:active:not(:disabled) {
+          transform: scale(0.93);
+          filter: brightness(0.9);
+        }
+        .player-row:active { transform: scale(0.99); }
+        @media (prefers-reduced-motion: reduce) {
+          .ranks-page button:active:not(:disabled),
+          .player-row:active { transform: none; }
+        }
         .player-name {
           font-weight: 700;
           font-size: 13px;
@@ -355,7 +372,6 @@ export default function RanksPage() {
           white-space: nowrap; transition: background 0.15s, transform 0.12s; flex-shrink: 0;
         }
         .duel-btn:hover:not(:disabled)  { background: var(--dd-blue2, #1d4ed8); }
-        .duel-btn:active:not(:disabled) { transform: scale(0.95); }
         .duel-btn:disabled { background: var(--dd-line); color: var(--dd-dim); cursor: not-allowed; }
       `}</style>
 
@@ -490,7 +506,7 @@ export default function RanksPage() {
                 const initial    = player.username?.slice(0, 2).toUpperCase() || "??";
                 const pct        = player.total_duels === 0 ? 0 : Math.round((player.total_wins / player.total_duels) * 100);
                 const barColor   = pct >= 60 ? "#34d399" : pct >= 40 ? "#fbbf24" : "#f87171";
-
+                
                 return (
                   <div
                     key={player.wallet_address}

@@ -110,7 +110,32 @@
     --privy-border-radius: 1rem !important;
   }
 }
+/* ══════════════════════════════════════
+   RANKS PAGE DD-* TOKENS
+   Maps the inline --dd-* vars used in
+   page.tsx to the existing design tokens
+   ══════════════════════════════════════ */
+:root {
+  --dd-bg:         hsl(var(--background));
+  --dd-card:       hsl(var(--card));
+  --dd-text:       hsl(var(--foreground));
+  --dd-text-muted: hsl(var(--muted-foreground));
+  --dd-dim:        hsl(var(--muted-foreground));
+  --dd-line:       hsl(var(--border));
+  --dd-blue:       hsl(var(--primary));
+  --dd-blue2:      #1d4ed8;
+}
 
+.dark {
+  --dd-bg:         hsl(var(--background));
+  --dd-card:       hsl(var(--card));
+  --dd-text:       hsl(var(--foreground));
+  --dd-text-muted: hsl(var(--muted-foreground));
+  --dd-dim:        hsl(var(--muted-foreground));
+  --dd-line:       hsl(var(--border));
+  --dd-blue:       hsl(var(--primary));
+  --dd-blue2:      #2563eb;
+}
 /* ══════════════════════════════════════
    BASE BODY — uses CSS variables, never
    a hardcoded hex colour

@@ -6,7 +6,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { usePathname } from "next/navigation"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "sonner"
+import { ThemedToaster } from "@/components/themed-toaster";
 import { NetworkProvider } from "@/hooks/use-network"
 import { WalletProvider } from "@/components/wallet-provider"
 import { PrivyProvider } from "@privy-io/react-auth"
@@ -167,7 +167,7 @@ export default function RootLayout({
                           <FooterWrapper />
                         </div>
                         <DMPanel />
-                        <Toaster richColors position="top-center" closeButton />
+                        <ThemedToaster />
                       </DMProvider>
                     </PresenceProvider>
                   </SubscriptionModalProvider>

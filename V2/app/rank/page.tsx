@@ -10,6 +10,15 @@ import { useDM } from "@/components/dm-provider";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
+// ─── Chain config ─────────────────────────────────────────────────────────────
+
+const CHAINS = [
+  { id: 42220, label: "Celo",     emoji: "🌿" },
+  { id: 677,   label: "Botchain", emoji: "🤖" },
+] as const;
+
+type ChainId = typeof CHAINS[number]["id"];
+
 // ─── Tier system ──────────────────────────────────────────────────────────────
 
 interface Tier {
@@ -104,7 +113,6 @@ function PodiumCard({
   return (
     <div className={`podium-card${isFirst ? " podium-first" : ""}`}>
       {isFirst && <span className="crown-emoji">👑</span>}
-
       <div style={{ position: "relative", display: "inline-block" }}>
         <div
           className="podium-avatar"
@@ -121,29 +129,21 @@ function PodiumCard({
             />
           ) : initial}
         </div>
-        <span
-          title={online ? "Online" : "Offline"}
-          style={{
-            position: "absolute", bottom: -2, right: -2,
-            width: 14, height: 14, borderRadius: "50%",
-            background: online ? "#22c55e" : "#6b7280",
-            border: "3px solid var(--dd-bg)",
-            zIndex: 10,
-          }}
-        />
+        <span title={online ? "Online" : "Offline"} style={{
+          position: "absolute", bottom: -2, right: -2,
+          width: 14, height: 14, borderRadius: "50%",
+          background: online ? "#22c55e" : "#6b7280",
+          border: "3px solid var(--dd-bg)", zIndex: 10,
+        }} />
       </div>
-
       <span className="podium-name">{player.username}</span>
       <StarDisplay count={tier.stars} color={tier.color} size={isFirst ? 13 : 11} />
       <span style={{ fontSize: 12, color: "#34d399", fontWeight: 700 }}>{player.total_wins}W</span>
       <RankDelta delta={player.rank_delta} />
       <span style={{ fontSize: 18 }}>{medals[place - 1]}</span>
-
       {!isMe && (
-        <button
-          className="podium-duel-btn"
-          onClick={() => onMessage(player.wallet_address, player.username, player.avatar_url)}
-        >
+        <button className="podium-duel-btn"
+          onClick={() => onMessage(player.wallet_address, player.username, player.avatar_url)}>
           Message
         </button>
       )}
@@ -155,48 +155,54 @@ function PodiumCard({
 
 export default function RanksPage() {
   const router = useRouter();
-  const { address: myWallet } = useWallet();
+  const { address: myWallet, chainId: walletChainId } = useWallet();
   const { openChat } = useDM();
 
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch]   = useState("");
-  const [filter, setFilter]   = useState<"top100" | "online">("top100");
+  // ── Chain selection: default to the wallet's active chain if supported ──
+  const defaultChain = CHAINS.find(c => c.id === walletChainId)?.id ?? CHAINS[0].id;
+  const [activeChain, setActiveChain] = useState<ChainId>(defaultChain);
+
+  // When the wallet switches chain, follow it automatically
+  useEffect(() => {
+    const matched = CHAINS.find(c => c.id === walletChainId);
+    if (matched) setActiveChain(matched.id);
+  }, [walletChainId]);
+
+  const [players, setPlayers]   = useState<Player[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [search,  setSearch]    = useState("");
+  const [filter,  setFilter]    = useState<"top100" | "online">("top100");
 
   const onlineSet  = usePresence();
   const onlineInfo = usePresenceInfo();
+  const myRowRef   = useRef<HTMLDivElement | null>(null);
+  const [flashMe, setFlashMe]   = useState(false);
 
-  const myRowRef = useRef<HTMLDivElement | null>(null);
-  const [flashMe, setFlashMe] = useState(false);
-
+  // ── Fetch on chain change ─────────────────────────────────────────────────
   useEffect(() => {
-    fetch(`${API_BASE}/api/ranks`)
+    setLoading(true);
+    setPlayers([]);
+    fetch(`${API_BASE}/api/ranks?chain_id=${activeChain}`)
       .then(r => r.json())
       .then(d => { if (d.success) setPlayers(d.players ?? []); })
-      .catch(() => {})
+      .catch(() => toast.error("Failed to load rankings."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeChain]);
 
-  const isOnline = (wallet: string) => onlineSet.has(wallet.toLowerCase());
-
-  const handleMessage = (wallet: string, username: string, avatar?: string) => {
-    openChat(wallet, username, avatar);
-  };
-
+  const isOnline     = (wallet: string) => onlineSet.has(wallet.toLowerCase());
+  const handleMessage = (wallet: string, username: string, avatar?: string) => openChat(wallet, username, avatar);
   const goBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/");
   };
 
-  const myEntry = players.find(p => p.wallet_address.toLowerCase() === (myWallet?.toLowerCase() ?? ""));
-  const myRank  = myEntry ? players.indexOf(myEntry) + 1 : null;
-  const myTier  = myEntry ? getTier(myEntry.total_wins) : TIERS[0];
+  const myEntry      = players.find(p => p.wallet_address.toLowerCase() === (myWallet?.toLowerCase() ?? ""));
+  const myRank       = myEntry ? players.indexOf(myEntry) + 1 : null;
+  const myTier       = myEntry ? getTier(myEntry.total_wins) : TIERS[0];
   const tierProgress = myEntry && myTier.maxWins !== Infinity
     ? Math.min(100, Math.round(((myEntry.total_wins - myTier.minWins) / (myTier.maxWins - myTier.minWins)) * 100))
     : 100;
 
-  // Everyone currently connected — ranked or not. Players outside the leaderboard
-  // get a row built from what the presence socket already told us about them.
   const onlinePlayers = useMemo(() => {
     const byWallet = new Map(players.map(p => [p.wallet_address.toLowerCase(), p]));
     const out: Player[] = [];
@@ -229,15 +235,15 @@ export default function RanksPage() {
   const scrollToMe = () => {
     if (!myWallet) { toast("Connect your wallet to find your rank."); return; }
     if (!myEntry)  { toast("You're not in the top 100 yet — win a few duels."); return; }
-
-    setSearch("");
-    setFilter("top100");
+    setSearch(""); setFilter("top100");
     setTimeout(() => {
       myRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       setFlashMe(true);
       setTimeout(() => setFlashMe(false), 1600);
     }, 60);
   };
+
+  const activeChainMeta = CHAINS.find(c => c.id === activeChain)!;
 
   return (
     <>
@@ -256,11 +262,8 @@ export default function RanksPage() {
         }
         .fade-up { animation: fadeUp 0.4s ease forwards; }
         .skeleton { background: var(--dd-line); border-radius: 10px; animation: shimmer 1.4s ease infinite; }
-
-        /* Press feedback on every button in the page */
         .ranks-page button {
-          -webkit-tap-highlight-color: transparent;
-          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent; touch-action: manipulation;
           transition: transform 0.12s ease, filter 0.12s ease, background 0.15s, border-color 0.2s, color 0.15s;
         }
         .ranks-page button:active:not(:disabled) { transform: scale(0.93); filter: brightness(0.9); }
@@ -268,7 +271,6 @@ export default function RanksPage() {
         @media (prefers-reduced-motion: reduce) {
           .ranks-page button:active:not(:disabled), .player-row:active { transform: none; }
         }
-
         .ranks-header { display: flex; align-items: center; gap: 12px; padding: 20px 16px 14px; }
         .back-btn {
           width: 36px; height: 36px; border-radius: 10px;
@@ -277,10 +279,28 @@ export default function RanksPage() {
         }
         .page-title {
           font-family: 'Big Shoulders Display', sans-serif;
-          font-size: 26px; font-weight: 900; line-height: 1;
-          letter-spacing: -0.01em; color: var(--dd-text);
+          font-size: 26px; font-weight: 900; line-height: 1; letter-spacing: -0.01em; color: var(--dd-text);
         }
         .page-subtitle { font-size: 12px; color: var(--dd-text-muted); font-weight: 500; margin-top: 2px; }
+
+        /* ── Chain switcher ── */
+        .chain-switcher {
+          display: flex; gap: 8px; padding: 0 16px 16px;
+        }
+        .chain-pill {
+          display: flex; align-items: center; gap: 6px;
+          padding: 8px 16px; border-radius: 99px;
+          border: 1.5px solid var(--dd-line);
+          background: transparent; color: var(--dd-dim);
+          font-family: 'Figtree', sans-serif; font-size: 13px; font-weight: 700;
+          cursor: pointer; flex-shrink: 0; white-space: nowrap;
+          transition: all 0.15s;
+        }
+        .chain-pill.active {
+          background: var(--dd-blue); border-color: var(--dd-blue); color: #fff;
+        }
+        .chain-pill:hover:not(.active) { border-color: rgba(37,99,235,0.4); color: var(--dd-text); }
+
         .my-banner {
           margin: 0 16px 16px; padding: 14px 16px; border-radius: 14px;
           background: rgba(37,99,235,0.1); border: 1px solid rgba(37,99,235,0.3);
@@ -356,7 +376,6 @@ export default function RanksPage() {
         }
         .player-row:hover { border-color: rgba(37,99,235,0.4); background: rgba(37,99,235,0.04); }
         .player-row.me    { border-color: rgba(37,99,235,0.5); background: rgba(37,99,235,0.08); }
-        /* opacity:1 is required — the row starts at 0 and relies on fadeUp to reveal it */
         .player-row.flash { opacity: 1; animation: flashRow 1.4s ease; }
         .player-name { font-weight: 700; font-size: 13px; color: var(--dd-text); word-break: break-word; }
         .player-name-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
@@ -392,9 +411,22 @@ export default function RanksPage() {
           <div>
             <div className="page-title">Rankings</div>
             <div className="page-subtitle">
-              {players.length} duelists · {onlineSet.size} online
+              {activeChainMeta.emoji} {activeChainMeta.label} · {players.length} duelists · {onlineSet.size} online
             </div>
           </div>
+        </div>
+
+        {/* Chain Switcher */}
+        <div className="chain-switcher">
+          {CHAINS.map(c => (
+            <button
+              key={c.id}
+              className={`chain-pill${activeChain === c.id ? " active" : ""}`}
+              onClick={() => setActiveChain(c.id)}
+            >
+              {c.emoji} {c.label}
+            </button>
+          ))}
         </div>
 
         {/* My Position Banner */}
@@ -402,7 +434,7 @@ export default function RanksPage() {
           <div className="my-banner fade-up">
             <div className="my-banner-top">
               <div className="my-banner-left">
-                <span className="my-banner-label">Your position</span>
+                <span className="my-banner-label">Your position on {activeChainMeta.label}</span>
                 <span className="my-banner-rank">#{myRank}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
                   <StarDisplay count={myTier.stars} color={myTier.color} size={12} />
@@ -430,7 +462,7 @@ export default function RanksPage() {
           </div>
         ) : myWallet && !loading ? (
           <div className="my-banner fade-up">
-            <span className="my-banner-label">Your position</span>
+            <span className="my-banner-label">Your position on {activeChainMeta.label}</span>
             <div className="my-banner-note" style={{ marginTop: 4 }}>
               Not in the top 100 yet — win duels to appear here.
             </div>
@@ -470,17 +502,11 @@ export default function RanksPage() {
 
         {/* Filter Pills */}
         <div className="filter-row">
-          <button
-            className={`filter-pill${filter === "top100" ? " active" : ""}`}
-            onClick={() => setFilter("top100")}
-          >
+          <button className={`filter-pill${filter === "top100" ? " active" : ""}`} onClick={() => setFilter("top100")}>
             Top 100
           </button>
           <button className="filter-pill" onClick={scrollToMe}>Me</button>
-          <button
-            className={`filter-pill${filter === "online" ? " active" : ""}`}
-            onClick={() => setFilter("online")}
-          >
+          <button className={`filter-pill${filter === "online" ? " active" : ""}`} onClick={() => setFilter("online")}>
             🟢 Online{onlineSet.size > 0 ? ` (${onlineSet.size})` : ""}
           </button>
         </div>
@@ -526,19 +552,11 @@ export default function RanksPage() {
                   className={`player-row${isMe ? " me" : ""}${isMe && flashMe ? " flash" : ""}`}
                   style={{ animationDelay: `${idx * 0.04}s` }}
                 >
-                  {/* Rank */}
                   <span className="rank-num" style={{
-                    color: globalRank === 1 ? "var(--dd-blue)"
-                         : globalRank === 2 ? "#9ca3af"
-                         : globalRank === 3 ? "#60a5fa"
-                         : "var(--dd-dim)",
+                    color: globalRank === 1 ? "var(--dd-blue)" : globalRank === 2 ? "#9ca3af" : globalRank === 3 ? "#60a5fa" : "var(--dd-dim)",
                   }}>
-                    {globalRank === null ? "—"
-                      : globalRank <= 3 ? ["🥇", "🥈", "🥉"][globalRank - 1]
-                      : `#${globalRank}`}
+                    {globalRank === null ? "—" : globalRank <= 3 ? ["🥇", "🥈", "🥉"][globalRank - 1] : `#${globalRank}`}
                   </span>
-
-                  {/* Avatar + online dot */}
                   <div style={{ position: "relative", flexShrink: 0 }}>
                     <div className="avatar" style={{ background: `${tier.color}22`, color: tier.color, overflow: "hidden", padding: 0 }}>
                       {player.avatar_url ? (
@@ -548,19 +566,13 @@ export default function RanksPage() {
                         />
                       ) : initial}
                     </div>
-                    <span
-                      title={online ? "Online" : "Offline"}
-                      style={{
-                        position: "absolute", bottom: -2, right: -2,
-                        width: 12, height: 12, borderRadius: "50%",
-                        background: online ? "#22c55e" : "#6b7280",
-                        border: "2px solid var(--dd-card)",
-                        zIndex: 10,
-                      }}
-                    />
+                    <span title={online ? "Online" : "Offline"} style={{
+                      position: "absolute", bottom: -2, right: -2,
+                      width: 12, height: 12, borderRadius: "50%",
+                      background: online ? "#22c55e" : "#6b7280",
+                      border: "2px solid var(--dd-card)", zIndex: 10,
+                    }} />
                   </div>
-
-                  {/* Info */}
                   <div className="player-info">
                     <div className="player-name-row">
                       <span className="player-name">{player.username}</span>
@@ -578,8 +590,6 @@ export default function RanksPage() {
                       )}
                     </div>
                   </div>
-
-                  {/* Right: wins + winrate bar */}
                   <div className="player-right">
                     <span className="player-wins" style={{ color: "#34d399" }}>{player.total_wins}W</span>
                     <div className="win-bar-row">
@@ -589,16 +599,8 @@ export default function RanksPage() {
                       <span className="win-pct" style={{ color: barColor }}>{pct}%</span>
                     </div>
                   </div>
-
-                  {/* Message — hidden for own row */}
                   {!isMe && (
-                    <button
-                      className="duel-btn"
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleMessage(player.wallet_address, player.username, player.avatar_url);
-                      }}
-                    >
+                    <button className="duel-btn" onClick={e => { e.stopPropagation(); handleMessage(player.wallet_address, player.username, player.avatar_url); }}>
                       <MessageCircle size={11} /> Message
                     </button>
                   )}

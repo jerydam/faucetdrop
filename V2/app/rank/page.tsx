@@ -3,9 +3,10 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/hooks/use-wallet";
-import { ArrowLeft, Swords, Search, ChevronUp, ChevronDown, Minus } from "lucide-react";
+import { ArrowLeft, Swords, Search, ChevronUp, ChevronDown, Minus, MessageCircle } from "lucide-react";
+import { useDM } from "@/components/dm-provider";
 import { usePresence } from "@/components/presence-provider"; // ← Global presence hook
-import {getChainConfig} from '@/lib/chain'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 // ─── Tier system ──────────────────────────────────────────────────────────────
@@ -16,11 +17,11 @@ interface Tier {
 }
 
 const TIERS: Tier[] = [
-  { label: "Droplet",  minWins: 0,   maxWins: 50,     stars: 1, color: "#9ca3af", badge: "💧" },
-  { label: "Drizzle",  minWins: 51, maxWins: 150,     stars: 2, color: "#60a5fa", badge: "🌧️" },
-  { label: "Downpour", minWins: 151, maxWins: 300,     stars: 3, color: "#34d399", badge: "⛈️" },
-  { label: "Torrent",  minWins: 301, maxWins: 500,     stars: 4, color: "#fbbf24", badge: "🌊" },
-  { label: "Flood",    minWins: 501, maxWins: Infinity, stars: 5, color: "#f87171", badge: "🏆" },
+  { label: "Droplet",  minWins: 0,   maxWins: 100,     stars: 1, color: "#9ca3af", badge: "💧" },
+  { label: "Drizzle",  minWins: 101, maxWins: 200,     stars: 2, color: "#60a5fa", badge: "🌧️" },
+  { label: "Downpour", minWins: 201, maxWins: 300,     stars: 3, color: "#34d399", badge: "⛈️" },
+  { label: "Torrent",  minWins: 301, maxWins: 400,     stars: 4, color: "#fbbf24", badge: "🌊" },
+  { label: "Flood",    minWins: 401, maxWins: Infinity, stars: 5, color: "#f87171", badge: "🏆" },
 ];
 
 function getTier(wins: number): Tier {
@@ -29,84 +30,7 @@ function getTier(wins: number): Tier {
   }
   return TIERS[0];
 }
-// ─── Weekly Rank Reward Banner ─────────────────────────────────────────────────
 
-const DUEL_FAUCET_URL = "https://app.faucetdrops.io/faucet";
-
-/**
- * Claim window: opens Sat 23:00 (week 1) → closes Sat 22:59 (week 2), i.e. a 7-day window.
- * Rank reset: every Sunday 00:00 UTC+1.
- * We compute "is claim window open" based on current time vs the most recent reset.
- */
-function getClaimWindowStatus() {
-  const now = new Date();
-
-  // Convert to UTC+1
-  const utc1 = new Date(now.getTime() + (60 + now.getTimezoneOffset()) * 60000);
-
-  const day = utc1.getDay();   // 0 = Sunday
-  const hour = utc1.getHours();
-  const minute = utc1.getMinutes();
-
-  // Minutes since last Sunday 00:00 (UTC+1)
-  const minutesSinceReset = day * 24 * 60 + hour * 60 + minute;
-
-  // Window opens Saturday 23:00 → that's day 6, 23:00 → minutes = 6*1440 + 23*60 = 9780
-  // Window closes following Saturday 22:59 → 7 days later minus 1 min = 9780 + 10080 - 1 = 19859
-  const WINDOW_OPEN_MIN  = 6 * 1440 + 23 * 60;        // 9780
-  const WINDOW_CLOSE_MIN = WINDOW_OPEN_MIN + 7 * 1440 - 1; // 19859
-
-  const isOpen = minutesSinceReset >= WINDOW_OPEN_MIN && minutesSinceReset <= WINDOW_CLOSE_MIN;
-
-  // Time remaining until window closes (only meaningful if open)
-  const minutesUntilClose = WINDOW_CLOSE_MIN - minutesSinceReset;
-  const daysLeft  = Math.floor(minutesUntilClose / 1440);
-  const hoursLeft = Math.floor((minutesUntilClose % 1440) / 60);
-
-  return { isOpen, daysLeft, hoursLeft };
-}
-
-function WeeklyRewardBanner() {
-  const [status, setStatus] = useState(getClaimWindowStatus());
-
-  useEffect(() => {
-    const interval = setInterval(() => setStatus(getClaimWindowStatus()), 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="weekly-reward-banner fade-up">
-      <div className="weekly-reward-top">
-        <div className="weekly-reward-left">
-          <span className="weekly-reward-label">🏆 Weekly Rank Rewards</span>
-          <span className="weekly-reward-desc">
-            Top 3 players each week claim a reward from the Duel Faucet.
-          </span>
-        </div>
-        <span className={`weekly-reward-status${status.isOpen ? " open" : ""}`}>
-          {status.isOpen ? "Claim Open" : "Claim Open"}
-        </span>
-      </div>
-
-      {status.isOpen ? (
-        <span className="weekly-reward-sub">
-          {status.daysLeft}d {status.hoursLeft}h left to claim — ranks reset Sunday 12 AM (UTC+1)
-        </span>
-      ) : (
-        <span className="weekly-reward-sub">
-          Opens Every Saturday 11 PM (UTC+1)
-        </span>
-      )}
-
-      <button
-        className="weekly-reward-claim-btn"
-        onClick={() => window.open(DUEL_FAUCET_URL, "_blank")}
-      >
-        Claim / View Allocation ↗
-      </button>
-    </div>
-  );
-}
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StarDisplay({ count, color, size = 14 }: { count: number; color: string; size?: number }) {
@@ -165,10 +89,10 @@ interface Player {
 // ─── Podium Card ──────────────────────────────────────────────────────────────
 
 function PodiumCard({
-  player, place, myWallet, onDuel, online,
+  player, place, myWallet, onMessage, online,
 }: {
   player: Player; place: number; myWallet: string;
-  onDuel: (w: string, username: string) => void; online: boolean;
+  onMessage: (w: string, username: string, avatar?: string) => void; online: boolean;
 }) {
   const tier    = getTier(player.total_wins);
   const isMe    = player.wallet_address.toLowerCase() === myWallet.toLowerCase();
@@ -216,10 +140,9 @@ function PodiumCard({
       {!isMe && (
         <button
           className="podium-duel-btn"
-          onClick={() => onDuel(player.wallet_address, player.username)}
-          disabled={!online}
+          onClick={() => onMessage(player.wallet_address, player.username, player.avatar_url)}
         >
-          {online ? "Duel ↗" : "Offline"}
+          Message
         </button>
       )}
     </div>
@@ -230,33 +153,32 @@ function PodiumCard({
 
 export default function RanksPage() {
   const router = useRouter();
+  const { address: myWallet } = useWallet();
+
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch]   = useState("");
-  const [filter, setFilter] = useState<"all" | "top10" | "myrank" | "online">("top10");
-  const { address: myWallet, chainId } = useWallet();
+  const [filter, setFilter] = useState<"top10" | "myrank" | "online">("top10");
 
   // 👇 Grab the global online set from your new provider
   const onlineSet = usePresence();
 
   useEffect(() => {
-  const chain = chainId ?? 42220;
-  fetch(`${API_BASE}/api/ranks?chain_id=${chain}`)
-    .then(r => r.json())
-    .then(d => { if (d.success) setPlayers(d.players ?? []); })
-    .catch(() => {})
-    .finally(() => setLoading(false));
-}, [chainId]); // ← re-fetch when chain switches
+    fetch(`${API_BASE}/api/ranks`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setPlayers(d.players ?? []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   const isOnline = (wallet: string) => onlineSet.has(wallet.toLowerCase());
 
   // ── Duel routing — always private invite ──
-  const handleDuel = (targetWallet: string, targetUsername: string) => {
-    const params = new URLSearchParams({
-      inviteUsername: targetUsername,
-      inviteWallet:   targetWallet,
-    });
-    router.push(`/challenge/create-challenge?${params.toString()}`);
+    const { openChat } = useDM();
+
+  // Duels are now negotiated in the private chat, so the row action opens the DM.
+  const handleMessage = (wallet: string, username: string, avatar?: string) => {
+    openChat(wallet, username, avatar);
   };
 
   const filtered = useMemo(() => {
@@ -410,32 +332,6 @@ export default function RanksPage() {
           gap: 3px;
           overflow: visible; 
         }  
-         .weekly-reward-banner {
-          margin: 0 16px 16px; padding: 14px 16px; border-radius: 14px;
-          background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3);
-          display: flex; flex-direction: column; gap: 8px;
-        }
-        .weekly-reward-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-        .weekly-reward-left { display: flex; flex-direction: column; gap: 2px; }
-        .weekly-reward-label { font-size: 13px; font-weight: 800; color: var(--dd-text); }
-        .weekly-reward-desc { font-size: 11px; color: var(--dd-text-muted); }
-        .weekly-reward-status {
-          font-size: 9px; font-weight: 800; padding: 4px 8px; border-radius: 6px;
-          background: var(--dd-line); color: var(--dd-text-muted); flex-shrink: 0;
-          white-space: nowrap;
-        }
-        .weekly-reward-status.open {
-          background: rgba(34,197,94,0.15); color: #22c55e;
-        }
-        .weekly-reward-sub { font-size: 10px; color: var(--dd-text-muted); }
-        .weekly-reward-claim-btn {
-          align-self: flex-start; padding: 8px 16px; border-radius: 10px;
-          background: #f59e0b; border: none; color: #0d0f1a;
-          font-family: 'Figtree', sans-serif; font-size: 12px; font-weight: 800;
-          cursor: pointer; transition: opacity 0.15s;
-        }
-        .weekly-reward-claim-btn:hover { opacity: 0.85; }
-        .weekly-reward-claim-btn:active { transform: scale(0.97); } 
         .player-row:hover { border-color: rgba(37,99,235,0.4); background: rgba(37,99,235,0.04); }
         .player-row.me    { border-color: rgba(37,99,235,0.5); background: rgba(37,99,235,0.08); }
         .rank-num { font-family: 'Big Shoulders Display', sans-serif; font-size: 16px; font-weight: 900; min-width: 28px; text-align: center; flex-shrink: 0; }
@@ -473,11 +369,11 @@ export default function RanksPage() {
           <div>
             <div className="page-title">Rankings</div>
             <div className="page-subtitle">
-              {players.length} duelists · {onlineSet.size} online · {chainId ? getChainConfig(chainId).shortName : "Celo"}
+              {players.length} duelists · {onlineSet.size} online
             </div>
           </div>
         </div>
-        <WeeklyRewardBanner />
+
         {/* My Position Banner */}
         {myEntry && (
           <div className="my-banner fade-up">
@@ -527,7 +423,7 @@ export default function RanksPage() {
                 player={players[playerIdx]}
                 place={place}
                 myWallet={myWallet ?? ""}
-                onDuel={handleDuel}
+                onMessage={handleMessage}
                 online={isOnline(players[playerIdx].wallet_address)}
               />
             ))}
@@ -554,7 +450,7 @@ export default function RanksPage() {
               className={`filter-pill${filter === f ? " active" : ""}`}
               onClick={() => setFilter(f as any)}
             >
-              {f === "top10" ? "Top 10" : f === "all" ? "All" : f === "myrank" ? "Near me" : "🟢 Online"}
+              {f === "top10" ? "Top 10" : f === "myrank" ? "Near me" : "🟢 Online"}
             </button>
           ))}
         </div>
@@ -664,11 +560,10 @@ export default function RanksPage() {
                         className="duel-btn"
                         onClick={e => {
                           e.stopPropagation();
-                          handleDuel(player.wallet_address, player.username);
+                          handleMessage(player.wallet_address, player.username, player.avatar_url);
                         }}
-                        disabled={!online}
                       >
-                        <Swords size={11} /> {online ? "Duel ↗" : "Offline"}
+                        <MessageCircle size={11} /> Message
                       </button>
                     )}
                   </div>

@@ -102,7 +102,8 @@ function PodiumCard({
   player, place, myWallet, onMessage, online,
 }: {
   player: Player; place: number; myWallet: string;
-  onMessage: (w: string, username: string, avatar?: string) => void; online: boolean;
+  onMessage: (w: string, username: string, avatar?: string) => void;
+  online: boolean;
 }) {
   const tier    = getTier(player.total_wins);
   const isMe    = player.wallet_address.toLowerCase() === myWallet.toLowerCase();
@@ -161,8 +162,6 @@ export default function RanksPage() {
   // ── Chain selection: default to the wallet's active chain if supported ──
   const defaultChain = CHAINS.find(c => c.id === walletChainId)?.id ?? CHAINS[0].id;
 
- 
-
   const [players, setPlayers]   = useState<Player[]>([]);
   const [loading, setLoading]   = useState(true);
   const [search,  setSearch]    = useState("");
@@ -186,7 +185,10 @@ export default function RanksPage() {
       .finally(() => setLoading(false));
   }, [activeChain]);
 
-  const isOnline     = (wallet: string) => onlineSet.has(wallet.toLowerCase());
+  const isOnline = (wallet: string) => onlineSet.has(wallet.toLowerCase());
+  const isFiller = (wallet: string) => !!onlineInfo.get(wallet.toLowerCase())?.filler;
+  const canMessage = (wallet: string) => !isFiller(wallet);
+
   const handleMessage = (wallet: string, username: string, avatar?: string) => openChat(wallet, username, avatar);
   const goBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
@@ -214,7 +216,20 @@ export default function RanksPage() {
         total_wins: 0, total_duels: 0, total_earned: 0, rank_delta: 0,
       });
     });
-    return out.sort((a, b) => b.total_wins - a.total_wins);
+
+    // Stable per-wallet scatter so the order doesn't churn between renders
+    const scatter = (s: string) => {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+      return h;
+    };
+
+    const real = out.filter(p => !isFiller(p.wallet_address))
+                    .sort((a, b) => b.total_wins - a.total_wins);
+    const pad  = out.filter(p =>  isFiller(p.wallet_address))
+                    .sort((a, b) => scatter(a.wallet_address) - scatter(b.wallet_address));
+
+    return [...real, ...pad];
   }, [players, onlineSet, onlineInfo]);
 
   const filtered = useMemo(() => {
@@ -584,7 +599,7 @@ export default function RanksPage() {
                       <span className="win-pct" style={{ color: barColor }}>{pct}%</span>
                     </div>
                   </div>
-                  {!isMe && (
+                  {!isMe && (player.wallet_address) && (
                     <button className="duel-btn" onClick={e => { e.stopPropagation(); handleMessage(player.wallet_address, player.username, player.avatar_url); }}>
                       <MessageCircle size={11} /> Message
                     </button>

@@ -13,8 +13,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-fa
 // ─── Chain config ─────────────────────────────────────────────────────────────
 
 const CHAINS = [
-  { id: 42220, label: "Celo",     emoji: "🌿" },
-  { id: 677,   label: "Botchain", emoji: "🤖" },
+  { id: 42220, label: "Celo",     emoji: "🟡" },
+  { id: 677,   label: "Botchain", emoji: "🟢" },
 ] as const;
 
 type ChainId = typeof CHAINS[number]["id"];

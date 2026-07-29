@@ -1,52 +1,68 @@
 "use client";
 
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useWallet } from "@/components/wallet-provider";
+import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react";
 
-import { useState, useEffect, useMemo } from "react";
-import { useWallet } from "@/hooks/use-wallet";
-
+// MUST match the backend that /dashboard/[username] resolves usernames against.
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
-  "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+  "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+
+const PLACEHOLDER_NAMES = new Set(["Dropee", "New User", "Anonymous"]);
 
 export function useProfileRoute() {
-  const { address } = useWallet();
+  const { address: evmAddress } = useWallet();
+  const { publicKey }           = useSolanaWallet();
+
+  // Solana base58 is case-sensitive — only normalise hex.
+  const address = useMemo(() => {
+    const raw = publicKey?.toBase58() || evmAddress || null;
+    if (!raw) return null;
+    return raw.startsWith("0x") ? raw.toLowerCase() : raw;
+  }, [publicKey, evmAddress]);
+
   const [dbUsername, setDbUsername] = useState<string | null>(null);
 
-  // Re-fetch whenever the ADDRESS changes (fixes stale username after a
-  // wallet switch — the old ref-based guard never reset while connected).
-  useEffect(() => {
-    if (!address) {
+  const load = useCallback(async (signal?: AbortSignal) => {
+    if (!address) { setDbUsername(null); return; }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/profile/${address}`, { signal });
+      if (!res.ok) { setDbUsername(null); return; }   // 5xx → fall back to address route
+      const data = await res.json();
+      const username = data.profile?.username;
+      setDbUsername(username && !PLACEHOLDER_NAMES.has(username) ? username : null);
+    } catch {
       setDbUsername(null);
-      return;
     }
-    let cancelled = false;
-    fetch(`${API_BASE_URL}/api/profile/${address.toLowerCase()}`)
-      .then(r => r.json())
-      .then(data => {
-        if (cancelled) return;
-        const username = data.profile?.username;
-        setDbUsername(username && username !== "Dropee" ? username : null);
-      })
-      .catch(() => { if (!cancelled) setDbUsername(null); });
-    return () => { cancelled = true; };
   }, [address]);
+
+  // Re-fetch whenever the ADDRESS changes (covers wallet switch and chain switch).
+  useEffect(() => {
+    const ctrl = new AbortController();
+    load(ctrl.signal);
+    return () => ctrl.abort();
+  }, [load]);
 
   // Live updates when the user renames themselves elsewhere in the app.
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.username) setDbUsername(detail.username);
+      else load();                        // event without a payload → re-resolve
     };
     window.addEventListener("profileUpdated", handler);
     return () => window.removeEventListener("profileUpdated", handler);
-  }, []);
+  }, [load]);
 
   const profileSlug = useMemo(
-    () => dbUsername ?? (address ? address.toLowerCase() : null),
+    () => dbUsername ?? address,
     [dbUsername, address],
   );
 
-  const profileHref = profileSlug ? `/dashboard/${profileSlug}` : "/dashboard";
+  const profileHref = profileSlug
+    ? `/dashboard/${encodeURIComponent(profileSlug)}`
+    : "/dashboard";
 
   const buildProfileHref = (query?: Record<string, string>) => {
     if (!query || Object.keys(query).length === 0) return profileHref;
@@ -54,5 +70,5 @@ export function useProfileRoute() {
     return `${profileHref}?${qs}`;
   };
 
-  return { profileSlug, dbUsername, profileHref, buildProfileHref };
+  return { profileSlug, dbUsername, profileHref, buildProfileHref, refresh: () => load() };
 }

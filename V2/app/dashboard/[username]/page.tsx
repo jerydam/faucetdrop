@@ -118,7 +118,7 @@ export default function DashboardPage() {
     
     const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; quest: QuestData | null }>({ open: false, quest: null })
     const [deleteConfirmInput, setDeleteConfirmInput] = useState("")
-    
+    const [loadError, setLoadError] = useState(false);
     const targetUsernameOrAddress = params.username as string;
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -312,6 +312,7 @@ export default function DashboardPage() {
 
     const fetchData = useCallback(async () => {
         setLoading(true);
+        setLoadError(false);
         try {
             let userProfile: UserProfileData | null = null;
             let userWallet: string | null = null;
@@ -346,12 +347,24 @@ export default function DashboardPage() {
                 }
                 userWallet = fetchedData?.wallet_address || targetUsernameOrAddress.toLowerCase()
             } else {
-                const profRes = await fetch(`${backendUrl}/api/profile/user/${targetUsernameOrAddress}?t=${Date.now()}`);
+                const uname   = decodeURIComponent(targetUsernameOrAddress);
+                const profRes = await fetch(
+                    `${backendUrl}/api/profile/user/${encodeURIComponent(uname)}?t=${Date.now()}`
+                );
+
+                // 4xx/5xx → backend problem, NOT a missing user
+                if (!profRes.ok) {
+                    setLoadError(true);
+                    setInitialLoadComplete(true);
+                    setLoading(false);
+                    return;
+                }
+
                 const profData = await profRes.json();
-                
+
                 if (profData.success && profData.profile) {
                     userProfile = profData.profile;
-                    userWallet = profData.profile.wallet_address;
+                    userWallet  = profData.profile.wallet_address;
                 } else {
                     setProfile(null);
                     setInitialLoadComplete(true);
@@ -531,16 +544,38 @@ export default function DashboardPage() {
         );
     }
 
+    if (loadError && initialLoadComplete) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center">
+                <p className="text-xl font-semibold mb-2">Couldn't load profile</p>
+                <p className="text-muted-foreground">The server didn't respond correctly.</p>
+                <Button onClick={fetchData} className="mt-4">Retry</Button>
+            </div>
+        );
+    }
+
     if (!profile && initialLoadComplete) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center">
                 <p className="text-xl font-semibold mb-2">User not found</p>
                 <p className="text-muted-foreground">The profile you're looking for doesn't exist.</p>
-                <Button onClick={() => router.push('/')} className="mt-4">Go Home</Button>
+                <div className="flex gap-2 mt-4">
+                    {currentConnectedAddress && (
+                        <Button
+                            onClick={() => router.push(
+                                `/dashboard/${currentConnectedAddress.startsWith("0x")
+                                    ? currentConnectedAddress.toLowerCase()
+                                    : currentConnectedAddress}`
+                            )}
+                        >
+                            My Profile
+                        </Button>
+                    )}
+                    <Button variant="outline" onClick={() => router.push('/')}>Go Home</Button>
+                </div>
             </div>
         );
     }
-
     if (!profile) return null;
 
     const displayAddress = profile.wallet_address ? 

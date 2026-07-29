@@ -14,6 +14,7 @@ import {
   AlertCircle,
   ShoppingBag,
   ChevronDown,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
@@ -230,8 +231,10 @@ const BLOCK_LOOKBACK: Record<number, number> = {
 export default function DropPointsPanel() {
   const { address, isConnected,  chainId, getActiveSigner } = useWallet();
 
+  const [isOpen, setIsOpen]             = useState(false);   // ← modal visibility
+  const [cooldownChecked, setCooldownChecked] = useState(false);
   const [activeTab, setActiveTab]       = useState<Tab>("overview");
-  const [tabsExpanded, setTabsExpanded] = useState(true); // ← collapse/expand state
+  const [tabsExpanded, setTabsExpanded] = useState(true);
   const [isClaiming, setIsClaiming]     = useState(false);
   const [claimBurst, setClaimBurst]     = useState(false);
   const [lastClaimAt, setLastClaimAt]   = useState<string | null>(null);
@@ -246,12 +249,13 @@ export default function DropPointsPanel() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const claimLockRef = useRef(false);
-  
+  const autoOpenedRef = useRef(false);
+
   const totalPoints = chainBalances.reduce((sum, c) => sum + c.balance, 0);
   const allLoaded   = chainBalances.every((c) => !c.loading);
   const maxBalance  = Math.max(...chainBalances.map((c) => c.balance), 1);
 
-  // ── Cooldown from contract (connected chain only) ─────────────────────────
+  // ── Cooldown from contract (all chains) ───────────────────────────────────
 
   const fetchCooldownFromContract = useCallback(async (addr: string) => {
   const COOLDOWN = 24 * 60 * 60 * 1000;
@@ -311,6 +315,8 @@ export default function DropPointsPanel() {
       setLastClaimAt(null);
     }
   }
+
+  setCooldownChecked(true);
 }, []);
 
   // ── Chain balances ────────────────────────────────────────────────────────
@@ -493,6 +499,7 @@ export default function DropPointsPanel() {
 
   useEffect(() => {
     if (!address) return;
+    setCooldownChecked(false);
     fetchChainData(address);
     fetchCooldownFromContract(address);
   }, [address, chainId, fetchChainData, fetchCooldownFromContract]);
@@ -533,6 +540,38 @@ export default function DropPointsPanel() {
     return () => clearInterval(t);
   }, [lastClaimAt]);
 
+  // ── Auto-popup (once per page load, skipped if already claimed) ───────────
+
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+
+    // No wallet yet → open after a beat so they can connect & claim
+    if (!address) {
+      const t = setTimeout(() => {
+        if (autoOpenedRef.current) return;
+        autoOpenedRef.current = true;
+        setIsOpen(true);
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+
+    // Wallet connected → wait for the on-chain check, only open if eligible
+    if (!cooldownChecked) return;
+    autoOpenedRef.current = true;
+    if (canClaim) setIsOpen(true);
+  }, [address, cooldownChecked, canClaim]);
+
+  // ── Close on Escape ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen]);
+
   // ── Claim ─────────────────────────────────────────────────────────────────
 
   const handleClaim = async () => {
@@ -551,7 +590,7 @@ export default function DropPointsPanel() {
 
   try {
     // ── One line — works for both wallet types ──────────────────────────
-    
+
     const activeSigner = await getActiveSigner(chainId)
     if (!activeSigner) {
       toast.error("Could not get signer — please re-login.", { id: "claim-tx" })
@@ -649,14 +688,11 @@ export default function DropPointsPanel() {
 
   const handleTabClick = (tabId: Tab) => {
     if (!tabsExpanded) {
-      // If collapsed, always expand — and switch to the tapped tab
       setActiveTab(tabId);
       setTabsExpanded(true);
     } else if (activeTab === tabId) {
-      // Clicking the active tab while expanded → collapse
       setTabsExpanded(false);
     } else {
-      // Just switch tab (stays expanded)
       setActiveTab(tabId);
     }
   };
@@ -664,287 +700,349 @@ export default function DropPointsPanel() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      id="claim-points"
-      className="w-full lg:w-[360px] bg-card border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col"
-    >
-      {/* Header */}
-      <div className="px-5 pt-5 pb-4 border-b border-border bg-gradient-to-br from-card to-accent/20 dark:to-accent/5">
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-            Drop Points
-          </span>
-          <div className="flex items-center gap-2">
-            {isConnected && chainId && CHAIN_CONFIG[chainId] && (
-              <span
-                className="text-[9px] font-bold px-2 py-0.5 rounded-full border"
-                style={{
-                  color: CHAIN_CONFIG[chainId].color,
-                  borderColor: `${CHAIN_CONFIG[chainId].color}55`,
-                  background: `${CHAIN_CONFIG[chainId].color}15`,
-                }}
-              >
-                {CHAIN_CONFIG[chainId].name}
-              </span>
-            )}
-            {address && (
-              <button
-                onClick={() => {
-                  fetchChainData(address);
-                  if (chainId) fetchCooldownFromContract(address);
-                }}
-                className="p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-                title="Refresh"
-              >
-                <RefreshCw size={12} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Total balance */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="relative w-12 h-12 shrink-0">
-            <Image
-              src="/drop-token.png"
-              alt="Drop"
-              fill
-              className="object-contain drop-shadow-md"
-            />
-          </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground font-semibold">
-              Total Earned (All Chains)
-            </p>
-            {!allLoaded && address ? (
-              <div className="flex items-center gap-1.5 mt-1">
-                <Loader2 size={14} className="animate-spin text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Loading...</span>
-              </div>
-            ) : (
-              <motion.p
-                key={totalPoints}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-3xl font-black tracking-tight tabular-nums"
-              >
-                {address
-                  ? totalPoints.toLocaleString(undefined, { maximumFractionDigits: 2 })
-                  : "—"}
-              </motion.p>
-            )}
-          </div>
-        </div>
-
-        {/* Claim button */}
-        <div className="relative">
-          <ClaimBurst trigger={claimBurst} />
+    <>
+      {/* ── Floating trigger (shown when the popup is closed) ──────────────── */}
+      <AnimatePresence>
+        {!isOpen && (
           <motion.button
-            onClick={handleClaim}
-            disabled={isClaiming || !canClaim || !isConnected}
-            whileTap={{ scale: 0.97 }}
-            className={`w-full py-3 rounded-xl font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 ${
-              !isConnected || !canClaim
-                ? "bg-accent text-muted-foreground cursor-not-allowed border border-border"
-                : isClaiming
-                ? "bg-primary/80 text-primary-foreground cursor-wait"
-                : "bg-primary text-primary-foreground hover:opacity-90 shadow-md hover:shadow-primary/30"
-            }`}
+            id="claim-points"
+            onClick={() => setIsOpen(true)}
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className={`fixed bottom-5 right-5 z-[90] flex items-center gap-2 pl-2 pr-4 py-2 rounded-full
+              shadow-lg border transition-colors ${
+                canClaim
+                  ? "bg-primary text-primary-foreground border-primary/50 shadow-primary/30"
+                  : "bg-card text-foreground border-border"
+              }`}
           >
-            {isClaiming ? (
-              <><Loader2 size={14} className="animate-spin" /> Processing</>
-            ) : !isConnected ? (
-              <><Zap size={14} /> Connect Wallet to Claim</>
-            ) : !canClaim ? (
-              <><Clock size={14} /> {formatCountdown(remainingMs)}</>
-            ) : (
-              <><Zap size={14} /> Claim Daily Drop Points</>
+            <span className="relative w-7 h-7 shrink-0">
+              <Image src="/drop-token.png" alt="Drop" fill className="object-contain" />
+            </span>
+            <span className="text-xs font-bold tabular-nums">
+              {!isConnected
+                ? "Claim Drop"
+                : canClaim
+                ? "Claim Drop"
+                : formatCountdown(remainingMs)}
+            </span>
+            {canClaim && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-background" />
             )}
           </motion.button>
-        </div>
+        )}
+      </AnimatePresence>
 
-        {/* Redeem link */}
-        <div
-          className="mt-3 w-full group relative overflow-hidden flex items-center gap-3 px-4 py-3
-            rounded-xl border border-border/40 bg-accent/20 cursor-not-allowed opacity-60"
-        >
-          <div className="w-8 h-8 rounded-lg bg-accent border border-border/50
-            flex items-center justify-center shrink-0">
-            <ShoppingBag size={14} className="text-muted-foreground" />
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-[11px] font-bold text-foreground leading-none mb-0.5">
-              Redeem at Merch Store
-            </p>
-            <p className="text-[10px] text-muted-foreground leading-none">
-              Trade DROP points for exclusive gear
-            </p>
-          </div>
-          <span className="text-[9px] font-black px-2 py-0.5 rounded-full
-            bg-amber-500/15 border border-amber-500/30 text-amber-500 shrink-0">
-            SOON
-          </span>
-        </div>
-      </div>
-
-      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex border-b border-border">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => handleTabClick(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-bold transition-colors ${
-              activeTab === tab.id && tabsExpanded
-                ? "text-primary border-b-2 border-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
-
-        {/* Collapse / expand chevron */}
-        <button
-          onClick={() => setTabsExpanded((v) => !v)}
-          className="px-3 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-          title={tabsExpanded ? "Collapse" : "Expand"}
-        >
+      {/* ── Popup ─────────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {isOpen && (
           <motion.div
-            animate={{ rotate: tabsExpanded ? 0 : 180 }}
-            transition={{ duration: 0.25, ease: "easeInOut" }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setIsOpen(false)}
+            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
           >
-            <ChevronDown size={14} />
-          </motion.div>
-        </button>
-      </div>
-
-      {/* ── Collapsible tab content ──────────────────────────────────────────── */}
-      <motion.div
-        animate={tabsExpanded ? "open" : "closed"}
-        variants={{
-          open:   { height: "auto", opacity: 1 },
-          closed: { height: 0,      opacity: 0 },
-        }}
-        transition={{ duration: 0.25, ease: "easeInOut" }}
-        style={{ overflow: "hidden" }}
-      >
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="overflow-y-auto max-h-[340px]"
-          >
-            {/* Overview */}
-            {activeTab === "overview" && (
-              <div className="p-4 space-y-2.5">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-1 mb-3">
-                  On-chain Balance per Network
-                </p>
-                {chainBalances.map(({ chainId: id, balance, loading, error }) => {
-                  const cfg = CHAIN_CONFIG[id];
-                  const pct = Math.round((balance / maxBalance) * 100);
-                  return (
-                    <div
-                      key={id}
-                      className="bg-accent/30 dark:bg-accent/10 rounded-xl px-4 py-3 border border-border/50"
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ background: cfg.color }}
-                          />
-                          <span className="text-xs font-semibold">{cfg.name}</span>
-                        </div>
-                        {loading ? (
-                          <div className="h-3.5 w-16 rounded bg-accent animate-pulse" />
-                        ) : error ? (
-                          <span className="flex items-center gap-1 text-[10px] text-red-400">
-                            <AlertCircle size={10} /> RPC error
-                          </span>
-                        ) : (
-                          <span className="text-xs font-black tabular-nums">
-                            {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} pts
-                          </span>
-                        )}
-                      </div>
-                      <div className="h-1 w-full bg-border rounded-full overflow-hidden">
-                        <motion.div
-                          className="h-full rounded-full"
-                          style={{ background: cfg.color }}
-                          initial={{ width: 0 }}
-                          animate={{ width: loading ? "0%" : `${pct}%` }}
-                          transition={{ duration: 0.5, ease: "easeOut" }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* History */}
-            {activeTab === "history" && (
-              <div className="p-4 space-y-2">
-                {historyLoading ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="h-14 rounded-xl bg-accent animate-pulse" />
-                  ))
-                ) : history.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
-                    <History size={28} strokeWidth={1.5} />
-                    <p className="text-xs">No claims yet</p>
-                  </div>
-                ) : (
-                  history.map((entry, i) => {
-                    const cfg = CHAIN_CONFIG[entry.chain_id];
-                    const date = new Date(entry.timestamp);
-                    return (
-                      <div
-                        key={i}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-accent/30 dark:bg-accent/10 border border-border/50 group"
+            <motion.div
+              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0, y: 30, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 30, scale: 0.97 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="w-full max-w-[380px] max-h-[88vh] overflow-y-auto bg-card border border-border rounded-2xl shadow-2xl flex flex-col"
+            >
+              {/* Header */}
+              <div className="px-5 pt-5 pb-4 border-b border-border bg-gradient-to-br from-card to-accent/20 dark:to-accent/5">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    Drop Points
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {isConnected && chainId && CHAIN_CONFIG[chainId] && (
+                      <span
+                        className="text-[9px] font-bold px-2 py-0.5 rounded-full border"
+                        style={{
+                          color: CHAIN_CONFIG[chainId].color,
+                          borderColor: `${CHAIN_CONFIG[chainId].color}55`,
+                          background: `${CHAIN_CONFIG[chainId].color}15`,
+                        }}
                       >
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ background: cfg?.color ?? "#888" }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold">
-                            +{entry.amount.toLocaleString()} pts
-                            <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
-                              {cfg?.name}
-                            </span>
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {date.toLocaleDateString()} · {date.toLocaleTimeString()}
-                          </p>
-                        </div>
-                        {cfg && entry.tx_hash && (
-                          <a
-                            href={`${cfg.explorer}${entry.tx_hash}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <ExternalLink
-                              size={12}
-                              className="text-muted-foreground hover:text-foreground"
-                            />
-                          </a>
+                        {CHAIN_CONFIG[chainId].name}
+                      </span>
+                    )}
+                    {address && (
+                      <button
+                        onClick={() => {
+                          fetchChainData(address);
+                          if (chainId) fetchCooldownFromContract(address);
+                        }}
+                        className="p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                        title="Refresh"
+                      >
+                        <RefreshCw size={12} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setIsOpen(false)}
+                      className="p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                      title="Close"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Total balance */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="relative w-12 h-12 shrink-0">
+                    <Image
+                      src="/drop-token.png"
+                      alt="Drop"
+                      fill
+                      className="object-contain drop-shadow-md"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold">
+                      Total Earned (All Chains)
+                    </p>
+                    {!allLoaded && address ? (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Loading...</span>
+                      </div>
+                    ) : (
+                      <motion.p
+                        key={totalPoints}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-3xl font-black tracking-tight tabular-nums"
+                      >
+                        {address
+                          ? totalPoints.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                          : "—"}
+                      </motion.p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Claim button */}
+                <div className="relative">
+                  <ClaimBurst trigger={claimBurst} />
+                  <motion.button
+                    onClick={handleClaim}
+                    disabled={isClaiming || !canClaim || !isConnected}
+                    whileTap={{ scale: 0.97 }}
+                    className={`w-full py-3 rounded-xl font-bold text-xs transition-all duration-200 flex items-center justify-center gap-2 ${
+                      !isConnected || !canClaim
+                        ? "bg-accent text-muted-foreground cursor-not-allowed border border-border"
+                        : isClaiming
+                        ? "bg-primary/80 text-primary-foreground cursor-wait"
+                        : "bg-primary text-primary-foreground hover:opacity-90 shadow-md hover:shadow-primary/30"
+                    }`}
+                  >
+                    {isClaiming ? (
+                      <><Loader2 size={14} className="animate-spin" /> Processing</>
+                    ) : !isConnected ? (
+                      <><Zap size={14} /> Connect Wallet to Claim</>
+                    ) : !canClaim ? (
+                      <><Clock size={14} /> {formatCountdown(remainingMs)}</>
+                    ) : (
+                      <><Zap size={14} /> Claim Daily Drop Points</>
+                    )}
+                  </motion.button>
+                </div>
+
+                {/* Redeem link */}
+                <div
+                  className="mt-3 w-full group relative overflow-hidden flex items-center gap-3 px-4 py-3
+                    rounded-xl border border-border/40 bg-accent/20 cursor-not-allowed opacity-60"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-accent border border-border/50
+                    flex items-center justify-center shrink-0">
+                    <ShoppingBag size={14} className="text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <p className="text-[11px] font-bold text-foreground leading-none mb-0.5">
+                      Redeem at Merch Store
+                    </p>
+                    <p className="text-[10px] text-muted-foreground leading-none">
+                      Trade DROP points for exclusive gear
+                    </p>
+                  </div>
+                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full
+                    bg-amber-500/15 border border-amber-500/30 text-amber-500 shrink-0">
+                    SOON
+                  </span>
+                </div>
+              </div>
+
+              {/* ── Tab bar ───────────────────────────────────────────────── */}
+              <div className="flex border-b border-border">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabClick(tab.id)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[11px] font-bold transition-colors ${
+                      activeTab === tab.id && tabsExpanded
+                        ? "text-primary border-b-2 border-primary"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                  </button>
+                ))}
+
+                {/* Collapse / expand chevron */}
+                <button
+                  onClick={() => setTabsExpanded((v) => !v)}
+                  className="px-3 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                  title={tabsExpanded ? "Collapse" : "Expand"}
+                >
+                  <motion.div
+                    animate={{ rotate: tabsExpanded ? 0 : 180 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                  >
+                    <ChevronDown size={14} />
+                  </motion.div>
+                </button>
+              </div>
+
+              {/* ── Collapsible tab content ───────────────────────────────── */}
+              <motion.div
+                animate={tabsExpanded ? "open" : "closed"}
+                variants={{
+                  open:   { height: "auto", opacity: 1 },
+                  closed: { height: 0,      opacity: 0 },
+                }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+                style={{ overflow: "hidden" }}
+              >
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-y-auto max-h-[340px]"
+                  >
+                    {/* Overview */}
+                    {activeTab === "overview" && (
+                      <div className="p-4 space-y-2.5">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-1 mb-3">
+                          On-chain Balance per Network
+                        </p>
+                        {chainBalances.map(({ chainId: id, balance, loading, error }) => {
+                          const cfg = CHAIN_CONFIG[id];
+                          const pct = Math.round((balance / maxBalance) * 100);
+                          return (
+                            <div
+                              key={id}
+                              className="bg-accent/30 dark:bg-accent/10 rounded-xl px-4 py-3 border border-border/50"
+                            >
+                              <div className="flex items-center justify-between mb-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="w-2 h-2 rounded-full shrink-0"
+                                    style={{ background: cfg.color }}
+                                  />
+                                  <span className="text-xs font-semibold">{cfg.name}</span>
+                                </div>
+                                {loading ? (
+                                  <div className="h-3.5 w-16 rounded bg-accent animate-pulse" />
+                                ) : error ? (
+                                  <span className="flex items-center gap-1 text-[10px] text-red-400">
+                                    <AlertCircle size={10} /> RPC error
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-black tabular-nums">
+                                    {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} pts
+                                  </span>
+                                )}
+                              </div>
+                              <div className="h-1 w-full bg-border rounded-full overflow-hidden">
+                                <motion.div
+                                  className="h-full rounded-full"
+                                  style={{ background: cfg.color }}
+                                  initial={{ width: 0 }}
+                                  animate={{ width: loading ? "0%" : `${pct}%` }}
+                                  transition={{ duration: 0.5, ease: "easeOut" }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* History */}
+                    {activeTab === "history" && (
+                      <div className="p-4 space-y-2">
+                        {historyLoading ? (
+                          Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="h-14 rounded-xl bg-accent animate-pulse" />
+                          ))
+                        ) : history.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+                            <History size={28} strokeWidth={1.5} />
+                            <p className="text-xs">No claims yet</p>
+                          </div>
+                        ) : (
+                          history.map((entry, i) => {
+                            const cfg = CHAIN_CONFIG[entry.chain_id];
+                            const date = new Date(entry.timestamp);
+                            return (
+                              <div
+                                key={i}
+                                className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-accent/30 dark:bg-accent/10 border border-border/50 group"
+                              >
+                                <span
+                                  className="w-2 h-2 rounded-full shrink-0"
+                                  style={{ background: cfg?.color ?? "#888" }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-bold">
+                                    +{entry.amount.toLocaleString()} pts
+                                    <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                                      {cfg?.name}
+                                    </span>
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {date.toLocaleDateString()} · {date.toLocaleTimeString()}
+                                  </p>
+                                </div>
+                                {cfg && entry.tx_hash && (
+                                  <a
+                                    href={`${cfg.explorer}${entry.tx_hash}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <ExternalLink
+                                      size={12}
+                                      className="text-muted-foreground hover:text-foreground"
+                                    />
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })
                         )}
                       </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </motion.div>
+            </motion.div>
           </motion.div>
-        </AnimatePresence>
-      </motion.div>
-    </div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

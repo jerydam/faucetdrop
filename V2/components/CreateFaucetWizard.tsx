@@ -313,7 +313,7 @@ export const NETWORK_TOKENS: Record<number, TokenConfiguration[]> = {
       symbol: "CELO",
       decimals: 18,
       isNative: true,
-      logoUrl: "/celo.jpeg", 
+      logoUrl: "/celo.png", 
       description: "Native Celo token for governance and staking",
     },
     {

@@ -964,12 +964,16 @@ useEffect(() => {
   };
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const tierStyle         = TIER_COLORS[balance?.tier ?? "Droplet"] ?? TIER_COLORS.Droplet;
-  const currentTierDef    = TIERS.find(t => t.name === (balance?.tier ?? "Droplet")) ?? TIERS[0];
-  const nextTierDef       = TIERS.find(t => t.minDuels > (balance?.totalDuels ?? 0)) ?? null;
-  const progressToNext    = nextTierDef
-    ? Math.min(100, (((balance?.totalDuels ?? 0) - currentTierDef.minDuels) / (nextTierDef.minDuels - currentTierDef.minDuels)) * 100)
+  const tierStyle      = TIER_COLORS[balance?.tier ?? "Droplet"] ?? TIER_COLORS.Droplet;
+  const duelsForTier   = balance?.totalDuels ?? 0;
+  const currentTierDef = [...TIERS].reverse().find(t => duelsForTier >= t.minDuels) ?? TIERS[0];
+  const nextTierDef    = TIERS.find(t => t.minDuels > duelsForTier) ?? null;
+  const progressToNext = nextTierDef
+    ? Math.max(0, Math.min(100,
+        ((duelsForTier - currentTierDef.minDuels) /
+         (nextTierDef.minDuels - currentTierDef.minDuels)) * 100))
     : 100;
+    
   const wins                  = matchHistory.filter(m => m.winner_address?.toLowerCase() === wallet);
   const matureUnclaimedStakes = stakes.filter(s => s.matured && !s.claimed);
 
@@ -1116,7 +1120,7 @@ useEffect(() => {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {nextTierDef.minDuels - balance.totalDuels} more duels to unlock {nextTierDef.name} ({nextTierDef.apy}% APY)
+                      {Math.max(0, nextTierDef.minDuels - balance.totalDuels)} more duels to unlock {nextTierDef.name} ({nextTierDef.apy}% APY)
                     </p>
                   </div>
                 )}

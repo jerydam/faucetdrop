@@ -13,8 +13,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-fa
 // ─── Chain config ─────────────────────────────────────────────────────────────
 
 const CHAINS = [
-  { id: 42220, label: "Celo",     emoji: "🟡" },
-  { id: 677,   label: "Botchain", emoji: "🟢" },
+  { id: 42220, label: "Celo",     icon: "/celo.png" },
+  { id: 677,   label: "Botchain", icon: "/botc.png" },
 ] as const;
 
 type ChainId = typeof CHAINS[number]["id"];
@@ -407,7 +407,9 @@ export default function RanksPage() {
           <div>
             <div className="page-title">Rankings</div>
             <div className="page-subtitle">
-              {activeChainMeta.emoji} {activeChainMeta.label} · {players.length} duelists · {onlineSet.size} online
+              <img src={activeChainMeta.icon} alt={activeChainMeta.label}
+                style={{ width: 14, height: 14, borderRadius: 3, verticalAlign: "middle", marginRight: 4 }} />
+              {activeChainMeta.label} · {players.length} duelists · {onlineSet.size} online
             </div>
           </div>
         </div>

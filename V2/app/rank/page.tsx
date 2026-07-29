@@ -160,13 +160,8 @@ export default function RanksPage() {
 
   // ── Chain selection: default to the wallet's active chain if supported ──
   const defaultChain = CHAINS.find(c => c.id === walletChainId)?.id ?? CHAINS[0].id;
-  const [activeChain, setActiveChain] = useState<ChainId>(defaultChain);
 
-  // When the wallet switches chain, follow it automatically
-  useEffect(() => {
-    const matched = CHAINS.find(c => c.id === walletChainId);
-    if (matched) setActiveChain(matched.id);
-  }, [walletChainId]);
+ 
 
   const [players, setPlayers]   = useState<Player[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -177,6 +172,8 @@ export default function RanksPage() {
   const onlineInfo = usePresenceInfo();
   const myRowRef   = useRef<HTMLDivElement | null>(null);
   const [flashMe, setFlashMe]   = useState(false);
+  const activeChain = CHAINS.find(c => c.id === walletChainId)?.id ?? CHAINS[0].id;
+  const activeChainMeta = CHAINS.find(c => c.id === activeChain)!;
 
   // ── Fetch on chain change ─────────────────────────────────────────────────
   useEffect(() => {
@@ -243,7 +240,6 @@ export default function RanksPage() {
     }, 60);
   };
 
-  const activeChainMeta = CHAINS.find(c => c.id === activeChain)!;
 
   return (
     <>
@@ -414,19 +410,6 @@ export default function RanksPage() {
               {activeChainMeta.emoji} {activeChainMeta.label} · {players.length} duelists · {onlineSet.size} online
             </div>
           </div>
-        </div>
-
-        {/* Chain Switcher */}
-        <div className="chain-switcher">
-          {CHAINS.map(c => (
-            <button
-              key={c.id}
-              className={`chain-pill${activeChain === c.id ? " active" : ""}`}
-              onClick={() => setActiveChain(c.id)}
-            >
-              {c.emoji} {c.label}
-            </button>
-          ))}
         </div>
 
         {/* My Position Banner */}

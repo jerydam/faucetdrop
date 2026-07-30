@@ -14,8 +14,10 @@ import {
   AlertCircle,
   ShoppingBag,
   ChevronDown,
+  ChevronRight,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useWallet } from "@/hooks/use-wallet";
 import Image from "next/image";
@@ -230,7 +232,7 @@ const BLOCK_LOOKBACK: Record<number, number> = {
 
 export default function DropPointsPanel() {
   const { address, isConnected,  chainId, getActiveSigner } = useWallet();
-
+  const router = useRouter();
   const [isOpen, setIsOpen]             = useState(false);   // ← modal visibility
   const [cooldownChecked, setCooldownChecked] = useState(false);
   const [activeTab, setActiveTab]       = useState<Tab>("overview");
@@ -857,28 +859,30 @@ export default function DropPointsPanel() {
                   </motion.button>
                 </div>
 
-                {/* Redeem link */}
-                <div
-                  className="mt-3 w-full group relative overflow-hidden flex items-center gap-3 px-4 py-3
-                    rounded-xl border border-border/40 bg-accent/20 cursor-not-allowed opacity-60"
+                {/* Redeem Drop */}
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    router.push("/support");
+                  }}
+                  className="mt-3 w-full group flex items-center gap-3 px-4 py-3
+                    rounded-xl border border-border/40 bg-accent/20 text-left
+                    hover:bg-accent/40 hover:border-primary/40 transition-colors"
                 >
                   <div className="w-8 h-8 rounded-lg bg-accent border border-border/50
                     flex items-center justify-center shrink-0">
-                    <ShoppingBag size={14} className="text-muted-foreground" />
+                    <ShoppingBag size={14} className="text-primary" />
                   </div>
-                  <div className="flex-1 text-left">
+                  <div className="flex-1">
                     <p className="text-[11px] font-bold text-foreground leading-none mb-0.5">
-                      Redeem at Merch Store
+                      Redeem Drop
                     </p>
                     <p className="text-[10px] text-muted-foreground leading-none">
-                      Trade DROP points for exclusive gear
+                      See how to turn DROP points into rewards
                     </p>
                   </div>
-                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full
-                    bg-amber-500/15 border border-amber-500/30 text-amber-500 shrink-0">
-                    SOON
-                  </span>
-                </div>
+                  <ChevronRight size={14} className="text-muted-foreground group-hover:text-foreground shrink-0" />
+                </button>
               </div>
 
               {/* ── Tab bar ───────────────────────────────────────────────── */}

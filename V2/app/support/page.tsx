@@ -1,228 +1,368 @@
 "use client";
 
 import React, { useState } from "react";
-import {
-  ChevronDown, ChevronUp, Zap, Shield, Trophy,
-  Coins, Wifi, HelpCircle, ExternalLink, MessageCircle,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronRight, Zap, Shield, Trophy, Coins, Wifi, HelpCircle, ExternalLink, MessageCircle, Bot, Network, Swords } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
-// ─── Design tokens (match app screenshot) ────────────────────────────────────
-// bg:      #0d0f1a   card: #13172a   border: #1e2340
-// primary: #2563eb   gold: #f59e0b
-// text:    #ffffff   muted: #64748b  subtle: #94a3b8
+// ── Chain config ──────────────────────────────────────────────────────────────
+// TODO: fill in the three placeholder addresses below.
+
+interface ChainMeta {
+  id: number;
+  label: string;
+  icon: string;
+  quizHub: string;
+  dropsToken: string;
+  explorer: string;
+  wallet: string;
+  gas: string;
+}
+
+const CHAINS: ChainMeta[] = [
+  {
+    id: 42220,
+    label: "Celo",
+    icon: "/celo.png",
+    quizHub: "0xd73170170E002b45eA4AA51e7E93302D61c30173",
+    dropsToken: "0x9825670865B896738CF8E6c98d093aD5b40F0A11", // ← TODO: Celo DROPS token address
+    explorer: "https://celoscan.io/address/",
+    wallet: "MiniPay",
+    gas: "CELO (or cUSD via fee abstraction)",
+  },
+  {
+    id: 677,
+    label: "Botchain",
+    icon: "/botc.png",
+    quizHub: "0xE7F217A8447087600C1CBFb63192586edFa619fe",    // ← TODO: Botchain QuizHub address
+    dropsToken: "0xBAd791F200f1F8Fb639d83125FcF732F5f6eCD03", // ← TODO: Botchain DROPS token address
+    explorer: "https://scan.botchain.ai/address/",
+    wallet: "any EVM wallet",
+    gas: "BOTC",
+  },
+];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface FAQItem { q: string; a: string }
+
+interface FAQItem {
+  q: string;
+  a: React.ReactNode;
+}
+
 interface FAQSection {
   icon: React.ReactNode;
   title: string;
-  accentColor: string;
+  color: string;
   items: FAQItem[];
 }
 
-// ── FAQ data (updated for DROPS / DropsIQ logic) ───────────────────────────────
+// ── Bot tier table styles ─────────────────────────────────────────────────────
+
+const tableStyle: React.CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: "12px",
+  marginTop: "8px",
+};
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "6px 8px",
+  fontSize: "10px",
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  color: "var(--primary, #2563eb)",
+  borderBottom: "1px solid var(--border)",
+};
+const tdStyle: React.CSSProperties = {
+  padding: "6px 8px",
+  color: "var(--muted-foreground)",
+  borderBottom: "1px solid var(--border, rgba(255,255,255,0.06))",
+};
+
+// ── Data ──────────────────────────────────────────────────────────────────────
+
 const FAQ_SECTIONS: FAQSection[] = [
   {
     icon: <Zap className="h-4 w-4" />,
     title: "Getting Started",
-    accentColor: "#f59e0b",
+    color: "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
     items: [
       {
-        q: "What is DropsIQ?",
-        a: "DropsIQ is a 1v1 quiz dueling platform built by Faucetdrops on the Celo blockchain. You challenge another player on any topic, both stake DROPS, and the winner takes the full pot — settled automatically by smart contracts.",
+        q: "What is PrimeIQ?",
+        a: "PrimeIQ is a quiz dueling platform built by FaucetDrops. You can challenge another human player 1v1, or take on one of five AI bot opponents in single-player mode — staking DROPS tokens and competing for on-chain rewards. PrimeIQ runs on two networks: Celo Mainnet and Botchain.",
+      },
+      {
+        q: "Which networks does PrimeIQ support?",
+        a: "Celo Mainnet (chain 42220) and Botchain (chain 677). Both networks run the full game — 1v1 duels, single-player bot mode, staking, and payouts. Each network has its own deployed QuizHub and DROPS token contracts.",
       },
       {
         q: "What wallet do I need?",
-        a: "DropsIQ works with any wallet that supports the Celo network — connect via your preferred wallet provider when you open the app."
+        a: "On Celo, PrimeIQ runs inside MiniPay (Opera Mini's built-in wallet) — your wallet connects automatically when you open the app, no setup required. On Botchain, connect any EVM-compatible wallet and add the Botchain network. Make sure you hold DROPS on whichever chain you're playing on (new players receive a 100 DROPS welcome bonus).",
       },
       {
-        q: "How do I get DROPS to play?",
-        a: "Every new wallet receives 100 free Game DROPS on registration — credited automatically, no action needed. You can also buy more DROPS with $G at a rate of 100 DROPS per $1 USD worth of $G.",
+        q: "What are DROPS?",
+        a: "DROPS is PrimeIQ's native platform token. You use DROPS to stake in games, and winnings are minted directly to your wallet. DROPS is deployed separately on each supported network, so your Celo balance and your Botchain balance are tracked independently. You can purchase DROPS by exchanging $GoodDollar (G$) through the Buy DROPS flow, or earn them through platform rewards.",
       },
       {
-        q: "How do I create a challenge?",
-        a: 'Tap "Create Challenge", enter a topic (e.g. "Solana & DeFi"), choose your stake amount (minimum 10 DROPS), set visibility to Public or Private, and hit Launch. AI generates 15 questions across Easy, Medium, and Hard rounds.',
+        q: "How do I create a multiplayer challenge?",
+        a: 'Tap "Create Challenge", pick a topic (e.g. "African History"), choose your DROPS stake amount, set visibility (Public or Private), and launch. An AI generates questions across Easy, Medium, and Hard rounds. You\'ll call createQuiz() on-chain to lock in the challenge. The minimum stake is 10 DROPS.',
       },
       {
-        q: "How do I join a challenge?",
-        a: "Browse the public hub to find open challenges, or paste a challenge code shared by a friend. Once you join the pre-lobby, negotiate the stake if you want, then stake your DROPS and click Ready to start.",
+        q: "How do I join a multiplayer challenge?",
+        a: "Browse the public hub or paste a code shared by a friend. Once you join, approve the redeem() transaction in your wallet (which burns your DROPS stake), then click Ready when both players are confirmed. You need to be connected to the same network the challenge was created on.",
+      },
+    ],
+  },
+  {
+    icon: <Network className="h-4 w-4" />,
+    title: "Networks & Chains",
+    color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20",
+    items: [
+      {
+        q: "Can I duel someone who's on a different network?",
+        a: "No. A challenge lives on the network it was created on, and both players must be connected to that same network to stake and play. If you open a challenge code while on the wrong chain, switch networks before joining.",
+      },
+      {
+        q: "Do my DROPS carry over between Celo and Botchain?",
+        a: "No — balances are per-network. DROPS you earn on Celo stay on Celo, and DROPS you earn on Botchain stay on Botchain. There is no bridge between them. Your welcome bonus is also granted per-network.",
+      },
+      {
+        q: "Is the leaderboard shared across networks?",
+        a: "Rankings are per-network — the leaderboard shows wins and duels for the chain you're viewing. Your overall profile totals combine both. Use the chain switcher on the Rankings page to compare.",
+      },
+      {
+        q: "Do my badges carry across networks?",
+        a: "Badge progress is tracked from your total games played, so playing on either network counts toward unlocking the Rematch Badge and the Redeem Badge.",
+      },
+      {
+        q: "Is single-player bot mode available on both networks?",
+        a: "Yes — all five bot tiers run on both Celo and Botchain, with bot wallets funded on each network.",
+      },
+      {
+        q: "How do I switch networks?",
+        a: "On Botchain, switch chains in your wallet and the app will follow. On Celo via MiniPay, the app is fixed to Celo Mainnet — MiniPay does not support switching to Botchain.",
+      },
+    ],
+  },
+  {
+    icon: <Bot className="h-4 w-4" />,
+    title: "Single-Player Mode",
+    color: "text-violet-500 bg-violet-500/10 border-violet-500/20",
+    items: [
+      {
+        q: "What is single-player mode?",
+        a: "Single-player mode lets you compete against an AI-powered bot opponent instead of a human. Choose a difficulty tier, stake your DROPS, and play — no waiting for an opponent. All payouts are settled on-chain just like multiplayer, on whichever network you're connected to.",
+      },
+      {
+        q: "What are the difficulty tiers?",
+        a: (
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Tier</th>
+                <th style={thStyle}>Bot</th>
+                <th style={thStyle}>Stake</th>
+                <th style={thStyle}>Questions</th>
+                <th style={thStyle}>Bot Win Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["1 — Easiest", "Droplet 💧", "10 DROPS", "15", "~25%"],
+                ["2", "Drizzle 🌦", "20 DROPS", "18", "~42%"],
+                ["3", "Downpour 🌧", "30 DROPS", "21", "~58%"],
+                ["4", "Torrent ⛈", "40 DROPS", "24", "~72%"],
+                ["5 — Hardest", "Flood 🌊", "50 DROPS", "30", "~87%"],
+              ].map((row, i) => (
+                <tr key={i}>
+                  {row.map((cell, j) => (
+                    <td key={j} style={{ ...tdStyle, borderBottom: i === 4 ? "none" : tdStyle.borderBottom }}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ),
+      },
+      {
+        q: "How does the bot play?",
+        a: "Each bot tier has a set base accuracy (chance of picking the correct answer) and answer speed. Higher tiers answer faster and more accurately, earning more speed-bonus points. A small mid-game nudge (±8%) adjusts bot accuracy slightly based on the score gap, keeping games from snowballing.",
+      },
+      {
+        q: "What happens to my stake in single-player mode?",
+        a: "When you create a single-player game, you call createQuiz() on-chain and redeem() to burn your DROPS stake. The resolver then calls registerQuiz(), and the bot wallet calls redeem() on-chain to burn its own DROPS stake for real. After the game, the resolver mints the payout directly to the winner's wallet.",
+      },
+      {
+        q: "What are the single-player payouts?",
+        a: "If you win, 2× your stake is minted to your wallet. If it's a tie, your full stake is refunded. If the bot wins, 2× the stake goes to the bot's platform wallet — no payout to you.",
+      },
+      {
+        q: "Which pouch do solo winnings go to?",
+        a: "Wins against Droplet and Drizzle (tiers 1–2) credit your Game Pouch. Wins against Downpour, Torrent, and Flood (tiers 3–5) credit your Reward Pouch instead — the harder tiers pay into the balance you can redeem for $GoodDollar. Tie refunds always return to the Game Pouch.",
+      },
+      {
+        q: "Can I choose my own topic in single-player mode?",
+        a: "Yes — single-player mode uses the same AI question generation as multiplayer. Enter any topic you like and the AI will generate questions scaled to the question count for that difficulty tier.",
       },
     ],
   },
   {
     icon: <Coins className="h-4 w-4" />,
-    title: "DROPS & Stakes",
-    accentColor: "#22c55e",
+    title: "DROPS & Staking",
+    color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
     items: [
       {
-        q: "What are Game DROPS vs Reward DROPS?",
-        a: "Game DROPS come from your welcome bonus (100 free) or purchases with $G — they can only be used to stake in games. Reward DROPS are earned by winning games and can be redeemed for $G or auto-staked for APY.",
+        q: "How do I get DROPS?",
+        a: "New players receive 100 DROPS as a one-time welcome bonus on each supported network. You can also buy DROPS by exchanging $GoodDollar (G$) through the Buy DROPS flow in the app. DROPS can also be earned through platform rewards and game wins.",
       },
       {
-        q: "What is the minimum stake?",
-        a: "The minimum stake is 10 DROPS per player. Before earning your Rematch Badge (10 games played), you cannot stake more than 10 DROPS per game.",
+        q: "What is the DROPS burn/mint model?",
+        a: "When you stake in a game, your DROPS are burned via the redeem() function on the DROPS token contract. When you win (or receive a tie refund), the equivalent DROPS are minted to your wallet via mintTo(). This keeps the token supply balanced around active gameplay on each network.",
       },
       {
-        q: "How do I buy DROPS with $G?",
-        a: "You can buy Drops from the Challenge Tab in your Dashboard, 100 DROPS = $1 USD (live $G price). Equivalent amount got transfered to your Game Pouch. Purchased DROPS are play-only.",
+        q: "What are game_drops vs reward_drops?",
+        a: "game_drops (Game Pouch) is the balance used for staking in duels — 1v1 wins, ties, and solo wins against tiers 1–2 credit this pouch. reward_drops (Reward Pouch) can be redeemed for $GoodDollar (G$) via the DropsRedeemPool contract, and is credited by platform rewards and solo wins against tiers 3–5. Both pouches are tracked per network.",
       },
       {
-        q: "How does pre-lobby stake negotiation work?",
-        a: "When you enter a challenge's pre-lobby, you can accept the creator's opening stake or propose a different amount. The creator can counter privately, and you can counter back. Once both sides agree, the stake locks on-chain — no further changes.",
+        q: "What's the minimum stake?",
+        a: "10 DROPS. Until you've earned the Rematch Badge, your stake is fixed at exactly 10 DROPS — the badge is what unlocks custom stake amounts.",
       },
       {
-        q: "When do I receive my winnings?",
-        a: "Winnings are transfer directly into your Reward Pouch as DROPS immediately after the game ends — no separate claim step required. From there you can redeem them for $G and let them auto-stake.",
+        q: "When do I receive my DROPS after winning?",
+        a: "In multiplayer mode, a Claim Reward button appears on the results screen after the resolver calls setWinner(). Tap it to trigger the on-chain claim and receive your DROPS. In single-player mode, the payout is minted directly after the game ends — no separate claim needed.",
       },
       {
         q: "What happens in a tie?",
-        a: "If both players finish with equal scores, the smart contract calls declareTie() and each player's stake is transfer back into their Game Pouch in full. (which can't happen)", 
+        a: "In multiplayer, the resolver calls declareTie() and both players' stakes are minted back to their wallets via the pending claims system. In single-player, a tie refunds your full stake directly.",
+      },
+      {
+        q: "Can I redeem DROPS for real value?",
+        a: "Yes — reward_drops can be staked in the DropsRedeemPool contract to earn $GoodDollar (G$) with an APY bonus. The redeem flow burns your reward_drops and opens a stake that matures over a set period. You need the Redeem Badge to access redeem-pool actions.",
       },
     ],
   },
   {
     icon: <Trophy className="h-4 w-4" />,
-    title: "Rematch Badge & Tiers",
-    accentColor: "#f59e0b",
+    title: "Badges & Progression",
+    color: "text-amber-500 bg-amber-500/10 border-amber-500/20",
     items: [
       {
         q: "What is the Rematch Badge?",
-        a: "After completing 10 games (wins, losses, and ties all count), you permanently earn the Rematch Badge. It removes the 10 DROPS stake cap, unlocks stake negotiation, lets you play the same opponent again, and unlocks Reward DROPS redemption.",
+        a: "You earn the Rematch Badge after 10 total games — solo or 1v1, on either network. It unlocks rematches, custom stake amounts above the 10 DROPS minimum, and stake negotiation in the pre-lobby.",
       },
       {
-        q: "What are player tiers?",
-        a: "Tiers are based on total games played: Droplet (0–50), Drizzle (51–150), Downpour (151–300), Torrent (301–500), Flood (501+). Your tier determines the APY you earn when Reward DROPS are auto-staked.",
+        q: "What is the Redeem Badge?",
+        a: "You earn the Redeem Badge after 10 qualifying games. A qualifying game is a 1v1 duel or a solo game against difficulty 3 or higher (Downpour, Torrent, Flood). Easy-tier solo games don't count. The badge unlocks all redeem-pool actions.",
       },
       {
-        q: "What APY does each tier earn?",
-        a: "Droplet: 15% | Drizzle: 20% | Downpour: 25% | Torrent: 30% | Flood: 35%. These are annual rates that accrue continuously, per second, from the moment you stake — there's no fixed cycle. APY is snapshotted at the moment each stake is created.",
-      },
-    ],
-  },
-  {
-    icon: <Trophy className="h-4 w-4" />,
-    title: "Weekly Rank Rewards",
-    accentColor: "#22c55e",
-    items: [
-      {
-        q: "What is the Weekly Rank Program?",
-        a: "Every week, the top 3 ranked players — based on games played and wins from the Rank page — earn a reward they can claim from the Duel Faucet.",
+        q: "Why can't I set my own stake amount yet?",
+        a: "Until you have the Rematch Badge, every challenge you create is fixed at the 10 DROPS minimum. This keeps new accounts from opening high-stake games before they've played. Your progress toward the badge is shown on your profile.",
       },
       {
-        q: "How is my rank determined?",
-        a: "Your rank is calculated live on the Rank page using your total games played and wins for the current weekly cycle.",
-      },
-      {
-        q: "When can I claim my reward?",
-        a: "The claim window opens at 11:00 PM Saturday (week 1) and stays open until 10:59 PM Saturday (week 2) — a full week. Tap the Claim button on the Rank page, which routes you to the Duel Faucet to claim or check your allocation.",
-      },
-      {
-        q: "What happens if I don't claim in time?",
-        a: "You have one full week to claim the previous week's reward. Ranks reset at 12:00 AM UTC+1 every Sunday — if you miss the claim window before the reset, that reward is forfeited.",
-      },
-    ],
-  },
-  {
-    icon: <Coins className="h-4 w-4" />,
-    title: "Redeem & Staking",
-    accentColor: "#a78bfa",
-    items: [
-      {
-        q: "How does redeeming Reward DROPS work?",
-        a: "Redeem requires the Rematch Badge. Your DROPS are burned on-chain. 75% of the value is sent to you in $G in full. 25% is auto-staked at your tier APY for 30 days. A 10% service fee on the 75% leg is paid from the pool — not deducted from your share.",
-      },
-      {
-        q: "What happens when I claim a matured stake?",
-        a: "Two things happen at once: (1) The pool pays your APY earnings in $G directly to your wallet — earnings have been accruing every second since you staked, so the longer you wait past the 30-day lock, the more you receive. (2) The pool transfers your locked DROPS capital back to your Game Pouch.",
-      },
-      {
-        q: "Can I have multiple stakes running at once?",
-        a: "Yes. Each redeem creates a new independent stake entry with its own 30-day clock and APY snapshot. There is no cap on concurrent stakes.",
-      },
-      {
-        q: "Does APY accrue in cycles or all at once?",
-        a: "Neither — earnings accumulate continuously, second by second, based on your tier APY. The 30-day lock just determines when you're first able to claim. Claimable amount = principal × (1 + APY/365 × days elapsed), computed live whenever you check or claim.",
-      },
-      {
-        q: "What is the $G price used for redemptions?",
-        a: "The backend fetches the live $G/USD price from an external API immediately before each redeem and updates the contract. The rate is 100 DROPS = $1 USD, so the $G amount you receive fluctuates with $G's market price.",
+        q: "What are the player tiers?",
+        a: "Tiers are cosmetic rankings based on total wins: Droplet (0–100), Drizzle (101–200), Downpour (201–300), Torrent (301–400), and Flood (401+). Higher tiers also earn a better APY rate when staking reward_drops in the redeem pool.",
       },
     ],
   },
   {
     icon: <Trophy className="h-4 w-4" />,
     title: "Gameplay",
-    accentColor: "#60a5fa",
+    color: "text-blue-500 bg-blue-500/10 border-blue-500/20",
     items: [
       {
         q: "How are questions generated?",
-        a: "Questions are generated by AI (Gemini 2.5 Flash, with Groq llama-3.3-70b as fallback) based on the topic you provide. Each game has 3 rounds — Easy, Medium, and Hard — with 5 questions each (15 total).",
+        a: "Questions are generated by AI (Gemini 2.5 Flash, with Groq as fallback) based on the topic you provide. Each game has 3 rounds — Easy, Medium, and Hard — with questions spread across them. The total question count depends on the mode: multiplayer uses 15 by default; single-player ranges from 15 (Droplet) to 30 (Flood).",
       },
       {
         q: "How is scoring calculated?",
-        a: "Correct answers earn 500 base points plus up to 500 speed bonus points. Formula: 500 + (500 × time_remaining / time_limit). Answering instantly earns 1,000 pts; wrong answers score 0.",
+        a: "Correct answers earn 500 base points plus up to 500 speed bonus points. Answering instantly earns the full 1000; answering at the last second earns 500. Wrong or unanswered questions score 0. Bots at higher tiers earn more speed bonus per correct answer.",
       },
       {
         q: "What are the time limits per round?",
         a: "Easy: 7 seconds per question. Medium: 10 seconds. Hard: 13 seconds.",
       },
       {
-        q: "Can I rematch my opponent?",
-        a: "Yes — once you have the Rematch Badge. After a game ends, tap Request Rematch. Your opponent has 30 seconds to accept. A new challenge is created with fresh AI questions on the same topic.",
+        q: "Can I rematch after a multiplayer duel?",
+        a: "Yes — after a multiplayer game ends, tap Request Rematch. Your opponent has 30 seconds to accept. If they do, a new challenge is created with the same topic and stake. Both players need the Rematch Badge (10 games each) before rematching is available.",
+      },
+      {
+        q: "Is there a pre-lobby stake negotiation in multiplayer?",
+        a: "Yes — when entering a multiplayer pre-lobby, you can accept the creator's stake or propose a different DROPS amount. The creator can counter, and you can counter back. Once both sides agree and the stake is locked, no changes can be made. Negotiation is only available once both players hold the Rematch Badge.",
       },
     ],
   },
   {
     icon: <Shield className="h-4 w-4" />,
-    title: "Security & Contracts",
-    accentColor: "#a78bfa",
+    title: "Security & Smart Contracts",
+    color: "text-purple-500 bg-purple-500/10 border-purple-500/20",
     items: [
       {
-        q: "Are my DROPS safe?",
-        a: "DROPS are non-transferable — only the resolver wallet (operated by the platform) can mint them, and only you can burn them. Stakes in QuizHub cannot be withdrawn by the platform — only released to the verified winner or refunded on a tie.",
+        q: "Are my staked DROPS safe?",
+        a: "Stakes are committed via the DROPS token contract and resolved by the QuizHub contract on the network you're playing on. The resolver wallet can only call designated resolution functions (setWinner, declareTie, confirmBurn, mintTo) — it cannot arbitrarily withdraw or redirect funds.",
       },
       {
-        q: "What if my opponent disconnects mid-game?",
-        a: "Your opponent gets a 60-second reconnect window with a visible countdown broadcast to both players. If they don't return, you win by forfeit and receive the full 2× stake into your Reward Pouch.",
+        q: "Who resolves game outcomes on-chain?",
+        a: "A resolver wallet operated by PrimeIQ calls the resolution functions after game logic confirms a result. In multiplayer, setWinner() or declareTie() is called. In single-player, the resolver handles registerQuiz(), confirmBurn() for both sides, and then mints the payout. Each network has its own resolver.",
       },
       {
-        q: "Who calls setWinner on-chain?",
-        a: "A resolver wallet operated by the platform calls setWinner() or declareTie() after game logic confirms a result. This wallet can only designate outcomes — it cannot move funds, mint DROPS arbitrarily, or access player balances.",
+        q: "What if my opponent disconnects mid-multiplayer game?",
+        a: "There is a 60-second grace period for reconnection, with a visible countdown. If the opponent doesn't return in time, you win by forfeit and the resolver settles the game on-chain normally.",
       },
       {
-        q: "How is the DropsRedeemPool funded?",
-        a: "The pool holds $G deposited by the platform owner via depositG(). It pays out player redemptions and APY earnings. The pool must hold enough $G liquidity to cover all active stakes plus new redemptions.",
+        q: "What if a challenge expires before my opponent joins?",
+        a: "A challenge that never gets registered on-chain goes stale after 2 hours of inactivity and is cancelled automatically, with any staked DROPS refunded. Once a challenge is registered on-chain, both players have a 2-hour burn window to stake — after that, any participant can cancel it and staked DROPS are refunded.",
+      },
+      {
+        q: "Are the bot wallets real wallets?",
+        a: "Yes — each bot tier has a dedicated wallet address on each supported network with real DROPS. When a game starts, the bot calls redeem() on-chain to burn its stake just like a human player. When the bot wins, the payout is minted to its wallet on-chain. Bot private keys are held securely as server-side environment secrets and are never exposed to clients.",
       },
     ],
   },
   {
     icon: <Wifi className="h-4 w-4" />,
     title: "Technical Issues",
-    accentColor: "#f97316",
+    color: "text-orange-500 bg-orange-500/10 border-orange-500/20",
     items: [
       {
-        q: "My burn transaction failed — what do I do?",
-        a: 'If your DropsToken.redeem() was signed but the game didn\'t register it, tap "Sync my stake" on the lobby screen. This calls the contract\'s getQuiz() to check your burn status on-chain and syncs without a new transaction.',
+        q: "My stake transaction failed — what do I do?",
+        a: 'If your redeem() transaction was signed but the game didn\'t register it, use the "Already staked? Sync my stake" option on the lobby screen. This reads your burn event directly from the chain and syncs it without a new transaction.',
       },
       {
-        q: "I burned my DROPS but the game won't start.",
-        a: "Both players must burn their stake AND click Ready. Check the lobby — if your status shows \"Stake verified\", just click Ready. If it still shows \"Awaiting stake\", tap the Sync button to re-check on-chain.",
+        q: "I staked but the game won't start.",
+        a: "Both players must stake AND click Ready before a multiplayer game starts. If your status shows \"Stake verified\", just click Ready. If it still shows \"Awaiting stake\", try the Sync button to re-check the chain.",
       },
       {
-        q: "My Reward DROPS balance looks wrong.",
-        a: "Reward DROPS are credited immediately after game resolution on-chain. If there's a delay, refresh the balance from your profile page. If the issue persists after a few minutes, contact support with your game code.",
+        q: "The single-player game isn't starting after I staked.",
+        a: "After your createQuiz() and redeem() transactions confirm, the backend needs to call registerQuiz() and complete the bot's stake. This typically takes a few seconds. If the game still hasn't started after 30 seconds, refresh the page and check your challenge history.",
       },
       {
-        q: "The lobby isn't updating / I can't see my opponent.",
-        a: "Tap the refresh icon (↻) on the lobby screen to manually pull the latest state. The lobby syncs via WebSocket — if your connection dropped, reopening the challenge link will reconnect and replay the current game state.",
+        q: "I'm on the wrong network.",
+        a: "If a challenge won't load or your DROPS balance shows zero unexpectedly, check which network you're connected to. Challenges and balances are per-network — a Celo challenge won't open while your wallet is on Botchain, and vice versa.",
+      },
+      {
+        q: "My balance is different from what the leaderboard shows.",
+        a: "Leaderboard stats and profile stats both read per-network totals, so make sure you're comparing the same chain. If the numbers still disagree after a refresh, contact support with your wallet address.",
+      },
+      {
+        q: "The app shows 'Permission denied' when trying to transact.",
+        a: "On Celo, this usually means MiniPay hasn't authorised the transaction yet — close and reopen the app inside MiniPay (not a regular browser), then try again. On Botchain, check your wallet has the network added and enough gas. Either way, make sure your DROPS balance covers the stake.",
+      },
+      {
+        q: "The lobby isn't updating or I can't see my opponent.",
+        a: "Tap the refresh icon (↻) in the lobby to manually pull the latest state. If that doesn't help, close and reopen the challenge link.",
+      },
+      {
+        q: "My claim button isn't working after a win.",
+        a: "Claim transactions require the resolver to have already called setWinner() or declareTie() on-chain. If the button appears but the transaction fails, wait a few seconds for the resolver confirmation to propagate and try again. Contact support if the issue persists more than a minute.",
       },
     ],
   },
 ];
 
-// ── FAQ Accordion ─────────────────────────────────────────────────────────────
+// ── FAQ Accordion Item ────────────────────────────────────────────────────────
 
-function FAQAccordion({ items, accentColor }: { items: FAQItem[]; accentColor: string }) {
+function FAQAccordion({ items }: { items: FAQItem[] }) {
   const [open, setOpen] = useState<number | null>(null);
 
   return (
@@ -230,20 +370,19 @@ function FAQAccordion({ items, accentColor }: { items: FAQItem[]; accentColor: s
       {items.map((item, i) => (
         <div
           key={i}
-          className="rounded-2xl overflow-hidden transition-all duration-200"
-          style={{
-            background: open === i ? "#13172a" : "#13172a",
-            border: open === i
-              ? `1px solid ${accentColor}50`
-              : "1px solid #1e2340",
-          }}
+          className={cn(
+            "rounded-2xl border transition-all duration-200 overflow-hidden",
+            open === i
+              ? "border-primary/30 bg-primary/5"
+              : "border-border bg-card hover:border-primary/20",
+          )}
         >
           <button
             onClick={() => setOpen(open === i ? null : i)}
             className="w-full flex items-start justify-between gap-3 px-4 py-3.5 text-left"
           >
-            <span className="text-sm font-bold text-white leading-snug flex-1">{item.q}</span>
-            <span className="shrink-0 mt-0.5" style={{ color: "#64748b" }}>
+            <span className="text-sm font-bold text-foreground leading-snug flex-1">{item.q}</span>
+            <span className="shrink-0 mt-0.5 text-muted-foreground">
               {open === i
                 ? <ChevronUp className="h-4 w-4" />
                 : <ChevronDown className="h-4 w-4" />
@@ -252,7 +391,10 @@ function FAQAccordion({ items, accentColor }: { items: FAQItem[]; accentColor: s
           </button>
           {open === i && (
             <div className="px-4 pb-4">
-              <p className="text-sm leading-relaxed" style={{ color: "#94a3b8" }}>{item.a}</p>
+              {typeof item.a === "string"
+                ? <p className="text-sm text-muted-foreground leading-relaxed">{item.a}</p>
+                : <div className="text-sm text-muted-foreground leading-relaxed">{item.a}</div>
+              }
             </div>
           )}
         </div>
@@ -261,29 +403,111 @@ function FAQAccordion({ items, accentColor }: { items: FAQItem[]; accentColor: s
   );
 }
 
+// ── Contracts card with chain switcher ────────────────────────────────────────
+
+function ContractRow({ label, address, explorer }: { label: string; address: string; explorer: string }) {
+  const missing = !address.startsWith("0x") || address.length < 10;
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+        <p className="font-mono text-xs text-foreground break-all">
+          {missing ? "Coming soon" : address}
+        </p>
+      </div>
+      {!missing && (
+        <a
+          href={`${explorer}${address}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 flex items-center gap-1 text-xs font-bold text-primary hover:opacity-70 transition-opacity pt-5"
+        >
+          View <ExternalLink className="h-3 w-3" />
+        </a>
+      )}
+    </div>
+  );
+}
+
+function ContractsCard() {
+  const [activeId, setActiveId] = useState<number>(CHAINS[0].id);
+  const chain = CHAINS.find(c => c.id === activeId)!;
+
+  return (
+    <div className="rounded-3xl border border-border bg-card overflow-hidden">
+      <div className="px-5 py-4 border-b border-border space-y-3">
+        <h3 className="font-black text-foreground text-sm flex items-center gap-2">
+          <Shield className="h-4 w-4 text-purple-500" /> Smart Contracts
+        </h3>
+        <div className="flex gap-2">
+          {CHAINS.map(c => (
+            <button
+              key={c.id}
+              onClick={() => setActiveId(c.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-black transition-colors",
+                activeId === c.id
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground border-border hover:text-foreground",
+              )}
+            >
+              <img src={c.icon} alt="" className="w-3.5 h-3.5 rounded-sm" />
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-5 py-4 space-y-4">
+        <ContractRow label="QuizHub Contract" address={chain.quizHub} explorer={chain.explorer} />
+        <ContractRow label="DROPS Token" address={chain.dropsToken} explorer={chain.explorer} />
+
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <div>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Chain ID</p>
+            <p className="font-mono text-xs text-foreground">{chain.id}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Gas Token</p>
+            <p className="font-mono text-xs text-foreground">{chain.gas}</p>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          All stakes, wins, ties, and refunds on {chain.label} flow through this contract. The
+          resolver can only call{" "}
+          <code className="bg-muted px-1 rounded text-[10px]">registerQuiz</code>,{" "}
+          <code className="bg-muted px-1 rounded text-[10px]">confirmBurn</code>,{" "}
+          <code className="bg-muted px-1 rounded text-[10px]">setWinner</code>,{" "}
+          <code className="bg-muted px-1 rounded text-[10px]">declareTie</code>, and{" "}
+          <code className="bg-muted px-1 rounded text-[10px]">mintTo</code> — it cannot withdraw
+          funds directly. Access {chain.label} with {chain.wallet}.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SupportPage() {
+  const router = useRouter();
   return (
-    <div className="min-h-screen" style={{ background: "#0d0f1a" }}>
+    <div className="min-h-screen bg-background">
 
       {/* Header */}
-      <div
-        className="sticky top-0 z-20 backdrop-blur-md"
-        style={{ background: "#13172a", borderBottom: "1px solid #1e2340" }}
-      >
+      <div className="border-b border-border bg-card/50 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
           <button
             onClick={() => window.history.back()}
-            className="flex items-center justify-center w-8 h-8 rounded-xl transition-colors active:scale-95 shrink-0"
-            style={{ background: "#0d0f1a", border: "1px solid #1e2340", color: "#94a3b8" }}
+            className="flex items-center justify-center w-8 h-8 rounded-xl border border-border bg-card hover:bg-muted transition-colors active:scale-95 shrink-0"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
             </svg>
           </button>
-          <HelpCircle className="h-5 w-5 shrink-0" style={{ color: "#2563eb" }} />
-          <h1 className="font-black text-white text-base">Support &amp; FAQ</h1>
+          <HelpCircle className="h-5 w-5 text-primary shrink-0" />
+          <h1 className="font-black text-foreground text-base">Support & FAQ</h1>
         </div>
       </div>
 
@@ -293,117 +517,77 @@ export default function SupportPage() {
         <div className="text-center space-y-3 pt-2">
           <div className="text-5xl">🧠</div>
           <div>
-            <h2 className="text-2xl font-black text-white">How can we help?</h2>
-            <p className="text-sm mt-1 max-w-xs mx-auto" style={{ color: "#64748b" }}>
-              Everything you need to know about DropsIQ — DROPS, challenges, staking, and troubleshooting.
+            <h2 className="text-2xl font-black text-foreground">How can we help?</h2>
+            <p className="text-muted-foreground text-sm mt-1 max-w-xs mx-auto">
+              Everything you need to know about PrimeIQ — DROPS staking, single-player bots,
+              multiplayer duels, and troubleshooting.
             </p>
           </div>
-        </div>
-
-        {/* Quick-stat strip */}
-        <div
-          className="rounded-2xl p-5 space-y-3"
-          style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)", border: "1px solid #3b82f640" }}
-        >
-          <p className="text-xs font-bold uppercase tracking-wider text-blue-200">DropsIQ at a glance</p>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Welcome DROPS",  value: "100 Free" },
-              { label: "Min Stake",      value: "10 DROPS" },
-              { label: "Winner Gets",    value: "2× Stake" },
-            ].map((s) => (
-              <div
-                key={s.label}
-                className="rounded-xl p-3 text-center"
-                style={{ background: "rgba(255,255,255,0.12)" }}
+          <div className="flex items-center justify-center gap-2 pt-1">
+            {CHAINS.map(c => (
+              <span
+                key={c.id}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border bg-card text-[11px] font-bold text-muted-foreground"
               >
-                <div className="text-sm font-black text-white">{s.value}</div>
-                <div className="text-[10px] text-blue-200 mt-0.5">{s.label}</div>
-              </div>
+                <img src={c.icon} alt="" className="w-3 h-3 rounded-sm" />
+                {c.label}
+              </span>
             ))}
           </div>
         </div>
 
+        {/* Mode overview cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-1">
+            <div className="text-2xl">⚔️</div>
+            <p className="font-black text-foreground text-sm">Multiplayer</p>
+            <p className="text-xs text-muted-foreground">1v1 human duels · stake DROPS · claim on-chain</p>
+          </div>
+          <div className="rounded-2xl border border-[#839ce9] bg-[#01071a] p-4 space-y-1">
+            <div className="text-2xl">🤖</div>
+            <p className="font-black text-foreground text-sm">Single-Player</p>
+            <p className="text-xs text-muted-foreground">5 bot tiers · instant start · auto payout</p>
+          </div>
+        </div>
+            {/* Play CTA */}
+        <button
+          onClick={() => router.push("/challenge")}
+          className="w-full rounded-3xl border-2 border-primary/20 bg-primary/5 p-5 flex items-center gap-4 text-left hover:bg-primary/10 transition-all active:scale-[0.99]"
+        >
+          <div className="w-11 h-11 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+            <Swords className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-black text-foreground text-sm">Start a duel</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Stake DROPS, race AI-generated questions, win on-chain.
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        </button>
+        
         {/* FAQ Sections */}
         {FAQ_SECTIONS.map((section) => (
           <section key={section.title} className="space-y-3">
             <div className="flex items-center gap-2">
-              <span
-                className="flex items-center justify-center w-7 h-7 rounded-xl"
-                style={{
-                  background: `${section.accentColor}15`,
-                  border: `1px solid ${section.accentColor}30`,
-                  color: section.accentColor,
-                }}
-              >
+              <span className={cn("flex items-center justify-center w-7 h-7 rounded-xl border text-xs font-black", section.color)}>
                 {section.icon}
               </span>
-              <h3 className="font-black text-white text-sm">{section.title}</h3>
+              <h3 className="font-black text-foreground text-base">{section.title}</h3>
             </div>
-            <FAQAccordion items={section.items} accentColor={section.accentColor} />
+            <FAQAccordion items={section.items} />
           </section>
         ))}
 
         {/* Contract info */}
-        <div
-          className="rounded-3xl overflow-hidden"
-          style={{ background: "#13172a", border: "1px solid #1e2340" }}
-        >
-          <div className="px-5 py-4" style={{ borderBottom: "1px solid #1e2340" }}>
-            <h3 className="font-black text-sm text-white flex items-center gap-2">
-              <Shield className="h-4 w-4" style={{ color: "#a78bfa" }} /> Smart Contracts (Celo)
-            </h3>
-          </div>
-          <div className="px-5 py-4 space-y-4">
-            {[
-              {
-                label: "QuizHub Contract",
-                address: "0x9088298cd07BE0cAA1e256d3f3761313e1a1447E",
-                note: "Holds no tokens — only records quiz state. Resolver can call setWinner, declareTie, confirmBurn. Players retain rights to their stakes.",
-              },
-              {
-                label: "DropsToken Contract",
-                address: "Contract address shown in app",
-                note: "Non-transferable ERC-20. Only the resolver wallet can mint (claim). Any holder can burn (redeem). Total supply changes with game activity.",
-              },
-              {
-                label: "DropsRedeemPool",
-                address: "Contract address shown in app",
-                note: "Holds $G liquidity for redemptions and continuously-accruing APY payouts. Owner can deposit/withdraw surplus $G. Resolver calls redeemForPlayer and releaseCapital, which transfers staked DROPS capital back to the player.",
-              },
-            ].map((c, i) => (
-              <div
-                key={i}
-                className="rounded-xl p-4 space-y-2"
-                style={{ background: "#0d0f1a", border: "1px solid #1e2340" }}
-              >
-                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "#64748b" }}>{c.label}</p>
-                <p className="font-mono text-xs text-white break-all">{c.address}</p>
-                <p className="text-[11px] leading-relaxed" style={{ color: "#64748b" }}>{c.note}</p>
-              </div>
-            ))}
-
-            <a
-              href="https://celoscan.io/address/0x9088298cd07BE0cAA1e256d3f3761313e1a1447E"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs font-bold transition-opacity hover:opacity-70 w-fit"
-              style={{ color: "#2563eb" }}
-            >
-              View QuizHub on Celoscan <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
-        </div>
+        <ContractsCard />
 
         {/* Contact */}
-        <div
-          className="rounded-3xl p-6 text-center space-y-4"
-          style={{ background: "#13172a", border: "2px solid #2563eb30" }}
-        >
+        <div className="rounded-3xl border-2 border-primary/20 bg-primary/5 p-6 text-center space-y-4">
           <div className="text-3xl">💬</div>
           <div>
-            <h3 className="font-black text-white">Still need help?</h3>
-            <p className="text-sm mt-1" style={{ color: "#64748b" }}>
+            <h3 className="font-black text-foreground">Still need help?</h3>
+            <p className="text-sm text-muted-foreground mt-1">
               Reach us directly — we typically respond within a few hours.
             </p>
           </div>
@@ -412,15 +596,13 @@ export default function SupportPage() {
               href="https://t.me/faucetdropschat"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl font-black text-sm transition-all active:scale-[0.99]"
-              style={{ background: "#2563eb", color: "#ffffff" }}
+              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-primary text-primary-foreground font-black text-sm hover:opacity-90 transition-all active:scale-[0.99]"
             >
               <MessageCircle className="h-4 w-4" /> Telegram Support
             </a>
             <a
               href="mailto:drops.faucet@gmail.com"
-              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl font-black text-sm transition-all active:scale-[0.99]"
-              style={{ background: "#13172a", border: "2px solid #1e2340", color: "#ffffff" }}
+              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl border-2 border-border bg-card text-foreground font-black text-sm hover:bg-muted transition-all active:scale-[0.99]"
             >
               ✉️ Email Us
             </a>

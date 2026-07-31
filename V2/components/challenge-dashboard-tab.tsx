@@ -608,7 +608,16 @@ useEffect(() => {
   const [swapQuoting, setSwapQuoting]   = useState(false);
   const [swapLoading, setSwapLoading]   = useState(false);
   const [swapTxHash, setSwapTxHash]     = useState<string | null>(null);
-
+  const [swapResult, setSwapResult] = useState<{
+    ok: boolean;
+    amountIn: string;
+    tokenInSymbol: string;
+    amountOut?: string;
+    outSymbol?: string;
+    route?: string;
+    txHash?: string;
+    error?: string;
+  } | null>(null);
   // Reset selection whenever the chain changes
   useEffect(() => {
     setSwapOut(swapCfg?.outTokens[0] ?? null);
@@ -659,8 +668,14 @@ useEffect(() => {
     const amt = parseFloat(swapAmount);
     if (!swapCfg?.dropsSwap || !swapOut || !amt || !swapQuote) return;
 
+    // snapshot for the modal — state gets cleared on success
+    const shownIn    = amt.toString();
+    const shownOut   = fmt(parseFloat(ethers.formatUnits(swapQuote.amountOut, swapOut.decimals)), 4);
+    const shownRoute = swapQuote.label;
+    const outSymbol  = swapOut.symbol;
+
     setSwapLoading(true);
-    setSwapTxHash(null);
+    setSwapResult(null);
     try {
       const switched = await ensureCorrectNetwork(activeChainId);
       if (!switched) throw new Error("Please connect your wallet first.");
@@ -683,7 +698,6 @@ useEffect(() => {
         toast({ title: `⏳ Approve ${swapCfg.tokenInSymbol} spend…` });
         const ap = await tokenIn.approve(swapCfg.dropsSwap, amountIn);
         await ap.wait();
-        toast({ title: "✅ Approved" });
       }
 
       const swapContract = new ethers.Contract(swapCfg.dropsSwap, DROPS_SWAP_ABI, signer);
@@ -701,14 +715,27 @@ useEffect(() => {
       const rc = await tx.wait();
       if (!rc || rc.status !== 1) throw new Error("Swap reverted on-chain");
 
-      setSwapTxHash(tx.hash);
-      toast({ title: `✅ Swapped to ${swapOut.symbol}!` });
+      setSwapResult({
+        ok: true,
+        amountIn:      shownIn,
+        tokenInSymbol: swapCfg.tokenInSymbol,
+        amountOut:     shownOut,
+        outSymbol,
+        route:         shownRoute,
+        txHash:        tx.hash,
+      });
       setSwapAmount("");
       setSwapQuote(null);
       fetchGWalletBalance();
     } catch (err: any) {
       const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error";
-      toast({ title: "Swap failed", description: msg, variant: "destructive" });
+      setSwapResult({
+        ok: false,
+        amountIn:      shownIn,
+        tokenInSymbol: swapCfg.tokenInSymbol,
+        outSymbol,
+        error:         msg,
+      });
     } finally {
       setSwapLoading(false);
     }
@@ -2110,7 +2137,104 @@ useEffect(() => {
           )}
         </div>
       )}
+      {/* ── Swap Result Modal ────────────────────────────────────────────── */}
+      {swapResult && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setSwapResult(null)}
+        >
+          <div
+            className="bg-background rounded-2xl border border-border shadow-xl w-full max-w-sm p-6 space-y-5"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="text-center space-y-2">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
+                swapResult.ok
+                  ? "bg-green-100 dark:bg-green-900/30"
+                  : "bg-red-100 dark:bg-red-900/30"
+              }`}>
+                {swapResult.ok
+                  ? <CheckCircle2 className="h-8 w-8 text-green-500" />
+                  : <AlertCircle className="h-8 w-8 text-red-500" />}
+              </div>
+              <h2 className="text-lg font-black text-foreground">
+                {swapResult.ok ? "Swap Complete!" : "Swap Failed"}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {swapResult.ok
+                  ? `Your ${swapResult.tokenInSymbol} has been converted to ${swapResult.outSymbol}`
+                  : "No funds were moved — you can safely try again."}
+              </p>
+            </div>
 
+            {swapResult.ok ? (
+              <>
+                {/* Stats */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
+                    <span className="text-sm text-muted-foreground font-medium">You swapped</span>
+                    <span className="text-sm font-black text-foreground">
+                      {swapResult.amountIn} {swapResult.tokenInSymbol}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/50">
+                    <span className="text-sm text-muted-foreground font-medium">Received</span>
+                    <span className="text-sm font-black text-green-600 dark:text-green-400">
+                      ≈ {swapResult.amountOut} {swapResult.outSymbol}
+                    </span>
+                  </div>
+                  {swapResult.route && (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
+                      <span className="text-sm text-muted-foreground font-medium">Route</span>
+                      <span className="text-xs font-mono text-foreground">{swapResult.route}</span>
+                    </div>
+                  )}
+                </div>
+
+                {swapResult.txHash && (
+                  <a
+                    href={explorerTxUrl(swapResult.txHash)}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {shortAddr(swapResult.txHash)}
+                  </a>
+                )}
+
+                <p className="text-[10px] text-center text-muted-foreground/60">
+                  Final amount may differ slightly from the estimate — check the transaction for the exact figure.
+                </p>
+
+                <Button className="w-full" onClick={() => setSwapResult(null)}>
+                  Done
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/50">
+                  <p className="text-xs text-red-600 dark:text-red-400 break-words">
+                    {swapResult.error}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setSwapResult(null)}>
+                    Close
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => { setSwapResult(null); fetchSwapQuote(); }}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" /> Try Again
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {/* ════════════════════════════════════════════════════════════════════
           POOLS
       ════════════════════════════════════════════════════════════════════ */}

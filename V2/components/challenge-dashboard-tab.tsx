@@ -19,7 +19,16 @@ import { ethers } from "ethers";
 import { REDEEM_ABI } from "@/lib/abis";
 import { getGTokenPrice } from "@/lib/getToken";
 import { getChainConfig, CELO_CHAIN_ID, isSupportedChain,ensureChainNetwork, getEnabledChains ,BOTCHAIN_CHAIN_ID } from "@/lib/chain";
-import { getGoodDollarPrice } from "@/lib/getGoodDollarPrice";
+import {
+  getSwapConfig, buildCandidatePaths, quoteExactInputRaw,
+  type SwapOutToken as SwapToken,
+} from "@/lib/swap-config";
+
+const DROPS_SWAP_ABI = [
+  "function swap(bytes path, uint256 amountIn, uint256 amountOutMin, address tokenOut) returns (uint256)",
+  "function feeBps() view returns (uint16)",
+];
+
 const BACKEND_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
 
 /** ─── Contract config ────────────────────────────────────────────────────── */
@@ -316,13 +325,14 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   } | null>(null);
 
   // ── Inner tab ──────────────────────────────────────────────────────────────
-  type InnerTab = "overview" | "redeem" | "pools" | "history" | "buy" | "admin";
+  type InnerTab = "overview" | "redeem" | "pools" | "history" | "buy" | "swap" | "admin";
   const tabs: { key: InnerTab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "redeem",   label: "Redeem"   },
     { key: "pools",    label: "Pools"    },
     { key: "history",  label: "History"  },
     { key: "buy",      label: "Buy Drops" },
+    { key: "swap",     label: "Swap"     },
     ...(adminMode ? [{ key: "admin" as InnerTab, label: "Admin" }] : []),
   ];
 
@@ -408,7 +418,7 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
   const [gTxHash, setGTxHash] = useState("");
   const [gWalletBalance, setGWalletBalance] = useState<number | null>(null);
   const [gWalletBalanceLoading, setGWalletBalanceLoading] = useState(false);
- 
+  const [gWalletDecimals, setGWalletDecimals] = useState(18);
   const handleCalculate = async () => {
     const drops = parseFloat(dropsToBuy);
     if (!drops || drops < 10) {
@@ -438,36 +448,36 @@ export function ChallengeDashboardTab({ walletAddress, initialSubtab, refreshKey
     setGCostDisplay(gCost);
     setBuyStep("deposit");
   };
-     const fetchGWalletBalance = useCallback(async () => {
-  if (!walletAddress || !G_TOKEN) return;
-  setGWalletBalanceLoading(true);
-  try {
-    const provider = new ethers.JsonRpcProvider(chainCfg.rpcUrl);
-    const token = new ethers.Contract(
-      G_TOKEN,
-      [
-        "function balanceOf(address account) view returns (uint256)",
-        "function decimals() view returns (uint8)",
-      ],
-      provider,
-    );
-    const [rawBal, decimals]: [bigint, number] = await Promise.all([
-      token.balanceOf(walletAddress),
-      token.decimals(),
-    ]);
-    setGWalletBalance(parseFloat(ethers.formatUnits(rawBal, decimals)));
-  } catch {
-    setGWalletBalance(null);
-  } finally {
-    setGWalletBalanceLoading(false);
-  }
-}, [walletAddress, G_TOKEN, chainCfg.rpcUrl]);
-
+const fetchGWalletBalance = useCallback(async () => {
+    if (!walletAddress || !G_TOKEN) return;
+    setGWalletBalanceLoading(true);
+    try {
+      const provider = new ethers.JsonRpcProvider(chainCfg.rpcUrl);
+      const token = new ethers.Contract(
+        G_TOKEN,
+        [
+          "function balanceOf(address account) view returns (uint256)",
+          "function decimals() view returns (uint8)",
+        ],
+        provider,
+      );
+      const [rawBal, decimals]: [bigint, number] = await Promise.all([
+        token.balanceOf(walletAddress),
+        token.decimals(),
+      ]);
+      setGWalletDecimals(Number(decimals));
+      setGWalletBalance(parseFloat(ethers.formatUnits(rawBal, decimals)));
+    } catch {
+      setGWalletBalance(null);
+    } finally {
+      setGWalletBalanceLoading(false);
+    }
+  }, [walletAddress, G_TOKEN, chainCfg.rpcUrl]);
 useEffect(() => {
   if (innerTab === "redeem" || innerTab === "buy") {
     fetchGoodDollarPrice();
   }
-  if (innerTab === "buy") {
+  if (innerTab === "buy" || innerTab === "swap") {
     fetchGWalletBalance();
   }
 }, [innerTab, fetchGoodDollarPrice, fetchGWalletBalance]);
@@ -588,6 +598,121 @@ useEffect(() => {
     setBuyStep("input");
   };
 
+  // ── Swap (per-chain) ──────────────────────────────────────────────────────
+  const swapCfg = getSwapConfig(activeChainId);
+
+  const [swapOut, setSwapOut]           = useState<SwapToken | null>(null);
+  const [swapAmount, setSwapAmount]     = useState("");
+  const [swapSlippage, setSwapSlippage] = useState(1);
+  const [swapQuote, setSwapQuote]       = useState<{ amountOut: bigint; path: string; label: string } | null>(null);
+  const [swapQuoting, setSwapQuoting]   = useState(false);
+  const [swapLoading, setSwapLoading]   = useState(false);
+  const [swapTxHash, setSwapTxHash]     = useState<string | null>(null);
+
+  // Reset selection whenever the chain changes
+  useEffect(() => {
+    setSwapOut(swapCfg?.outTokens[0] ?? null);
+    setSwapAmount("");
+    setSwapQuote(null);
+    setSwapTxHash(null);
+  }, [activeChainId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchSwapQuote = useCallback(async () => {
+    const amt = parseFloat(swapAmount);
+    if (!swapCfg || !swapOut || !amt || amt <= 0) { setSwapQuote(null); return; }
+
+    setSwapQuoting(true);
+    try {
+      const amountIn = ethers.parseUnits(amt.toString(), gWalletDecimals);
+      const cands    = buildCandidatePaths(swapCfg, swapOut);
+      console.log(`[swap] ${cands.length} routes → ${swapOut.symbol} on chain ${activeChainId}`);
+
+      let best: { amountOut: bigint; path: string; label: string } | null = null;
+      for (const c of cands) {
+        try {
+          const out = await quoteExactInputRaw(chainCfg.rpcUrl, swapCfg.quoter, c.path, amountIn);
+          console.log(`[swap] ${c.label} → ${out.toString()}`);
+          if (out > 0n && (best === null || out > best.amountOut)) {
+            best = { amountOut: out, path: c.path, label: c.label };
+          }
+        } catch (e: any) {
+          console.warn(`[swap] ${c.label} failed:`, e?.message);
+        }
+      }
+      if (!best) console.warn("[swap] no route produced a quote");
+      setSwapQuote(best);
+    } catch (err) {
+      console.error("[swap] quote error:", err);
+      setSwapQuote(null);
+    } finally {
+      setSwapQuoting(false);
+    }
+  }, [swapAmount, swapOut, swapCfg, gWalletDecimals, chainCfg.rpcUrl, activeChainId]);
+
+  useEffect(() => {
+    if (innerTab !== "swap") return;
+    const t = setTimeout(fetchSwapQuote, 400);
+    return () => clearTimeout(t);
+  }, [innerTab, fetchSwapQuote]);
+
+  const handleSwap = async () => {
+    const amt = parseFloat(swapAmount);
+    if (!swapCfg?.dropsSwap || !swapOut || !amt || !swapQuote) return;
+
+    setSwapLoading(true);
+    setSwapTxHash(null);
+    try {
+      const switched = await ensureCorrectNetwork(activeChainId);
+      if (!switched) throw new Error("Please connect your wallet first.");
+
+      const signer = await getActiveSigner(activeChainId);
+      if (!signer) throw new Error("No wallet connected");
+      const signerAddr = await signer.getAddress();
+      if (signerAddr.toLowerCase() !== wallet) {
+        throw new Error(`Connect as ${walletAddress} to proceed`);
+      }
+
+      const amountIn = ethers.parseUnits(amt.toString(), gWalletDecimals);
+      const tokenIn  = new ethers.Contract(swapCfg.tokenIn, ERC20_ABI, signer);
+
+      const bal: bigint = await tokenIn.balanceOf(signerAddr);
+      if (bal < amountIn) throw new Error(`Insufficient ${swapCfg.tokenInSymbol} balance`);
+
+      const allowance: bigint = await tokenIn.allowance(signerAddr, swapCfg.dropsSwap);
+      if (allowance < amountIn) {
+        toast({ title: `⏳ Approve ${swapCfg.tokenInSymbol} spend…` });
+        const ap = await tokenIn.approve(swapCfg.dropsSwap, amountIn);
+        await ap.wait();
+        toast({ title: "✅ Approved" });
+      }
+
+      const swapContract = new ethers.Contract(swapCfg.dropsSwap, DROPS_SWAP_ABI, signer);
+      let feeBps = 0n;
+      try { feeBps = BigInt(await swapContract.feeBps()); } catch { /* fee optional */ }
+
+      const netQuote = (swapQuote.amountOut * (10000n - feeBps)) / 10000n;
+      const slipBps  = BigInt(Math.round(swapSlippage * 100));
+      const minOut   = (netQuote * (10000n - slipBps)) / 10000n;
+
+      toast({ title: "⏳ Confirm swap in your wallet…" });
+      const tx = await swapContract.swap(swapQuote.path, amountIn, minOut, swapOut.address);
+      toast({ title: "📡 Swap sent, waiting for confirmation…" });
+
+      const rc = await tx.wait();
+      if (!rc || rc.status !== 1) throw new Error("Swap reverted on-chain");
+
+      setSwapTxHash(tx.hash);
+      toast({ title: `✅ Swapped to ${swapOut.symbol}!` });
+      setSwapAmount("");
+      setSwapQuote(null);
+      fetchGWalletBalance();
+    } catch (err: any) {
+      const msg = err?.reason ?? err?.shortMessage ?? err?.message ?? "Unknown error";
+      toast({ title: "Swap failed", description: msg, variant: "destructive" });
+    } finally {
+      setSwapLoading(false);
+    }
+  };
   /** Get a signer-backed contract instance, ensuring active network */
   const getSignerContract = useCallback(async () => {
     if (!DROPS_REDEEM_POOL_ADDRESS) throw new Error("Redeem pool not available on this network.");
@@ -1797,6 +1922,192 @@ useEffect(() => {
 
             </CardContent>
           </Card>
+        </div>
+      )}
+
+        {/* ════════════════════════════════════════════════════════════════════
+          SWAP
+      ════════════════════════════════════════════════════════════════════ */}
+      {innerTab === "swap" && (
+        <div className="space-y-4">
+          {!swapCfg ? (
+            <div className="text-center py-12 border border-dashed rounded-xl text-muted-foreground">
+              <RefreshCw className="h-8 w-8 mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-medium">Swapping isn't available on {chainCfg.name} yet</p>
+              <p className="text-xs mt-1">Switch to Celo to swap {getTokenSymbol(CELO_CHAIN_ID)} for stablecoins.</p>
+            </div>
+          ) : !swapCfg.dropsSwap ? (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+              <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                The swap contract isn't deployed on {chainCfg.name} yet. Coming soon.
+              </p>
+            </div>
+          ) : (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4 text-primary" />
+                  Swap {swapCfg.tokenInSymbol} → Stablecoin
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+
+                {/* Balance */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40 border border-border">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground font-medium">
+                      Your {swapCfg.tokenInSymbol} balance
+                    </span>
+                  </div>
+                  {gWalletBalanceLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <span className="font-black text-foreground">
+                      {gWalletBalance !== null
+                        ? `${fmt(gWalletBalance, 4)} ${swapCfg.tokenInSymbol}`
+                        : "—"}
+                    </span>
+                  )}
+                </div>
+
+                {/* Output token */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Receive</Label>
+                  <div className="flex gap-2">
+                    {swapCfg.outTokens.map(t => (
+                      <button
+                        key={t.symbol}
+                        onClick={() => { setSwapOut(t); setSwapQuote(null); }}
+                        className={`flex-1 py-2.5 rounded-xl border text-xs font-bold transition-all
+                          ${swapOut?.symbol === t.symbol
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40"}`}
+                      >
+                        <span className="block">{t.symbol}</span>
+                        <span className="block text-[9px] font-normal text-muted-foreground/70 mt-0.5">{t.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                    {swapCfg.tokenInSymbol} to Swap
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      value={swapAmount}
+                      onChange={e => setSwapAmount(e.target.value)}
+                      placeholder="0"
+                      className="flex-1 font-mono font-bold text-lg h-12"
+                    />
+                    <Button
+                      variant="outline" size="sm"
+                      className="h-12 px-3 text-xs font-bold"
+                      disabled={!gWalletBalance || gWalletBalance <= 0}
+                      onClick={() => gWalletBalance && setSwapAmount(String(gWalletBalance))}
+                    >
+                      MAX
+                    </Button>
+                  </div>
+                  {gWalletBalance !== null && parseFloat(swapAmount) > gWalletBalance && (
+                    <p className="text-xs text-red-500 font-bold pl-1">
+                      Exceeds your {swapCfg.tokenInSymbol} balance
+                    </p>
+                  )}
+                </div>
+
+                {/* Slippage */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Max Slippage</Label>
+                  <div className="flex gap-2">
+                    {[0.5, 1, 3].map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setSwapSlippage(s)}
+                        className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all
+                          ${swapSlippage === s
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40"}`}
+                      >
+                        {s}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Quote */}
+                {swapQuoting ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground ml-2">Finding best route…</span>
+                  </div>
+                ) : swapQuote && swapOut ? (
+                  <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">You receive (est.)</span>
+                      <span className="text-sm font-black text-primary">
+                        {fmt(parseFloat(ethers.formatUnits(swapQuote.amountOut, swapOut.decimals)), 4)} {swapOut.symbol}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">Minimum received</span>
+                      <span className="text-xs font-bold text-foreground">
+                        {fmt(
+                          parseFloat(ethers.formatUnits(swapQuote.amountOut, swapOut.decimals)) * (1 - swapSlippage / 100),
+                          4,
+                        )} {swapOut.symbol}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">Route</span>
+                      <span className="text-[10px] font-mono text-muted-foreground">{swapQuote.label}</span>
+                    </div>
+                  </div>
+                ) : swapAmount && parseFloat(swapAmount) > 0 ? (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+                    <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      No route found for this amount — try a smaller amount or a different token.
+                    </p>
+                  </div>
+                ) : null}
+
+                <Button
+                  className="w-full"
+                  onClick={handleSwap}
+                  disabled={
+                    swapLoading || swapQuoting || !swapQuote || !swapOut ||
+                    !swapAmount || parseFloat(swapAmount) <= 0 ||
+                    (gWalletBalance !== null && parseFloat(swapAmount) > gWalletBalance)
+                  }
+                >
+                  {swapLoading
+                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Swapping…</>
+                    : <><RefreshCw className="h-4 w-4 mr-2" /> Swap for {swapOut?.symbol ?? "…"}</>
+                  }
+                </Button>
+
+                {swapTxHash && (
+                  <a
+                    href={explorerTxUrl(swapTxHash)}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-primary"
+                  >
+                    <ExternalLink className="h-3 w-3" /> {shortAddr(swapTxHash)}
+                  </a>
+                )}
+
+                <p className="text-[10px] text-center text-muted-foreground">
+                  Routed on-chain via {chainCfg.name}. You'll sign an approval once, then the swap.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 

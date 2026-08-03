@@ -163,7 +163,7 @@ const ALL_TOKENS_BY_CHAIN: Record<number, TokenConfiguration[]> = {
             symbol: "BOT",
             decimals: 18,
             isNative: true,
-            logoUrl: "/bot.png", 
+            logoUrl: "/botc.png", 
             description: "Native BOT for transaction fees",
           },
           {

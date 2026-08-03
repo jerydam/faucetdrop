@@ -78,7 +78,7 @@ export const CHAINS: Record<number, ChainConfig> = {
 
 export const SUPPORTED_CHAIN_IDS = Object.keys(CHAINS).map(Number);
 
-export const DEFAULT_CHAIN_ID = CELO_CHAIN_ID;
+export const DEFAULT_CHAIN_ID = BOTCHAIN_CHAIN_ID;
 
 export function getChainConfig(chainId: number | null | undefined): ChainConfig {
   if (chainId && CHAINS[chainId]) return CHAINS[chainId];

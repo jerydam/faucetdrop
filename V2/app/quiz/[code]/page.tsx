@@ -499,26 +499,45 @@
     return map;
   }, [payoutsData]);
 
-  const handleSwitchAndClaim = async () => {
-  if (!activeWallet || !contractInfo) { toast.error("Wallet not connected"); return }
+const handleSwitchAndClaim = async () => {
+  if (!contractInfo) { toast.error("Wallet not connected"); return }
 
-  // Solana: no chain-switching needed, go straight to claim
   const isSolana = contractInfo.chainId === SOLANA_CHAIN_ID
   if (!isSolana) {
-    const currentChainId = parseInt(activeWallet.chainId.split(":")[1] ?? "0")
-    if (currentChainId !== contractInfo.chainId) {
-      try {
-        toast.info("Switching to the correct network...")
-        await activeWallet.switchChain(contractInfo.chainId)
-        await new Promise(r => setTimeout(r, 1500))
-      } catch {
-        toast.error("Please switch to the correct network in your wallet")
-        return
+    try {
+      let currentChainId: number | null = null
+
+      if (activeWallet) {
+        const raw = activeWallet.chainId ?? ""
+        const parsed = raw.includes(":") ? parseInt(raw.split(":")[1]) : parseInt(raw)
+        currentChainId = isNaN(parsed) ? null : parsed
+      } else if (typeof window !== "undefined" && (window as any).ethereum) {
+        const hex = await (window as any).ethereum.request({ method: "eth_chainId" })
+        currentChainId = parseInt(hex, 16)
       }
+
+      console.log("[Claim] currentChainId:", currentChainId, "required:", contractInfo.chainId)
+
+      // Only attempt switch if we're CERTAIN we're on the wrong chain
+      if (currentChainId !== null && currentChainId !== contractInfo.chainId) {
+        toast.info("Switching network...")
+        if (activeWallet) {
+          await activeWallet.switchChain(contractInfo.chainId)
+        } else if (typeof window !== "undefined" && (window as any).ethereum) {
+          await (window as any).ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: `0x${contractInfo.chainId.toString(16)}` }]
+          })
+        }
+        await new Promise(r => setTimeout(r, 1500))
+      }
+    } catch (e: any) {
+      console.warn("[Claim] chain check/switch error:", e?.message)
+      // DON'T return here — if chainId was null or switch failed non-fatally, still try claim
     }
   }
 
-  handleClaim()
+  handleClaim()  // always reaches here now
 }
 
   const handleClaim = async () => {

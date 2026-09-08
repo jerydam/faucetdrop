@@ -5,6 +5,23 @@ import { createPortal } from "react-dom"
 import { useWallet, type SocialProvider, API_BASE, openOAuthPopup } from "./wallet-provider"
 import { X, Loader2, ChevronRight, Shield, Fingerprint } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { createClient } from "@supabase/supabase-js"
+import { toast } from "sonner"
+
+
+
+// Wherever you create the supabase client used for auth
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      flowType: "pkce",
+    },
+  }
+)
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Brand icons
@@ -108,24 +125,40 @@ export function ConnectModal({ onSuccess }: ConnectModalProps) {
   }, [showModal])
 
   // ── Standard OAuth social login ───────────────────────────────────────────
-  const handleSocial = useCallback(async (providerId: SocialProvider) => {
+const handleSocial = useCallback(async (providerId: SocialProvider) => {
   if (providerId === "passkey")   { handlePasskey();       return }
   if (providerId === "telegram")  { handleTelegramPopup(); return }
   if (providerId === "farcaster") { handleFarcaster();     return }
 
+  const SUPABASE_PROVIDER_MAP: Record<string, string> = {
+    google:  "google",
+    twitter: "x",  // ← fixed
+    github:  "github",
+    discord: "discord",
+  }
+
+const supabaseProvider = SUPABASE_PROVIDER_MAP[providerId as string]
+
   setLoadingId(providerId)
   try {
-    const credential = await openOAuthPopup(API_BASE, providerId, () => setLoadingId(null))
-    await connectSocial(providerId, credential)
-    onSuccess?.()
+    // 1. Trigger Supabase OAuth — opens provider's login page
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: supabaseProvider as any,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        skipBrowserRedirect: false,
+      },
+    })
+    if (error) throw error
+    // The page will redirect — callback page handles the rest
   } catch (err: any) {
-    if (err?.message !== "cancelled" && err?.message !== "OAuth timed out") {
-      console.error(`${providerId} login error:`, err)
+    if (err?.message !== "cancelled") {
+      toast.error(err.message ?? `${providerId} login failed`)
     }
-  } finally {
     setLoadingId(null)
   }
-}, [connectSocial, onSuccess])
+  // Note: don't setLoadingId(null) on success — page is redirecting
+}, [])
 
   // ── Telegram popup ────────────────────────────────────────────────────────
   const handleTelegramPopup = useCallback(() => {

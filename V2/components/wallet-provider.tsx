@@ -68,11 +68,11 @@ interface WalletContextType {
 
   setShowModal:             (val: boolean) => void
   connectExternalWallet:    (wallet: DetectedWallet) => Promise<void>
-  connectSocial:            (provider: SocialProvider, credential: string) => Promise<void>
+  connectSocial: (provider: SocialProvider, credentialOrToken: string, mode?: "supabase_token" | "credential") => Promise<void>
+  linkSocial:    (provider: SocialProvider, credentialOrToken: string, mode?: "supabase_token" | "credential") => Promise<void>
   disconnect:               () => void
   switchChain:              (chainId: number) => Promise<void>
   ensureCorrectNetwork:     (requiredChainId: number) => Promise<boolean>
-  linkSocial:               (provider: SocialProvider, credential: string) => Promise<void>
   refreshProvider:          () => Promise<void>
 }
 
@@ -479,13 +479,21 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
 
 
   // ── Connect social (embedded wallet via backend) ──────────────────────────
-  const connectSocial = useCallback(async (socialProvider: SocialProvider, credential: string) => {
+  const connectSocial = useCallback(async (
+    socialProvider: SocialProvider,
+    credentialOrToken: string,
+    mode: "supabase_token" | "credential" = "credential"   // ← new param
+  ) => {
     setIsConnecting(true)
     try {
+      const body = mode === "supabase_token"
+        ? { provider: socialProvider, supabase_token: credentialOrToken }
+        : { provider: socialProvider, credential: credentialOrToken }
+
       const res = await fetch(`${API_BASE}/wallet/social-login`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ provider: socialProvider, credential }),
+        body:    JSON.stringify(body),
       })
       if (!res.ok) {
         const err = await res.json()
@@ -653,16 +661,24 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
   }, [isConnected, chainId, switchChain])
 
   // ── Link additional social ────────────────────────────────────────────────
-  const linkSocial = useCallback(async (socialProvider: SocialProvider, credential: string) => {
+  const linkSocial = useCallback(async (
+    socialProvider: SocialProvider,
+    credentialOrToken: string,
+    mode: "supabase_token" | "credential" = "credential"
+  ) => {
     if (!session?.token) { toast.error("Not connected"); return }
     try {
+      const body = mode === "supabase_token"
+        ? { provider: socialProvider, supabase_token: credentialOrToken }
+        : { provider: socialProvider, credential: credentialOrToken }
+
       const res = await fetch(`${API_BASE}/wallet/link-social`, {
         method:  "POST",
         headers: {
           "Content-Type":  "application/json",
           "Authorization": `Bearer ${session.token}`,
         },
-        body: JSON.stringify({ provider: socialProvider, credential }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error((await res.json()).detail)
       const data = await res.json()

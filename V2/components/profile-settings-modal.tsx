@@ -392,7 +392,7 @@ async function redirectForSocialLink(provider: string): Promise<void> {
         const {
           address, isConnected, session,
           linkSocial, walletType, solanaAddress, stellarAddress,
-          getActiveSigner,   // ← replaces direct `signer` usage for save
+          getActiveSigner, markPINSet  // ← replaces direct `signer` usage for save
         } = useWallet()
 
         const router        = useRouter()
@@ -430,6 +430,7 @@ async function redirectForSocialLink(provider: string): Promise<void> {
             setFreshLinkedSocials(null);   setUnlinkedOverride(null)
           }
         }, [isOpen])
+        const [backendHasPin, setBackendHasPin] = useState<boolean>(false)
 
         // ── Fetch profile + addresses + socials on open ───────────────────────
         const fetchProfile = useCallback(async (signal?: AbortSignal) => {
@@ -507,6 +508,34 @@ async function redirectForSocialLink(provider: string): Promise<void> {
           if (chain === "stellar") setExtXlmAddr(addr)
           toast.success(`${CHAIN_META[chain].label} wallet verified and linked!`)
         }
+        
+// Inside fetchProfile or alongside it, add this to the useEffect that runs on open:
+const fetchPinStatus = useCallback(async () => {
+  if (!session?.token) return
+  try {
+    const res = await fetch(`${walletApiBase}/wallet/me`, {
+      headers: { Authorization: `Bearer ${session.token}` },
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    setBackendHasPin(!!data.has_pin)
+    // Also sync it into the session so getEmbeddedSigner works correctly
+    if (data.has_pin && !session.hasPIN) {
+      markPINSet("pin")
+    }
+  } catch { /* non-fatal */ }
+}, [session?.token, session?.hasPIN, markPINSet, walletApiBase])
+
+// Add fetchPinStatus to the open effect:
+useEffect(() => {
+  if (!isOpen || !address) return
+  const controller = new AbortController()
+  fetchProfile(controller.signal)
+  fetchChainAddresses()
+  fetchLinkedSocials()
+  fetchPinStatus()        // ← add this
+  return () => controller.abort()
+}, [isOpen, address, fetchProfile, fetchChainAddresses, fetchLinkedSocials, fetchPinStatus])
 
         // ── Save profile — works for both embedded and external wallets ───────
         const handleSave = async () => {
@@ -856,6 +885,7 @@ async function redirectForSocialLink(provider: string): Promise<void> {
                           : "Link your Solana and Stellar wallets to receive multi-chain rewards."}
                       </p>
                     </div>
+                    // Replace the PIN / Passkey section render:
                     {isEmbedded && (
                       <div className="border-t pt-6">
                         <h4 className="mb-3 text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
@@ -865,33 +895,30 @@ async function redirectForSocialLink(provider: string): Promise<void> {
                           <div className="flex flex-col gap-0.5">
                             <span className="text-sm font-semibold">PIN / Passkey</span>
                             <span className="text-xs">
-                              {session?.hasPIN
+                              {backendHasPin
                                 ? <span className="text-green-600 flex items-center gap-1 font-medium">
                                     <CheckCircle2 className="h-3 w-3" /> Protected
                                   </span>
                                 : <span className="text-muted-foreground">Not set up</span>}
                             </span>
-                          </div>                      
-                            {session?.hasPIN ? (
-                              <div className="flex gap-2">
-                                <Button size="sm" variant="outline" type="button"
-                                  onClick={() => { setIsOpen(false); setResetPinModalOpen(true) }}>
-                                  Reset PIN
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button size="sm" variant="outline" type="button"
-                                onClick={() => { setIsOpen(false); setSecurityModalOpen(true) }}>
-                                Set up
-                              </Button>
-                            )}
-                          
+                          </div>
+                          {backendHasPin ? (
+                            <Button size="sm" variant="outline" type="button"
+                              onClick={() => { setIsOpen(false); setResetPinModalOpen(true) }}>
+                              Reset PIN
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" type="button"
+                              onClick={() => { setIsOpen(false); setSecurityModalOpen(true) }}>
+                              Set up
+                            </Button>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-3 px-1">
                           Required before signing transactions — separate from your login.
                         </p>
                       </div>
-                    )}     
+                    )}   
                     {/* Verified Connections */}
                     <div className="border-t pt-6">
                       <h4 className="mb-4 text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">

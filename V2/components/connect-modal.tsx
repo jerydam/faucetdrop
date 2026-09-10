@@ -11,14 +11,10 @@ import { toast } from "sonner"
 
 
 // Wherever you create the supabase client used for auth
+// At the top of connect-modal.tsx, change the supabase client:
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    auth: {
-      flowType: "pkce",
-    },
-  }
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
 
@@ -132,32 +128,30 @@ const handleSocial = useCallback(async (providerId: SocialProvider) => {
 
   const SUPABASE_PROVIDER_MAP: Record<string, string> = {
     google:  "google",
-    twitter: "x",  // ← fixed
+    twitter: "x",
     github:  "github",
     discord: "discord",
   }
 
-const supabaseProvider = SUPABASE_PROVIDER_MAP[providerId as string]
+  const supabaseProvider = SUPABASE_PROVIDER_MAP[providerId as string]
 
   setLoadingId(providerId)
   try {
-    // 1. Trigger Supabase OAuth — opens provider's login page
     const { error } = await supabase.auth.signInWithOAuth({
       provider: supabaseProvider as any,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        // ← pass the clicked provider in the redirect URL
+        redirectTo: `${window.location.origin}/auth/callback?provider=${providerId}`,
         skipBrowserRedirect: false,
       },
     })
     if (error) throw error
-    // The page will redirect — callback page handles the rest
   } catch (err: any) {
     if (err?.message !== "cancelled") {
       toast.error(err.message ?? `${providerId} login failed`)
     }
     setLoadingId(null)
   }
-  // Note: don't setLoadingId(null) on success — page is redirecting
 }, [])
 
   // ── Telegram popup ────────────────────────────────────────────────────────

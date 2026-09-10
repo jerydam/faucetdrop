@@ -81,7 +81,7 @@ interface WalletContextType {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SESSION_KEY = "wallet_session"
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
+export const API_BASE = process.env.NEXT_PUBLIC_WALLET_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

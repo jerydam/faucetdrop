@@ -1,83 +1,53 @@
-// app/auth/callback/page.tsx
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 import { useWallet } from "@/components/wallet-provider"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  {
-    auth: {
-      flowType: "pkce",
-    },
-  }
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
-
-const PROVIDER_MAP: Record<string, string> = {
-  google:  "google",
-  twitter: "twitter",
-  github:  "github",
-  discord: "discord",
-}
 
 export default function AuthCallback() {
   const { connectSocial } = useWallet()
   const router = useRouter()
+  const ran = useRef(false)
 
   useEffect(() => {
+    if (ran.current) return
+    ran.current = true
+
     ;(async () => {
       try {
-        // Extract the code from the URL
-        const code = new URLSearchParams(window.location.search).get("code")
+        const { data: { session }, error } = await supabase.auth.getSession()
 
-        if (!code) {
-          // No code = possibly a hash-based session (PKCE implicit fallback)
-          // Try getSession directly as a last resort
-          const { data: { session } } = await supabase.auth.getSession()
-          if (!session) {
-            router.replace("/?auth=failed")
-            return
-          }
-          await finishLogin(session)
-          return
-        }
-
-        // Exchange the code for a session — this is the required step
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-        if (error || !data.session) {
-          console.error("Code exchange failed:", error)
+        if (error || !session) {
+          console.error("[callback] no session:", error)
           router.replace("/?auth=failed")
           return
         }
 
-        await finishLogin(data.session)
-      } catch (err) {
-        console.error("Auth callback error:", err)
-        router.replace("/?auth=failed")
+        // ← read the provider we passed in the redirect URL, not app_metadata
+        const provider = new URLSearchParams(window.location.search).get("provider")
+
+        console.log("[callback] provider from URL:", provider)
+        console.log("[callback] user id:", session.user.id)
+
+        if (!provider) {
+          console.error("[callback] no provider param in URL")
+          router.replace("/?auth=failed")
+          return
+        }
+
+        await connectSocial(provider as any, session.access_token, "supabase_token")
+        router.replace("/")
+      } catch (err: any) {
+        console.error("[callback] error:", err)
+        router.replace(err?.message === "cancelled" ? "/" : "/?auth=failed")
       }
     })()
-
-    async function finishLogin(session: any) {
-      const provider = session.user?.app_metadata?.provider as string | undefined
-      if (!provider) {
-        router.replace("/?auth=failed")
-        return
-      }
-
-      const mapped = PROVIDER_MAP[provider] ?? provider
-
-      try {
-        await connectSocial(mapped as any, session.access_token, "supabase_token")
-        router.replace("/")
-      } catch (err) {
-        console.error("connectSocial failed:", err)
-        router.replace("/?auth=failed")
-      }
-    }
   }, [])
 
   return (

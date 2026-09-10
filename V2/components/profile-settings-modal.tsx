@@ -26,7 +26,7 @@
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      async function redirectForSocialLink(provider: string): Promise<void> {
+async function redirectForSocialLink(provider: string): Promise<void> {
   const SUPABASE_PROVIDER_MAP: Record<string, string> = {
     google:  "google",
     twitter: "x",
@@ -35,13 +35,17 @@
   }
   const supabaseProvider = SUPABASE_PROVIDER_MAP[provider] ?? provider
 
-  // For linking, we need to use linkIdentity instead of signInWithOAuth
-  // This attaches the new provider to the EXISTING session rather than
-  // creating a competing OAuth session (which causes the X personalization_id error)
-  const { error } = await supabase.auth.linkIdentity({
+  // Stash the current wallet token so auth/callback can use it for linking
+  const walletToken = sessionStorage.getItem("wallet_token")
+  if (walletToken) {
+    sessionStorage.setItem("pending_link_wallet_token", walletToken)
+  }
+
+  const { error } = await supabase.auth.signInWithOAuth({
     provider: supabaseProvider as any,
     options: {
       redirectTo: `${window.location.origin}/auth/callback?provider=${provider}&mode=link`,
+      skipBrowserRedirect: false,
     },
   })
   if (error) throw new Error(error.message)
@@ -659,7 +663,14 @@
         const effectiveLinked = new Set(
           unlinkedOverride ?? freshLinkedSocials ?? session?.linkedSocials ?? []
         )
-
+        // Add this alongside your existing socialUnlinked listener
+        useEffect(() => {
+          const handler = async () => {
+            await fetchLinkedSocials()
+          }
+          window.addEventListener("socialLinked", handler)
+          return () => window.removeEventListener("socialLinked", handler)
+        }, [fetchLinkedSocials])
         // ── File upload ───────────────────────────────────────────────────────
         const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           const file = e.target.files?.[0]

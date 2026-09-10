@@ -27,11 +27,21 @@
       )
 
       async function openSupabaseOAuthPopup(provider: string): Promise<string> {
+        const SUPABASE_PROVIDER_MAP: Record<string, string> = {
+          google:  "google",
+          twitter: "x",       // ← Supabase uses "x", not "twitter"
+          github:  "github",
+          discord: "discord",
+        }
+
+        const supabaseProvider = SUPABASE_PROVIDER_MAP[provider] ?? provider
+
+        
         return new Promise(async (resolve, reject) => {
           const { data, error } = await supabase.auth.signInWithOAuth({
-            provider: provider as any,
+            provider: supabaseProvider as any,   // ← use mapped name
             options: {
-              redirectTo:          `${window.location.origin}/auth/callback-popup`,
+              redirectTo: `${window.location.origin}/auth/callback-popup`,
               skipBrowserRedirect: true,
             },
           })

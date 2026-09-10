@@ -35,10 +35,10 @@ async function redirectForSocialLink(provider: string): Promise<void> {
   }
   const supabaseProvider = SUPABASE_PROVIDER_MAP[provider] ?? provider
 
-  // Stash the current wallet token so auth/callback can use it for linking
-  const walletToken = sessionStorage.getItem("wallet_token")
+  const walletToken = localStorage.getItem("wallet_token")
   if (walletToken) {
-    sessionStorage.setItem("pending_link_wallet_token", walletToken)
+    localStorage.setItem("pending_link_wallet_token", walletToken)
+    localStorage.setItem("pending_link_provider", provider)
   }
 
   const { error } = await supabase.auth.signInWithOAuth({

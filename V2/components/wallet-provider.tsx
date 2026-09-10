@@ -379,6 +379,7 @@ const SIGNER_CACHE_TTL_MS = 60_000
         chainId:    result.chainId,
         token:      data.token,
         linkedSocials: data.linked_socials,
+        
       }
 
       setSession(newSession)
@@ -510,6 +511,8 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
         legacy_sol_address: string | null
         stellar_address:    string | null
         needs_seed_import:  boolean
+        has_pin:            boolean          // ← add this
+
       } = await res.json()
 
       // ── Clear ALL stale import/session state from any previous user ──
@@ -526,6 +529,8 @@ const getActiveSigner = useCallback(async (targetChainId?: number) => {
         chainId:        DEFAULT_CHAIN_ID,
         token:          data.token,
         linkedSocials:  data.linked_socials,
+        hasPIN:         data.has_pin ?? false,   // ← add this
+
         // Start as undefined so fetchNonEvmAddresses runs, but if backend
         // already returned stellar/solana from the login response, use it.
         solanaAddress:  undefined,

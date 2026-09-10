@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 import { useWallet } from "@/components/wallet-provider"
 import { toast } from "sonner"
-
+import { DEFAULT_CHAIN_ID } from "@/config/chain"
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -34,41 +34,61 @@ export default function AuthCallback() {
         if (!provider) { router.replace("/?auth=failed"); return }
 
         if (mode === "link") {
-          // Recover the original wallet token stored before the redirect
-          const walletToken = sessionStorage.getItem("pending_link_wallet_token")
-          sessionStorage.removeItem("pending_link_wallet_token")
+  const walletToken = localStorage.getItem("pending_link_wallet_token")
+  localStorage.removeItem("pending_link_wallet_token")
+  localStorage.removeItem("pending_link_provider")
 
-          if (!walletToken) {
-            // No token found — fall back to normal login so the user isn't stranded
-            toast.error("Link session expired — you've been logged in instead")
-            await connectSocial(provider as any, session.access_token, "supabase_token")
-            router.replace("/")
-            return
-          }
+  if (!walletToken) {
+    // Genuine fallback — no token survived the redirect
+    toast.error("Link session expired — logged in instead")
+    await connectSocial(provider as any, session.access_token, "supabase_token")
+    router.replace("/")
+    return
+  }
 
-          // Call the backend link-social endpoint directly with the original wallet token
-          const res = await fetch(`${WALLET_API}/wallet/link-social`, {
-            method:  "POST",
-            headers: {
-              "Content-Type":  "application/json",
-              "Authorization": `Bearer ${walletToken}`,
-            },
-            body: JSON.stringify({
-              provider,
-              supabase_token: session.access_token,
-            }),
-          })
+  const res = await fetch(`${WALLET_API}/wallet/link-social`, {
+    method:  "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "Authorization": `Bearer ${walletToken}`,
+    },
+    body: JSON.stringify({
+      provider,
+      supabase_token: session.access_token,
+    }),
+  })
 
-          if (!res.ok) {
-            const body = await res.json()
-            throw new Error(body.detail || "Failed to link account")
-          }
+  if (!res.ok) {
+    const body = await res.json()
+    throw new Error(body.detail || "Failed to link account")
+  }
 
-          // Dispatch event so profile-settings.tsx can refresh its social list
-          window.dispatchEvent(new CustomEvent("socialLinked", { detail: provider }))
-          router.replace(`/?linked=${provider}`)
+  // Restore the original wallet session — the OAuth redirect may have
+  // overwritten it with a new Supabase session for the linked provider
+  // but we want the user to stay on their original wallet
+  const originalSession = localStorage.getItem("wallet_session")
+  if (!originalSession) {
+    // Session was wiped by the redirect — re-fetch from backend and restore
+    const meRes = await fetch(`${WALLET_API}/wallet/me`, {
+      headers: { Authorization: `Bearer ${walletToken}` },
+    })
+    if (meRes.ok) {
+      const me = await meRes.json()
+      // Rebuild a minimal session so the user isn't logged out
+      const restoredSession = {
+        address:       me.address,
+        walletType:    me.wallet_type,
+        chainId:       DEFAULT_CHAIN_ID,
+        token:         walletToken,
+        linkedSocials: me.linked_socials,
+      }
+      localStorage.setItem("wallet_session", JSON.stringify(restoredSession))
+    }
+  }
 
-        } else {
+  window.dispatchEvent(new CustomEvent("socialLinked", { detail: provider }))
+  router.replace(`/?linked=${provider}`)
+} else {
           await connectSocial(provider as any, session.access_token, "supabase_token")
           router.replace("/")
         }

@@ -35,11 +35,17 @@ async function redirectForSocialLink(provider: string): Promise<void> {
   }
   const supabaseProvider = SUPABASE_PROVIDER_MAP[provider] ?? provider
 
-  const walletToken = localStorage.getItem("wallet_token")
-  if (walletToken) {
-    localStorage.setItem("pending_link_wallet_token", walletToken)
-    localStorage.setItem("pending_link_provider", provider)
-  }
+  // Parse the session object and extract the token
+  try {
+    const raw = localStorage.getItem("wallet_session")
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed?.token) {
+        localStorage.setItem("pending_link_wallet_token", parsed.token)
+        localStorage.setItem("pending_link_provider", provider)
+      }
+    }
+  } catch { /* non-fatal */ }
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: supabaseProvider as any,

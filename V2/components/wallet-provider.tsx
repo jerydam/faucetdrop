@@ -23,19 +23,18 @@ export interface WalletSession {
   provider?:      string
   chainId:        number
   token?:         string
-  hasPIN?: boolean
+  hasPIN?:        boolean
+  hasPasskey?:    boolean          // ← add this
 
-  linkedSocials?: SocialProvider[]
+  linkedSocials?:  SocialProvider[]
   solanaAddress?:  string | null
   stellarAddress?: string | null
-  // ── Legacy Privy import fields ──
   legacyFound?:       boolean
   legacyPrivyId?:     string | null
   legacyEvmAddress?:  string | null
   legacySolAddress?:  string | null
   needsSeedImport?:   boolean
 }
-
 interface DetectedWallet {
   name:     string
   icon:     string
@@ -395,12 +394,39 @@ const SIGNER_CACHE_TTL_MS = 60_000
     }
   }, [forcePrivyLogout])
 
+// ── Passkey signing grant (alternative to PIN) ─────────────────────────────
+const getPasskeySigningGrant = useCallback(async (): Promise<string> => {
+  if (!session?.token) throw new Error("Not connected")
+
+  // Re-authenticate with passkey to get a fresh Supabase access_token
+  const { createClient } = await import("@supabase/supabase-js")
+  const sb = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  )
+
+  // signInWithPasskey triggers biometric/device PIN re-auth
+  const { data, error } = await (sb.auth as any).signInWithPasskey({})
+  if (error || !data?.session?.access_token) {
+    throw new Error(error?.message ?? "Passkey authentication failed")
+  }
+
+  const res = await fetch(`${API_BASE}/wallet/passkey-signing-grant`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.token}`,
+    },
+    body: JSON.stringify({ supabase_token: data.session.access_token }),
+  })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body.detail ?? "Passkey grant failed")
+  return body.signing_grant as string
+}, [session?.token])
 
 const getPinVerifiedGrant = useCallback(async (): Promise<string> => {
   if (!session?.token) throw new Error("Not connected")
 
-  // openPinEntryModal returns the PIN the user typed; caller still has to
-  // verify it against the backend to get a grant.
   const pin = await new Promise<string>((resolve, reject) => {
     openPinEntryModal(resolve, reject)
   })
@@ -427,18 +453,30 @@ const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
     return cached.wallet
   }
 
-  // No PIN set yet — bail out to the setup nudge rather than prompting for one
-  if (session.hasPIN === false) {
+  // No PIN set — bail out to the setup nudge
+  if (session.hasPIN === false && !session.hasPasskey) {
     throw new Error("NO_PIN_SET")
   }
 
-  const grant = await getPinVerifiedGrant() // throws on cancel/wrong PIN
+  // Use passkey if linked, otherwise fall back to PIN
+  let grant: string
+  if (session.hasPasskey) {
+    try {
+      grant = await getPasskeySigningGrant()
+    } catch (err: any) {
+      // If passkey fails (not enrolled on this device), fall back to PIN
+      if (session.hasPIN === false) throw err
+      grant = await getPinVerifiedGrant()
+    }
+  } else {
+    grant = await getPinVerifiedGrant()
+  }
 
   const res = await fetch(`${API_BASE}/wallet/export-privatekey`, {
-    method:  "POST",
+    method: "POST",
     headers: {
-      "Content-Type":  "application/json",
-      Authorization:   `Bearer ${session.token}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.token}`,
     },
     body: JSON.stringify({ chain_id: targetChainId, signing_grant: grant }),
   })
@@ -447,7 +485,7 @@ const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
   if (!data.private_key) return null
 
   const provider = new JsonRpcProvider(CHAIN_RPC[targetChainId])
-  const wallet    = new ethers.Wallet(data.private_key, provider)
+  const wallet = new ethers.Wallet(data.private_key, provider)
 
   embeddedSignerCache.current.set(targetChainId, {
     wallet,
@@ -455,7 +493,8 @@ const getEmbeddedSigner = useCallback(async (targetChainId: number) => {
   })
 
   return wallet
-}, [session?.token, session?.walletType, session?.hasPIN, getPinVerifiedGrant])
+}, [session?.token, session?.walletType, session?.hasPIN, session?.hasPasskey,
+    getPinVerifiedGrant, getPasskeySigningGrant])
 
 
 const getActiveSigner = useCallback(async (targetChainId?: number) => {

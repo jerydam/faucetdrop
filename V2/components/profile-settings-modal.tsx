@@ -452,7 +452,48 @@ async function redirectForSocialLink(provider: string): Promise<void> {
             if (!signal?.aborted) setLoading(false)
           }
         }, [address])
+        const handleEnrollPasskey = async () => {
+  try {
+    const { createClient } = await import("@supabase/supabase-js")
+    const sb = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
 
+    // First sign in with current Supabase session to get a valid context
+    const { data: sessionData } = await sb.auth.getSession()
+    if (!sessionData.session) {
+      toast.error("Re-authenticate first — log out and log back in, then try again.")
+      return
+    }
+
+    const { data, error } = await (sb.auth as any).enrollPasskey({})
+    if (error) throw new Error(error.message)
+
+    // Link the passkey as a social provider on our backend
+    const token = data?.session?.access_token ?? sessionData.session.access_token
+    const res = await fetch(`${walletApiBase}/wallet/link-social`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.token}`,
+      },
+      body: JSON.stringify({ provider: "passkey", supabase_token: token }),
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.detail || "Failed to link passkey")
+    }
+
+    markPINSet("passkey")
+    toast.success("Passkey enrolled — you can now use it to sign transactions.")
+    await fetchLinkedSocials()
+  } catch (err: any) {
+    if (!err?.message?.includes("cancel")) {
+      toast.error(err?.message ?? "Passkey enrollment failed")
+    }
+  }
+}
         const fetchChainAddresses = useCallback(async () => {
           if (!session?.token) return
           try {
@@ -919,6 +960,29 @@ useEffect(() => {
                         </p>
                       </div>
                     )}   
+                    // After the "Set up" / "Reset PIN" button block, add a passkey row:
+                    {isEmbedded && (
+                      <div className="flex items-center justify-between p-3 border rounded-lg bg-card/50 mt-3">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-semibold">Passkey</span>
+                          <span className="text-xs">
+                            {session?.hasPasskey
+                              ? <span className="text-green-600 flex items-center gap-1 font-medium">
+                                  <CheckCircle2 className="h-3 w-3" /> Enrolled
+                                </span>
+                              : <span className="text-muted-foreground">Not enrolled</span>}
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          type="button"
+                          onClick={handleEnrollPasskey}
+                        >
+                          {session?.hasPasskey ? "Re-enroll" : "Set up passkey"}
+                        </Button>
+                      </div>
+                    )}
                     {/* Verified Connections */}
                     <div className="border-t pt-6">
                       <h4 className="mb-4 text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">

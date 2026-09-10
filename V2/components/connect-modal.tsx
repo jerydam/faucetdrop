@@ -302,50 +302,36 @@ const handleSocial = useCallback(async (providerId: SocialProvider) => {
   }, [connectSocial, onSuccess])
 
   // ── Passkey ───────────────────────────────────────────────────────────────
-  const handlePasskey = useCallback(async () => {
-    setLoadingId("passkey")
-    try {
-      let credentialId: string
-      try {
-        const assertion = await navigator.credentials.get({
-          publicKey: {
-            challenge:        crypto.getRandomValues(new Uint8Array(32)),
-            timeout:          60000,
-            userVerification: "required",
-          },
-        }) as PublicKeyCredential
-        credentialId = assertion.id
-      } catch {
-        const credential = await navigator.credentials.create({
-          publicKey: {
-            challenge: crypto.getRandomValues(new Uint8Array(32)),
-            rp:        { name: "FaucetDrops", id: window.location.hostname },
-            user: {
-              id:          crypto.getRandomValues(new Uint8Array(16)),
-              name:        `user-${Date.now()}`,
-              displayName: "FaucetDrops User",
-            },
-            pubKeyCredParams: [
-              { alg: -7,   type: "public-key" },
-              { alg: -257, type: "public-key" },
-            ],
-            authenticatorSelection: {
-              authenticatorAttachment: "platform",
-              userVerification:        "required",
-              residentKey:             "required",
-            },
-          },
-        }) as PublicKeyCredential
-        credentialId = credential.id
+  // Replace handlePasskey entirely:
+const handlePasskey = useCallback(async () => {
+  setLoadingId("passkey")
+  try {
+    // Use Supabase's native passkey flow — it handles WebAuthn internally
+    const { data, error } = await (supabase.auth as any).signInWithPasskey({})
+
+    if (error) {
+      // No passkey enrolled yet — register one
+      if (error.message?.includes("not found") || error.message?.includes("no credential")) {
+        const { data: regData, error: regError } = await (supabase.auth as any).enrollPasskey({})
+        if (regError) throw new Error(regError.message)
+        if (!regData?.session?.access_token) throw new Error("Passkey enrollment failed")
+        await connectSocial("passkey", regData.session.access_token, "supabase_token")
+      } else {
+        throw new Error(error.message)
       }
-      await connectSocial("passkey", credentialId)
-      onSuccess?.()
-    } catch (err: any) {
-      if (!err?.message?.includes("cancel")) console.error("Passkey error:", err)
-    } finally {
-      setLoadingId(null)
+    } else {
+      if (!data?.session?.access_token) throw new Error("No session from passkey auth")
+      await connectSocial("passkey", data.session.access_token, "supabase_token")
     }
-  }, [connectSocial, onSuccess])
+    onSuccess?.()
+  } catch (err: any) {
+    if (!err?.message?.includes("cancel")) {
+      toast.error(err?.message ?? "Passkey error")
+    }
+  } finally {
+    setLoadingId(null)
+  }
+}, [connectSocial, onSuccess])
 
   // ── External wallet ───────────────────────────────────────────────────────
   const handleExternalWallet = useCallback(async (wallet: typeof detectedWallets[number]) => {

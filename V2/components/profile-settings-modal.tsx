@@ -26,55 +26,24 @@
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      async function openSupabaseOAuthPopup(provider: string): Promise<string> {
+      async function redirectForSocialLink(provider: string): Promise<void> {
         const SUPABASE_PROVIDER_MAP: Record<string, string> = {
           google:  "google",
-          twitter: "x",       // ← Supabase uses "x", not "twitter"
+          twitter: "x",
           github:  "github",
           discord: "discord",
         }
-
         const supabaseProvider = SUPABASE_PROVIDER_MAP[provider] ?? provider
 
-        
-        return new Promise(async (resolve, reject) => {
-          const { data, error } = await supabase.auth.signInWithOAuth({
-            provider: supabaseProvider as any,   // ← use mapped name
-            options: {
-              redirectTo: `${window.location.origin}/auth/callback-popup`,
-              skipBrowserRedirect: true,
-            },
-          })
-          if (error || !data.url) { reject(new Error("Failed to get OAuth URL")); return }
-
-          const popup = window.open(data.url, `${provider}_link`, "width=520,height=640,left=400,top=100")
-          if (!popup) { reject(new Error("Popup blocked — allow popups and try again")); return }
-
-          let settled = false
-          const settle = (fn: () => void) => {
-            if (settled) return
-            settled = true
-            clearInterval(closedPoll)
-            window.removeEventListener("message", handler)
-            fn()
-          }
-
-          const handler = (e: MessageEvent) => {
-            if (e.data?.type !== "supabase_oauth_token") return
-            popup.close()
-            settle(() => resolve(e.data.access_token))
-          }
-          window.addEventListener("message", handler)
-
-          const closedPoll = setInterval(() => {
-            if (popup.closed) settle(() => reject(new Error("cancelled")))
-          }, 500)
-
-          setTimeout(() => {
-            popup.close()
-            settle(() => reject(new Error("OAuth timed out")))
-          }, 180_000)
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: supabaseProvider as any,
+          options: {
+            redirectTo: `${window.location.origin}/auth/callback?provider=${provider}&mode=link`,
+            skipBrowserRedirect: false,  // full redirect, same as connect modal
+          },
         })
+        if (error) throw new Error(error.message)
+        // page navigates away — no return value needed
       }
       const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
 
@@ -637,23 +606,23 @@
         try {
           if (provider === "telegram") {
             const credential = await openSocialPopup("/auth/telegram", "telegram_auth", "telegram_auth")
-            await linkSocial(provider, credential)                        // default mode = "credential"
+            await linkSocial(provider, credential)
+            setUnlinkedOverride(null)
+            await fetchLinkedSocials()
 
           } else if (provider === "farcaster") {
             const credential = await openSocialPopup("/auth/farcaster", "farcaster_auth", "farcaster_auth")
-            await linkSocial(provider, credential)                        // default mode = "credential"
+            await linkSocial(provider, credential)
+            setUnlinkedOverride(null)
+            await fetchLinkedSocials()
 
           } else {
-            const token = await openSupabaseOAuthPopup(provider as string)
-            await linkSocial(provider, token, "supabase_token")          // explicit mode
+            // full redirect — page navigates away, callback handles the rest
+            await redirectForSocialLink(provider as string)
+            // nothing after this runs
           }
-
-          setUnlinkedOverride(null)
-          await fetchLinkedSocials()
         } catch (err: any) {
-          if (err.message === "cancelled") return
-          toast.error(err.message || `Failed to connect ${provider}`)
-        } finally {
+          if (err.message !== "cancelled") toast.error(err.message || `Failed to connect ${provider}`)
           setLinkingProvider(null)
         }
       }

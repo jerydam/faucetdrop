@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 import { useWallet } from "@/components/wallet-provider"
+import { toast } from "sonner"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,7 +12,7 @@ const supabase = createClient(
 )
 
 export default function AuthCallback() {
-  const { connectSocial } = useWallet()
+const { connectSocial, linkSocial } = useWallet()
   const router = useRouter()
   const ran = useRef(false)
 
@@ -20,36 +21,36 @@ export default function AuthCallback() {
     ran.current = true
 
     ;(async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession()
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error || !session) { router.replace("/?auth=failed"); return }
 
-        if (error || !session) {
-          console.error("[callback] no session:", error)
-          router.replace("/?auth=failed")
-          return
-        }
+    const params   = new URLSearchParams(window.location.search)
+    const provider = params.get("provider")
+    const mode     = params.get("mode")
 
-        // ← read the provider we passed in the redirect URL, not app_metadata
-        const provider = new URLSearchParams(window.location.search).get("provider")
+    if (!provider) { router.replace("/?auth=failed"); return }
 
-        console.log("[callback] provider from URL:", provider)
-        console.log("[callback] user id:", session.user.id)
-
-        if (!provider) {
-          console.error("[callback] no provider param in URL")
-          router.replace("/?auth=failed")
-          return
-        }
-
-        await connectSocial(provider as any, session.access_token, "supabase_token")
-        router.replace("/")
-      } catch (err: any) {
-        console.error("[callback] error:", err)
-        router.replace(err?.message === "cancelled" ? "/" : "/?auth=failed")
-      }
-    })()
+    if (mode === "link") {
+      // linking to existing wallet — call linkSocial instead of connectSocial
+      await linkSocial(provider as any, session.access_token, "supabase_token")
+      router.replace("/?linked=" + provider)   // back to profile, show success
+    } else {
+      await connectSocial(provider as any, session.access_token, "supabase_token")
+      router.replace("/")
+    }
+  } catch (err: any) {
+    router.replace(err?.message === "cancelled" ? "/" : "/?auth=failed")
+  }
+})()
   }, [])
-
+useEffect(() => {
+  const linked = new URLSearchParams(window.location.search).get("linked")
+  if (linked) {
+    toast.success(`${linked} connected!`)
+    router.replace(window.location.pathname)  // clean the URL
+  }
+}, [])
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="flex flex-col items-center gap-3">

@@ -32,13 +32,17 @@ const { connectSocial, linkSocial } = useWallet()
     if (!provider) { router.replace("/?auth=failed"); return }
 
     if (mode === "link") {
-      // linking to existing wallet — call linkSocial instead of connectSocial
-      await linkSocial(provider as any, session.access_token, "supabase_token")
-      router.replace("/?linked=" + provider)   // back to profile, show success
-    } else {
-      await connectSocial(provider as any, session.access_token, "supabase_token")
-      router.replace("/")
-    }
+  // After linkIdentity redirect, session.provider_token contains the 
+  // linked provider's token — use that to inform your backend
+  const providerToken = session.provider_token ?? session.access_token
+  await linkSocial(provider as any, session.access_token)
+  
+  // Show success toast on return
+  router.replace(`/?linked=${provider}`)
+} else {
+  await connectSocial(provider as any, session.access_token, "supabase_token")
+  router.replace("/")
+}
   } catch (err: any) {
     router.replace(err?.message === "cancelled" ? "/" : "/?auth=failed")
   }

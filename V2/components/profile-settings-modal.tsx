@@ -27,24 +27,25 @@
       )
 
       async function redirectForSocialLink(provider: string): Promise<void> {
-        const SUPABASE_PROVIDER_MAP: Record<string, string> = {
-          google:  "google",
-          twitter: "x",
-          github:  "github",
-          discord: "discord",
-        }
-        const supabaseProvider = SUPABASE_PROVIDER_MAP[provider] ?? provider
+  const SUPABASE_PROVIDER_MAP: Record<string, string> = {
+    google:  "google",
+    twitter: "x",
+    github:  "github",
+    discord: "discord",
+  }
+  const supabaseProvider = SUPABASE_PROVIDER_MAP[provider] ?? provider
 
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: supabaseProvider as any,
-          options: {
-            redirectTo: `${window.location.origin}/auth/callback?provider=${provider}&mode=link`,
-            skipBrowserRedirect: false,  // full redirect, same as connect modal
-          },
-        })
-        if (error) throw new Error(error.message)
-        // page navigates away — no return value needed
-      }
+  // For linking, we need to use linkIdentity instead of signInWithOAuth
+  // This attaches the new provider to the EXISTING session rather than
+  // creating a competing OAuth session (which causes the X personalization_id error)
+  const { error } = await supabase.auth.linkIdentity({
+    provider: supabaseProvider as any,
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback?provider=${provider}&mode=link`,
+    },
+  })
+  if (error) throw new Error(error.message)
+}
       const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
 
       // ─────────────────────────────────────────────────────────────────────────────

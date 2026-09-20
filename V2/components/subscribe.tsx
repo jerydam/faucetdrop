@@ -12,7 +12,7 @@ import {
     AlertCircle, UserCircle2, ArrowRight, Twitter, ExternalLink
 } from "lucide-react"
 
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
+const API_BASE_URL = "http://127.0.0.1:8000"
 const COMPANY_WALLET = "0x97841b00B8Ad031FB30495eCeF2B2DbB6FCaCE30"
 
 const STABLECOINS: Record<number, { address: string; decimals: number; symbol: string }> = {

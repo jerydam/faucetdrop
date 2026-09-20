@@ -75,7 +75,7 @@ function parseOnchainError(err: any): string {
   return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
 }
 
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app";
+const API_BASE_URL = "http://127.0.0.1:8000";
 const DEFAULT_QUIZ_COVER = "/quiz.jpeg";
 
 const CHAIN_RPC: Record<number, string> = {

@@ -28,7 +28,7 @@ import { getChainConfig, getEnabledChains, CELO_CHAIN_ID, isSupportedChain } fro
 // Config
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 
 

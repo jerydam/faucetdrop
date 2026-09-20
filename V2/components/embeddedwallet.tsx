@@ -378,7 +378,7 @@ export function EmbeddedWalletControlProduction() {
             let backendData: BackendResponse | null = null
 
             try {
-                const response = await fetch(`https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/api/wallet/balances/${chainId}/${currentAddress}`)
+                const response = await fetch(`http://127.0.0.1:8000/api/wallet/balances/${chainId}/${currentAddress}`)
                 if (response.ok) {
                     backendData = await response.json()
                 }

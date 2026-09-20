@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import MultiImageUpload from "@/components/MultiImageUpload";
 import {
   Table,
   TableBody,
@@ -78,7 +79,7 @@ import { getAnchorWalletFromPrivy } from "@/lib/privy-solana-wallet"
 import { PublicKey } from "@solana/web3.js"
 import { BN } from "@coral-xyz/anchor"
 
-const API_BASE_URL = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"; // <-- REPLACE WITH ACTUAL BACKEND URL
+const API_BASE_URL = "http://127.0.0.1:8000"; // <-- REPLACE WITH ACTUAL BACKEND URL
 const SUPER_ADMIN_ADDRESS = "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2";
 // ============= TYPES =============
 export type VerificationType =
@@ -504,10 +505,10 @@ export default function QuestDetailsPage() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<QuestTask | null>(null);
   const [submissionData, setSubmissionData] = useState({
-    proofUrl: "",
-    notes: "",
-    file: null as File | null,
-  });
+  proofUrl: "",
+  notes: "",
+  files: [] as File[],
+});
   const [submittingTaskId, setSubmittingTaskId] = useState<string | null>(null);
 
   const [showFundModal, setShowFundModal] = useState(false);
@@ -1298,12 +1299,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
   }
 };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { toast.error("File size exceeds 5MB limit."); e.target.value = ""; return; }
-    setSubmissionData((prev) => ({ ...prev, file }));
-  };
+  
 
   const handleSubmitTask = async () => {
     if (!selectedTask || !userWalletAddress) return;
@@ -1382,9 +1378,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
       formData.append("submittedData", finalProofUrl);
       formData.append("notes", submissionData.notes.trim());
 
-      if (submissionData.file) {
-        formData.append("file", submissionData.file);
-      }
+      submissionData.files.forEach((f) => formData.append("files", f));
 
       const response = await fetch(
         `${API_BASE_URL}/api/quests/${faucetAddress}/submissions`,
@@ -1472,7 +1466,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
           );
           await refreshAllStats();
           setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
+          setSubmissionData({ proofUrl: "", notes: "", files: [] })
         } else {
           // Always cancel so task stays available for retry
           await cancelSubmission(submissionId);
@@ -1532,7 +1526,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
           toast.success(verifyJson.message || "✅ Discord task verified! Points awarded.");
           await refreshAllStats();
           setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
+          submissionData.files.forEach((f) => formData.append("files", f));
         } else {
           await cancelSubmission(submissionId);
           if (verifyJson.reason === "discord_not_linked") {
@@ -1574,7 +1568,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
           toast.success(verifyJson.message || "✅ Share verified! Points added.");
           await refreshAllStats();
           setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
+        submissionData.files.forEach((f) => formData.append("files", f));
         } else {
           await cancelSubmission(submissionId);
           toast.error(
@@ -1635,7 +1629,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
           toast.success(verifyJson.message || "✅ Task verified! Points added.");
           await refreshAllStats();
           setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
+          submissionData.files.forEach((f) => formData.append("files", f));
         } else {
           await cancelSubmission(submissionId);
           toast.error(
@@ -1667,7 +1661,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
           toast.success("✅ Task verified! Points added.");
           await refreshAllStats();
           setShowSubmitModal(false);
-          setSubmissionData({ proofUrl: "", notes: "", file: null });
+          submissionData.files.forEach((f) => formData.append("files", f));
         } else {
           await cancelSubmission(submissionId);
           toast.error(
@@ -1687,7 +1681,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
         
         await refreshAllStats();
         setShowSubmitModal(false);
-        setSubmissionData({ proofUrl: "", notes: "", file: null });
+        submissionData.files.forEach((f) => formData.append("files", f));
 
         // ─────────────────────────────────────────────────────────────────────────
         // ONCHAIN
@@ -1696,7 +1690,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
         toast.success("✅ Wallet verified on-chain! Points added.");
         await refreshAllStats();
         setShowSubmitModal(false);
-        setSubmissionData({ proofUrl: "", notes: "", file: null });
+        submissionData.files.forEach((f) => formData.append("files", f));
 
         // ─────────────────────────────────────────────────────────────────────────
         // MANUAL (link / upload / link_image)
@@ -1705,7 +1699,7 @@ const handleRemoveAdmin = async (adminAddress: string) => {
         toast.info("📋 Task submitted for manual review.");
         await refreshAllStats();
         setShowSubmitModal(false);
-        setSubmissionData({ proofUrl: "", notes: "", file: null });
+        submissionData.files.forEach((f) => formData.append("files", f));
       }
     } catch (error: any) {
       toast.error(error.message || "An error occurred. Please try again.");
@@ -3499,7 +3493,9 @@ const handleAdminWithdraw = async () => {
                                   userNotes = "";
                                 }
                               }
-
+                              const proofImages: string[] = sub.proofUrls?.length
+                              ? sub.proofUrls
+                              : isImage && sub.submittedData ? [sub.submittedData] : [];
                               const isProcessing = processingSubmission === sub.submissionId;
                               const displayLink = isImage ? userLink : sub.submittedData;
 
@@ -3526,25 +3522,26 @@ const handleAdminWithdraw = async () => {
                                   <div className="p-4 space-y-4 flex-1">
 
                                     {/* Image Preview & URL */}
-                                    {isImage && (
+                                    {proofImages.length > 0 && (
                                       <div className="space-y-2">
-                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest flex justify-between items-center">
-                                          <span>Submitted Image</span>
-                                          <a href={sub.submittedData} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline flex items-center gap-1 normal-case tracking-normal">
-                                            <ExternalLink size={12} /> View Raw URL
-                                          </a>
+                                        <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
+                                          Submitted Image{proofImages.length > 1 ? `s (${proofImages.length})` : ""}
                                         </Label>
-                                        <div className="relative group cursor-zoom-in" onClick={() => setPreviewImage(sub.submittedData)}>
-                                          <img
-                                            src={sub.submittedData}
-                                            alt="Proof"
-                                            className="w-full h-48 object-cover rounded-lg border border-slate-200 dark:border-slate-800 shadow-inner"
-                                          />
-                                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
-                                            <span className="text-white text-xs font-medium flex items-center gap-2">
-                                              <ZoomIn size={16} /> Click to enlarge
-                                            </span>
-                                          </div>
+                                        <div className={proofImages.length > 1 ? "grid grid-cols-2 gap-2" : ""}>
+                                          {proofImages.map((url, i) => (
+                                            <div key={url} className="relative group cursor-zoom-in" onClick={() => setPreviewImage(url)}>
+                                              <img
+                                                src={url}
+                                                alt={`Proof ${i + 1}`}
+                                                className={`w-full object-cover rounded-lg border border-slate-200 dark:border-slate-800 shadow-inner ${proofImages.length > 1 ? "h-32" : "h-48"}`}
+                                              />
+                                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                                                <span className="text-white text-xs font-medium flex items-center gap-2">
+                                                  <ZoomIn size={16} /> Enlarge
+                                                </span>
+                                              </div>
+                                            </div>
+                                          ))}
                                         </div>
                                       </div>
                                     )}
@@ -3755,22 +3752,13 @@ const handleAdminWithdraw = async () => {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           {selectedTask.url && <Badge variant="outline" className="bg-background">Step 3</Badge>}
-                          <Label className="font-semibold text-sm">Upload Screenshot <span className="text-red-500">*</span></Label>
+                          <Label className="font-semibold text-sm">Upload Screenshots <span className="text-red-500">*</span></Label>
                         </div>
-                        <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center relative bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            className="absolute inset-0 opacity-0 cursor-pointer h-full w-full"
-                            onChange={handleFileSelect}
-                          />
-                          <Upload className="h-8 w-8 text-slate-400 mb-2" />
-                          <p className="text-sm font-semibold">Click or drag screenshot here</p>
-                          <p className="text-xs text-muted-foreground mt-1">Max 5MB · Any resolution · PNG, JPG, GIF`</p>
-                          {submissionData.file && (
-                            <Badge className="mt-3 bg-green-500 text-white">{submissionData.file.name}</Badge>
-                          )}
-                        </div>
+                        <MultiImageUpload
+                          files={submissionData.files}
+                          onChange={(files) => setSubmissionData((p) => ({ ...p, files }))}
+                        />
+                        <p className="text-xs text-muted-foreground">Max 5 images · 5MB each · PNG, JPG, GIF, WebP</p>
                       </div>
 
                       {/* Notes */}
@@ -3869,12 +3857,10 @@ const handleAdminWithdraw = async () => {
                         {selectedTask.url && <Badge variant="outline" className="bg-background">Step {selectedTask.verificationType === 'manual_link_image' ? '3' : '2'}</Badge>}
                         <Label className="font-semibold text-sm">Upload Proof Image (Required)</Label>
                       </div>
-                      <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center relative bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                        <Input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer h-full w-full" onChange={handleFileSelect} />
-                        <Upload className="h-8 w-8 text-slate-400 mb-2" />
-                        <p className="text-sm font-semibold">Click or drag screenshot here</p>
-                        {submissionData.file && <Badge className="mt-2 bg-green-500">{submissionData.file.name}</Badge>}
-                      </div>
+                      <MultiImageUpload
+                        files={submissionData.files}
+                        onChange={(files) => setSubmissionData((p) => ({ ...p, files }))}
+                      />
                     </div>
                   )}
 
@@ -3958,10 +3944,10 @@ const handleAdminWithdraw = async () => {
                       return !submissionData.proofUrl.trim();
                     }
                     if (vType === "manual_upload") {
-                      return !submissionData.file;
+                      return submissionData.files.length === 0;
                     }
                     if (vType === "manual_link_image") {
-                      return !submissionData.proofUrl.trim() || !submissionData.file;
+                      return !submissionData.proofUrl.trim() || submissionData.files.length === 0;
                     }
                     if (vType === "auto_social" && ['quote', 'comment'].includes(selectedTask.action)) {
                       return !submissionData.proofUrl.trim();

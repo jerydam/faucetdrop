@@ -13,7 +13,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
-  "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+  "http://127.0.0.1:8000";
 
 export interface ExpiryData {
   /** Unix seconds when the window closes */

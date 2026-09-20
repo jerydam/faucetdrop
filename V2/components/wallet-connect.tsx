@@ -25,7 +25,7 @@ const ADMIN_ADDRESSES = [
 interface Props { className?: string }
 
 export function WalletConnectButton({ className }: Props) {
-  const API_BASE = "https://identical-vivi-faucetdrops-41e9c56b.koyeb.app"
+  const API_BASE = "http://127.0.0.1:8000"
   const {
     address, isConnected, isConnecting, walletType,
     session, disconnect, setShowModal,

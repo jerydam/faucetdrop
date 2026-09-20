@@ -15,7 +15,7 @@ import { REDEEM_ABI } from "@/lib/abis";
 import { getChainConfig, CELO_CHAIN_ID, BOTCHAIN_CHAIN_ID, isSupportedChain, getEnabledChains, ensureChainNetwork } from "@/lib/chain";
 import { useProfileRoute } from "@/hooks/use-profile-route";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 interface LobbyChallenge {
   code: string; topic: string; stake_amount: number; token_symbol: string;

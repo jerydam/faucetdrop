@@ -294,7 +294,7 @@ async function fetchFaucetBalance(
 
 async function loadSocialMediaLinks(faucetAddress: string): Promise<SocialMediaLink[]> {
   try {
-    const res = await fetch(`https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/faucet-tasks/${faucetAddress}`)
+    const res = await fetch(`http://127.0.0.1:8000/faucet-tasks/${faucetAddress}`)
     if (!res.ok) return []
     const result = await res.json()
     if (!Array.isArray(result.tasks)) return []
@@ -311,7 +311,7 @@ async function loadSocialMediaLinks(faucetAddress: string): Promise<SocialMediaL
 
 async function loadCustomXPostTemplate(faucetAddress: string): Promise<string> {
   try {
-    const res = await fetch(`https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/faucet-x-template/${faucetAddress}`)
+    const res = await fetch(`http://127.0.0.1:8000/faucet-x-template/${faucetAddress}`)
     if (!res.ok) return DEFAULT_X_POST_TEMPLATE
     const result = await res.json()
     return result.template || DEFAULT_X_POST_TEMPLATE
@@ -324,7 +324,7 @@ async function saveAdminPopupPreference(
   userAddr: string, faucetAddr: string, dontShow: boolean
 ) {
   try {
-    const res = await fetch("https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/admin-popup-preference", {
+    const res = await fetch("http://127.0.0.1:8000/admin-popup-preference", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -340,7 +340,7 @@ async function getAdminPopupPreference(
 ): Promise<boolean> {
   try {
     const res = await fetch(
-      `https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
+      `http://127.0.0.1:8000/admin-popup-preference?userAddress=${encodeURIComponent(userAddr)}&faucetAddress=${encodeURIComponent(faucetAddr)}`
     )
     return res.ok ? (await res.json()).dontShowAgain ?? false : false
   } catch { return false }
@@ -821,7 +821,7 @@ useEffect(() => {
           payload.secretCode = secretCode
         }
 
-        const res = await fetch("https://identical-vivi-faucetdrops-41e9c56b.koyeb.app/solana/claim", {
+        const res = await fetch("http://127.0.0.1:8000/solana/claim", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

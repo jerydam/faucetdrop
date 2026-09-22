@@ -8,7 +8,7 @@ import { Header } from "@/components/header";
 import { useWallet } from "@/components/wallet-provider"
 
 const DEMO_NAMES = ["Alice", "Bob", "Carol", "David", "Eve", "Frank", "Grace", "Henry"];
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://faucetdrops-indexer.vercel.app";
 const FEATURES = [
   {
     icon: <Zap size={17} />,

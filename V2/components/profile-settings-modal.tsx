@@ -56,7 +56,7 @@ async function redirectForSocialLink(provider: string): Promise<void> {
   })
   if (error) throw new Error(error.message)
 }
-      const API_BASE_URL = "http://127.0.0.1:8000"
+      const API_BASE_URL = "https://faucetdrop-backend.vercel.app"
 
       // ─────────────────────────────────────────────────────────────────────────────
       // Types
@@ -396,7 +396,7 @@ async function redirectForSocialLink(provider: string): Promise<void> {
         } = useWallet()
 
         const router        = useRouter()
-        const walletApiBase = process.env.NEXT_PUBLIC_WALLET_URL ?? "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
+        const walletApiBase = process.env.NEXT_PUBLIC_WALLET_URL ?? "https://wallet-infra-three.vercel.app"
         const [resetPinModalOpen, setResetPinModalOpen] = useState(false)
         const [isOpen,          setIsOpen]          = useState(false)
         const [loading,         setLoading]         = useState(false)

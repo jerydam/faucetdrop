@@ -3,7 +3,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Home, Trophy, User, Swords } from "lucide-react";
 import { useProfileRoute } from "@/hooks/use-profile-route";
 
-const API_BASE_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const API_BASE_URL = "https://challenge-backend-eta.vercel.app";
 
 const tabs = [
   { id: "home",    label: "Home",    icon: Home,   href: "/" },

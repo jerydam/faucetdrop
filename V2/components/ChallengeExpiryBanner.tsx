@@ -27,7 +27,7 @@ import type { UseChallengeExpiryReturn } from "@/hooks/use-challenge-expiry";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
-  "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+  "https://challenge-backend-eta.vercel.app";
 
 // ── Progress arc (SVG ring) ───────────────────────────────────────────────────
 

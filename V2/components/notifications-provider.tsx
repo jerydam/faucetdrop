@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { createPortal } from "react-dom";
 import { useDM } from "@/components/dm-provider";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://challenge-backend-eta.vercel.app";
 
 function getWsNotifyUrl() {
   if (typeof window === "undefined") return "wss://127.0.0.1:8000/ws/notify";

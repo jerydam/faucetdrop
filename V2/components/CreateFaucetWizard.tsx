@@ -760,7 +760,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     formData.append('file', file)
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/upload-image', {
+      const response = await fetch('https://faucetdrop-backend.vercel.app/upload-image', {
         method: 'POST',
         body: formData,
       })
@@ -818,7 +818,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`💾 Saving faucet metadata for ${faucetAddress}`)
         
-      const response = await fetch('http://127.0.0.1:8000/faucet-metadata', {
+      const response = await fetch('https://faucetdrop-backend.vercel.app/faucet-metadata', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -966,7 +966,7 @@ export default function CreateFaucetWizard({ onSuccess, closeModal }: CreateFauc
     try {
       console.log(`📝 Registering faucet ${name} (${faucetAddress}) in backend...`)
 
-      const response = await fetch('http://127.0.0.1:8000/register-faucet', {
+      const response = await fetch('https://faucetdrop-backend.vercel.app/register-faucet', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1320,7 +1320,7 @@ const handleFaucetCreation = async () => {
     let finalSlug = createdFaucetAddress
     try {
       const syncRes = await fetch(
-        `https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app/sync-faucet/${createdFaucetAddress}`,
+        `https://faucetdrops-indexer.vercel.app/sync-faucet/${createdFaucetAddress}`,
         { method: "POST" },
       )
       if (syncRes.ok) {
@@ -1442,7 +1442,7 @@ const handleFaucetCreation = async () => {
       let finalSlug = faucetStatePubkey
       try {
         const syncRes = await fetch(
-          `https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app/sync-faucet/${faucetStatePubkey}`,
+          `https://faucetdrops-indexer.vercel.app/sync-faucet/${faucetStatePubkey}`,
           { method: "POST" },
         )
         if (syncRes.ok) {

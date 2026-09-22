@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useWallet } from "@/hooks/use-wallet";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://challenge-backend-eta.vercel.app";
 const WS_BASE  = API_BASE.replace(/^http/, "ws");
 
 export interface PresenceInfo {

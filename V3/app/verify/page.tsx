@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { ShieldCheck, ShieldX, ScanLine, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
-const API_BASE_URL = "https://faucetpay-backend.koyeb.app";
+const API_BASE_URL = "https://challenge-backend-eta.vercel.app";
 
 interface EmployeeRecord {
   id: string;

@@ -11,7 +11,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const WALLET_API = "https://thoughtful-carmencita-faucetdrops-02a54589.koyeb.app"
+const WALLET_API = "https://wallet-infra-three.vercel.app"
 
 export default function AuthCallback() {
   const { connectSocial } = useWallet()

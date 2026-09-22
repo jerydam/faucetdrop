@@ -29,7 +29,7 @@ const DROPS_SWAP_ABI = [
   "function feeBps() view returns (uint16)",
 ];
 
-const BACKEND_URL = "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const BACKEND_URL = "https://challenge-backend-eta.vercel.app";
 
 /** ─── Contract config ────────────────────────────────────────────────────── */
 const DROPS_REDEEM_POOL_ABI = [

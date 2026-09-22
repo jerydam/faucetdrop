@@ -47,7 +47,7 @@ const BALANCE_ABI = [
   "function balanceOf(address account) external view returns (uint256)",
 ];
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "https://faucetdrop-backend.vercel.app";
 
 const MERCH_ITEMS = [
   {

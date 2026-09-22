@@ -34,7 +34,7 @@
       import { createQuestReward, type Network } from "@/lib/faucet"
       import { toast } from 'sonner'
 
-      const API_BASE_URL = "http://127.0.0.1:8000"
+      const API_BASE_URL = "https://faucetdrop-backend.vercel.app"
       const BACKEND_WALLET_ADDRESS = "0xB4AC6CC4B18B0F09d24FAF947af3c47C86718fA2"
 
       // =========================================================

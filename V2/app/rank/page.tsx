@@ -8,7 +8,7 @@ import { ArrowLeft, Search, ChevronUp, ChevronDown, Minus, MessageCircle } from 
 import { usePresence, usePresenceInfo } from "@/components/presence-provider";
 import { useDM } from "@/components/dm-provider";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://faucetdrop-backend.vercel.app";
 
 // ─── Chain config ─────────────────────────────────────────────────────────────
 

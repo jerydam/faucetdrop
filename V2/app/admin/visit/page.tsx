@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const API_BASE_URL = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
+const API_BASE_URL = "https://faucetdrops-indexer.vercel.app";
 
 interface DailyPoint   { date: string;  visits: number }
 interface WeeklyPoint  { week: string;  visits: number }

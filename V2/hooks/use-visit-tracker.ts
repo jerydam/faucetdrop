@@ -6,7 +6,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
-const API_BASE_URL = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
+const API_BASE_URL = "https://faucetdrops-indexer.vercel.app";
 
 /** Lightweight browser fingerprint — not for auth, just to deduplicate visitors. */
 function getFingerprint(): string {

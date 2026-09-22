@@ -8,7 +8,7 @@ const supabase = createClient(
 );
 
 // Backend URL — only used for the manual refresh trigger
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'https://faucetdrops-indexer.vercel.app';
 
 export interface DashboardData {
   total_claims: number;

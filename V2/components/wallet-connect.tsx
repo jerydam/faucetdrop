@@ -25,7 +25,7 @@ const ADMIN_ADDRESSES = [
 interface Props { className?: string }
 
 export function WalletConnectButton({ className }: Props) {
-  const API_BASE = "http://127.0.0.1:8000"
+  const API_BASE = "https://faucetdrop-backend.vercel.app"
   const {
     address, isConnected, isConnecting, walletType,
     session, disconnect, setShowModal,

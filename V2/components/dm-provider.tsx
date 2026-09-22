@@ -9,7 +9,7 @@ import { useWallet } from "@/hooks/use-wallet";
 import { usePresence } from "@/components/presence-provider";
 import { cn } from "@/lib/utils";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://conscious-adorne-faucetdrops-fc77a861.koyeb.app";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://challenge-backend-eta.vercel.app";
 const WS_BASE  = API_BASE.replace(/^http/, "ws");
 
 export interface DMMessage {

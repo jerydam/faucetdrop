@@ -661,7 +661,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
 
       // 1. X post template (backend-stored for both chains)
       if (isTemplateChanged) {
-        const res = await fetch("http://127.0.0.1:8000/faucet-x-template", {
+        const res = await fetch("https://faucetdrop-backend.vercel.app/faucet-x-template", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -690,7 +690,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           }));
 
         if (formattedTasks.length > 0) {
-          const taskRes = await fetch("http://127.0.0.1:8000/add-faucet-tasks", {
+          const taskRes = await fetch("https://faucetdrop-backend.vercel.app/add-faucet-tasks", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -743,7 +743,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
           );
 
           // Sync to backend DB for EVM
-          await fetch("http://127.0.0.1:8000/set-claim-parameters", {
+          await fetch("https://faucetdrop-backend.vercel.app/set-claim-parameters", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -762,8 +762,8 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         if (faucetType === "dropcode") {
           try {
             const codeEndpoint = onSolana
-              ? "http://127.0.0.1:8000/solana/generate-new-drop-code"
-              : "http://127.0.0.1:8000/generate-new-drop-code";
+              ? "https://faucetdrop-backend.vercel.app/solana/generate-new-drop-code"
+              : "https://faucetdrop-backend.vercel.app/generate-new-drop-code";
             const codeRes = await fetch(codeEndpoint, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -887,7 +887,7 @@ const FaucetAdminView: React.FC<FaucetAdminViewProps> = ({
         if (!activeSolanaWallet) throw new Error("Solana wallet not connected");
         // Solana batch-reset: we need the list of claimers.
         // For now, call the backend which has the claimer list from its DB.
-        const res = await fetch("http://127.0.0.1:8000/solana/reset-all-claims", {
+        const res = await fetch("https://faucetdrop-backend.vercel.app/solana/reset-all-claims", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1038,7 +1038,7 @@ const handleDeleteFaucet = async () => {
 
     // Always clean up backend metadata
     try {
-      await fetch("http://127.0.0.1:8000/delete-faucet-metadata", {
+      await fetch("https://faucetdrop-backend.vercel.app/delete-faucet-metadata", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1138,7 +1138,7 @@ const handleManageAdmin = async () => {
 
       if (onSolana) {
         const res = await fetch(
-          `http://127.0.0.1:8000/solana/get-drop-code?faucetAddress=${encodeURIComponent(faucetAddress)}&userAddress=${encodeURIComponent(address)}&chainId=${SOLANA_CHAIN_ID}`
+          `https://faucetdrop-backend.vercel.app/solana/get-drop-code?faucetAddress=${encodeURIComponent(faucetAddress)}&userAddress=${encodeURIComponent(address)}&chainId=${SOLANA_CHAIN_ID}`
         );
         if (!res.ok) throw new Error("Failed to retrieve drop code");
         const data = await res.json();
@@ -1171,8 +1171,8 @@ const handleManageAdmin = async () => {
       setIsGeneratingNewCode(true);
 
       const endpoint = onSolana
-        ? "http://127.0.0.1:8000/solana/generate-new-drop-code"
-        : "http://127.0.0.1:8000/generate-new-drop-code";
+        ? "https://faucetdrop-backend.vercel.app/solana/generate-new-drop-code"
+        : "https://faucetdrop-backend.vercel.app/generate-new-drop-code";
 
       const res = await fetch(endpoint, {
         method: "POST",

@@ -763,7 +763,7 @@ useEffect(() => { setPage(1); }, [searchTerm, filterBy, sortBy]);
     setSortBy(SORT_OPTIONS.DEFAULT); setPage(1);
   };
   const handleNetworkRefresh = async () => {
-  const apiUrl = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app"
+  const apiUrl = "https://faucetdrops-indexer.vercel.app"
 ;
   // Fire backend sync without blocking the UI refresh
   fetch(`${apiUrl}/api/refresh/network-faucets`).catch(() => {});

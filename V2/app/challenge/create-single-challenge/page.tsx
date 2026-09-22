@@ -16,7 +16,7 @@ import { getChainConfig, BOTCHAIN_CHAIN_ID } from "@/lib/chain";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
-  "http://127.0.0.1:8000";
+  "https://faucetdrop-backend.vercel.app";
   interface Tier {
   level:         number;
   tierName:      string;

@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme";
 import { useWallet } from "@/hooks/use-wallet"
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://faucetdrops-indexer.vercel.app";
 
 // Wheel segment colours — kept vivid intentionally
 const WHEEL_COLORS = [

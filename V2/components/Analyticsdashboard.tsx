@@ -75,7 +75,7 @@ export interface QuizItem {
 
 type Tab = "faucet" | "quest" | "quiz";
 
-const API_BASE = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app";
+const API_BASE = "https://faucetdrops-indexer.vercel.app";
 
 const EMPTY_FAUCET: FaucetAnalytics = {
   totalFaucets: 0, totalDrops: 0, uniqueUsers: 0, avgDropPerUser: 0,
@@ -547,7 +547,7 @@ export default function AnalyticsDashboard() {
     const handleAnalyticsRefresh = async () => {
       setRefreshingAnalytics(true);
       try {
-          const apiUrl = "https://xeric-gwendolen-faucetdrops-4f72016d.koyeb.app"
+          const apiUrl = "https://faucetdrops-indexer.vercel.app"
         await fetch(`${apiUrl}/api/refresh/analytics`);
         // If you have a refetch function from useDashboard, call it here
       } finally {

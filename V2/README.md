@@ -1,4 +1,3 @@
-
 # 💧 FaucetDrops - Onchain Engagement Platform
 
 An all-in-one **onchain engagement platform** designed to help crypto and blockchain communities **create, manage, and reward** user participation through token faucets, gamified quest campaigns, competitive 1v1 challenges, and live multiplayer quizzes.
@@ -9,7 +8,7 @@ Whether you're running airdrops, hackathons, loyalty programs, or community game
 
 ## 🌟 Why This Platform Matters
 
-Managing community engagement onchain is complex. FaucetDrops solves this by letting you:
+Managing community engagement onchain is complex. FaucetDrops solves this by letting you:-
 
 * ✅ **Create Token Faucets** — Distribute ETH or tokens to specific audiences
 * ✅ **Design Gamified Quests** — Build multi-stage campaigns with tasks and rewards

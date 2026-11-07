@@ -1261,7 +1261,10 @@ export default function QuizCodePage() {
   const hasSubmittedOnChain = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
   const myWallet = useMemo(() => userWalletAddress?.toLowerCase() ?? "", [userWalletAddress]);
-
+  const lastMsgAtRef = useRef<number>(Date.now());
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unmountedRef = useRef(false);
   // ── Load profile ──
   useEffect(() => {
     if (!userWalletAddress) return;
@@ -1421,17 +1424,33 @@ export default function QuizCodePage() {
   }
 
   const connectWS = useCallback(() => {
-    if (!code || !userWalletAddress) return;
+    if (!code || !userWalletAddress || unmountedRef.current) return;
     if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return;
+    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+
     const ws = new WebSocket(`${getWsBaseUrl()}/ws/quiz/${code}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (reconnectAttempts.current >= 3) toast.success("Reconnected");
       reconnectAttempts.current = 0;
+      lastMsgAtRef.current = Date.now();
       ws.send(JSON.stringify({ type: "identify", walletAddress: userWalletAddress }));
+
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = setInterval(() => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        // Nothing (not even a pong) for 45s → connection is dead, force a reconnect
+        if (Date.now() - lastMsgAtRef.current > 45_000) {
+          ws.close(4000, "heartbeat timeout");
+          return;
+        }
+        ws.send(JSON.stringify({ type: "ping", ts: Date.now() }));
+      }, 15_000);
     };
 
     ws.onmessage = async (ev) => {
+      lastMsgAtRef.current = Date.now();
       let msg: any;
       try {
         if (sessionKeyRef.current) {
@@ -1449,7 +1468,10 @@ export default function QuizCodePage() {
       }
 
       switch (msg.type) {
-                case "state_sync": {
+        case "pong":
+        case "answer_ack":
+          break;
+        case "state_sync": {
           setQuizMeta(prev => prev ?? msg.quiz);
           if (msg.isCreator) { setIsCreator(true); setHasJoined(true); setIsSpectator(true); }
           const incoming: Player[] = msg.players || [];
@@ -1459,7 +1481,11 @@ export default function QuizCodePage() {
             setIsReturningPlayer(true);
             setIsReady(!!meSync.isReady);
           }
-          if (msg.status === "active") { setHasJoined(true); setPhase("question"); }
+          if (msg.status === "active") {
+            setHasJoined(true);
+            // Live snapshot (question/leaderboard) follows right after; show countdown until it arrives
+            setPhase(p => (p === "lobby" || p === "loading" ? "countdown" : p));
+          }
           if (msg.status === "finished") setPhase("game_over");
           break;
         }
@@ -1470,6 +1496,7 @@ export default function QuizCodePage() {
           if (meList) setIsReady(!!meList.isReady);
           break;
         }
+        case "reward_funded": { setIsFunded(true); break; }
         case "game_starting": {
           toast.success(msg.message || "Quiz starting in 3 seconds...");
           setIsStarting(false);
@@ -1497,7 +1524,8 @@ export default function QuizCodePage() {
         case "chat_error": { toast.warning(msg.message); break; }
         case "question": {
           if (timerRef.current) clearInterval(timerRef.current);
-          const localStartTime = Date.now();
+          // `elapsed` is > 0 when we (re)join mid-question
+          const localStartTime = Date.now() - (Number(msg.elapsed) || 0) * 1000;
           setCurrentQ({ index: msg.index, total: msg.total, question: msg.question, options: msg.options, timeLimit: msg.timeLimit, startedAt: localStartTime });
           setSelectedId(null);
           setHasSubmitted(false);
@@ -1539,20 +1567,47 @@ export default function QuizCodePage() {
       }
     };
 
+    ws.onerror = () => { /* onclose handles reconnect */ };
+
     ws.onclose = (event) => {
       sessionKeyRef.current = null;
-      if (event.code === 1000 || event.code === 1008) return;
-      if (reconnectAttempts.current >= 5) { toast.error("Lost connection to the quiz server. Please refresh the page."); return; }
-      reconnectAttempts.current += 1;
-      const delay = 2000 * reconnectAttempts.current;
-      setTimeout(() => { if (wsRef.current?.readyState !== WebSocket.OPEN) connectWS(); }, delay);
-    };
-  }, [code, userWalletAddress, startTimer, myWallet]);
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+      if (wsRef.current === ws) wsRef.current = null;
 
-    useEffect(() => {
-    if (!userWalletAddress || wsRef.current?.readyState === WebSocket.OPEN) return;
+      // Intentional closes: unmount, kicked, quiz not found
+      if (unmountedRef.current || [1000, 1008, 4003, 4004].includes(event.code)) return;
+
+      reconnectAttempts.current += 1;
+      if (reconnectAttempts.current === 3) toast.warning("Connection lost — reconnecting…");
+      const delay = Math.min(1000 * 2 ** (reconnectAttempts.current - 1), 10_000);
+      reconnectTimerRef.current = setTimeout(connectWS, delay);
+    };
+  }, [code, userWalletAddress, startTimer, myWallet, router]);
+      useEffect(() => {
+    if (!userWalletAddress) return;
+    unmountedRef.current = false;
     connectWS();
+
+    const wake = () => {
+      if (document.visibilityState !== "visible") return;
+      const ws = wsRef.current;
+      if (!ws || ws.readyState > WebSocket.OPEN) {
+        reconnectAttempts.current = 0;
+        connectWS();
+      } else if (ws.readyState === WebSocket.OPEN) {
+        // Phone was asleep — re-identify to pull a fresh snapshot
+        ws.send(JSON.stringify({ type: "identify", walletAddress: userWalletAddress }));
+      }
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
+
     return () => {
+      unmountedRef.current = true;
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (wsRef.current) {
         wsRef.current.close(1000, "unmount");
         wsRef.current = null;

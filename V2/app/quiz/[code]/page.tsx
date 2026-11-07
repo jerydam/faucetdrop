@@ -1378,15 +1378,20 @@ export default function QuizCodePage() {
       .catch(() => toast.error("Failed to load quiz"));
   }, [code, userWalletAddress, router]);
 
-  const handleToggleReady = () => {
+    const handleToggleReady = () => {
     const newState = !isReady;
     setIsReady(newState);
     setPlayers(prev => prev.map(p =>
-      p.walletAddress.toLowerCase() === myWallet.toLowerCase() ? { ...p, isReady: newState } : p
+      p.walletAddress.toLowerCase() === myWallet ? { ...p, isReady: newState } : p
     ));
-    wsRef.current?.send(JSON.stringify({ type: "set_ready", walletAddress: userWalletAddress, isReady: newState }));
+    wsRef.current?.send(JSON.stringify({
+      type: "set_ready",
+      walletAddress: userWalletAddress,
+      username,
+      avatarUrl,
+      isReady: newState,
+    }));
   };
-
   const handleKickPlayer = (targetWallet: string) => {
     wsRef.current?.send(JSON.stringify({ type: "kick_player", walletAddress: userWalletAddress, targetWallet }));
   };
@@ -1444,38 +1449,25 @@ export default function QuizCodePage() {
       }
 
       switch (msg.type) {
-        case "state_sync": {
+                case "state_sync": {
           setQuizMeta(prev => prev ?? msg.quiz);
           if (msg.isCreator) { setIsCreator(true); setHasJoined(true); setIsSpectator(true); }
-          setPlayers(prev => {
-            const incoming = msg.players || [];
-            const creatorAddr = msg.quiz?.creatorAddress?.toLowerCase() ?? "";
-            return incoming
-              .filter((p: Player) => p.walletAddress.toLowerCase() !== creatorAddr)
-              .map((p: Player) => {
-                const existing = prev.find(e => e.walletAddress === p.walletAddress);
-                const mergedReady = (existing?.isReady && p.isReady === false) ? true : p.isReady;
-                return { ...p, isReady: mergedReady };
-              });
-          });
-          const amIPlaying = (msg.players || []).some((p: any) => p.walletAddress.toLowerCase() === myWallet);
-          if (amIPlaying) setIsReturningPlayer(true);
+          const incoming: Player[] = msg.players || [];
+          setPlayers(incoming);
+          const meSync = incoming.find(p => p.walletAddress.toLowerCase() === myWallet);
+          if (meSync) {
+            setIsReturningPlayer(true);
+            setIsReady(!!meSync.isReady);
+          }
           if (msg.status === "active") { setHasJoined(true); setPhase("question"); }
           if (msg.status === "finished") setPhase("game_over");
           break;
         }
         case "player_list": {
-          setPlayers(prev => {
-            const incoming = msg.players || [];
-            const creatorAddr = quizMeta?.creatorAddress?.toLowerCase() ?? "";
-            return incoming
-              .filter((p: Player) => p.walletAddress.toLowerCase() !== creatorAddr)
-              .map((p: Player) => {
-                const existing = prev.find(e => e.walletAddress === p.walletAddress);
-                const mergedReady = (existing?.isReady && p.isReady === false) ? true : p.isReady;
-                return { ...p, isReady: mergedReady };
-              });
-          });
+          const incoming: Player[] = msg.players || [];
+          setPlayers(incoming);
+          const meList = incoming.find(p => p.walletAddress.toLowerCase() === myWallet);
+          if (meList) setIsReady(!!meList.isReady);
           break;
         }
         case "game_starting": {
@@ -1557,10 +1549,15 @@ export default function QuizCodePage() {
     };
   }, [code, userWalletAddress, startTimer, myWallet]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!userWalletAddress || wsRef.current?.readyState === WebSocket.OPEN) return;
     connectWS();
-    return () => { if (wsRef.current) { wsRef.current.close(); wsRef.current = null; } };
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close(1000, "unmount");
+        wsRef.current = null;
+      }
+    };
   }, [userWalletAddress, connectWS]);
 
   useEffect(() => {
